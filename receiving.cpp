@@ -9,7 +9,7 @@
 #include <algorithm>
 
 enum {
-    HISTORY_MESSAGES_ABSOLUTE_LIMIT = 10000
+    HISTORY_MESSAGES_ABSOLUTE_LIMIT = 80
 };
 
 // The name is chosen by whoever sent the file and routinely contains spaces and other
@@ -257,7 +257,7 @@ static std::string quoteMessage(const td::td_api::message *message, TdAccountDat
             const td::td_api::messageAnimatedEmoji &animatedEmoji =
                 static_cast<const td::td_api::messageAnimatedEmoji &>(*message->content_);
             text = animatedEmoji.emoji_;
-			break;
+            break;
         }
         default:
             text = '[' + getUnsupportedMessageDescription(*message->content_) + ']';
@@ -544,7 +544,7 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
         g_free(fileSizeStr);
     }
 
-    
+
     if (!notice.empty())
         notice = makeNoticeWithSender(chat, fullMessage.messageInfo, notice.c_str(),
                                       account.purpleAccount);
@@ -630,7 +630,7 @@ static void showFileMessage(const td::td_api::chat &chat, IncomingMessage &fullM
 }
 
 static void showStickerMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
-                               td::td_api::messageSticker &stickerContent, 
+                               td::td_api::messageSticker &stickerContent,
                                TdTransceiver &transceiver, TdAccountData &account)
 {
     if (!stickerContent.sticker_) return;
@@ -727,7 +727,7 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
             const td::td_api::messageAnimatedEmoji &animatedEmoji =
                 static_cast<const td::td_api::messageAnimatedEmoji &>(*message.content_);
             showMessageText(account, chat, messageInfo, animatedEmoji.emoji_.c_str(), NULL);
-			break;
+            break;
         }
         default: {
             // TRANSLATOR: In-chat error message, argument will be a Telegram type.
@@ -1130,8 +1130,8 @@ static void fetchHistoryResponse(TdAccountData &account, ChatId chatId, MessageI
                                   stopAt.value());
                 break;
             }
-            if ((!stopAt.valid() && (messagesFetched == 100)) ||
-                (messagesFetched == HISTORY_MESSAGES_ABSOLUTE_LIMIT))
+            if ((!stopAt.valid() && (messagesFetched >= 100)) ||
+                (messagesFetched >= HISTORY_MESSAGES_ABSOLUTE_LIMIT))
             {
                 purple_debug_misc(config::pluginId, "Reached history limit, stopping\n");
                 break;
@@ -1152,11 +1152,11 @@ static void fetchHistoryResponse(TdAccountData &account, ChatId chatId, MessageI
             showChatNotification(account, *chat, message.c_str(), PURPLE_MESSAGE_ERROR);
     }
 
-    if (requestMoreFrom.valid())
+    if (requestMoreFrom.valid() && messagesFetched < HISTORY_MESSAGES_ABSOLUTE_LIMIT)
         fetchHistoryRequest(account, chatId, messagesFetched, requestMoreFrom, stopAt);
     else {
-        purple_debug_misc(config::pluginId, "Done fetching history for chat %" G_GINT64_FORMAT "\n",
-                          chatId.value());
+        purple_debug_misc(config::pluginId, "Done fetching history for chat %" G_GINT64_FORMAT " (%u msgs)\n",
+                          chatId.value(), messagesFetched);
         std::vector<IncomingMessage> readyMessages;
         account.pendingMessages.setChatReady(chatId, readyMessages);
         showMessages(readyMessages, account);
