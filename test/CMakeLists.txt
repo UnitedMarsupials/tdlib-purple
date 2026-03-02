@@ -39,8 +39,8 @@ add_executable(tests EXCLUDE_FROM_ALL
 )
 
 set_property(TARGET tests PROPERTY CXX_STANDARD 14)
-target_include_directories(tests PRIVATE ${CMAKE_SOURCE_DIR})
-target_link_libraries(tests PRIVATE gtest fmt::fmt Td::TdStatic ${GLIB_LIBRARIES})
+target_include_directories(tests PRIVATE ${CMAKE_SOURCE_DIR} ${fmt_INCLUDE_DIRS} ${rlottie_INCLUDE_DIRS})
+target_link_libraries(tests PRIVATE gtest ${fmt_LIBRARIES} Td::TdStatic ${GLIB_LIBRARIES} ${rlottie_LIBRARIES})
 
 if (DEFINED GTEST_PATH)
     target_include_directories(tests PRIVATE ${GTEST_PATH}/include)
@@ -52,10 +52,6 @@ if (NOT NoWebp)
 endif (NOT NoWebp)
 
 if (NOT NoLottie)
-    if (NOT NoBundledLottie)
-        target_include_directories(tests PRIVATE ${CMAKE_SOURCE_DIR}/rlottie/inc)
-    endif (NOT NoBundledLottie)
-    target_link_libraries(tests PRIVATE rlottie)
     target_compile_definitions(tests PRIVATE LOT_BUILD)
 endif (NOT NoLottie)
 

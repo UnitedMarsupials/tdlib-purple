@@ -32,6 +32,8 @@ if (NOT NoPkgConfig)
     if (NOT NoVoip)
         pkg_check_modules(tgvoip tgvoip)
     endif(NOT NoVoip)
+    pkg_check_modules(fmt REQUIRED fmt)
+    pkg_check_modules(rlottie REQUIRED rlottie)
 
     pkg_get_variable(PURPLE_PLUGIN_DIR purple plugindir)
     pkg_get_variable(PURPLE_DATA_DIR purple datarootdir)
@@ -74,8 +76,8 @@ add_library(telegram-tdlib SHARED
 target_compile_definitions(telegram-tdlib PRIVATE GLIB_DISABLE_DEPRECATION_WARNINGS)
 #target_compile_options(telegram-tdlib PRIVATE -Wmissing-declarations)
 
-include_directories(${Purple_INCLUDE_DIRS} ${CMAKE_BINARY_DIR})
-target_link_libraries(telegram-tdlib PRIVATE Td::TdStatic ${Purple_LIBRARIES})
+include_directories(${Purple_INCLUDE_DIRS} ${CMAKE_BINARY_DIR} ${fmt_INCLUDE_DIRS} ${rlottie_INCLUDE_DIRS})
+target_link_libraries(telegram-tdlib PRIVATE Td::TdStatic ${Purple_LIBRARIES} ${fmt_LIBRARIES} ${rlottie_LIBRARIES})
 
 set(VERSION_SCRIPT_FLAG "-Wl,--version-script=${CMAKE_SOURCE_DIR}/ld_version_script")
 set(CMAKE_EXE_LINKER_FLAGS ${VERSION_SCRIPT_FLAG})
@@ -93,22 +95,6 @@ endif (NOT NoWebp)
 set_property(TARGET telegram-tdlib PROPERTY CXX_STANDARD 14)
 
 set(BUILD_SHARED_LIBS OFF)
-add_subdirectory(fmt)
-target_compile_options(fmt PRIVATE -fPIC)
-target_link_libraries(telegram-tdlib PRIVATE fmt::fmt)
-
-if (NOT NoLottie)
-    if (NOT NoBundledLottie)
-        add_subdirectory(rlottie)
-        target_compile_options(rlottie PRIVATE -fPIC)
-        target_include_directories(telegram-tdlib PRIVATE rlottie/inc)
-    endif (NOT NoBundledLottie)
-    target_link_libraries(telegram-tdlib PRIVATE rlottie)
-    # When building with cygwin, lack of LOT_BUILD would add dllimport attribute to function
-    # prototypes from rlottie, causing them to have different name mangling from what they had when
-    # building rlottie.
-    target_compile_definitions(telegram-tdlib PRIVATE LOT_BUILD)
-endif (NOT NoLottie)
 
 if (NOT DEFINED SHARE_INSTALL_PREFIX)
     set(SHARE_INSTALL_PREFIX "share")

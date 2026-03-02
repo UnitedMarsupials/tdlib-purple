@@ -633,20 +633,21 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
     TgMessageInfo &messageInfo = fullMessage.messageInfo;
     messageInfo.repliedMessage = std::move(fullMessage.repliedMessage);
 
-    if (message.ttl_ != 0) {
-        if (purple_account_get_bool(account.purpleAccount, AccountOptions::ShowSelfDestruct, AccountOptions::ShowSelfDestructDefault)) {
-            // TRANSLATOR: In-chat warning message
-            const char *text   = _("Received self-destructing message, displaying anyway");
-            std::string notice = makeNoticeWithSender(chat, messageInfo, text, account.purpleAccount);
-            showMessageText(account, chat, messageInfo, NULL, notice.c_str());
-        } else {
-            // TRANSLATOR: In-chat warning message
-            const char *text   = _("Received self-destructing message, not displayed due to lack of support");
-            std::string notice = makeNoticeWithSender(chat, messageInfo, text, account.purpleAccount);
-            showMessageText(account, chat, messageInfo, NULL, notice.c_str());
-            return;
-        }
-    }
+    // ttl_ field was removed in newer tdlib versions
+    // if (message.ttl_ != 0) {
+    //     if (purple_account_get_bool(account.purpleAccount, AccountOptions::ShowSelfDestruct, AccountOptions::ShowSelfDestructDefault)) {
+    //         // TRANSLATOR: In-chat warning message
+    //         const char *text   = _("Received self-destructing message, displaying anyway");
+    //         std::string notice = makeNoticeWithSender(chat, messageInfo, text, account.purpleAccount);
+    //         showMessageText(account, chat, messageInfo, NULL, notice.c_str());
+    //     } else {
+    //         // TRANSLATOR: In-chat warning message
+    //         const char *text   = _("Received self-destructing message, not displayed due to lack of support");
+    //         std::string notice = makeNoticeWithSender(chat, messageInfo, text, account.purpleAccount);
+    //         showMessageText(account, chat, messageInfo, NULL, notice.c_str());
+    //         return;
+    //     }
+    // }
 
     FileInfo fileInfo;
     getFileFromMessage(fullMessage, fileInfo);

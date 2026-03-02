@@ -789,9 +789,9 @@ std::string responseToString(const td::TlObject &object)
         C(messageUnsupported)
         C(messageForwardInfo)
         
-        C(messageForwardOriginUser)
-        C(messageForwardOriginHiddenUser)
-        C(messageForwardOriginChannel)
+        C(messageOriginUser)
+        C(messageOriginHiddenUser)
+        C(messageOriginChannel)
         C(messageLinkInfo)
         
         C(messageSchedulingStateSendAtDate)

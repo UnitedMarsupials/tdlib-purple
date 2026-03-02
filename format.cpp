@@ -1,14 +1,20 @@
 #include "format.h"
 #include <fmt/format.h>
 
-std::string formatMessage(const char *fmt, std::initializer_list<std::string> args)
+std::string formatMessage(const char *fmt_str, std::initializer_list<std::string> args)
 {
-    fmt::dynamic_format_arg_store<fmt::format_context> fa;
-
-    for (const std::string &arg: args)
-        fa.push_back(arg);
-
-    return fmt::vformat(fmt, fa);
+    std::string result = fmt_str;
+    size_t arg_index = 0;
+    
+    for (const auto &arg : args) {
+        size_t pos = result.find("{}");
+        if (pos != std::string::npos) {
+            result.replace(pos, 2, arg);
+        }
+        arg_index++;
+    }
+    
+    return result;
 }
 
 std::string formatMessage(const char *fmt, const std::string &s)

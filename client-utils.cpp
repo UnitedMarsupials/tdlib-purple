@@ -62,13 +62,11 @@ static std::string messageTypeToString(const td::td_api::MessageContent &content
     C(messagePinMessage)
     C(messageScreenshotTaken)
     C(messageChatSetTheme)
-    C(messageChatSetTtl)
     C(messageCustomServiceAction)
     C(messageGameScore)
     C(messagePaymentSuccessful)
     C(messagePaymentSuccessfulBot)
     C(messageContactRegistered)
-    C(messageWebsiteConnected)
     C(messagePassportDataSent)
     C(messagePassportDataReceived)
     C(messageProximityAlertTriggered)
@@ -502,12 +500,12 @@ std::string getIncomingGroupchatSenderPurpleName(const td::td_api::chat &chat, c
             return _("Channel post");
         } else if (message.forward_info_ && message.forward_info_->origin_)
             switch (message.forward_info_->origin_->get_id()) {
-            case td::td_api::messageForwardOriginUser::ID:
-                return account.getDisplayName(getSenderUserId(static_cast<const td::td_api::messageForwardOriginUser &>(*message.forward_info_->origin_)));
-            case td::td_api::messageForwardOriginHiddenUser::ID:
-                return static_cast<const td::td_api::messageForwardOriginHiddenUser &>(*message.forward_info_->origin_).sender_name_;
-            case td::td_api::messageForwardOriginChannel::ID:
-                return static_cast<const td::td_api::messageForwardOriginChannel&>(*message.forward_info_->origin_).author_signature_;
+            case td::td_api::messageOriginUser::ID:
+                return account.getDisplayName(getSenderUserId(static_cast<const td::td_api::messageOriginUser &>(*message.forward_info_->origin_)));
+            case td::td_api::messageOriginHiddenUser::ID:
+                return static_cast<const td::td_api::messageOriginHiddenUser &>(*message.forward_info_->origin_).sender_name_;
+            case td::td_api::messageOriginChannel::ID:
+                return static_cast<const td::td_api::messageOriginChannel&>(*message.forward_info_->origin_).author_signature_;
             }
     }
 
@@ -524,12 +522,12 @@ std::string getForwardSource(const td::td_api::messageForwardInfo &forwardInfo,
         return "";
 
     switch (forwardInfo.origin_->get_id()) {
-        case td::td_api::messageForwardOriginUser::ID:
-            return account.getDisplayName(getSenderUserId(static_cast<const td::td_api::messageForwardOriginUser &>(*forwardInfo.origin_)));
-        case td::td_api::messageForwardOriginHiddenUser::ID:
-            return static_cast<const td::td_api::messageForwardOriginHiddenUser &>(*forwardInfo.origin_).sender_name_;
-        case td::td_api::messageForwardOriginChannel::ID: {
-            const td::td_api::chat *chat = account.getChat(getChatId(static_cast<const td::td_api::messageForwardOriginChannel&>(*forwardInfo.origin_)));
+        case td::td_api::messageOriginUser::ID:
+            return account.getDisplayName(getSenderUserId(static_cast<const td::td_api::messageOriginUser &>(*forwardInfo.origin_)));
+        case td::td_api::messageOriginHiddenUser::ID:
+            return static_cast<const td::td_api::messageOriginHiddenUser &>(*forwardInfo.origin_).sender_name_;
+        case td::td_api::messageOriginChannel::ID: {
+            const td::td_api::chat *chat = account.getChat(getChatId(static_cast<const td::td_api::messageOriginChannel&>(*forwardInfo.origin_)));
             if (chat)
                 return chat->title_;
         }
@@ -860,11 +858,11 @@ std::string getDownloadXferPeerName(ChatId chatId,
 
 void notifySendFailed(const td::td_api::updateMessageSendFailed &sendFailed, TdAccountData &account)
 {
-    if (sendFailed.message_) {
+    if (sendFailed.message_ && sendFailed.error_) {
         const td::td_api::chat *chat = account.getChat(getChatId(*sendFailed.message_));
         if (chat) {
-            std::string errorMessage = formatMessage(errorCodeMessage(), {std::to_string(sendFailed.error_code_),
-                                                     sendFailed.error_message_});
+            std::string errorMessage = formatMessage(errorCodeMessage(), {std::to_string(sendFailed.error_->code_),
+                                                     sendFailed.error_->message_});
             // TRANSLATOR: In-chat error message, argument will be text.
             errorMessage = formatMessage(_("Failed to send message: {}"), errorMessage);
             showChatNotification(account, *chat, errorMessage.c_str(), sendFailed.message_->date_,

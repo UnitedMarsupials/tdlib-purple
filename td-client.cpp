@@ -243,11 +243,12 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
 void PurpleTdClient::processAuthorizationState(td::td_api::AuthorizationState &authState)
 {
     switch (authState.get_id()) {
-    case td::td_api::authorizationStateWaitEncryptionKey::ID:
-        purple_debug_misc(config::pluginId, "Authorization state update: encriytion key requested\n");
-        m_transceiver.sendQuery(td::td_api::make_object<td::td_api::checkDatabaseEncryptionKey>(""),
-                                &PurpleTdClient::authResponse);
-        break;
+    // Database encryption is handled automatically in newer tdlib versions
+    // case td::td_api::authorizationStateWaitEncryptionKey::ID:
+    //     purple_debug_misc(config::pluginId, "Authorization state update: encriytion key requested\n");
+    //     m_transceiver.sendQuery(td::td_api::make_object<td::td_api::checkDatabaseEncryptionKey>(""),
+    //                             &PurpleTdClient::authResponse);
+    //     break;
 
     case td::td_api::authorizationStateWaitTdlibParameters::ID: 
         purple_debug_misc(config::pluginId, "Authorization state update: TDLib parameters requested\n");
@@ -375,7 +376,7 @@ std::string PurpleTdClient::getBaseDatabasePath()
     return std::string(purple_user_dir()) + G_DIR_SEPARATOR_S + config::configSubdir;
 }
 
-static void stuff(td::td_api::tdlibParameters &parameters)
+static void stuff(td::td_api::setTdlibParameters &parameters)
 {
     std::string s(config::stuff);
     for (size_t i = 0; i < s.length(); i++)
@@ -390,7 +391,7 @@ static void stuff(td::td_api::tdlibParameters &parameters)
 
 void PurpleTdClient::sendTdlibParameters()
 {
-    auto parameters = td::td_api::make_object<td::td_api::tdlibParameters>();
+    auto parameters = td::td_api::make_object<td::td_api::setTdlibParameters>();
     const char *username = purple_account_get_username(m_account);
     parameters->database_directory_ = getBaseDatabasePath() + G_DIR_SEPARATOR_S + username;
     purple_debug_misc(config::pluginId, "Account %s using database directory %s\n",
@@ -407,9 +408,8 @@ void PurpleTdClient::sendTdlibParameters()
     parameters->device_model_ = "Desktop";
     parameters->system_version_ = "Unknown";
     parameters->application_version_ = "1.0";
-    parameters->enable_storage_optimizer_ = (purple_account_get_bool(m_account, AccountOptions::KeepInlineDownloads,
-                                                                     AccountOptions::KeepInlineDownloadsDefault) == FALSE);
-    m_transceiver.sendQuery(td::td_api::make_object<td::td_api::setTdlibParameters>(std::move(parameters)),
+    // enable_storage_optimizer was removed in newer tdlib versions
+    m_transceiver.sendQuery(std::move(parameters),
                             &PurpleTdClient::authResponse);
 }
 
@@ -579,7 +579,7 @@ void PurpleTdClient::registerUser()
                 "Registration is required but this libpurple doesn't support input requests");
         }
     } else
-        m_transceiver.sendQuery(td::td_api::make_object<td::td_api::registerUser>(firstName, lastName),
+        m_transceiver.sendQuery(td::td_api::make_object<td::td_api::registerUser>(firstName, lastName, false),
                                 &PurpleTdClient::authResponse);
 }
 
@@ -592,7 +592,7 @@ void PurpleTdClient::displayNameEntered(PurpleTdClient *self, const gchar *name)
                                 // TRANSLATOR: Connection error message after failed registration.
                                 _("Display name is required for registration"));
     else
-        self->m_transceiver.sendQuery(td::td_api::make_object<td::td_api::registerUser>(firstName, lastName),
+        self->m_transceiver.sendQuery(td::td_api::make_object<td::td_api::registerUser>(firstName, lastName, false),
                                       &PurpleTdClient::authResponse);
 }
 
@@ -615,10 +615,6 @@ void PurpleTdClient::notifyAuthError(const td::td_api::object_ptr<td::td_api::Ob
 {
     std::string message;
     switch (m_lastAuthState) {
-    case td::td_api::authorizationStateWaitEncryptionKey::ID:
-        // TRANSLATOR: Connection error message, argument is text (a proper reason)
-        message = _("Error applying database encryption key: {}");
-        break;
     default:
         // TRANSLATOR: Connection error message, argument is text (a proper reason)
         message = _("Authentication error: {}");
@@ -2229,8 +2225,9 @@ void PurpleTdClient::cancelUpload(PurpleXfer *xfer)
     if (m_data.getFileIdForTransfer(xfer, fileId)) {
         purple_debug_misc(config::pluginId, "Cancelling upload of %s (file id %d)\n",
                           purple_xfer_get_local_filename(xfer), fileId);
-        auto cancelRequest = td::td_api::make_object<td::td_api::cancelUploadFile>(fileId);
-        m_transceiver.sendQuery(std::move(cancelRequest), nullptr);
+        // cancelUploadFile was removed in newer tdlib versions
+        // auto cancelRequest = td::td_api::make_object<td::td_api::cancelUploadFile>(fileId);
+        // m_transceiver.sendQuery(std::move(cancelRequest), nullptr);
         m_data.removeFileTransfer(fileId);
         purple_xfer_unref(xfer);
     } else {
