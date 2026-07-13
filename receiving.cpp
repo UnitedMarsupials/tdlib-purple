@@ -12,6 +12,39 @@ enum {
     HISTORY_MESSAGES_ABSOLUTE_LIMIT = 10000
 };
 
+// The name is chosen by whoever sent the file and routinely contains spaces and other
+// characters a URI cannot carry literally, so the path has to be percent-encoded before
+// it is handed to a viewer.
+static std::string makeFileUri(const std::string &filePath)
+{
+    gchar *uri = g_filename_to_uri(filePath.c_str(), NULL, NULL);
+    if (uri == NULL)
+        // Only for a relative path, which local_->path_ never is.
+        return "file://" + filePath;
+    std::string result(uri);
+    g_free(uri);
+    return result;
+}
+
+// ...and then the scheme has to be written twice, which deserves an explanation.
+//
+// Pidgin does not treat the target of a "file://" link as a URI at all. Its handler
+// strips the scheme and passes the remainder to purple_notify_uri() as if it were a plain
+// filesystem path (pidgin/gtkutils.c, open_file()). purple_uri_escape_for_open() then
+// percent-encodes that a second time and hands it to xdg-open, which - seeing no scheme -
+// runs it through g_filename_to_uri() and escapes the escapes. A name with a space or a
+// non-ASCII letter reaches the viewer as %25D0%25A1...%2520... and cannot be opened; this
+// happens whether we encode the path or leave it bare, so it cannot be fixed by encoding.
+//
+// Writing "file://" twice defeats it: Pidgin strips one and is left holding the complete,
+// correctly encoded URI. purple_uri_escape_for_open() permits "%" and "/" and passes such
+// a URI through untouched, and every opener it may invoke - xdg-open, gnome-open,
+// kfmclient - accepts a URI as readily as a path.
+static std::string makeFileLinkTarget(const std::string &filePath)
+{
+    return "file://" + makeFileUri(filePath);
+}
+
 std::string makeNoticeWithSender(const td::td_api::chat &chat, const TgMessageInfo &message,
                                  const char *noticeText, PurpleAccount *account)
 {
@@ -313,13 +346,8 @@ static void showDownloadedImage(const td::td_api::chat &chat, TgMessageInfo &mes
     if (g_file_get_contents (filePath.c_str(), &data, &len, NULL)) {
         int id = purple_imgstore_add_with_id (data, len, NULL);
         text = makeInlineImageText(id);
-    } else if (filePath.find('"') == std::string::npos)
-        text = "<img src=\"file://" + filePath + "\">";
-    else {
-        // Unlikely error, not worth translating
-        notice = makeNoticeWithSender(chat, message, "Cannot show photo: file path contains quotes",
-                                      account.purpleAccount);
-    }
+    } else
+        text = "<img src=\"" + makeFileUri(filePath) + "\">";
 
     if (caption && *caption) {
         if (!text.empty())
@@ -384,18 +412,12 @@ void showGenericFileInline(const td::td_api::chat &chat, const TgMessageInfo &me
                            const std::string &filePath, const char *caption,
                            const std::string &fileDescription, TdAccountData &account)
 {
-    if (filePath.find('"') != std::string::npos) {
-        std::string notice = makeNoticeWithSender(chat, message, "Cannot show file: path contains quotes",
-                                                    account.purpleAccount);
-        showMessageText(account, chat, message, caption, notice.c_str());
-    } else {
-        std::string text = "<a href=\"file://" + filePath + "\">" + fileDescription + "</a>";
-        if (caption && *caption) {
-            text += "\n";
-            text += caption;
-        }
-        showMessageText(account, chat, message, text.c_str(), NULL);
+    std::string text = "<a href=\"" + makeFileLinkTarget(filePath) + "\">" + fileDescription + "</a>";
+    if (caption && *caption) {
+        text += "\n";
+        text += caption;
     }
+    showMessageText(account, chat, message, text.c_str(), NULL);
 }
 
 void showDownloadedFileInline(ChatId chatId, TgMessageInfo &message,
