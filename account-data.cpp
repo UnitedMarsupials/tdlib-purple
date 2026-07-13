@@ -942,10 +942,12 @@ bool TdAccountData::hasActiveCall()
 
 void TdAccountData::setActiveCall(int32_t callId)
 {
+#ifndef NoVoip
     if (!m_callData) {
         m_callData = std::make_unique<tgvoip::VoIPController>();
         m_callId = callId;
     }
+#endif
 }
 
 tgvoip::VoIPController *TdAccountData::getCallData()
