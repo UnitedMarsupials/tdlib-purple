@@ -45,10 +45,22 @@ static std::string makeFileLinkTarget(const std::string &filePath)
     return "file://" + makeFileUri(filePath);
 }
 
+// Anything chosen by a remote party - a file name, a contact's display name, a group
+// title - reaches the conversation window, which libpurple renders as HTML. Escape it at
+// the point it enters that markup, or a value containing markup characters is mangled or
+// swallowed outright. Not for text going to purple_request_*, which Pidgin escapes itself.
+static std::string escapeForDisplay(const std::string &text)
+{
+    gchar *escaped = purple_markup_escape_text(text.c_str(), text.size());
+    std::string result(escaped);
+    g_free(escaped);
+    return result;
+}
+
 std::string makeNoticeWithSender(const td::td_api::chat &chat, const TgMessageInfo &message,
                                  const char *noticeText, PurpleAccount *account)
 {
-    std::string prefix = getSenderDisplayName(chat, message, account);
+    std::string prefix = escapeForDisplay(getSenderDisplayName(chat, message, account));
     if (!prefix.empty())
         prefix += ": ";
     return prefix + noticeText;
@@ -268,7 +280,8 @@ static std::string quoteMessage(const td::td_api::message *message, TdAccountDat
         if (text[i] == '\n') text[i] = ' ';
 
     // TRANSLATOR: In-chat notification of a reply. Arguments will be username and the original text or description thereof. Please preserve the HTML.
-    return formatMessage(_("<b>&gt; {0} wrote:</b>\n&gt; {1}"), {originalName, text});
+    return formatMessage(_("<b>&gt; {0} wrote:</b>\n&gt; {1}"),
+                         {escapeForDisplay(originalName), escapeForDisplay(text)});
 }
 
 void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const TgMessageInfo &message,
@@ -287,7 +300,8 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
             if (!newText.empty())
                 newText += "\n";
             // TRANSLATOR: In-chat notification of forward. Argument will be a username. Please preserve the HTML.
-            newText += formatMessage(_("<b>Forwarded from {}:</b>"), message.forwardedFrom);
+            newText += formatMessage(_("<b>Forwarded from {}:</b>"),
+                                     escapeForDisplay(message.forwardedFrom));
         }
         if (!newText.empty())
             newText += "\n";
@@ -347,7 +361,7 @@ static void showDownloadedImage(const td::td_api::chat &chat, TgMessageInfo &mes
         int id = purple_imgstore_add_with_id (data, len, NULL);
         text = makeInlineImageText(id);
     } else
-        text = "<img src=\"" + makeFileUri(filePath) + "\">";
+        text = "<img src=\"" + escapeForDisplay(makeFileUri(filePath)) + "\">";
 
     if (caption && *caption) {
         if (!text.empty())
@@ -412,7 +426,8 @@ void showGenericFileInline(const td::td_api::chat &chat, const TgMessageInfo &me
                            const std::string &filePath, const char *caption,
                            const std::string &fileDescription, TdAccountData &account)
 {
-    std::string text = "<a href=\"" + makeFileLinkTarget(filePath) + "\">" + fileDescription + "</a>";
+    std::string text = "<a href=\"" + escapeForDisplay(makeFileLinkTarget(filePath)) + "\">" +
+                       escapeForDisplay(fileDescription) + "</a>";
     if (caption && *caption) {
         text += "\n";
         text += caption;
@@ -530,17 +545,17 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
              !fullMessage.inlineDownloadComplete )
         {
             // TRANSLATOR: In-chat notification, appears after a colon (':'). Argument is a file *type*, not a filename.
-            notice = formatMessage(_("Downloading {}"), std::string(fileDesc));
+            notice = formatMessage(_("Downloading {}"), escapeForDisplay(fileDesc));
         }
         autoDownload = true;
     } else if (!ignoreBigDownloads(account.purpleAccount)) {
         // TRANSLATOR: In-chat notification, appears after a colon (':'). Argument is a file *type*, not a filename.
-        notice = formatMessage(_("Requesting {} download"), std::string(fileDesc));
+        notice = formatMessage(_("Requesting {} download"), escapeForDisplay(fileDesc));
         askDownload = true;
     } else {
         char *fileSizeStr = purple_str_size_to_units(fileSize); // File size above limit, so it's non-zero
         // TRANSLATOR: In-chat notification, appears after a colon (':'). Arguments are a file *type*, not a filename; second argument is a file size with unit.
-        notice = formatMessage(_("Ignoring {0} download ({1})"), {std::string(fileDesc), std::string(fileSizeStr)});
+        notice = formatMessage(_("Ignoring {0} download ({1})"), {escapeForDisplay(fileDesc), std::string(fileSizeStr)});
         g_free(fileSizeStr);
     }
 
@@ -612,7 +627,7 @@ static void showFileMessage(const td::td_api::chat &chat, IncomingMessage &fullM
     const char *captionStr = !caption.empty() ? caption.c_str() : NULL;
     if (!file) {
         // Unlikely message not worth translating
-        std::string notice = formatMessage("Faulty file: {}", fileDescription);
+        std::string notice = formatMessage("Faulty file: {}", escapeForDisplay(fileDescription));
         notice = makeNoticeWithSender(chat, fullMessage.messageInfo, notice.c_str(),
                                       account.purpleAccount);
         showMessageText(account, chat, fullMessage.messageInfo, captionStr, notice.c_str());
@@ -676,13 +691,15 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
     if (fileInfo.secret) {
         if (purple_account_get_bool(account.purpleAccount, AccountOptions::ShowSelfDestruct, AccountOptions::ShowSelfDestructDefault)) {
             // TRANSLATOR: In-chat warning message
-            std::string notice = formatMessage("Received secret file {}, displaying anyway", fileInfo.description);
+            std::string notice = formatMessage("Received secret file {}, displaying anyway",
+                                               escapeForDisplay(fileInfo.description));
             notice = makeNoticeWithSender(chat, messageInfo, notice.c_str(), account.purpleAccount);
             showMessageText(account, chat, messageInfo, !fileInfo.caption.empty() ? fileInfo.caption.c_str() : nullptr,
                             notice.c_str());
         } else {
             // TRANSLATOR: In-chat warning message
-            std::string notice = formatMessage("Ignoring secret file ({})", fileInfo.description);
+            std::string notice = formatMessage("Ignoring secret file ({})",
+                                               escapeForDisplay(fileInfo.description));
             notice = makeNoticeWithSender(chat, messageInfo, notice.c_str(), account.purpleAccount);
             showMessageText(account, chat, messageInfo, !fileInfo.caption.empty() ? fileInfo.caption.c_str() : nullptr,
                             notice.c_str());
@@ -715,8 +732,9 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
             const auto &titleChange = static_cast<const td::td_api::messageChatChangeTitle &>(*message.content_);
             // TRANSLATOR: In-chat status update, arguments are chat names.
             std::string notice = formatMessage(_("{0} changed group name to {1}"),
-                                               {getSenderDisplayName(chat, messageInfo, account.purpleAccount),
-                                                titleChange.title_});
+                                               {escapeForDisplay(getSenderDisplayName(chat, messageInfo,
+                                                                                      account.purpleAccount)),
+                                                escapeForDisplay(titleChange.title_)});
             showMessageText(account, chat, messageInfo, NULL, notice.c_str());
             break;
         }
@@ -906,7 +924,7 @@ void getFileFromMessage(const IncomingMessage &fullMessage, FileInfo &result)
             const td::td_api::messagePhoto &photo = static_cast<const td::td_api::messagePhoto &>(*message.content_);
             result.file = getSelectedPhotoSize(fullMessage, photo);
             result.name = ""; // will not be needed - inline download only
-            if (photo.caption_) result.caption = photo.caption_->text_;
+            if (photo.caption_) result.caption = getMessageText(*photo.caption_);
             // TRANSLATOR: File-type, used to describe what is being downloaded, in sentences like "Downloading photo" or "Ignoring photo download".
             result.description = _("photo");
             result.secret = photo.is_secret_;
@@ -915,7 +933,7 @@ void getFileFromMessage(const IncomingMessage &fullMessage, FileInfo &result)
         case td::td_api::messageDocument::ID: {
             const td::td_api::messageDocument &document = static_cast<const td::td_api::messageDocument &>(*message.content_);
             result.file = document.document_ ? document.document_->document_.get() : nullptr;
-            if (document.caption_) result.caption = document.caption_->text_;
+            if (document.caption_) result.caption = getMessageText(*document.caption_);
             result.name = getFileName(document.document_.get());
             result.description = makeDocumentDescription(document.document_.get());
             break;
@@ -923,7 +941,7 @@ void getFileFromMessage(const IncomingMessage &fullMessage, FileInfo &result)
         case td::td_api::messageVideo::ID: {
             const td::td_api::messageVideo &video = static_cast<const td::td_api::messageVideo &>(*message.content_);
             result.file = video.video_ ? video.video_->video_.get() : nullptr;
-            if (video.caption_) result.caption = video.caption_->text_;
+            if (video.caption_) result.caption = getMessageText(*video.caption_);
             result.name = getFileName(video.video_.get());
             result.description = makeDocumentDescription(video.video_.get());
             result.secret = video.is_secret_;
@@ -932,7 +950,7 @@ void getFileFromMessage(const IncomingMessage &fullMessage, FileInfo &result)
         case td::td_api::messageAnimation::ID: {
             const td::td_api::messageAnimation &animation = static_cast<const td::td_api::messageAnimation &>(*message.content_);
             result.file = animation.animation_ ? animation.animation_->animation_.get() : nullptr;
-            if (animation.caption_) result.caption = animation.caption_->text_;
+            if (animation.caption_) result.caption = getMessageText(*animation.caption_);
             result.name = getFileName(animation.animation_.get());
             result.description = makeDocumentDescription(animation.animation_.get());
             result.secret = animation.is_secret_;
@@ -941,7 +959,7 @@ void getFileFromMessage(const IncomingMessage &fullMessage, FileInfo &result)
         case td::td_api::messageAudio::ID: {
             const td::td_api::messageAudio &audio = static_cast<const td::td_api::messageAudio &>(*message.content_);
             result.file = audio.audio_ ? audio.audio_->audio_.get() : nullptr;
-            if (audio.caption_) result.caption = audio.caption_->text_;
+            if (audio.caption_) result.caption = getMessageText(*audio.caption_);
             result.name = getFileName(audio.audio_.get());
             result.description = makeDocumentDescription(audio.audio_.get());
             break;
@@ -949,7 +967,7 @@ void getFileFromMessage(const IncomingMessage &fullMessage, FileInfo &result)
         case td::td_api::messageVoiceNote::ID: {
             const td::td_api::messageVoiceNote &audio = static_cast<const td::td_api::messageVoiceNote &>(*message.content_);
             result.file = audio.voice_note_ ? audio.voice_note_->voice_.get() : nullptr;
-            if (audio.caption_) result.caption = audio.caption_->text_;
+            if (audio.caption_) result.caption = getMessageText(*audio.caption_);
             result.name = getFileName(audio.voice_note_.get());
             result.description = makeDocumentDescription(audio.voice_note_.get());
             break;
