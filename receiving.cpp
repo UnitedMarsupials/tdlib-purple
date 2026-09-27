@@ -638,9 +638,13 @@ static void showFileMessage(const td::td_api::chat &chat, IncomingMessage &fullM
         {
             showFileInline(chat, fullMessage, *file, captionStr, fileDescription,
                            transceiver, account);
-        } else
+        } else {
+            // The transfer itself puts nothing in the conversation, so the caption goes there alone
+            if (captionStr)
+                showMessageText(account, chat, fullMessage.messageInfo, captionStr, NULL);
             requestStandardDownload(getId(chat), fullMessage.messageInfo, fileName, *file,
                                     transceiver, account);
+        }
     }
 }
 

@@ -66,6 +66,12 @@ builds against 1.8.x, tested against **1.8.48**.
   intact; every opener it may invoke (`xdg-open`, `gnome-open`, `kfmclient`) accepts a URI
   as readily as a path. Encoding also makes the old refusal to show a file whose path
   contains a double quote unnecessary, so that has been dropped.
+- **Captions of files received as standard file transfers are no longer lost.** With
+  file downloads set to "Standard file transfers" (the default outside Pidgin), a file in a
+  private chat arrives as a transfer request, which puts nothing in the conversation, and
+  its caption was dropped, along with the reply or "forwarded from" header that goes with
+  it. A caption now appears in the conversation, headers included, as it does for a file
+  shown inline. This bug predates the fork; it is present in 0.8.1 unchanged.
 - **Names containing markup characters are shown correctly.** Values chosen by a remote
   party — a file name, a contact's display name, a group title, the caption of a photo or
   file, the text of a quoted message — reach the conversation window, which libpurple
