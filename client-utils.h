@@ -8,6 +8,7 @@
 const char *errorCodeMessage();
 
 std::string         getUnsupportedMessageDescription(const td::td_api::MessageContent &content);
+std::string         describeUnsupportedContent(const td::td_api::MessageContent &content);
 std::string         getDisplayedError(const td::td_api::object_ptr<td::td_api::Object> &object);
 std::string         proxyTypeToString(PurpleProxyType proxyType);
 

@@ -756,6 +756,12 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
             std::string notice = getUnsupportedMessageDescription(*message.content_);
             notice = makeNoticeWithSender(chat, messageInfo, notice.c_str(), account.purpleAccount);
             showMessageText(account, chat, messageInfo, NULL, notice.c_str());
+
+            // Show what the message holds anyway, in TDLib's own words. Escaping is what keeps any
+            // markup in it inert; the font merely lines up the indentation.
+            std::string text = "\n<font face=\"monospace\">" +
+                               escapeForDisplay(describeUnsupportedContent(*message.content_)) + "</font>";
+            showMessageText(account, chat, messageInfo, text.c_str(), NULL);
         }
     }
 

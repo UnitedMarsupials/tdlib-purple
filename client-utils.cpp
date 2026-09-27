@@ -82,6 +82,64 @@ std::string getUnsupportedMessageDescription(const td::td_api::MessageContent &c
     return formatMessage(_("Unsupported message type {}"), messageTypeToString(content));
 }
 
+// Fields whose value says nothing: zero, false, empty or absent
+static bool isEmptyDumpValue(const std::string &value)
+{
+    return (value == "0") || (value == "false") || (value == "\"\"") || (value == "null");
+}
+
+std::string describeUnsupportedContent(const td::td_api::MessageContent &content)
+{
+    // TDLib's debug representation is the only generic view of an object its C++ interface
+    // offers: a field per line, nested objects and vectors as indented blocks. Strings are not
+    // escaped in it, so a string can pose as further fields -- which makes it fit for display
+    // (escaped, by the caller) but never for parsing anything out of it. Empty fields, and
+    // blocks that only describe TDLib's file cache, are left out as noise.
+    enum { MAX_LINES = 50 };
+    std::string dump = td::td_api::to_string(content);
+    std::string result;
+    std::string skipUntil; // closing line of a block being left out
+    unsigned    lines = 0;
+
+    for (size_t pos = 0; pos < dump.size(); ) {
+        size_t end = dump.find('\n', pos);
+        if (end == std::string::npos)
+            end = dump.size();
+        std::string line = dump.substr(pos, end - pos);
+        pos = end + 1;
+
+        if (!skipUntil.empty()) {
+            if (line == skipUntil)
+                skipUntil.clear();
+            continue;
+        }
+
+        size_t indent    = line.find_first_not_of(' ');
+        size_t separator = line.find(" = ");
+        if ((indent != std::string::npos) && (separator != std::string::npos)) {
+            std::string value = line.substr(separator + 3);
+            if (isEmptyDumpValue(value) || (value.compare(0, 7, "bytes [") == 0))
+                continue;
+            if ((value == "vector[0] {") || (value == "localFile {") || (value == "remoteFile {") ||
+                (value == "minithumbnail {"))
+            {
+                skipUntil = std::string(indent, ' ') + "}";
+                continue;
+            }
+        }
+
+        if (++lines > MAX_LINES) {
+            result += "\n…";
+            break;
+        }
+        if (!result.empty())
+            result += '\n';
+        result += line;
+    }
+
+    return result;
+}
+
 std::string getDisplayedError(const td::td_api::object_ptr<td::td_api::Object> &object)
 {
     if (!object) {

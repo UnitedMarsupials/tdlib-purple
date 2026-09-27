@@ -42,6 +42,12 @@ builds against 1.8.x, tested against **1.8.48**.
   corresponding correction to the member-status check. Authored by **Björn Bidar**
   (upstream PR #163, likewise still open), and delivered to us — with our gratitude —
   by way of **Ben Wiederhake**'s branch.
+- **Messages of unsupported types now show what they contain.** Below the usual
+  "Unsupported message type" notice comes TDLib's own description of the message — a
+  poll's question and options, a venue's address, a service action's text — shown
+  verbatim in a monospace font, with empty fields and file-cache details left out and
+  long descriptions cut short. It covers every type TDLib can deliver, including ones
+  added after this release, without the plugin having to know them.
 
 ### Behaviour
 
