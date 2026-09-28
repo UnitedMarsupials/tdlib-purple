@@ -228,15 +228,19 @@ struct IncomingMessage {
     td::td_api::object_ptr<td::td_api::message> repliedMessage;
     td::td_api::object_ptr<td::td_api::file>    thumbnail;
     std::string inlineDownloadedFilePath;
+    // Thumbnail the sender attached to a video, shown along with the video's own link or notice
+    std::string previewPath;
 
     // This doesn't have to be a separate struct, it exists for historical reasons.
     // Could be refactored.
     TgMessageInfo messageInfo;
 
     int32_t  selectedPhotoSizeId;
+    int32_t  previewFileId; // 0 if there is no thumbnail worth showing
     unsigned inlineFileSizeLimit;
     bool     standardDownloadConfigured;
     bool     repliedMessageFetchDoneOrFailed;
+    bool     previewFetchDone;
     bool     inlineDownloadComplete;
     bool     inlineDownloadTimeout;
     bool     animatedStickerConverted;

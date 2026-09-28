@@ -415,7 +415,7 @@ static void showDownloadedSticker(const td::td_api::chat &chat, TgMessageInfo &m
                 downloadFileInline(thumbnail->id_, getId(chat), message, fileDescription, nullptr,
                                    transceiver, account);
         } else {
-            showGenericFileInline(chat, message, filePath, NULL, fileDescription, account);
+            showGenericFileInline(chat, message, filePath, NULL, fileDescription, std::string(), account);
         }
     } else {
         showWebpSticker(chat, message, filePath, fileDescription, account);
@@ -424,21 +424,33 @@ static void showDownloadedSticker(const td::td_api::chat &chat, TgMessageInfo &m
 
 void showGenericFileInline(const td::td_api::chat &chat, const TgMessageInfo &message,
                            const std::string &filePath, const char *caption,
-                           const std::string &fileDescription, TdAccountData &account)
+                           const std::string &fileDescription, const std::string &preview,
+                           TdAccountData &account)
 {
-    std::string text = "<a href=\"" + escapeForDisplay(makeFileLinkTarget(filePath)) + "\">" +
-                       escapeForDisplay(fileDescription) + "</a>";
+    // A video's thumbnail leads, so that the link to the video sits directly beneath the picture.
+    // The picture is part of the link, although Pidgin 2.14 will only ever activate one from its
+    // text: gtk_imhtml_image_add_to() renders an inline image as a widget of its own, and link
+    // activation runs through the tag "event" signal, which fires for text. Saying that the
+    // picture belongs to the link costs nothing meanwhile, and is what a conversation widget
+    // would have to be told in order to make it clickable.
+    std::string text = preview.empty() ? "" : "\n";
+    text += "<a href=\"" + escapeForDisplay(makeFileLinkTarget(filePath)) + "\">";
+    if (!preview.empty())
+        text += preview + "\n";
+    text += escapeForDisplay(fileDescription) + "</a>";
     if (caption && *caption) {
         text += "\n";
         text += caption;
     }
-    showMessageText(account, chat, message, text.c_str(), NULL);
+    showMessageText(account, chat, message, text.c_str(), NULL,
+                    preview.empty() ? 0 : PURPLE_MESSAGE_IMAGES);
 }
 
 void showDownloadedFileInline(ChatId chatId, TgMessageInfo &message,
                               const std::string &filePath, const char *caption,
                               const std::string &fileDescription,
                               td::td_api::object_ptr<td::td_api::file> thumbnail,
+                              const std::string &preview,
                               TdTransceiver &transceiver, TdAccountData &account)
 {
     const td::td_api::chat *chat = account.getChat(chatId);
@@ -453,7 +465,7 @@ void showDownloadedFileInline(ChatId chatId, TgMessageInfo &message,
                               transceiver, account);
         break;
     case TgMessageInfo::Type::Other:
-        showGenericFileInline(*chat, message, filePath, caption, fileDescription, account);
+        showGenericFileInline(*chat, message, filePath, caption, fileDescription, preview, account);
         break;
     }
 }
@@ -522,6 +534,20 @@ static void requestInlineDownload(const char *sender, const td::td_api::file &fi
                           _("_No"), ignoreInlineDownload);
 }
 
+// The thumbnail fetched for a video, as markup for the conversation window; empty if there is none
+static std::string makePreviewImageText(const IncomingMessage &fullMessage)
+{
+    gchar *data = NULL;
+    gsize  len  = 0;
+
+    if (fullMessage.previewPath.empty() ||
+        !g_file_get_contents(fullMessage.previewPath.c_str(), &data, &len, NULL))
+        return "";
+
+    int id = purple_imgstore_add_with_id(data, len, NULL);
+    return "<img id=\"" + std::to_string(id) + "\">";
+}
+
 static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMessage,
                            const td::td_api::file &file, const char *caption,
                            const std::string &fileDesc,
@@ -534,6 +560,10 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
 
     if (caption && (*caption == '\0'))
         caption = NULL;
+
+    // A video's thumbnail goes inside the hyperlink where there is one (see showGenericFileInline);
+    // where there is only a notice, it goes above the caption. Either way it precedes the caption.
+    std::string preview = makePreviewImageText(fullMessage);
 
     if (file.local_ && file.local_->is_downloading_completed_) {
         autoDownload = true;
@@ -565,8 +595,20 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
                                       account.purpleAccount);
 
     // Notice means file isn't downloaded yet or is ignored. Either way, show caption as well.
-    if (!notice.empty())
-        showMessageText(account, chat, fullMessage.messageInfo, caption, notice.c_str());
+    // A thumbnail then starts the message, so it gets a line of its own, as a photo does.
+    if (!notice.empty()) {
+        if (preview.empty())
+            showMessageText(account, chat, fullMessage.messageInfo, caption, notice.c_str());
+        else {
+            std::string text = "\n" + preview;
+            if (caption) {
+                text += "\n";
+                text += caption;
+            }
+            showMessageText(account, chat, fullMessage.messageInfo, text.c_str(), notice.c_str(),
+                            PURPLE_MESSAGE_IMAGES);
+        }
+    }
 
     if (autoDownload || askDownload) {
         if (fullMessage.animatedStickerConverted) {
@@ -576,10 +618,12 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
             }
         } else if (file.local_ && file.local_->is_downloading_completed_)
             showDownloadedFileInline(getId(chat), fullMessage.messageInfo, file.local_->path_,
-                                     caption, fileDesc, std::move(fullMessage.thumbnail), transceiver, account);
+                                     caption, fileDesc, std::move(fullMessage.thumbnail), preview,
+                                     transceiver, account);
         else if (autoDownload && fullMessage.inlineDownloadComplete)
             showDownloadedFileInline(getId(chat), fullMessage.messageInfo, fullMessage.inlineDownloadedFilePath,
-                                     caption, fileDesc, std::move(fullMessage.thumbnail), transceiver, account);
+                                     caption, fileDesc, std::move(fullMessage.thumbnail), preview,
+                                     transceiver, account);
         else if (autoDownload) {
             // When download takes too long, message will leave PendingMessageQueue and be "shown".
             // However, nothing more should be done at that point except keep waiting for the download.
@@ -639,8 +683,18 @@ static void showFileMessage(const td::td_api::chat &chat, IncomingMessage &fullM
             showFileInline(chat, fullMessage, *file, captionStr, fileDescription,
                            transceiver, account);
         } else {
-            // The transfer itself puts nothing in the conversation, so the caption goes there alone
-            if (captionStr)
+            // The transfer itself puts nothing in the conversation, so the caption goes there
+            // alone, below the video's thumbnail, if any, which gets a line of its own
+            std::string preview = makePreviewImageText(fullMessage);
+            if (!preview.empty()) {
+                std::string text = "\n" + preview;
+                if (captionStr) {
+                    text += "\n";
+                    text += captionStr;
+                }
+                showMessageText(account, chat, fullMessage.messageInfo, text.c_str(), NULL,
+                                PURPLE_MESSAGE_IMAGES);
+            } else if (captionStr)
                 showMessageText(account, chat, fullMessage.messageInfo, captionStr, NULL);
             requestStandardDownload(getId(chat), fullMessage.messageInfo, fileName, *file,
                                     transceiver, account);
@@ -808,6 +862,49 @@ const td::td_api::file *selectPhotoSize(PurpleAccount *account, const td::td_api
     return selectedSize ? selectedSize->photo_.get() : nullptr;
 }
 
+// The thumbnail the sender attached to a video, if it is one the conversation window can show:
+// Telegram also sends MPEG4 thumbnails for some videos and animations, and those are skipped.
+static const td::td_api::file *getVideoPreview(const td::td_api::MessageContent &content,
+                                               PurpleAccount *account)
+{
+    const td::td_api::thumbnail *thumbnail = nullptr;
+    bool                         secret    = false;
+
+    switch (content.get_id()) {
+        case td::td_api::messageVideo::ID: {
+            const auto &video = static_cast<const td::td_api::messageVideo &>(content);
+            if (video.video_)
+                thumbnail = video.video_->thumbnail_.get();
+            secret = video.is_secret_;
+            break;
+        }
+        case td::td_api::messageAnimation::ID: {
+            const auto &animation = static_cast<const td::td_api::messageAnimation &>(content);
+            if (animation.animation_)
+                thumbnail = animation.animation_->thumbnail_.get();
+            secret = animation.is_secret_;
+            break;
+        }
+        case td::td_api::messageVideoNote::ID: {
+            const auto &videoNote = static_cast<const td::td_api::messageVideoNote &>(content);
+            if (videoNote.video_note_)
+                thumbnail = videoNote.video_note_->thumbnail_.get();
+            secret = videoNote.is_secret_;
+            break;
+        }
+    }
+
+    // A self-destructing video is only displayed on request, and so is its thumbnail
+    if (secret && !purple_account_get_bool(account, AccountOptions::ShowSelfDestruct,
+                                           AccountOptions::ShowSelfDestructDefault))
+        return nullptr;
+
+    if (thumbnail && thumbnail->format_ &&
+        (thumbnail->format_->get_id() == td::td_api::thumbnailFormatJpeg::ID))
+        return thumbnail->file_.get();
+    return nullptr;
+}
+
 void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td_api::message> message,
                      IncomingMessage &fullMessage, const TdAccountData &account)
 {
@@ -819,6 +916,9 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
     fullMessage.repliedMessage = nullptr;
     fullMessage.selectedPhotoSizeId = 0;
     fullMessage.repliedMessageFetchDoneOrFailed = false;
+    fullMessage.previewPath.clear();
+    fullMessage.previewFileId = 0;
+    fullMessage.previewFetchDone = false;
     fullMessage.inlineDownloadComplete = false;
     fullMessage.inlineDownloadTimeout = false;
     fullMessage.animatedStickerConverted = false;
@@ -854,6 +954,15 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
             td::td_api::messageSticker &sticker = static_cast<td::td_api::messageSticker &>(*message->content_);
             if (sticker.sticker_ && sticker.sticker_->thumbnail_) {
                 fullMessage.thumbnail = std::move(sticker.sticker_->thumbnail_->file_);
+            }
+        }
+
+        const td::td_api::file *preview = getVideoPreview(*message->content_, account.purpleAccount);
+        if (preview) {
+            fullMessage.previewFileId = preview->id_;
+            if (preview->local_ && preview->local_->is_downloading_completed_) {
+                fullMessage.previewPath = preview->local_->path_;
+                fullMessage.previewFetchDone = true;
             }
         }
     }
@@ -1012,6 +1121,10 @@ bool isMessageReady(const IncomingMessage &fullMessage, const TdAccountData &acc
         return false;
     }
 
+    // Wait for a video's thumbnail, or it would land below messages that arrived after it
+    if (fullMessage.previewFileId && !fullMessage.previewFetchDone)
+        return false;
+
     if (message.content_)
     {
         FileInfo fileInfo;
@@ -1027,6 +1140,22 @@ bool isMessageReady(const IncomingMessage &fullMessage, const TdAccountData &acc
 
 
     return true;
+}
+
+static void previewDownloadResponse(TdAccountData &account, ChatId chatId, MessageId messageId,
+                                    td::td_api::object_ptr<td::td_api::Object> object)
+{
+    IncomingMessage *pendingMessage = account.pendingMessages.findPendingMessage(chatId, messageId);
+    if (!pendingMessage) return;
+
+    pendingMessage->previewFetchDone = true;
+    if (object)
+        pendingMessage->previewPath = getDownloadPath(object);
+    else
+        purple_debug_misc(config::pluginId, "Video thumbnail for message %" G_GINT64_FORMAT " timed out\n",
+                          messageId.value());
+
+    checkMessageReady(pendingMessage, account.transceiver, account);
 }
 
 void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAccountData &account,
@@ -1046,6 +1175,22 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
         getMessageReq->chat_id_    = chatId.value();
         getMessageReq->message_id_ = replyMessageId.value();
         transceiver.sendQueryWithTimeout(std::move(getMessageReq), onFetchReply, 1);
+    }
+
+    if (fullMessage.previewFileId && !fullMessage.previewFetchDone) {
+        purple_debug_misc(config::pluginId, "Fetching video thumbnail for message %" G_GINT64_FORMAT "\n",
+                          messageId.value());
+        auto downloadReq = td::td_api::make_object<td::td_api::downloadFile>();
+        downloadReq->file_id_     = fullMessage.previewFileId;
+        downloadReq->priority_    = FILE_DOWNLOAD_PRIORITY;
+        downloadReq->offset_      = 0;
+        downloadReq->limit_       = 0;
+        downloadReq->synchronous_ = true;
+        // Past the timeout the video is shown without it; a late thumbnail is then discarded
+        transceiver.sendQueryWithTimeout(std::move(downloadReq),
+            [&account, chatId, messageId](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
+                previewDownloadResponse(account, chatId, messageId, std::move(object));
+            }, 1);
     }
 
     FileInfo fileInfo;

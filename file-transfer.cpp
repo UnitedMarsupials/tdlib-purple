@@ -215,9 +215,10 @@ static void inlineDownloadResponse(uint64_t requestId,
         } else {
             // Message no longer in PendingMessageQueue
             if (!path.empty())
+                // No thumbnail here: the message left PendingMessageQueue, taking it along
                 showDownloadedFileInline(request->chatId, request->message, path, NULL,
                                          request->fileDescription, std::move(request->thumbnail),
-                                         transceiver, account);
+                                         std::string(), transceiver, account);
         }
     }
 }

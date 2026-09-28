@@ -38,6 +38,17 @@ builds against 1.8.x, tested against **1.8.48**.
   `show-self-destruct` account option (off by default). Authored by the ever-generous
   **Ben Wiederhake** — this is his own work, offered upstream as PR #159 in May 2022 and
   never merged there. Our thanks for both the feature and the patience.
+- **Videos are shown with their thumbnail**, the preview image the sender's client attaches
+  to a video, animation or round video message. The picture leads the message, with the
+  link to the video directly beneath it and the caption below that; where there is no link
+  yet, the notice about the download follows instead. That includes videos over the
+  auto-download limit, which can now be recognised before deciding whether to download
+  them. Each message waits briefly for its thumbnail, in the same queue that keeps messages
+  in order, so a preview never lands below messages that arrived after it; a thumbnail that
+  takes too long is skipped. Thumbnails in MPEG4 format, which some animations carry, are
+  not shown. The picture is marked up as part of the link, but Pidgin 2.14 activates a
+  link only from its text — an inline image is a widget of its own there — so for now the
+  link beneath the picture is the thing to click.
 - **Group chats you are not a member of are no longer added** to the buddy list, with a
   corresponding correction to the member-status check. Authored by **Björn Bidar**
   (upstream PR #163, likewise still open), and delivered to us — with our gratitude —

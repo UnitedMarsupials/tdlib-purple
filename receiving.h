@@ -19,11 +19,13 @@ void showChatNotification(TdAccountData &account, const td::td_api::chat &chat,
                           const char *notification, time_t timestamp, PurpleMessageFlags extraFlags);
 void showGenericFileInline(const td::td_api::chat &chat, const TgMessageInfo &message,
                            const std::string &filePath, const char *caption,
-                           const std::string &fileDescription,TdAccountData &account);
+                           const std::string &fileDescription, const std::string &preview,
+                           TdAccountData &account);
 void showDownloadedFileInline(ChatId chatId, TgMessageInfo &message,
                               const std::string &filePath, const char *caption,
                               const std::string &fileDescription,
                               td::td_api::object_ptr<td::td_api::file> thumbnail,
+                              const std::string &preview,
                               TdTransceiver &transceiver, TdAccountData &account);
 bool isStickerAnimated(const std::string &filePath);
 bool shouldConvertAnimatedSticker(const TgMessageInfo &message, const PurpleAccount *purpleAccount);
