@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9 (unreleased)
+## 0.9.0 (2026-09-27)
 
 This is the first release from this fork. The upstream project,
 [ars3niy/tdlib-purple](https://github.com/ars3niy/tdlib-purple), published 0.8.1 on
