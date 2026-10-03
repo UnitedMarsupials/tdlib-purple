@@ -10,7 +10,7 @@ TEST_F(MessageHistoryTest, TdlibSkipMessages_LastMessageUnknown)
     loginWithSupergroup();
 
     tgl.update(make_object<updateChatLastMessage>(
-        groupChatId, nullptr, 0
+        groupChatId, nullptr, std::vector<object_ptr<chatPosition>>()
     ));
     tgl.verifyNoRequests();
 }
@@ -22,7 +22,7 @@ TEST_F(MessageHistoryTest, TdlibSkipMessages)
     loginWithSupergroup();
 
     tgl.update(make_object<updateChatLastMessage>(
-        groupChatId, nullptr, 0
+        groupChatId, nullptr, std::vector<object_ptr<chatPosition>>()
     ));
 
     tgl.update(make_object<updateNewMessage>(
@@ -32,7 +32,7 @@ TEST_F(MessageHistoryTest, TdlibSkipMessages)
     tgl.update(make_object<updateChatLastMessage>(
         groupChatId,
         makeMessage(6, userIds[0], groupChatId, false, 6, makeTextMessage("6")),
-        0
+        std::vector<object_ptr<chatPosition>>()
     ));
 
     tgl.update(make_object<updateNewMessage>(
@@ -41,7 +41,7 @@ TEST_F(MessageHistoryTest, TdlibSkipMessages)
     tgl.update(make_object<updateChatLastMessage>(
         groupChatId,
         makeMessage(7, userIds[0], groupChatId, false, 7, makeTextMessage("7")),
-        0
+        std::vector<object_ptr<chatPosition>>()
     ));
     prpl.verifyNoEvents();
     tgl.verifyNoRequests();
@@ -70,7 +70,7 @@ TEST_F(MessageHistoryTest, TdlibSkipMessages)
         ServGotChatEvent(connection, purpleChatId, userNameInChat, "6", PURPLE_MESSAGE_RECV, 6),
         ServGotChatEvent(connection, purpleChatId, userNameInChat, "7", PURPLE_MESSAGE_RECV, 7)
     );
-    tgl.verifyRequest(viewMessages(groupChatId, {6, 7, 5, 4, 3, 2}, true));
+    tgl.verifyRequest(viewMessages(groupChatId, {6, 7, 5, 4, 3, 2}, nullptr, true));
 
     tgl.update(make_object<updateNewMessage>(
         makeMessage(8, userIds[0], groupChatId, false, 8, makeTextMessage("8"))
@@ -78,12 +78,12 @@ TEST_F(MessageHistoryTest, TdlibSkipMessages)
     tgl.update(make_object<updateChatLastMessage>(
         groupChatId,
         makeMessage(8, userIds[0], groupChatId, false, 8, makeTextMessage("8")),
-        0
+        std::vector<object_ptr<chatPosition>>()
     ));
     prpl.verifyEvents(
         ServGotChatEvent(connection, purpleChatId, userNameInChat, "8", PURPLE_MESSAGE_RECV, 8)
     );
-    tgl.verifyRequest(viewMessages(groupChatId, {8}, true));
+    tgl.verifyRequest(viewMessages(groupChatId, {8}, nullptr, true));
 
     ASSERT_EQ(std::string("8"), std::string(purple_account_get_string(
         account, ("last-message-chat" + std::to_string(groupChatId)).c_str(), "")));
@@ -96,7 +96,7 @@ TEST_F(MessageHistoryTest, TdlibSkipMessages_FlushAtLogout)
     loginWithSupergroup();
 
     tgl.update(make_object<updateChatLastMessage>(
-        groupChatId, nullptr, 0
+        groupChatId, nullptr, std::vector<object_ptr<chatPosition>>()
     ));
 
     tgl.update(make_object<updateNewMessage>(
@@ -106,7 +106,7 @@ TEST_F(MessageHistoryTest, TdlibSkipMessages_FlushAtLogout)
     tgl.update(make_object<updateChatLastMessage>(
         groupChatId,
         makeMessage(6, userIds[0], groupChatId, false, 6, makeTextMessage("6")),
-        0
+        std::vector<object_ptr<chatPosition>>()
     ));
     prpl.verifyNoEvents();
     tgl.verifyNoRequests();
@@ -136,7 +136,7 @@ TEST_F(MessageHistoryTest, TdlibSkipMessages_FlushAtLogout)
         ServGotChatEvent(connection, purpleChatId, userNameInChat, "5", PURPLE_MESSAGE_RECV, 5),
         ServGotChatEvent(connection, purpleChatId, userNameInChat, "6", PURPLE_MESSAGE_RECV, 6)
     );
-    tgl.verifyRequest(viewMessages(groupChatId, {6, 5, 4, 3, 2}, true));
+    tgl.verifyRequest(viewMessages(groupChatId, {6, 5, 4, 3, 2}, nullptr, true));
 
     ASSERT_EQ(std::string("6"), std::string(purple_account_get_string(
         account, ("last-message-chat" + std::to_string(groupChatId)).c_str(), "")));

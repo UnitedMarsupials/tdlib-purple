@@ -23,11 +23,11 @@ TEST_F(MessageSplitTest, SplitCaption)
             0,
             nullptr,
             nullptr,
-            make_object<inputMessagePhoto>(
+            nullptr, make_object<inputMessagePhoto>(
                 make_object<inputFileLocal>(),
                 nullptr, std::vector<std::int32_t>(), 0, 0,
                 make_object<formattedText>("", std::vector<object_ptr<textEntity>>()),
-                0
+                false, nullptr, false
             )
         ),
         make_object<sendMessage>(
@@ -35,9 +35,9 @@ TEST_F(MessageSplitTest, SplitCaption)
             0,
             nullptr,
             nullptr,
-            make_object<inputMessageText>(
+            nullptr, make_object<inputMessageText>(
                 make_object<formattedText>("234567890", std::vector<object_ptr<textEntity>>()),
-                false, false
+                nullptr, false
             )
         )
     });
@@ -50,11 +50,11 @@ TEST_F(MessageSplitTest, SplitCaption)
             0,
             nullptr,
             nullptr,
-            make_object<inputMessagePhoto>(
+            nullptr, make_object<inputMessagePhoto>(
                 make_object<inputFileLocal>(),
                 nullptr, std::vector<std::int32_t>(), 0, 0,
                 make_object<formattedText>("1", std::vector<object_ptr<textEntity>>()),
-                0
+                false, nullptr, false
             )
         ),
         make_object<sendMessage>(
@@ -62,9 +62,9 @@ TEST_F(MessageSplitTest, SplitCaption)
             0,
             nullptr,
             nullptr,
-            make_object<inputMessageText>(
+            nullptr, make_object<inputMessageText>(
                 make_object<formattedText>("123456789", std::vector<object_ptr<textEntity>>()),
-                false, false
+                nullptr, false
             )
         )
     });
@@ -93,11 +93,11 @@ TEST_F(MessageSplitTest, SplitCaptionAndText)
             0,
             nullptr,
             nullptr,
-            make_object<inputMessagePhoto>(
+            nullptr, make_object<inputMessagePhoto>(
                 make_object<inputFileLocal>(),
                 nullptr, std::vector<std::int32_t>(), 0, 0,
                 make_object<formattedText>("123456789", std::vector<object_ptr<textEntity>>()),
-                0
+                false, nullptr, false
             )
         ),
         make_object<sendMessage>(
@@ -105,9 +105,9 @@ TEST_F(MessageSplitTest, SplitCaptionAndText)
             0,
             nullptr,
             nullptr,
-            make_object<inputMessageText>(
+            nullptr, make_object<inputMessageText>(
                 make_object<formattedText>("1234567890123456789", std::vector<object_ptr<textEntity>>()),
-                false, false
+                nullptr, false
             )
         ),
         make_object<sendMessage>(
@@ -115,9 +115,9 @@ TEST_F(MessageSplitTest, SplitCaptionAndText)
             0,
             nullptr,
             nullptr,
-            make_object<inputMessageText>(
+            nullptr, make_object<inputMessageText>(
                 make_object<formattedText>("0", std::vector<object_ptr<textEntity>>()),
-                false, false
+                nullptr, false
             )
         )
     });
@@ -142,12 +142,12 @@ TEST_F(MessageSplitTest, SplitCaption_Utf8)
             0,
             nullptr,
             nullptr,
-            make_object<inputMessagePhoto>(
+            nullptr, make_object<inputMessagePhoto>(
                 make_object<inputFileLocal>(),
                 nullptr, std::vector<std::int32_t>(), 0, 0,
                 // 8 bytes (limit is 9)
                 make_object<formattedText>("😃😃", std::vector<object_ptr<textEntity>>()),
-                0
+                false, nullptr, false
             )
         ),
         make_object<sendMessage>(
@@ -155,9 +155,9 @@ TEST_F(MessageSplitTest, SplitCaption_Utf8)
             0,
             nullptr,
             nullptr,
-            make_object<inputMessageText>(
+            nullptr, make_object<inputMessageText>(
                 make_object<formattedText>("😃", std::vector<object_ptr<textEntity>>()),
-                false, false
+                nullptr, false
             )
         )
     });
@@ -184,9 +184,9 @@ TEST_F(MessageSplitTest, SplitText_Utf8)
             0,
             nullptr,
             nullptr,
-            make_object<inputMessageText>(
+            nullptr, make_object<inputMessageText>(
                 make_object<formattedText>("😃😃", std::vector<object_ptr<textEntity>>()),
-                false, false
+                nullptr, false
             )
         ),
         make_object<sendMessage>(
@@ -194,9 +194,9 @@ TEST_F(MessageSplitTest, SplitText_Utf8)
             0,
             nullptr,
             nullptr,
-            make_object<inputMessageText>(
+            nullptr, make_object<inputMessageText>(
                 make_object<formattedText>("😃😃", std::vector<object_ptr<textEntity>>()),
-                false, false
+                nullptr, false
             )
         ),
         make_object<sendMessage>(
@@ -204,9 +204,9 @@ TEST_F(MessageSplitTest, SplitText_Utf8)
             0,
             nullptr,
             nullptr,
-            make_object<inputMessageText>(
+            nullptr, make_object<inputMessageText>(
                 make_object<formattedText>("😃", std::vector<object_ptr<textEntity>>()),
-                false, false
+                nullptr, false
             )
         )
     });

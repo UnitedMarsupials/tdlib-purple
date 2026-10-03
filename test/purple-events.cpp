@@ -6,7 +6,7 @@ PurpleEventReceiver g_purpleEvents;
 
 void PurpleEventReceiver::addEvent(std::unique_ptr<PurpleEvent> event)
 {
-    std::cout << "Libpurple event: " << event->toString() << "\n";
+    printToConsole("Libpurple event: " + event->toString() + "\n");
     m_events.push(std::move(event));
 }
 

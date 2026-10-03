@@ -6,6 +6,8 @@
 #include <string>
 #include <purple.h>
 
+void printToConsole(const std::string &text);
+
 extern "C" {
 
 void setFakeFileSize(const char *path, size_t size);

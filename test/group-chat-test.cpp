@@ -28,7 +28,7 @@ void GroupChatTest::loginWithBasicGroup()
             makeUpdateChatListMain(groupChatId)
         },
         make_object<users>(),
-        make_object<chats>(std::vector<int64_t>(1, groupChatId)),
+        make_object<chats>(1, std::vector<int64_t>(1, groupChatId)),
         {
             std::make_unique<AddChatEvent>(
                 groupChatPurpleName, groupChatTitle, account, nullptr, nullptr
@@ -77,7 +77,7 @@ TEST_F(GroupChatTest, ExistingBasicGroupChatAtLogin)
     auto groupChat = makeChat(
         groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0
     );
-    groupChat->chat_list_ = make_object<chatListMain>();
+    groupChat->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
     login(
         {
             make_object<updateBasicGroup>(make_object<basicGroup>(
@@ -86,7 +86,7 @@ TEST_F(GroupChatTest, ExistingBasicGroupChatAtLogin)
             make_object<updateNewChat>(std::move(groupChat)),
         },
         make_object<users>(),
-        make_object<chats>(std::vector<int64_t>(1, groupChatId)),
+        make_object<chats>(1, std::vector<int64_t>(1, groupChatId)),
         {},
         {make_object<getBasicGroupFullInfo>(groupId)}
     );
@@ -103,7 +103,7 @@ TEST_F(GroupChatTest, BasicGroupReceiveTextAndReply)
     tgl.update(make_object<updateNewMessage>(
         makeMessage(messageId[0], userIds[0], groupChatId, false, date[0], makeTextMessage("Hello"))
     ));
-    tgl.verifyRequest(viewMessages(groupChatId, {messageId[0]}, true));
+    tgl.verifyRequest(viewMessages(groupChatId, {messageId[0]}, nullptr, true));
     prpl.verifyEvents(
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
         ServGotChatEvent(connection, purpleChatId, userFirstNames[0] + " " + userLastNames[0],
@@ -112,7 +112,7 @@ TEST_F(GroupChatTest, BasicGroupReceiveTextAndReply)
 
     object_ptr<message> reply = makeMessage(messageId[1], selfId, groupChatId, true, date[1],
                                             makeTextMessage("Reply"));
-    reply->reply_to_message_id_ = messageId[0];
+    reply->reply_to_ = makeReplyTo(messageId[0]);
     tgl.update(make_object<updateNewMessage>(std::move(reply)));
     tgl.verifyRequest(getMessage(groupChatId, messageId[0]));
     prpl.verifyNoEvents();
@@ -123,7 +123,7 @@ TEST_F(GroupChatTest, BasicGroupReceiveTextAndReply)
         fmt::format(replyPattern, userFirstNames[0] + " " + userLastNames[0], "Hello", "Reply"),
         PURPLE_MESSAGE_SEND, date[1]
     ));
-    tgl.verifyRequest(viewMessages(groupChatId, {messageId[1]}, true));
+    tgl.verifyRequest(viewMessages(groupChatId, {messageId[1]}, nullptr, true));
 }
 
 TEST_F(GroupChatTest, BasicGroupReceivePhoto)
@@ -140,7 +140,7 @@ TEST_F(GroupChatTest, BasicGroupReceivePhoto)
         make_object<messagePhoto>(
             makePhotoRemote(fileId, 10000, 640, 480),
             make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>()),
-            false
+            false, false, false
         )
     )));
     tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
@@ -160,7 +160,7 @@ TEST_F(GroupChatTest, BasicGroupReceivePhoto)
             (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES), date
         )
     );
-    tgl.verifyRequest(viewMessages(groupChatId, {messageId}, true));
+    tgl.verifyRequest(viewMessages(groupChatId, {messageId}, nullptr, true));
 }
 
 TEST_F(GroupChatTest, ExistingBasicGroupReceiveMessageAtLogin_WithMemberList_RemoveGroupMemberFromBuddies)
@@ -191,7 +191,7 @@ TEST_F(GroupChatTest, ExistingBasicGroupReceiveMessageAtLogin_WithMemberList_Rem
         userIds[1],
         userIds[1],
         0,
-        make_object<chatMemberStatusCreator>("", true),
+        make_object<chatMemberStatusCreator>("", false, true),
         nullptr
     ));
     members.push_back(makeChatMember(
@@ -205,7 +205,7 @@ TEST_F(GroupChatTest, ExistingBasicGroupReceiveMessageAtLogin_WithMemberList_Rem
     auto chat = makeChat(
         groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0
     );
-    chat->chat_list_ = make_object<chatListMain>();
+    chat->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
 
     login(
         {
@@ -222,8 +222,8 @@ TEST_F(GroupChatTest, ExistingBasicGroupReceiveMessageAtLogin_WithMemberList_Rem
             ),
             standardUpdateUser(1)
         },
-        make_object<users>(1, std::vector<int32_t>(1, userIds[0])),
-        make_object<chats>(std::vector<int64_t>(1, groupChatId)),
+        make_object<users>(1, std::vector<int64_t>(1, userIds[0])),
+        make_object<chats>(1, std::vector<int64_t>(1, groupChatId)),
         {
             std::make_unique<ServGotJoinedChatEvent>(connection, purpleChatId, groupChatPurpleName,
                                                      groupChatTitle),
@@ -232,12 +232,14 @@ TEST_F(GroupChatTest, ExistingBasicGroupReceiveMessageAtLogin_WithMemberList_Rem
         },
         {
             make_object<getBasicGroupFullInfo>(groupId),
-            make_object<viewMessages>(groupChatId, std::vector<int64_t>(1, messageId), true),
+            make_object<viewMessages>(groupChatId, std::vector<int64_t>(1, messageId), nullptr, true),
             make_object<basicGroupFullInfo>(
+                nullptr,
                 "basic group",
                 userIds[1],
                 std::move(members),
-                ""
+                false, false, nullptr,
+                std::vector<object_ptr<botCommands>>()
             )
         },
         {
@@ -318,7 +320,7 @@ TEST_F(GroupChatTest, SendMessageWithMemberList)
         userIds[1],
         userIds[1],
         0,
-        make_object<chatMemberStatusCreator>("", true),
+        make_object<chatMemberStatusCreator>("", false, true),
         nullptr
     ));
     members.push_back(makeChatMember(
@@ -342,7 +344,7 @@ TEST_F(GroupChatTest, SendMessageWithMemberList)
             standardUpdateUserNoPhone(1),
         },
         make_object<users>(),
-        make_object<chats>(std::vector<int64_t>(1, groupChatId)),
+        make_object<chats>(1, std::vector<int64_t>(1, groupChatId)),
         {
             std::make_unique<AddChatEvent>(
                 groupChatPurpleName, groupChatTitle, account, nullptr, nullptr
@@ -351,10 +353,12 @@ TEST_F(GroupChatTest, SendMessageWithMemberList)
         {
             make_object<getBasicGroupFullInfo>(groupId),
             make_object<basicGroupFullInfo>(
+                nullptr,
                 "basic group",
                 userIds[1],
                 std::move(members),
-                ""
+                false, false, nullptr,
+                std::vector<object_ptr<botCommands>>()
             )
         }
     );
@@ -395,9 +399,10 @@ TEST_F(GroupChatTest, SendMessageWithMemberList)
         0,
         nullptr,
         nullptr,
+        nullptr,
         make_object<inputMessageText>(
             make_object<formattedText>("message", std::vector<object_ptr<textEntity>>()),
-            false,
+            nullptr,
             false
         )
     ));
@@ -408,7 +413,7 @@ TEST_F(GroupChatTest, SendMessageWithMemberList)
     ));
     tgl.verifyRequest(viewMessages(
         groupChatId,
-        {messageId},
+        {messageId}, nullptr,
         true
     ));
     prpl.verifyEvents(ConversationWriteEvent(
@@ -448,7 +453,7 @@ TEST_F(GroupChatTest, JoinBasicGroupByInviteLink)
     auto chatUpdate = make_object<updateNewChat>(makeChat(
         groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0
     ));
-    chatUpdate->chat_->chat_list_ = make_object<chatListMain>();
+    chatUpdate->chat_->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
     tgl.update(std::move(chatUpdate));
     // Chat is added, list of members requested
     prpl.verifyEvents(AddChatEvent(
@@ -462,7 +467,7 @@ TEST_F(GroupChatTest, JoinBasicGroupByInviteLink)
     ));
     uint64_t viewMessagesRequestId = tgl.verifyRequest(viewMessages(
         groupChatId,
-        {1},
+        {1}, nullptr,
         true
     ));
 
@@ -472,7 +477,11 @@ TEST_F(GroupChatTest, JoinBasicGroupByInviteLink)
         ConversationWriteEvent(groupChatPurpleName, NotificationWho,
                                selfFirstName + " " + selfLastName + ": " +
                                "Unsupported message type messageChatJoinByLink",
-                               PURPLE_MESSAGE_SYSTEM, 12345)
+                               PURPLE_MESSAGE_SYSTEM, 12345),
+        // ...followed by what the message holds, which for this type is nothing at all
+        ConversationWriteEvent(groupChatPurpleName, selfFirstName + " " + selfLastName,
+                               "\n<font face=\"monospace\">messageChatJoinByLink {\n}</font>",
+                               PURPLE_MESSAGE_SEND, 12345)
     );
 
     // Now reply to join group - original chat is removed
@@ -496,7 +505,7 @@ TEST_F(GroupChatTest, JoinBasicGroupByInviteLink)
         userIds[1],
         userIds[1],
         0,
-        make_object<chatMemberStatusCreator>("", true),
+        make_object<chatMemberStatusCreator>("", false, true),
         nullptr
     ));
     members.push_back(makeChatMember(
@@ -507,10 +516,12 @@ TEST_F(GroupChatTest, JoinBasicGroupByInviteLink)
         nullptr
     ));
     tgl.reply(groupInfoRequestId, make_object<basicGroupFullInfo>(
-        "basic group",
+        nullptr,
+                "basic group",
         userIds[1],
         std::move(members),
-        ""
+        false, false, nullptr,
+                std::vector<object_ptr<botCommands>>()
     ));
 
     prpl.verifyEvents(
@@ -558,7 +569,7 @@ TEST_F(GroupChatTest, GroupRenamed)
     ));
     tgl.verifyRequest(viewMessages(
         groupChatId,
-        {messageId},
+        {messageId}, nullptr,
         true
     ));
     prpl.verifyEvents(
@@ -604,7 +615,7 @@ TEST_F(GroupChatTest, CreateRemoveBasicGroupInAnotherClient)
     loginWithOneContact();
 
     tgl.update(make_object<updateBasicGroup>(make_object<basicGroup>(
-        groupId, 2, make_object<chatMemberStatusCreator>("", true), true, 0
+        groupId, 2, make_object<chatMemberStatusCreator>("", false, true), true, 0
     )));
     tgl.verifyNoRequests();
 
@@ -614,19 +625,24 @@ TEST_F(GroupChatTest, CreateRemoveBasicGroupInAnotherClient)
     prpl.verifyNoEvents();
     tgl.verifyNoRequests();
 
-    std::vector<int32_t> members = {selfId, userIds[0]};
+    std::vector<int64_t> members = {selfId, userIds[0]};
     tgl.update(make_object<updateNewMessage>(
         makeMessage(messageId[0], selfId, groupChatId, true, date[0],
                     make_object<messageBasicGroupChatCreate>(groupChatTitle, std::move(members)))
     ));
-    tgl.verifyRequest(viewMessages(groupChatId, {messageId[0]}, true));
+    tgl.verifyRequest(viewMessages(groupChatId, {messageId[0]}, nullptr, true));
     prpl.verifyEvents(
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatPurpleName),
         ConvSetTitleEvent(groupChatPurpleName, groupChatTitle),
         ConversationWriteEvent(groupChatPurpleName, NotificationWho,
                                selfFirstName + " " + selfLastName +
                                ": Unsupported message type messageBasicGroupChatCreate",
-                               PURPLE_MESSAGE_SYSTEM, date[0])
+                               PURPLE_MESSAGE_SYSTEM, date[0]),
+        ConversationWriteEvent(groupChatPurpleName, selfFirstName + " " + selfLastName,
+                               "\n<font face=\"monospace\">messageBasicGroupChatCreate {\n"
+                               "  title = \"Title\"\n"
+                               "  member_user_ids = vector[2] {\n    1\n    100\n  }\n}</font>",
+                               PURPLE_MESSAGE_SEND, date[0])
     );
 
     tgl.update(makeUpdateChatListMain(groupChatId));
@@ -637,11 +653,13 @@ TEST_F(GroupChatTest, CreateRemoveBasicGroupInAnotherClient)
 
     tgl.update(make_object<updateBasicGroupFullInfo>(
         groupId,
-        make_object<basicGroupFullInfo>("basic group", selfId, std::vector<object_ptr<chatMember>>(), "")
+        make_object<basicGroupFullInfo>(nullptr, "basic group", selfId,
+            std::vector<object_ptr<chatMember>>(), false, false, nullptr,
+            std::vector<object_ptr<botCommands>>())
     ));
     tgl.update(make_object<updateBasicGroup>(make_object<basicGroup>(
         groupId, 0,
-        make_object<chatMemberStatusCreator>("", false), // We are no longer group member
+        make_object<chatMemberStatusCreator>("", false, false), // We are no longer group member
         true, 0
     )));
 
@@ -649,14 +667,18 @@ TEST_F(GroupChatTest, CreateRemoveBasicGroupInAnotherClient)
         makeMessage(messageId[1], selfId, groupChatId, true, date[1],
                     make_object<messageChatDeleteMember>(selfId))
     ));
-    tgl.verifyRequest(viewMessages(groupChatId, {messageId[1]}, true));
+    tgl.verifyRequest(viewMessages(groupChatId, {messageId[1]}, nullptr, true));
     prpl.verifyEvents(
         ChatSetTopicEvent(groupChatPurpleName, "basic group", ""),
         ChatClearUsersEvent(groupChatPurpleName),
         ConversationWriteEvent(groupChatPurpleName, NotificationWho,
                                selfFirstName + " " + selfLastName +
                                ": Unsupported message type messageChatDeleteMember",
-                               PURPLE_MESSAGE_SYSTEM, date[1])
+                               PURPLE_MESSAGE_SYSTEM, date[1]),
+        ConversationWriteEvent(groupChatPurpleName, selfFirstName + " " + selfLastName,
+                               "\n<font face=\"monospace\">messageChatDeleteMember {\n"
+                               "  user_id = 1\n}</font>",
+                               PURPLE_MESSAGE_SEND, date[1])
     );
 
     tgl.update(makeUpdateRemoveFromChatList(groupChatId, make_object<chatListMain>()));
@@ -670,7 +692,7 @@ TEST_F(GroupChatTest, DeleteBasicGroup_Creator)
 {
     loginWithBasicGroup();
     tgl.update(make_object<updateBasicGroup>(make_object<basicGroup>(
-        groupId, 2, make_object<chatMemberStatusCreator>("", true), true, 0
+        groupId, 2, make_object<chatMemberStatusCreator>("", false, true), true, 0
     )));
     PurpleChat *chat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
     ASSERT_NE(nullptr, chat);
@@ -747,7 +769,7 @@ TEST_F(GroupChatTest, UsersWithSameName)
         userIds[1],
         userIds[1],
         0,
-        make_object<chatMemberStatusCreator>("", true),
+        make_object<chatMemberStatusCreator>("", false, true),
         nullptr
     ));
     members.push_back(makeChatMember(
@@ -778,7 +800,7 @@ TEST_F(GroupChatTest, UsersWithSameName)
             ))
         },
         make_object<users>(),
-        make_object<chats>(std::vector<int64_t>(1, groupChatId)),
+        make_object<chats>(1, std::vector<int64_t>(1, groupChatId)),
         {
             std::make_unique<AddChatEvent>(
                 groupChatPurpleName, groupChatTitle, account, nullptr, nullptr
@@ -787,10 +809,12 @@ TEST_F(GroupChatTest, UsersWithSameName)
         {
             make_object<getBasicGroupFullInfo>(groupId),
             make_object<basicGroupFullInfo>(
+                nullptr,
                 "basic group",
                 userIds[1],
                 std::move(members),
-                ""
+                false, false, nullptr,
+                std::vector<object_ptr<botCommands>>()
             )
         }
     );
@@ -839,7 +863,7 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
         userIds[0],
         userIds[0],
         0,
-        make_object<chatMemberStatusCreator>("", true),
+        make_object<chatMemberStatusCreator>("", false, true),
         nullptr
     ));
     members.push_back(makeChatMember(
@@ -871,7 +895,7 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
             make_object<updateUser>(std::move(deletedUser))
         },
         make_object<users>(),
-        make_object<chats>(std::vector<int64_t>(1, groupChatId)),
+        make_object<chats>(1, std::vector<int64_t>(1, groupChatId)),
         {
             std::make_unique<AddChatEvent>(
                 groupChatPurpleName, groupChatTitle, account, nullptr, nullptr
@@ -880,10 +904,12 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
         {
             make_object<getBasicGroupFullInfo>(groupId),
             make_object<basicGroupFullInfo>(
+                nullptr,
                 "basic group",
                 userIds[1],
                 std::move(members),
-                ""
+                false, false, nullptr,
+                std::vector<object_ptr<botCommands>>()
             )
         }
     );
@@ -952,9 +978,10 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
         0,
         nullptr,
         nullptr,
+        nullptr,
         make_object<inputMessageText>(
             make_object<formattedText>("message", std::vector<object_ptr<textEntity>>()),
-            false,
+            nullptr,
             false
         )
     ));
@@ -1027,9 +1054,10 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
         0,
         nullptr,
         nullptr,
+        nullptr,
         make_object<inputMessageText>(
             make_object<formattedText>("message2", std::vector<object_ptr<textEntity>>()),
-            false,
+            nullptr,
             false
         )
     ));
@@ -1044,7 +1072,7 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
     )));
 
     // Both read receipts now - whatever.
-    tgl.verifyRequest(viewMessages(chatIds[0], {echoMessageId[0], echoMessageId[1]}, true));
+    tgl.verifyRequest(viewMessages(chatIds[0], {echoMessageId[0], echoMessageId[1]}, nullptr, true));
     prpl.verifyEvents(
         NewConversationEvent(
             PURPLE_CONV_TYPE_IM, account,
@@ -1184,7 +1212,7 @@ TEST_F(GroupChatTest, GetInviteLink)
             makeUpdateChatListMain(groupChatId)
         },
         make_object<users>(),
-        make_object<chats>(std::vector<int64_t>(1, groupChatId)),
+        make_object<chats>(1, std::vector<int64_t>(1, groupChatId)),
         {
             std::make_unique<AddChatEvent>(
                 groupChatPurpleName, groupChatTitle, account, nullptr, nullptr
@@ -1193,10 +1221,12 @@ TEST_F(GroupChatTest, GetInviteLink)
         {
             make_object<getBasicGroupFullInfo>(groupId),
             make_object<basicGroupFullInfo>(
+                nullptr,
                 "basic group",
                 userIds[1],
                 std::vector<object_ptr<chatMember>>(),
-                ""
+                false, false, nullptr,
+                std::vector<object_ptr<botCommands>>()
             )
         }
     );
@@ -1206,7 +1236,7 @@ TEST_F(GroupChatTest, GetInviteLink)
     GList *actions = pluginInfo().blist_node_menu(&chat->node);
 
     nodeMenuAction(&chat->node, actions, "Show invite link");
-    tgl.verifyRequest(makeInviteLinkRequest(groupChatId));
+    tgl.verifyRequest(*makeInviteLinkRequest(groupChatId));
 
     tgl.reply(make_object<error>(100, "error"));
     prpl.verifyEvents(
@@ -1221,19 +1251,22 @@ TEST_F(GroupChatTest, GetInviteLink)
     );
 
     nodeMenuAction(&chat->node, actions, "Show invite link");
-    tgl.verifyRequest(makeInviteLinkRequest(groupChatId));
+    tgl.verifyRequest(*makeInviteLinkRequest(groupChatId));
     tgl.update(make_object<updateBasicGroupFullInfo>(
         groupChatId,
         make_object<basicGroupFullInfo>(
+            nullptr,
             "basic group",
             userIds[1],
             std::vector<object_ptr<chatMember>>(),
-            "http://invite"
+            false, false,
+            makeChatInviteLink("http://invite"),
+            std::vector<object_ptr<botCommands>>()
         )
     ));
     prpl.verifyNoEvents();
 
-    tgl.reply(make_object<chatInviteLink>("http://invite"));
+    tgl.reply(makeChatInviteLink("http://invite"));
     prpl.verifyEvents(
         ConversationWriteEvent(
             groupChatPurpleName, NotificationWho,
@@ -1260,30 +1293,14 @@ TEST_F(GroupChatTest, Roomlist)
     tgl.verifyRequests({
         make_object<disableProxy>(),
         make_object<getProxies>(),
-        make_object<setTdlibParameters>(make_object<tdlibParameters>(
-            false,
+        makeTdlibParameters(
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
-            "",
-            false,
-            false,
-            false,
-            true, // use secret chats
-            0,
-            "",
-            "",
-            "",
-            "",
-            "",
-            true,
-            false
-        ))
+            true // use secret chats
+        )
     });
     tgl.reply(make_object<ok>());
 
-    tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitEncryptionKey>(true)));
-    tgl.verifyRequest(checkDatabaseEncryptionKey(""));
-    tgl.reply(make_object<ok>());
 
     tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateReady>()));
     prpl.verifyEvents(
@@ -1297,7 +1314,7 @@ TEST_F(GroupChatTest, Roomlist)
 
     tgl.reply(make_object<users>());
 
-    uint64_t getChatsId = tgl.verifyRequest(getChatsRequest());
+    uint64_t getChatsId = tgl.verifyRequest(*getChatsRequest());
 
     tgl.update(make_object<updateUser>(makeUser(
         selfId,
@@ -1321,13 +1338,13 @@ TEST_F(GroupChatTest, Roomlist)
         AddChatEvent(groupChatPurpleName, groupChatTitle, account, nullptr, nullptr)
     );
 
-    tgl.reply(getChatsId, make_object<ok>()));
-    tgl.verifyRequest(getChatsRequest());
+    tgl.reply(getChatsId, make_object<ok>());
+    tgl.verifyRequest(*getChatsRequest());
 
     PurpleRoomlist *earlyRoomlist = pluginInfo().roomlist_get_list(connection);
     prpl.verifyEvents(RoomlistInProgressEvent(earlyRoomlist, TRUE));
 
-    tgl.reply(getChatsNoChatsResponse);
+    tgl.reply(getChatsNoChatsResponse());
 
     prpl.verifyEvents(
         RoomlistAddRoomEvent(superEarlyRoomlist, "id", groupChatPurpleName.c_str()),
@@ -1371,7 +1388,7 @@ TEST_F(GroupChatTest, SendFile)
     setFakeFileSize(PATH, 10000);
     pluginInfo().chat_send_file(connection, purpleChatId, PATH);
     prpl.verifyEvents(XferAcceptedEvent(groupChatTitle, PATH));
-    tgl.verifyRequest(uploadFile(
+    tgl.verifyRequest(preliminaryUploadFile(
         make_object<inputFileLocal>(PATH),
         make_object<fileTypeDocument>(),
         1
@@ -1401,9 +1418,11 @@ TEST_F(GroupChatTest, SendFile)
         0,
         nullptr,
         nullptr,
+        nullptr,
         make_object<inputMessageDocument>(
             make_object<inputFileId>(fileId),
             nullptr,
+            false,
             make_object<formattedText>()
         )
     ));
@@ -1438,7 +1457,7 @@ TEST_F(GroupChatTest, OpenLeftGroupChat_ReceiveMessageAtLogin)
     auto chat = makeChat(
         groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0
     );
-    chat->chat_list_ = make_object<chatListMain>();
+    chat->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
     login(
         {
             // Private chat with the contact
@@ -1456,8 +1475,8 @@ TEST_F(GroupChatTest, OpenLeftGroupChat_ReceiveMessageAtLogin)
                 makeMessage(messageId[1], userIds[0], groupChatId, false, date, makeTextMessage("Hello2"))
             )
         },
-        make_object<users>(1, std::vector<int32_t>(1, userIds[0])),
-        make_object<chats>(std::vector<int64_t>(1, groupChatId)),
+        make_object<users>(1, std::vector<int64_t>(1, userIds[0])),
+        make_object<chats>(1, std::vector<int64_t>(1, groupChatId)),
         {
             std::make_unique<ServGotJoinedChatEvent>(connection, purpleChatId, groupChatPurpleName,
                                                      groupChatTitle),
@@ -1468,8 +1487,8 @@ TEST_F(GroupChatTest, OpenLeftGroupChat_ReceiveMessageAtLogin)
         },
         {
             make_object<getBasicGroupFullInfo>(groupId),
-            make_object<viewMessages>(groupChatId, std::vector<int64_t>(1, messageId[0]), true),
-            make_object<viewMessages>(groupChatId, std::vector<int64_t>(1, messageId[1]), true)
+            make_object<viewMessages>(groupChatId, std::vector<int64_t>(1, messageId[0]), nullptr, true),
+            make_object<viewMessages>(groupChatId, std::vector<int64_t>(1, messageId[1]), nullptr, true)
         },
         {
             std::make_unique<UserStatusEvent>(account, purpleUserName(0), PURPLE_STATUS_AWAY),
@@ -1514,7 +1533,7 @@ TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListMainRightAway)
     auto groupChat = makeChat(
         groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0
     );
-    groupChat->chat_list_ = make_object<chatListMain>();
+    groupChat->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
     tgl.update(make_object<updateNewChat>(std::move(groupChat)));
     // Now that updateNewChat has happened, joining
     prpl.verifyEvents(
@@ -1558,9 +1577,10 @@ TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListNullFirst)
     auto groupChat = makeChat(
         groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0
     );
-    groupChat->chat_list_ = nullptr;
+    // The chat belongs to no list yet: before TDLib 1.8 that was a null chat_list_, and it is an
+    // empty positions_ now, which makeChat already leaves behind.
     tgl.update(make_object<updateNewChat>(std::move(groupChat)));
-    // chat_list is null at first (which is how it actually happens) so chat is temporarily
+    // chat list is empty at first (which is how it actually happens) so chat is temporarily
     // removed from buddy list.
     // Also for that reason, still not joining, otherwise conversation title will be changed to
     // chat-XXXXXXXXXX.
@@ -1575,4 +1595,4 @@ TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListNullFirst)
     tgl.verifyRequest(getBasicGroupFullInfo(groupId));
 }
 
-Test non-user member
+// TODO: test non-user member

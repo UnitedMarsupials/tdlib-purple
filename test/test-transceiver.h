@@ -65,6 +65,15 @@ object_ptr<updateChatPosition> makeUpdateChatListMain(int64_t chatId);
 object_ptr<updateChatPosition> makeUpdateChatList(int64_t chatId, object_ptr<ChatList> &&chatList);
 object_ptr<updateChatPosition> makeUpdateRemoveFromChatList(int64_t chatId, object_ptr<ChatList> &&removeFrom);
 object_ptr<loadChats> getChatsRequest();
+object_ptr<setTdlibParameters> makeTdlibParameters(const std::string &databaseDirectory,
+                                                   bool useSecretChats);
+object_ptr<MessageReplyTo> makeReplyTo(std::int64_t message_id_);
+object_ptr<photoSize> makePhotoSize(object_ptr<file> &&photo, unsigned width, unsigned height);
+object_ptr<sticker> makeSticker(std::int32_t width_, std::int32_t height_,
+                                const std::string &emoji_, object_ptr<file> &&sticker_,
+                                object_ptr<thumbnail> &&thumbnail_ = nullptr);
+object_ptr<supergroup> makeSupergroup(std::int64_t id_, object_ptr<ChatMemberStatus> &&status_,
+                                      std::int32_t member_count_);
 object_ptr<Object> getChatsNoChatsResponse();
 
 object_ptr<message> makeMessage(std::int64_t id_, std::int32_t sender_user_id_, std::int64_t chat_id_,

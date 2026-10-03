@@ -40,7 +40,12 @@ add_executable(tests EXCLUDE_FROM_ALL
 
 set_property(TARGET tests PROPERTY CXX_STANDARD 14)
 target_include_directories(tests PRIVATE ${CMAKE_SOURCE_DIR} ${fmt_INCLUDE_DIRS} ${rlottie_INCLUDE_DIRS})
-target_link_libraries(tests PRIVATE gtest ${fmt_LIBRARIES} Td::TdStatic ${GLIB_LIBRARIES} ${rlottie_LIBRARIES})
+# The plugin gets zlib and the thread library by way of the shared libraries it loads, but this
+# binary links TDLib statically and so has to name them itself.
+find_package(ZLIB REQUIRED)
+find_package(Threads REQUIRED)
+target_link_libraries(tests PRIVATE gtest ${fmt_LIBRARIES} Td::TdStatic ${GLIB_LIBRARIES}
+                      ${rlottie_LIBRARIES} ZLIB::ZLIB Threads::Threads)
 
 if (DEFINED GTEST_PATH)
     target_include_directories(tests PRIVATE ${GTEST_PATH}/include)

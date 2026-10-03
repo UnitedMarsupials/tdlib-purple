@@ -24,7 +24,7 @@ void SecretChatTest::loginWithSecretChat()
     loginWithOneContact();
 
     tgl.update(make_object<updateSecretChat>(make_object<secretChat>(
-        secretChatId, userIds[0], make_object<secretChatStatePending>(), false, 60, "whatever", 0
+        secretChatId, userIds[0], make_object<secretChatStatePending>(), false, "whatever", 60
     )));
     tgl.update(make_object<updateNewChat>(makeChatForSecret(userIds[0])));
     prpl.verifyEvents(
@@ -33,7 +33,7 @@ void SecretChatTest::loginWithSecretChat()
     );
 
     tgl.update(make_object<updateSecretChat>(make_object<secretChat>(
-        secretChatId, userIds[0], make_object<secretChatStateReady>(), false, 60, "whatever", 0
+        secretChatId, userIds[0], make_object<secretChatStateReady>(), false, "whatever", 60
     )));
     prpl.verifyEvents(
         UserStatusEvent(account, secretChatBuddyName, PURPLE_STATUS_AVAILABLE)
@@ -48,7 +48,7 @@ TEST_F(SecretChatTest, ReceiveMessage)
     tgl.update(make_object<updateNewMessage>(
         makeMessage(1, userIds[0], secretChatChatId, false, date, makeTextMessage("text"))
     ));
-    tgl.verifyRequest(viewMessages(secretChatChatId, {1}, true));
+    tgl.verifyRequest(viewMessages(secretChatChatId, {1}, nullptr, true));
     prpl.verifyEvents(ServGotImEvent(
         connection, secretChatBuddyName, "text", PURPLE_MESSAGE_RECV, date
     ));
@@ -65,7 +65,7 @@ TEST_F(SecretChatTest, CreateSecretChat_Lifecycle)
 
     tgl.verifyRequest(createNewSecretChat(userIds[0]));
     tgl.update(make_object<updateSecretChat>(make_object<secretChat>(
-        secretChatId, userIds[0], make_object<secretChatStatePending>(), true, 60, "whatever", 0
+        secretChatId, userIds[0], make_object<secretChatStatePending>(), true, "whatever", 60
     )));
     tgl.update(make_object<updateNewChat>(makeChatForSecret(userIds[0])));
     prpl.verifyEvents(
@@ -80,7 +80,7 @@ TEST_F(SecretChatTest, CreateSecretChat_Lifecycle)
     );
 
     tgl.update(make_object<updateSecretChat>(make_object<secretChat>(
-        secretChatId, userIds[0], make_object<secretChatStateReady>(), false, 60, "whatever", 0
+        secretChatId, userIds[0], make_object<secretChatStateReady>(), false, "whatever", 60
     )));
     prpl.verifyEvents(
         UserStatusEvent(account, secretChatBuddyName, PURPLE_STATUS_AVAILABLE)
@@ -97,7 +97,7 @@ TEST_F(SecretChatTest, CreateSecretChat_Lifecycle)
         make_object<closeSecretChat>(secretChatId)
     });
     tgl.update(make_object<updateSecretChat>(make_object<secretChat>(
-        secretChatId, userIds[0], make_object<secretChatStateClosed>(), true, 60, "whatever", 0
+        secretChatId, userIds[0], make_object<secretChatStateClosed>(), true, "whatever", 60
     )));
 
     g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
@@ -116,24 +116,11 @@ TEST_F(SecretChatTest, SecretChatsDisabled)
     tgl.verifyRequests({
         make_object<disableProxy>(),
         make_object<getProxies>(),
-        make_object<setTdlibParameters>(make_object<tdlibParameters>(
-            false,
+        makeTdlibParameters(
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
-            "",
-            false,
-            false,
-            false,
-            false, // use secret chats
-            0,
-            "",
-            "",
-            "",
-            "",
-            "",
-            true,
-            false
-        ))
+            false // this test turns secret chats off
+        )
     });
 }
 
@@ -148,16 +135,17 @@ TEST_F(SecretChatTest, SendMessage)
         0,
         nullptr,
         nullptr,
+        nullptr,
         make_object<inputMessageText>(
             make_object<formattedText>("message", std::vector<object_ptr<textEntity>>()),
-            false, false
+            nullptr, false
         )
     ));
 
     tgl.update(make_object<updateNewMessage>(
         makeMessage(1, userIds[0], secretChatChatId, true, date, makeTextMessage("message"))
     ));
-    tgl.verifyRequest(viewMessages(secretChatChatId, {1}, true));
+    tgl.verifyRequest(viewMessages(secretChatChatId, {1}, nullptr, true));
     prpl.verifyEvents(
         NewConversationEvent(PURPLE_CONV_TYPE_IM, account, secretChatBuddyName),
         ConversationWriteEvent(
@@ -172,16 +160,16 @@ TEST_F(SecretChatTest, TypingNotification)
     loginWithSecretChat();
 
     pluginInfo().send_typing(connection, secretChatBuddyName.c_str(), PURPLE_TYPING);
-    tgl.verifyRequest(sendChatAction(secretChatChatId, make_object<chatActionTyping>()));
+    tgl.verifyRequest(sendChatAction(secretChatChatId, 0, "", make_object<chatActionTyping>()));
 
     pluginInfo().send_typing(connection, secretChatBuddyName.c_str(), PURPLE_TYPED);
-    tgl.verifyRequest(sendChatAction(secretChatChatId, make_object<chatActionCancel>()));
+    tgl.verifyRequest(sendChatAction(secretChatChatId, 0, "", make_object<chatActionCancel>()));
 
     pluginInfo().send_typing(connection, secretChatBuddyName.c_str(), PURPLE_TYPING);
-    tgl.verifyRequest(sendChatAction(secretChatChatId, make_object<chatActionTyping>()));
+    tgl.verifyRequest(sendChatAction(secretChatChatId, 0, "", make_object<chatActionTyping>()));
 
     pluginInfo().send_typing(connection, secretChatBuddyName.c_str(), PURPLE_NOT_TYPING);
-    tgl.verifyRequest(sendChatAction(secretChatChatId, make_object<chatActionCancel>()));
+    tgl.verifyRequest(sendChatAction(secretChatChatId, 0, "", make_object<chatActionCancel>()));
 }
 
 TEST_F(SecretChatTest, SendFile)
@@ -193,7 +181,7 @@ TEST_F(SecretChatTest, SendFile)
     setFakeFileSize(PATH, 9000);
     pluginInfo().send_file(connection, secretChatBuddyName.c_str(), PATH);
     prpl.verifyEvents(XferAcceptedEvent(secretChatBuddyName, PATH));
-    tgl.verifyRequest(uploadFile(
+    tgl.verifyRequest(preliminaryUploadFile(
         make_object<inputFileLocal>(PATH),
         make_object<fileTypeDocument>(),
         1
@@ -237,9 +225,11 @@ TEST_F(SecretChatTest, SendFile)
         0,
         nullptr,
         nullptr,
+        nullptr,
         make_object<inputMessageDocument>(
             make_object<inputFileId>(fileId),
             nullptr,
+            false,
             make_object<formattedText>()
         )
     ));
@@ -286,7 +276,7 @@ TEST_F(SecretChatTest, Download_Inline_Progress)
             PURPLE_MESSAGE_SYSTEM, date
         )
     );
-    tgl.verifyRequest(viewMessages(secretChatChatId, {messageId}, true));
+    tgl.verifyRequest(viewMessages(secretChatChatId, {messageId}, nullptr, true));
 
     tgl.update(make_object<updateFile>(make_object<file>(
         fileId, 10000, 10000,
@@ -309,7 +299,7 @@ TEST_F(SecretChatTest, Download_Inline_Progress)
         ServGotImEvent(
             connection,
             secretChatBuddyName,
-            "<a href=\"file:///path\">doc.file.name [mime/type]</a>",
+            "<a href=\"file://file:///path\">doc.file.name [mime/type]</a>",
             PURPLE_MESSAGE_RECV,
             date
         )
@@ -346,10 +336,11 @@ TEST_F(SecretChatTest, Download_StandardTransfer)
         )
     )));
 
-    // TODO: Read receipt is not sent. It's a bug of sorts but it doesn't really matter.
-    // tgl.verifyRequest(viewMessages(secretChatChatId, {messageId}, true));
+    // Showing the caption creates the conversation, so the read receipt is sent now
+    tgl.verifyRequest(viewMessages(secretChatChatId, {messageId}, nullptr, true));
 
     prpl.verifyEvents(
+        ServGotImEvent(connection, secretChatBuddyName, "document", PURPLE_MESSAGE_RECV, date),
         XferRequestEvent(PURPLE_XFER_RECEIVE, secretChatBuddyName.c_str(), "doc.file.name")
     );
 

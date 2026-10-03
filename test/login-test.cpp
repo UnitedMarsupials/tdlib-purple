@@ -19,32 +19,15 @@ TEST_F(LoginTest, ConnectionReadyBeforeAuthReady)
     tgl.verifyRequests({
         make_object<disableProxy>(),
         make_object<getProxies>(),
-        make_object<setTdlibParameters>(make_object<tdlibParameters>(
-            false,
+        makeTdlibParameters(
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
-            "",
-            false,
-            false,
-            false,
-            true, // use secret chats
-            0,
-            "",
-            "",
-            "",
-            "",
-            "",
-            true,
-            false
-        ))
+            true // use secret chats
+        )
     });
-    tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitEncryptionKey>(true)));
     tgl.reply(make_object<ok>());
 
-    // TODO: what if is_encrypted = false?
-    tgl.verifyRequest(checkDatabaseEncryptionKey(""));
     tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitPhoneNumber>()));
-    tgl.reply(make_object<ok>());
 
     tgl.verifyRequest(setAuthenticationPhoneNumber("+" + selfPhoneNumber, nullptr));
     tgl.update(make_object<updateConnectionState>(make_object<connectionStateConnecting>()));
@@ -66,7 +49,7 @@ TEST_F(LoginTest, ConnectionReadyBeforeAuthReady)
     )));
     tgl.reply(make_object<users>());
 
-    tgl.verifyRequest(getChatsRequest());
+    tgl.verifyRequest(*getChatsRequest());
     prpl.verifyNoEvents();
     tgl.reply(getChatsNoChatsResponse());
 
@@ -90,31 +73,15 @@ TEST_F(LoginTest, RegisterNewAccount_WithAlias_ConnectionReadyBeforeAuthReady)
     tgl.verifyRequests({
         make_object<disableProxy>(),
         make_object<getProxies>(),
-        make_object<setTdlibParameters>(make_object<tdlibParameters>(
-            false,
+        makeTdlibParameters(
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
-            "",
-            false,
-            false,
-            false,
-            true, // use secret chats
-            0,
-            "",
-            "",
-            "",
-            "",
-            "",
-            true,
-            false
-        ))
+            true // use secret chats
+        )
     });
-    tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitEncryptionKey>(true)));
     tgl.reply(make_object<ok>());
 
-    tgl.verifyRequest(checkDatabaseEncryptionKey(""));
     tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitPhoneNumber>()));
-    tgl.reply(make_object<ok>());
 
     tgl.verifyRequest(setAuthenticationPhoneNumber("+" + selfPhoneNumber, nullptr));
 
@@ -149,7 +116,7 @@ TEST_F(LoginTest, RegisterNewAccount_WithAlias_ConnectionReadyBeforeAuthReady)
     ));
     tgl.reply(make_object<ok>());
 
-    tgl.verifyRequest(registerUser(selfFirstName, selfLastName));
+    tgl.verifyRequest(registerUser(selfFirstName, selfLastName, false));
     prpl.verifyNoEvents();
 
     tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateReady>()));
@@ -166,7 +133,7 @@ TEST_F(LoginTest, RegisterNewAccount_WithAlias_ConnectionReadyBeforeAuthReady)
     )));
     tgl.reply(make_object<users>());
 
-    tgl.verifyRequest(getChatsRequest());
+    tgl.verifyRequest(*getChatsRequest());
     prpl.verifyNoEvents();
     tgl.reply(getChatsNoChatsResponse());
 
@@ -188,31 +155,15 @@ TEST_F(LoginTest, RegisterNewAccount_NoAlias)
     tgl.verifyRequests({
         make_object<disableProxy>(),
         make_object<getProxies>(),
-        make_object<setTdlibParameters>(make_object<tdlibParameters>(
-            false,
+        makeTdlibParameters(
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
-            "",
-            false,
-            false,
-            false,
-            true, // use secret chats
-            0,
-            "",
-            "",
-            "",
-            "",
-            "",
-            true,
-            false
-        ))
+            true // use secret chats
+        )
     });
-    tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitEncryptionKey>(true)));
     tgl.reply(make_object<ok>());
 
-    tgl.verifyRequest(checkDatabaseEncryptionKey(""));
     tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitPhoneNumber>()));
-    tgl.reply(make_object<ok>());
 
     tgl.verifyRequest(setAuthenticationPhoneNumber("+" + selfPhoneNumber, nullptr));
 
@@ -248,7 +199,7 @@ TEST_F(LoginTest, RegisterNewAccount_NoAlias)
     prpl.verifyEvents(RequestInputEvent(connection, account, NULL, NULL));
 
     prpl.inputEnter((selfFirstName + "     " + selfLastName).c_str());
-    tgl.verifyRequest(registerUser(selfFirstName, selfLastName));
+    tgl.verifyRequest(registerUser(selfFirstName, selfLastName, false));
 
     tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateReady>()));
     prpl.verifyEvents(ConnectionSetStateEvent(connection, PURPLE_CONNECTED));
@@ -271,31 +222,15 @@ TEST_F(LoginTest, TwoFactorAuthentication)
     tgl.verifyRequests({
         make_object<disableProxy>(),
         make_object<getProxies>(),
-        make_object<setTdlibParameters>(make_object<tdlibParameters>(
-            false,
+        makeTdlibParameters(
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
-            "",
-            false,
-            false,
-            false,
-            true, // use secret chats
-            0,
-            "",
-            "",
-            "",
-            "",
-            "",
-            true,
-            false
-        ))
+            true // use secret chats
+        )
     });
-    tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitEncryptionKey>(true)));
     tgl.reply(make_object<ok>());
 
-    tgl.verifyRequest(checkDatabaseEncryptionKey(""));
     tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitPhoneNumber>()));
-    tgl.reply(make_object<ok>());
 
     tgl.verifyRequest(setAuthenticationPhoneNumber("+" + selfPhoneNumber, nullptr));
 
@@ -319,7 +254,7 @@ TEST_F(LoginTest, TwoFactorAuthentication)
     prpl.verifyNoEvents();
 
     tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitPassword>(
-        "hint", true, "user@example.com"
+        "hint", true, false, "user@example.com"
     )));
     tgl.reply(make_object<ok>());
 
@@ -341,8 +276,8 @@ TEST_F(LoginTest, RenameBuddyAtConnect)
 
     login(
         {standardUpdateUser(0), standardPrivateChat(0), makeUpdateChatListMain(chatIds[0])},
-        make_object<users>(1, std::vector<int32_t>(1, userIds[0])),
-        make_object<chats>(std::vector<int64_t>(1, chatIds[0])),
+        make_object<users>(1, std::vector<int64_t>(1, userIds[0])),
+        make_object<chats>(1, std::vector<int64_t>(1, chatIds[0])),
         {
             std::make_unique<AliasBuddyEvent>(purpleUserName(0), userFirstNames[0] + " " + userLastNames[0]),
         }, {},
@@ -411,24 +346,11 @@ TEST_F(LoginTest, AddedProxyCofiguration)
         make_object<disableProxy>(),
         make_object<addProxy>(host, port, true, make_object<proxyTypeSocks5>(username, password)),
         make_object<getProxies>(),
-        make_object<setTdlibParameters>(make_object<tdlibParameters>(
-            false,
+        makeTdlibParameters(
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
-            "",
-            false,
-            false,
-            false,
-            true, // use secret chats
-            0,
-            "",
-            "",
-            "",
-            "",
-            "",
-            true,
-            false
-        ))
+            true // use secret chats
+        )
     });
 
     tgl.reply(make_object<ok>()); // reply to disableProxy
@@ -464,24 +386,11 @@ TEST_F(LoginTest, ChangedProxyCofiguration)
         make_object<disableProxy>(),
         make_object<addProxy>(host, port, true, make_object<proxyTypeSocks5>(username, password)),
         make_object<getProxies>(),
-        make_object<setTdlibParameters>(make_object<tdlibParameters>(
-            false,
+        makeTdlibParameters(
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
-            "",
-            false,
-            false,
-            false,
-            true, // use secret chats
-            0,
-            "",
-            "",
-            "",
-            "",
-            "",
-            true,
-            false
-        ))
+            true // use secret chats
+        )
     });
 
     tgl.reply(make_object<ok>()); // reply to disableProxy
@@ -507,24 +416,11 @@ TEST_F(LoginTest, RemovedProxyCofiguration)
     tgl.verifyRequests({
         make_object<disableProxy>(),
         make_object<getProxies>(),
-        make_object<setTdlibParameters>(make_object<tdlibParameters>(
-            false,
+        makeTdlibParameters(
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
-            "",
-            false,
-            false,
-            false,
-            true, // use secret chats
-            0,
-            "",
-            "",
-            "",
-            "",
-            "",
-            true,
-            false
-        ))
+            true // use secret chats
+        )
     });
 
     tgl.reply(make_object<ok>()); // reply to disableProxy
@@ -548,31 +444,15 @@ TEST_F(LoginTest, getChatsSequence)
     tgl.verifyRequests({
         make_object<disableProxy>(),
         make_object<getProxies>(),
-        make_object<setTdlibParameters>(make_object<tdlibParameters>(
-            false,
+        makeTdlibParameters(
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
-            "",
-            false,
-            false,
-            false,
-            true, // use secret chats
-            0,
-            "",
-            "",
-            "",
-            "",
-            "",
-            true,
-            false
-        ))
+            true // use secret chats
+        )
     });
-    tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitEncryptionKey>(true)));
     tgl.reply(make_object<ok>());
 
-    tgl.verifyRequest(checkDatabaseEncryptionKey(""));
     tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitPhoneNumber>()));
-    tgl.reply(make_object<ok>());
 
     tgl.verifyRequest(setAuthenticationPhoneNumber("+" + selfPhoneNumber, nullptr));
     tgl.update(make_object<updateConnectionState>(make_object<connectionStateConnecting>()));
@@ -599,9 +479,12 @@ TEST_F(LoginTest, getChatsSequence)
     object_ptr<updateNewChat> chat1 = standardPrivateChat(0, make_object<chatListMain>());
     object_ptr<updateNewChat> chat2 = standardPrivateChat(1, make_object<chatListMain>());
     object_ptr<updateNewChat> chat3 = standardPrivateChat(1, make_object<chatListMain>());
-    chat1->chat_->order_ = 10;
-    chat2->chat_->order_ = 20;
-    chat3->chat_->order_ = 30;
+    chat1->chat_->positions_.push_back(
+        make_object<chatPosition>(make_object<chatListMain>(), 10, false, nullptr));
+    chat2->chat_->positions_.push_back(
+        make_object<chatPosition>(make_object<chatListMain>(), 20, false, nullptr));
+    chat3->chat_->positions_.push_back(
+        make_object<chatPosition>(make_object<chatListMain>(), 30, false, nullptr));
     chat3->chat_->id_ = chatIds[1]+1;
     tgl.update(std::move(chat1));
     tgl.update(std::move(chat2));
@@ -618,7 +501,7 @@ TEST_F(LoginTest, getChatsSequence)
     ));
     tgl.reply(make_object<ok>());
 
-    tgl.verifyRequest(getChatsRequest());
+    tgl.verifyRequest(*getChatsRequest());
     tgl.update(standardPrivateChat(1));
     tgl.reply(getChatsNoChatsResponse());
 
@@ -642,24 +525,11 @@ TEST_F(LoginTest, KeepInlineDownloads)
     tgl.verifyRequests({
         make_object<disableProxy>(),
         make_object<getProxies>(),
-        make_object<setTdlibParameters>(make_object<tdlibParameters>(
-            false,
+        makeTdlibParameters(
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
-            "",
-            false,
-            false,
-            false,
-            true, // use secret chats
-            0,
-            "",
-            "",
-            "",
-            "",
-            "",
-            false, // enable storage optimizer, false due to configuration
-            false
-        ))
+            true // use secret chats
+        )
     });
 }
 
@@ -703,7 +573,7 @@ TEST_F(LoginTest, IncomingGroupChatMessageAtLoginWhileChatListStillNull)
             std::make_unique<AddChatEvent>(groupChatPurpleName, groupChatTitle, account, nullptr, nullptr)
         },
         {
-            make_object<viewMessages>(groupChatId, std::vector<int64_t>(1, messageId), true),
+            make_object<viewMessages>(groupChatId, std::vector<int64_t>(1, messageId), nullptr, true),
             make_object<getBasicGroupFullInfo>(groupId)
         }
     );

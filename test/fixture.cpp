@@ -38,14 +38,26 @@ void CommTest::TearDown()
     clearFakeFiles();
 }
 
+// Is this a request the plugin sent, or something TDLib sent back? This used to be decided by
+// whether a hand-written table of class names in printout.cpp happened to know the object.
+//
+// dynamic_cast cannot answer it: TDLib is built without RTTI for its API classes -- libtdapi
+// carries no typeinfo for td_api::Function at all -- so the cast reads a vtable that is not
+// there and the process dies. downcast_call switches on get_id(), which is a plain virtual
+// call, and returns false when the id does not belong to that hierarchy. That is the question
+// being asked, and it is what the old name tables were doing the long way round.
 static bool isFunction(const td::TlObject &object)
 {
-    return requestToString(object).substr(0, 3) != "Id ";
+    auto &function = const_cast<td::td_api::Function &>(static_cast<const td::td_api::Function &>(object));
+
+    return td::td_api::downcast_call(function, [](auto &) {});
 }
 
 static bool isObject(const td::TlObject &object)
 {
-    return responseToString(object).substr(0, 3) != "Id ";
+    auto &reply = const_cast<td::td_api::Object &>(static_cast<const td::td_api::Object &>(object));
+
+    return td::td_api::downcast_call(reply, [](auto &) {});
 }
 
 void CommTest::login(std::initializer_list<object_ptr<Object>> extraUpdates, object_ptr<users> getContactsReply,
@@ -64,31 +76,17 @@ void CommTest::login(std::initializer_list<object_ptr<Object>> extraUpdates, obj
     tgl.verifyRequests({
         make_object<disableProxy>(),
         make_object<getProxies>(),
-        make_object<setTdlibParameters>(make_object<tdlibParameters>(
-            false,
+        makeTdlibParameters(
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
-            "",
-            false,
-            false,
-            false,
-            true, // use secret chats
-            0,
-            "",
-            "",
-            "",
-            "",
-            "",
-            true,
-            false
-        ))
+            true // use secret chats
+        )
     });
     tgl.reply(make_object<ok>());
 
-    // TODO: what if is_encrypted = false?
-    tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitEncryptionKey>(true)));
-    tgl.verifyRequest(checkDatabaseEncryptionKey(""));
-    tgl.reply(make_object<ok>());
+    // TDLib 1.8 sets the database encryption key itself, so the
+    // authorizationStateWaitEncryptionKey / checkDatabaseEncryptionKey exchange that used to
+    // sit here is gone, and the plugin no longer has a handler for it.
 
     tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateReady>()));
     prpl.verifyEvents(ConnectionSetStateEvent(connection, PURPLE_CONNECTED));
@@ -127,11 +125,11 @@ void CommTest::login(std::initializer_list<object_ptr<Object>> extraUpdates, obj
 
     tgl.reply(contactRequestId, std::move(getContactsReply));
 
-    tgl.verifyRequest(getChatsRequest());
+    tgl.verifyRequest(*getChatsRequest());
     bool hasChats = getChatsReply->get_id() == td::td_api::ok::ID;
     tgl.reply(std::move(getChatsReply));
     if (hasChats) {
-        tgl.verifyRequest(getChatsRequest());
+        tgl.verifyRequest(*getChatsRequest());
         tgl.reply(getChatsNoChatsResponse());
     }
 
@@ -148,8 +146,9 @@ void CommTest::loginWithOneContact()
 {
     login(
         {standardUpdateUser(0), standardPrivateChat(0), makeUpdateChatListMain(chatIds[0])},
-        make_object<users>(1, std::vector<int32_t>(1, userIds[0])),
-        make_object<chats>(std::vector<int64_t>(1, chatIds[0])),
+        // User and chat ids are 53-bit as of TDLib 1.8, and `chats` gained a total_count_
+        make_object<users>(1, std::vector<int64_t>(1, userIds[0])),
+        make_object<chats>(1, std::vector<int64_t>(1, chatIds[0])),
         {
             std::make_unique<AddBuddyEvent>(purpleUserName(0), userFirstNames[0] + " " + userLastNames[0],
                                             account, nullptr, nullptr, nullptr),
@@ -192,7 +191,10 @@ object_ptr<updateNewChat> CommTest::standardPrivateChat(unsigned index, object_p
         userFirstNames[index] + " " + userLastNames[index],
         nullptr, 0, 0, 0
     );
-    chat->chat_list_ = std::move(chatList);
+    // A chat no longer names one list it belongs to; it carries a position in each list it is
+    // in, and that is what the plugin reads (see isChatInContactList() in account-data.cpp).
+    if (chatList)
+        chat->positions_.push_back(make_object<chatPosition>(std::move(chatList), 1, false, nullptr));
     return make_object<updateNewChat>(std::move(chat));
 }
 

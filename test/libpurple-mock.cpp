@@ -1,6 +1,8 @@
 #include "libpurple-mock.h"
 #include "purple-events.h"
 #include <purple.h>
+#include <langinfo.h>
+#include <locale.h>
 #include <stdarg.h>
 #include <vector>
 #include <gtest/gtest.h>
@@ -16,16 +18,59 @@ struct AccountInfo {
 std::vector<AccountInfo>  g_accounts;
 PurplePlugin             *g_plugin;
 
+// The user's locale is only consulted: switching the process to it would change what is tested
+static const std::string &consoleCodeset()
+{
+    static const std::string codeset = [] {
+        std::string result = "US-ASCII";
+        locale_t locale = newlocale(LC_CTYPE_MASK, "", (locale_t)0);
+        if (locale) {
+            result = nl_langinfo_l(CODESET, locale);
+            freelocale(locale);
+        }
+        return result;
+    }();
+    return codeset;
+}
+
+// The plugin's text is UTF-8, while the terminal reading the suite's output may legitimately be
+// anything else. Printed raw, a curly quote in a GLib error reaches a KOI8 xterm as the C1
+// control OSC, and the terminal swallows the rest of the run, verdict included. g_print would
+// convert, but only when writing to a terminal itself, never through make or ninja.
+void printToConsole(const std::string &text)
+{
+    gchar *converted = g_convert_with_fallback(text.c_str(), text.size(), consoleCodeset().c_str(),
+                                               "UTF-8", "?", NULL, NULL, NULL);
+    if (converted) {
+        fputs(converted, stdout);
+        g_free(converted);
+    } else {
+        // Not UTF-8 after all, or not convertible: escape whatever lies beyond ASCII
+        for (unsigned char c: text) {
+            if (c < 0x80)
+                putchar(c);
+            else
+                printf("\\x%02x", c);
+        }
+    }
+}
+
 extern "C" {
 
 #define EVENT(type, ...) g_purpleEvents.addEvent(std::make_unique<type>(__VA_ARGS__))
+
+static void printDebug(const char *prefix, const char *category, const char *format, va_list va)
+{
+    gchar *message = g_strdup_vprintf(format, va);
+    printToConsole(std::string(prefix) + category + ": " + message);
+    g_free(message);
+}
 
 void purple_debug_misc(const char *category, const char *format, ...)
 {
     va_list va;
     va_start(va, format);
-    printf("%s: ", category);
-    vprintf(format, va);
+    printDebug("", category, format, va);
     va_end(va);
 }
 
@@ -33,8 +78,7 @@ void purple_debug_info(const char *category, const char *format, ...)
 {
     va_list va;
     va_start(va, format);
-    printf("Info: %s: ", category);
-    vprintf(format, va);
+    printDebug("Info: ", category, format, va);
     va_end(va);
 }
 
@@ -42,8 +86,7 @@ void purple_debug_warning(const char *category, const char *format, ...)
 {
     va_list va;
     va_start(va, format);
-    printf("Warning: %s: ", category);
-    vprintf(format, va);
+    printDebug("Warning: ", category, format, va);
     va_end(va);
 }
 

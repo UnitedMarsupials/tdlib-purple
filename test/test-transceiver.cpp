@@ -82,16 +82,12 @@ void TestTransceiver::runTimeouts()
 
 #define COMPARE(param) ASSERT_EQ(expected.param, actual.param)
 
+// As of TDLib 1.8 the parameters live directly on the request rather than in a nested
+// tdlibParameters object, and enable_storage_optimizer_ is gone altogether.
 static void compare(const setTdlibParameters &actual, const setTdlibParameters &expected)
 {
-    COMPARE(parameters_->database_directory_);
-    COMPARE(parameters_->use_secret_chats_);
-    COMPARE(parameters_->enable_storage_optimizer_);
-}
-
-static void compare(const checkDatabaseEncryptionKey &actual, const checkDatabaseEncryptionKey &expected)
-{
-    COMPARE(encryption_key_);
+    COMPARE(database_directory_);
+    COMPARE(use_secret_chats_);
 }
 
 static void compare(const setAuthenticationPhoneNumber &actual, const setAuthenticationPhoneNumber &expected)
@@ -159,7 +155,9 @@ static void compare(const inputMessageText &actual,
                     const inputMessageText &expected)
 {
     compare(actual.text_, expected.text_);
-    COMPARE(disable_web_page_preview_);
+    // disable_web_page_preview_ became the linkPreviewOptions object link_preview_options_,
+    // which the plugin never sets; assert that it stays that way.
+    COMPARE(link_preview_options_ != nullptr);
     COMPARE(clear_draft_);
 }
 
@@ -203,7 +201,8 @@ static void compare(const inputMessagePhoto &actual, const inputMessagePhoto &ex
     COMPARE(width_);
     COMPARE(height_);
     compare(actual.caption_, expected.caption_);
-    COMPARE(ttl_);
+    // ttl_ became the MessageSelfDestructType object self_destruct_type_
+    COMPARE(self_destruct_type_ != nullptr);
 
     COMPARE(photo_ != nullptr);
     if (actual.photo_) {
@@ -241,7 +240,9 @@ static void compare(const sendMessage &actual, const sendMessage &expected,
                     std::vector<std::string> &m_inputPhotoPaths)
 {
     COMPARE(chat_id_);
-    COMPARE(reply_to_message_id_);
+    // reply_to_message_id_ became the InputMessageReplyTo object reply_to_, which the plugin
+    // does not set when sending
+    COMPARE(reply_to_ != nullptr);
 
     compare(actual.options_,               expected.options_);
     compare(actual.reply_markup_,          expected.reply_markup_);
@@ -383,7 +384,7 @@ static void compare(const checkAuthenticationPassword &actual, const checkAuthen
     COMPARE(password_);
 }
 
-static void compare(const uploadFile &actual, const uploadFile &expected)
+static void compare(const preliminaryUploadFile &actual, const preliminaryUploadFile &expected)
 {
     compare(actual.file_, expected.file_);
 
@@ -491,7 +492,6 @@ static void compareRequests(const Function &actual, const Function &expected,
 
     switch (actual.get_id()) {
         C(setTdlibParameters)
-        C(checkDatabaseEncryptionKey)
         C(setAuthenticationPhoneNumber)
         case getContacts::ID: break;
         C(getChats)
@@ -520,7 +520,7 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(leaveChat)
         C(deleteChat)
         C(checkAuthenticationPassword)
-        C(uploadFile)
+        C(preliminaryUploadFile)
         C(closeSecretChat)
         C(getSupergroupFullInfo)
         C(cancelDownloadFile)
@@ -571,24 +571,27 @@ void TestTransceiver::reply(uint64_t requestId, td::td_api::object_ptr<td::td_ap
 namespace td {
 namespace td_api {
 
+// These used to pass every field of the object positionally, and so had to be rewritten -- and
+// grown #if TDLIB_VERSION_NUMBER arms -- each time TDLib inserted a field. TDLib inserts fields
+// constantly: `user` and `chat` have each gained some ten since this suite was written. Setting
+// only the fields a test actually looks at, and letting the rest default-initialise, is what
+// keeps these compiling as the API grows.
 object_ptr<user> makeUser(std::int32_t id_, std::string const &first_name_,
                           std::string const &last_name_,
                           std::string const &phone_number_,
                           object_ptr<UserStatus> &&status_)
 {
-    return make_object<user>(
-        id_, first_name_, last_name_, "", phone_number_, std::move(status_),
-        nullptr,
-        false, // is_contact
-        false,
-        false,
-        false,
-        "",
-        false,
-        true,
-        make_object<userTypeRegular>(),
-        ""
-    );
+    auto result = make_object<user>();
+
+    result->id_           = id_;
+    result->first_name_   = first_name_;
+    result->last_name_    = last_name_;
+    result->phone_number_ = phone_number_;
+    result->status_       = std::move(status_);
+    result->have_access_  = true;
+    result->type_         = make_object<userTypeRegular>();
+
+    return result;
 }
 
 object_ptr<chat> makeChat(std::int64_t id_,
@@ -599,39 +602,20 @@ object_ptr<chat> makeChat(std::int64_t id_,
                           std::int64_t last_read_inbox_message_id_,
                           std::int64_t last_read_outbox_message_id_)
 {
-    return make_object<chat>(
-        id_,
-        std::move(type_),
-        nullptr,
-        title_,
-        nullptr,
-        make_object<chatPermissions>(true, true, true, true, true, false, false, false),
-        std::move(last_message_),
-        0,
-#if TDLIB_VERSION_NUMBER >= 10604
-        nullptr, // source
-#endif
-        false,
-        unread_count_ > 0,
-#if TDLIB_VERSION_NUMBER < 10604
-        false,  // sponsored
-#endif
-        false,
-        true,
-        true,
-        false,
-        false,
-        unread_count_,
-        last_read_inbox_message_id_,
-        last_read_outbox_message_id_,
-        0,
-        make_object<chatNotificationSettings>(true, 0, true, "default", true, false, true, false, true, false),
-        nullptr,
-        0,
-        0,
-        nullptr,
-        ""
-    );
+    auto result = make_object<chat>();
+
+    result->id_                         = id_;
+    result->type_                       = std::move(type_);
+    result->title_                      = title_;
+    result->permissions_                = make_object<chatPermissions>();
+    result->last_message_               = std::move(last_message_);
+    result->is_marked_as_unread_        = (unread_count_ > 0);
+    result->unread_count_               = unread_count_;
+    result->last_read_inbox_message_id_ = last_read_inbox_message_id_;
+    result->last_read_outbox_message_id_= last_read_outbox_message_id_;
+    result->notification_settings_      = make_object<chatNotificationSettings>();
+
+    return result;
 }
 
 object_ptr<updateChatPosition> makeUpdateChatListMain(int64_t chatId)
@@ -660,6 +644,58 @@ object_ptr<loadChats> getChatsRequest()
     return make_object<loadChats>(make_object<chatListMain>(), 200);
 }
 
+// message.reply_to_message_id_ became reply_to_, a MessageReplyTo object; getReplyMessageId()
+// in identifiers.cpp reads the message_id_ out of its messageReplyToMessage form.
+object_ptr<MessageReplyTo> makeReplyTo(std::int64_t message_id_)
+{
+    auto result = make_object<messageReplyToMessage>();
+
+    result->message_id_ = message_id_;
+
+    return result;
+}
+
+object_ptr<sticker> makeSticker(std::int32_t width_, std::int32_t height_,
+                                const std::string &emoji_, object_ptr<file> &&sticker_,
+                                object_ptr<thumbnail> &&thumbnail_)
+{
+    auto result = make_object<sticker>();
+
+    result->width_   = width_;
+    result->height_  = height_;
+    result->emoji_   = emoji_;
+    result->sticker_   = std::move(sticker_);
+    result->thumbnail_ = std::move(thumbnail_);
+
+    return result;
+}
+
+// supergroup's username became a usernames object, and it has gained boost_level_ and a dozen
+// flags besides; only what the tests assert on is set here.
+object_ptr<supergroup> makeSupergroup(std::int64_t id_, object_ptr<ChatMemberStatus> &&status_,
+                                      std::int32_t member_count_)
+{
+    auto result = make_object<supergroup>();
+
+    result->id_           = id_;
+    result->status_       = std::move(status_);
+    result->member_count_ = member_count_;
+
+    return result;
+}
+
+// Only the fields compare(setTdlibParameters) looks at; see the note on makeUser above.
+object_ptr<setTdlibParameters> makeTdlibParameters(const std::string &databaseDirectory,
+                                                   bool useSecretChats)
+{
+    auto result = make_object<setTdlibParameters>();
+
+    result->database_directory_ = databaseDirectory;
+    result->use_secret_chats_   = useSecretChats;
+
+    return result;
+}
+
 object_ptr<Object> getChatsNoChatsResponse()
 {
     return make_object<error>(404, "No more chats");
@@ -668,55 +704,51 @@ object_ptr<Object> getChatsNoChatsResponse()
 object_ptr<message> makeMessage(std::int64_t id_, std::int32_t sender_user_id_, std::int64_t chat_id_,
                                 bool is_outgoing_, std::int32_t date_, object_ptr<MessageContent> &&content_)
 {
-    return make_object<message>(
-        id_,
-        sender_user_id_,
-        chat_id_,
-        is_outgoing_ ? make_object<messageSendingStatePending>() : nullptr,
-        nullptr,
-        is_outgoing_,
-        false,
-        true,
-        true,
-        true,
-        false,
-        false,
-        date_,
-        0,
-        nullptr,
-        0,
-        0,
-        0,
-        0,
-        "",
-        0,
-        0,
-        "",
-        std::move(content_),
-        nullptr
-    );
+    auto result = make_object<message>();
+
+    result->id_            = id_;
+    // The sender is a MessageSender object now, not a bare user id
+    result->sender_id_     = make_object<messageSenderUser>(sender_user_id_);
+    result->chat_id_       = chat_id_;
+    result->sending_state_ = is_outgoing_ ? make_object<messageSendingStatePending>() : nullptr;
+    result->is_outgoing_   = is_outgoing_;
+    result->can_be_saved_  = true;
+    result->date_          = date_;
+    result->content_       = std::move(content_);
+
+    return result;
+}
+
+// photoSize has gained progressive_sizes_, and is built identically by each of the helpers below
+object_ptr<photoSize> makePhotoSize(object_ptr<file> &&photo, unsigned width, unsigned height)
+{
+    auto result = make_object<photoSize>();
+
+    result->type_   = "whatever";
+    result->photo_  = std::move(photo);
+    result->width_  = width;
+    result->height_ = height;
+
+    return result;
 }
 
 object_ptr<messageText> makeTextMessage(const std::string &text)
 {
-    return make_object<messageText>(
-        make_object<formattedText>(text, std::vector<object_ptr<textEntity>>()),
-        nullptr
-    );
+    auto result = make_object<messageText>();
+
+    result->text_ = make_object<formattedText>(text, std::vector<object_ptr<textEntity>>());
+
+    return result;
 }
 
 object_ptr<photo> makePhotoRemote(int32_t fileId, unsigned size, unsigned width, unsigned height)
 {
     std::vector<object_ptr<photoSize>> sizes;
-    sizes.push_back(make_object<photoSize>(
-        "whatever",
-        make_object<file>(
+    sizes.push_back(makePhotoSize(make_object<file>(
             fileId, size, size,
             make_object<localFile>("", true, true, false, false, 0, 0, 0),
             make_object<remoteFile>("beh", "bleh", false, true, size)
-        ),
-        width, height
-    ));
+        ), width, height));
     return make_object<photo>(false, nullptr, std::move(sizes));
 }
 
@@ -724,15 +756,11 @@ object_ptr<photo> makePhotoLocal(int32_t fileId, unsigned size, const std::strin
                                  unsigned width, unsigned height)
 {
     std::vector<object_ptr<photoSize>> sizes;
-    sizes.push_back(make_object<photoSize>(
-        "whatever",
-        make_object<file>(
+    sizes.push_back(makePhotoSize(make_object<file>(
             fileId, size, size,
             make_object<localFile>(path, true, true, false, true, 0, size, size),
             make_object<remoteFile>("beh", "bleh", false, true, size)
-        ),
-        width, height
-    ));
+        ), width, height));
     return make_object<photo>(false, nullptr, std::move(sizes));
 }
 
@@ -742,15 +770,11 @@ object_ptr<photo> makePhotoUploading(int32_t fileId, unsigned size, unsigned upl
     EXPECT_TRUE(uploaded < size);
 
     std::vector<object_ptr<photoSize>> sizes;
-    sizes.push_back(make_object<photoSize>(
-        "whatever",
-        make_object<file>(
+    sizes.push_back(makePhotoSize(make_object<file>(
             fileId, size, size,
             make_object<localFile>(path, true, true, false, true, 0, size, size),
             make_object<remoteFile>("beh", "bleh", false, false, uploaded)
-        ),
-        width, height
-    ));
+        ), width, height));
     return make_object<photo>(false, nullptr, std::move(sizes));
 }
 

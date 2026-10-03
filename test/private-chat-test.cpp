@@ -39,7 +39,7 @@ TEST_F(PrivateChatTest, AddContactByPhone)
         make_object<userStatusOffline>()
     )));
     tgl.reply(make_object<importedContacts>(
-        std::vector<int32_t>(1, userIds[0]),
+        std::vector<int64_t>(1, userIds[0]),
         std::vector<int32_t>()
     ));
 
@@ -247,7 +247,7 @@ TEST_F(PrivateChatTest, ContactedByNew)
 
     // They message us
     object_ptr<updateNewChat> chatUpdate = standardPrivateChat(0);
-    chatUpdate->chat_->chat_list_ = make_object<chatListMain>();
+    chatUpdate->chat_->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
     tgl.update(std::move(chatUpdate));
     prpl.verifyEvents(AddBuddyEvent(
         purpleUserName(0),
@@ -273,7 +273,7 @@ TEST_F(PrivateChatTest, ContactedByNew)
     ));
     tgl.verifyRequest(viewMessages(
         chatIds[0],
-        {messageId},
+        {messageId}, nullptr,
         true
     ));
 
@@ -298,7 +298,7 @@ TEST_F(PrivateChatTest, ContactedByNew_ImmediatePhoneNumber)
     prpl.verifyNoEvents();
 
     object_ptr<updateNewChat> chatUpdate = standardPrivateChat(0);
-    chatUpdate->chat_->chat_list_ = make_object<chatListMain>();
+    chatUpdate->chat_->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
     tgl.update(std::move(chatUpdate));
     prpl.verifyEvents(AddBuddyEvent(
         purpleUserName(0),
@@ -324,7 +324,7 @@ TEST_F(PrivateChatTest, ContactedByNew_ImmediatePhoneNumber)
     ));
     tgl.verifyRequest(viewMessages(
         chatIds[0],
-        {messageId},
+        {messageId}, nullptr,
         true
     ));
 }
@@ -335,7 +335,7 @@ TEST_F(PrivateChatTest, ContactWithoutChatAtLogin)
     userUpdate->user_->is_contact_ = true;
     login(
         {std::move(userUpdate)},
-        make_object<users>(1, std::vector<int32_t>(1, userIds[0])),
+        make_object<users>(1, std::vector<int64_t>(1, userIds[0])),
         make_object<chats>(),
         {}, {}, {}
     );
@@ -396,10 +396,10 @@ TEST_F(PrivateChatTest, Document)
     ));
     prpl.verifyEvents(ServGotImEvent(
         connection, purpleUserName(0),
-        "<a href=\"file:///path\">doc.file.name [mime/type]</a>\ndocument",
+        "<a href=\"file://file:///path\">doc.file.name [mime/type]</a>\ndocument",
         PURPLE_MESSAGE_RECV, date
     ));
-    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, true));
+    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
 }
 
 TEST_F(PrivateChatTest, Video)
@@ -424,8 +424,9 @@ TEST_F(PrivateChatTest, Video)
                     make_object<remoteFile>("beh", "bleh", false, true, 10000)
                 )
             ),
+            std::vector<object_ptr<alternativeVideo>>(), nullptr, 0,
             make_object<formattedText>("video", std::vector<object_ptr<textEntity>>()),
-            false
+            false, false, false
         )
     )));
     tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
@@ -440,12 +441,12 @@ TEST_F(PrivateChatTest, Video)
         ServGotImEvent(
             connection,
             purpleUserName(0),
-            "<a href=\"file:///path\">video.avi [video/whatever]</a>\nvideo",
+            "<a href=\"file://file:///path\">video.avi [video/whatever]</a>\nvideo",
             PURPLE_MESSAGE_RECV,
             date
         )
     );
-    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, true));
+    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
 }
 
 TEST_F(PrivateChatTest, Audio)
@@ -464,7 +465,7 @@ TEST_F(PrivateChatTest, Audio)
         make_object<messageAudio>(
             make_object<audio>(
                 25*60, "Symphony #40", "Wolfgang Amadeus Mozart",
-                "symphony.ogg", "audio/whatever", nullptr, nullptr,
+                "symphony.ogg", "audio/whatever", nullptr, nullptr, std::vector<object_ptr<thumbnail>>(),
                 make_object<file>(
                     fileId, 10000, 10000,
                     make_object<localFile>("", true, true, false, false, 0, 0, 0),
@@ -486,12 +487,12 @@ TEST_F(PrivateChatTest, Audio)
         ServGotImEvent(
             connection,
             purpleUserName(0),
-            "<a href=\"file:///path\">symphony.ogg [audio/whatever]</a>\naudio",
+            "<a href=\"file://file:///path\">symphony.ogg [audio/whatever]</a>\naudio",
             PURPLE_MESSAGE_RECV,
             date
         )
     );
-    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, true));
+    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
 }
 
 TEST_F(PrivateChatTest, OtherMessage)
@@ -509,7 +510,7 @@ TEST_F(PrivateChatTest, OtherMessage)
     )));
     tgl.verifyRequest(viewMessages(
         chatIds[0],
-        {1},
+        {1}, nullptr,
         true
     ));
     prpl.verifyEvents(
@@ -518,7 +519,11 @@ TEST_F(PrivateChatTest, OtherMessage)
             purpleUserName(0), purpleUserName(0),
             userFirstNames[0] + " " + userLastNames[0] + ": Unsupported message type messageGame",
             PURPLE_MESSAGE_SYSTEM, date
-        )
+        ),
+        // ...followed by what the message actually holds, as TDLib describes it
+        ServGotImEvent(connection, purpleUserName(0),
+                       "\n<font face=\"monospace\">messageGame {\n}</font>",
+                       PURPLE_MESSAGE_RECV, date)
     );
 }
 
@@ -530,15 +535,11 @@ TEST_F(PrivateChatTest, Photo)
     loginWithOneContact();
 
     std::vector<object_ptr<photoSize>> sizes;
-    sizes.push_back(make_object<photoSize>(
-        "whatever",
-        make_object<file>(
+    sizes.push_back(makePhotoSize(make_object<file>(
             fileId, 10000, 10000,
             make_object<localFile>("", true, true, false, false, 0, 0, 0),
             make_object<remoteFile>("beh", "bleh", false, true, 10000)
-        ),
-        640, 480
-    ));
+        ), 640, 480));
     tgl.update(make_object<updateNewMessage>(makeMessage(
         1,
         userIds[0],
@@ -548,7 +549,7 @@ TEST_F(PrivateChatTest, Photo)
         make_object<messagePhoto>(
             make_object<photo>(false, nullptr, std::move(sizes)),
             make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>()),
-            false
+            false, false, false
         )
     )));
     tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
@@ -578,7 +579,7 @@ TEST_F(PrivateChatTest, Photo)
         "photo",
         (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES), date
     ));
-    tgl.verifyRequest(viewMessages(chatIds[0], {1}, true));
+    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
 
     tgl.update(make_object<updateFile>(make_object<file>(
         fileId, 10000, 10000,
@@ -594,15 +595,11 @@ TEST_F(PrivateChatTest, AlreadyDownloadedPhoto)
     loginWithOneContact();
 
     std::vector<object_ptr<photoSize>> sizes;
-    sizes.push_back(make_object<photoSize>(
-        "whatever",
-        make_object<file>(
+    sizes.push_back(makePhotoSize(make_object<file>(
             fileId, 10000, 10000,
             make_object<localFile>("/path", true, true, false, true, 0, 10000, 10000),
             make_object<remoteFile>("beh", "bleh", false, true, 10000)
-        ),
-        640, 480
-    ));
+        ), 640, 480));
     tgl.update(make_object<updateNewMessage>(makeMessage(
         1,
         userIds[0],
@@ -612,11 +609,11 @@ TEST_F(PrivateChatTest, AlreadyDownloadedPhoto)
         make_object<messagePhoto>(
             make_object<photo>(false, nullptr, std::move(sizes)),
             make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>()),
-            false
+            false, false, false
         )
     )));
     tgl.verifyRequest(
-        viewMessages(chatIds[0], std::vector<int64_t>(1, 1), true)
+        viewMessages(chatIds[0], std::vector<int64_t>(1, 1), nullptr, true)
     );
     prpl.verifyEvents(
         ServGotImEvent(
@@ -667,9 +664,9 @@ TEST_F(PrivateChatTest, SendImage)
             0,
             nullptr,
             nullptr,
-            make_object<inputMessageText>(
+            nullptr, make_object<inputMessageText>(
                 make_object<formattedText>("prefix", std::vector<object_ptr<textEntity>>()),
-                false, false
+                nullptr, false
             )
         ),
         make_object<sendMessage>(
@@ -677,11 +674,11 @@ TEST_F(PrivateChatTest, SendImage)
             0,
             nullptr,
             nullptr,
-            make_object<inputMessagePhoto>(
+            nullptr, make_object<inputMessagePhoto>(
                 make_object<inputFileLocal>(),
                 nullptr, std::vector<std::int32_t>(), 0, 0,
                 make_object<formattedText>("caption1", std::vector<object_ptr<textEntity>>()),
-                0
+                false, nullptr, false
             )
         ),
         make_object<sendMessage>(
@@ -689,11 +686,11 @@ TEST_F(PrivateChatTest, SendImage)
             0,
             nullptr,
             nullptr,
-            make_object<inputMessagePhoto>(
+            nullptr, make_object<inputMessagePhoto>(
                 make_object<inputFileLocal>(),
                 nullptr, std::vector<std::int32_t>(), 0, 0,
                 make_object<formattedText>("caption2", std::vector<object_ptr<textEntity>>()),
-                0
+                false, nullptr, false
             )
         )
     });
@@ -717,7 +714,7 @@ TEST_F(PrivateChatTest, SendImage)
         make_object<messagePhoto>(
             makePhotoUploading(fileId[0], sizeof(data1), 0, "/path", 0, 0),
             make_object<formattedText>("caption1", std::vector<object_ptr<textEntity>>()),
-            false
+            false, false, false
         )
     );
     msg->sending_state_ = make_object<messageSendingStatePending>();
@@ -732,7 +729,7 @@ TEST_F(PrivateChatTest, SendImage)
         make_object<messagePhoto>(
             makePhotoUploading(fileId[1], sizeof(data2), 0, "/path", 0, 0),
             make_object<formattedText>("caption2", std::vector<object_ptr<textEntity>>()),
-            false
+            false, false, false
         )
     );
     msg->sending_state_ = make_object<messageSendingStatePending>();
@@ -749,7 +746,7 @@ TEST_F(PrivateChatTest, SendImage)
             make_object<messagePhoto>(
                 makePhotoLocal(fileId[0], sizeof(data1), "/path", 0, 0),
                 make_object<formattedText>("caption1", std::vector<object_ptr<textEntity>>()),
-                false
+                false, false, false
             )
         ),
         msgIdOld[1]
@@ -767,11 +764,11 @@ TEST_F(PrivateChatTest, SendImage)
             make_object<messagePhoto>(
                 makePhotoLocal(fileId[1], sizeof(data1), "/path", 0, 0),
                 make_object<formattedText>("caption2", std::vector<object_ptr<textEntity>>()),
-                false
+                false, false, false
             )
         ),
         msgIdOld[2],
-        100, "whatever error"
+        make_object<error>(100, "whatever error")
     ));
     ASSERT_FALSE(g_file_test(tgl.getInputPhotoPath(1).c_str(), G_FILE_TEST_EXISTS));
 
@@ -799,7 +796,7 @@ TEST_F(PrivateChatTest, ReplyToOldMessage)
         date,
         makeTextMessage("reply")
     );
-    message->reply_to_message_id_ = srcMsgId;
+    message->reply_to_ = makeReplyTo(srcMsgId);
 
     tgl.update(make_object<updateNewMessage>(std::move(message)));
     tgl.verifyRequest(getMessage(chatIds[0], srcMsgId));
@@ -822,7 +819,7 @@ TEST_F(PrivateChatTest, ReplyToOldMessage)
             date
         )
     );
-    tgl.verifyRequest(viewMessages(chatIds[0], {msgId}, true));
+    tgl.verifyRequest(viewMessages(chatIds[0], {msgId}, nullptr, true));
 }
 
 TEST_F(PrivateChatTest, ReplyToOldMessage_FetchTimeout)
@@ -841,7 +838,7 @@ TEST_F(PrivateChatTest, ReplyToOldMessage_FetchTimeout)
         date,
         makeTextMessage("reply")
     );
-    message->reply_to_message_id_ = srcMsgId;
+    message->reply_to_ = makeReplyTo(srcMsgId);
 
     tgl.update(make_object<updateNewMessage>(std::move(message)));
     uint64_t getMessageReqId = tgl.verifyRequest(
@@ -859,7 +856,7 @@ TEST_F(PrivateChatTest, ReplyToOldMessage_FetchTimeout)
             date
         )
     );
-    tgl.verifyRequest(viewMessages(chatIds[0], {msgId}, true));
+    tgl.verifyRequest(viewMessages(chatIds[0], {msgId}, nullptr, true));
 
     tgl.reply(getMessageReqId, makeMessage(
         srcMsgId, userIds[0], chatIds[0], false, srcDate,
@@ -873,16 +870,16 @@ TEST_F(PrivateChatTest, TypingNotification)
     loginWithOneContact();
 
     pluginInfo().send_typing(connection, purpleUserName(0).c_str(), PURPLE_TYPING);
-    tgl.verifyRequest(sendChatAction(chatIds[0], make_object<chatActionTyping>()));
+    tgl.verifyRequest(sendChatAction(chatIds[0], 0, "", make_object<chatActionTyping>()));
 
     pluginInfo().send_typing(connection, purpleUserName(0).c_str(), PURPLE_TYPED);
-    tgl.verifyRequest(sendChatAction(chatIds[0], make_object<chatActionCancel>()));
+    tgl.verifyRequest(sendChatAction(chatIds[0], 0, "", make_object<chatActionCancel>()));
 
     pluginInfo().send_typing(connection, purpleUserName(0).c_str(), PURPLE_TYPING);
-    tgl.verifyRequest(sendChatAction(chatIds[0], make_object<chatActionTyping>()));
+    tgl.verifyRequest(sendChatAction(chatIds[0], 0, "", make_object<chatActionTyping>()));
 
     pluginInfo().send_typing(connection, purpleUserName(0).c_str(), PURPLE_NOT_TYPING);
-    tgl.verifyRequest(sendChatAction(chatIds[0], make_object<chatActionCancel>()));
+    tgl.verifyRequest(sendChatAction(chatIds[0], 0, "", make_object<chatActionCancel>()));
 }
 
 TEST_F(PrivateChatTest, DeleteContact)
@@ -902,7 +899,7 @@ TEST_F(PrivateChatTest, DeleteContact)
 
     tgl.verifyRequests({
         make_object<deleteChatHistory>(chatIds[0], true, false),
-        make_object<removeContacts>(std::vector<std::int32_t>(1, userIds[0]))
+        make_object<removeContacts>(std::vector<std::int64_t>(1, userIds[0]))
     });
 
     auto userUpdate1 = standardUpdateUser(0);
@@ -911,11 +908,11 @@ TEST_F(PrivateChatTest, DeleteContact)
     tgl.update(standardUpdateUser(0));
     tgl.update(make_object<updateChatTitle>(chatIds[0], "New Title"));
     tgl.update(makeUpdateChatList(chatIds[0], make_object<chatListArchive>()));
-    tgl.update(makeUpdateRemoveFromChatList(groupChatId, make_object<chatListMain>()));
-    tgl.update(makeUpdateRemoveFromChatList(groupChatId, make_object<chatListArchive>()));
+    tgl.update(makeUpdateRemoveFromChatList(chatIds[0], make_object<chatListMain>()));
+    tgl.update(makeUpdateRemoveFromChatList(chatIds[0], make_object<chatListArchive>()));
 }
 
-TODO: test moving from main to archive or vice versa now that it's not atomic
+// TODO: test moving from main to archive or vice versa now that it's not atomic
 
 TEST_F(PrivateChatTest, MessageSendResponseError)
 {
@@ -927,9 +924,10 @@ TEST_F(PrivateChatTest, MessageSendResponseError)
         0,
         nullptr,
         nullptr,
+        nullptr,
         make_object<inputMessageText>(
             make_object<formattedText>("message", std::vector<object_ptr<textEntity>>()),
-            false, false
+            nullptr, false
         )
     ));
 
@@ -959,10 +957,11 @@ TEST_F(PrivateChatTest, SendMessage_SpecialCharactersAndHtml)
         0,
         nullptr,
         nullptr,
+        nullptr,
         make_object<inputMessageText>(
             // Our mock purple_unescape_html handles these two characters
             make_object<formattedText>("1<2 3>2", std::vector<object_ptr<textEntity>>()),
-            false, false
+            nullptr, false
         )
     ));
 }
@@ -988,7 +987,7 @@ TEST_F(PrivateChatTest, ReceiveMessage_SpecialCharacters)
         PURPLE_MESSAGE_RECV,
         date
     ));
-    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, true));
+    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
 }
 
 TEST_F(PrivateChatTest, WriteToNonContact_CreatePrivateChatFail)
@@ -1051,8 +1050,8 @@ TEST_F(PrivateChatTest, BuddyWithNullAlias)
 
     login(
         {standardUpdateUser(0), standardPrivateChat(0), makeUpdateChatListMain(chatIds[0])},
-        make_object<users>(1, std::vector<int32_t>(1, userIds[0])),
-        make_object<chats>(std::vector<int64_t>(1, chatIds[0])),
+        make_object<users>(1, std::vector<int64_t>(1, userIds[0])),
+        make_object<chats>(1, std::vector<int64_t>(1, chatIds[0])),
         {
             std::make_unique<AliasBuddyEvent>(purpleUserName(0), userFirstNames[0] + " " + userLastNames[0]),
         }, {},
@@ -1076,12 +1075,12 @@ TEST_F(PrivateChatTest, CallEnded)
         chatIds[0],
         false,
         date,
-        make_object<messageCall>(nullptr, 137)
+        make_object<messageCall>(false, nullptr, 137)
     )));
 
     tgl.verifyRequest(viewMessages(
         chatIds[0],
-        {messageId},
+        {messageId}, nullptr,
         true
     ));
     prpl.verifyEvents(
@@ -1114,7 +1113,7 @@ TEST_F(PrivateChatTest, RemoteSend)
     tgl.update(make_object<updateNewMessage>(std::move(message)));
     tgl.verifyRequest(viewMessages(
         chatIds[0],
-        {messageId},
+        {messageId}, nullptr,
         true
     ));
     prpl.verifyEvents(
@@ -1143,7 +1142,7 @@ void PrivateChatTest::testReadReceipt(bool shouldSend)
     ));
 
     if (shouldSend)
-        tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, true));
+        tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
     else
         tgl.verifyNoRequests();
 }
