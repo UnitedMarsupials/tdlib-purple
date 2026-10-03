@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.9.1 (unreleased)
+
+### Fixes
+
+- **A group chat you administer is no longer missing from the buddy list.** The same gap
+  dropped every administrator from the member list of every group chat.
+- **Joining a public group by its link now shows the group.**
+- **Translations are found wherever the plugin is installed, and display correctly in
+  locales that are not UTF-8.**
+
+### Translations
+
+- **Ukrainian**, complete.
+- **Translations are maintained in this repository now**; upstream's Transifex project is
+  not used.
+
+### Build
+
+- **CMake 4 can configure the build**, which it refused while the build asked for CMake 3.2.
+
+### Tests
+
+- **The test suite compiles and passes again**, against TDLib 1.8 — 128 tests, all green.
+  It had not built since 1.7.9, and the two fixes above are bugs it found as soon as it ran.
+
 ## 0.9.0 (2026-09-27)
 
 This is the first release from this fork. The upstream project,
@@ -122,8 +147,6 @@ builds against 1.8.x, tested against **1.8.48**.
   the case on the machine where this release was prepared and exercised. The call code has
   therefore not been run at all against the 1.8 API, and should be treated as unverified
   rather than as working.
-- The test suite (`make tests`) does not compile against the current TDLib API; it still
-  targets the pre-1.8 interface. No regression coverage is presently available.
 
 ---
 
