@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 # the oldest CMake 4 accepts without a deprecation warning
 
-set(VERSION 0.9.0)
+set(VERSION 0.9.1)
 project(tdlib-purple VERSION ${VERSION} LANGUAGES CXX)
 
 find_package(Td REQUIRED)
