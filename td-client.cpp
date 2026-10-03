@@ -89,17 +89,10 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
     case td::td_api::updateNewChat::ID: {
         auto &newChat = static_cast<td::td_api::updateNewChat &>(update);
         purple_debug_misc(config::pluginId, "Incoming update: new chat\n");
-        if (newChat.chat_->type_->get_id() == td::td_api::chatTypePrivate::ID ||
-            newChat.chat_->type_->get_id() == td::td_api::chatTypeSecret::ID  ||
-            m_data.isGroupChatWithMembership(*newChat.chat_.get()))
-            addChat(std::move(newChat.chat_));
-        else {
-            purple_debug_misc(config::pluginId,
-                              "Incoming update: ignorig ID=%d\n",
-                              update.get_id());
-            purple_debug_misc(config::pluginId,
-                              "Not adding a group that we are not a member of");
-        }
+        // Every chat TDLib tells us about is tracked, including a group we are not a member of:
+        // joining one later produces no second updateNewChat, so a chat dropped here could never
+        // be picked up again. Whether it belongs in the buddy list is updateChat's decision.
+        addChat(std::move(newChat.chat_));
 
         break;
     }
@@ -1217,7 +1210,13 @@ void PurpleTdClient::updateChat(const td::td_api::chat *chat)
     if (privateChatUser)
         updateUserInfo(*privateChatUser, chat);
 
-    if (isChatInContactList(*chat, privateChatUser)) {
+    // A group we are not a member of stays out of the buddy list, but is still tracked above, so
+    // that joining it brings it in rather than leaving it invisible for the rest of the session.
+    bool showInBuddyList = isChatInContactList(*chat, privateChatUser);
+    if ((basicGroupId.valid() || supergroupId.valid()) && !m_data.isGroupChatWithMembership(*chat))
+        showInBuddyList = false;
+
+    if (showInBuddyList) {
         // purple_blist_find_chat doesn't work if account is not connected
         if (basicGroupId.valid()) {
             requestBasicGroupFullInfo(basicGroupId);
