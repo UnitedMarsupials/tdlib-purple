@@ -110,6 +110,11 @@ bool isGroupMember(const td::td_api::object_ptr<td::td_api::ChatMemberStatus> &s
         return static_cast<const td::td_api::chatMemberStatusCreator &>(*status).is_member_;
     else if (status->get_id() == td::td_api::chatMemberStatusMember::ID)
         return true;
+    // An administrator is a member and has no flag saying otherwise -- only the creator and a
+    // restricted member can be in a group's administration without belonging to it. These six
+    // are every ChatMemberStatus TDLib defines.
+    else if (status->get_id() == td::td_api::chatMemberStatusAdministrator::ID)
+        return true;
 
     return false;
 }
