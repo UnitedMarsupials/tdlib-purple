@@ -4,7 +4,7 @@ namespace config {
 
 char pluginId[]      = "telegram-tdlib";
 char pluginName[]    = "Telegram (tdlib)";
-char versionString[] = PACKAGE_VERSION ", tdlib ${Td_VERSION}";
+char versionString[] = PACKAGE_VERSION ", tdlib ${TDLIB_VERSION}";
 char pluginSummary[] = "Telegram using tdlib";
 char pluginDesc[]    = "Telegram Protocol Plugin using tdlib";
 char pluginAuthor[]  = "Arseniy Lartsev";

@@ -4,6 +4,7 @@
 #include <langinfo.h>
 #include <locale.h>
 #include <stdarg.h>
+#include <algorithm>
 #include <vector>
 #include <gtest/gtest.h>
 

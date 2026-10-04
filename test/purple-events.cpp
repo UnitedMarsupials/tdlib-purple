@@ -1,5 +1,6 @@
 #include "purple-events.h"
 #include "libpurple-mock.h"
+#include <algorithm>
 #include <gtest/gtest.h>
 
 PurpleEventReceiver g_purpleEvents;
