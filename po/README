@@ -1,9 +1,11 @@
-Do not edit these files!
+The translations are maintained here, in this repository, as ordinary .po
+files. To correct a translation, edit its .po file; to add a language, add
+<language>.po and list the language in LINGUAS. Either way, send a pull
+request to https://github.com/UnitedMarsupials/tdlib-purple
 
-The translations are maintained in Transifex:
+Up to 0.8.1 the translations came from upstream's Transifex project,
     https://www.transifex.com/tdlib-purple-developers/tdlib-purple/
+which this fork does not use: nothing is fetched from there any more.
 
-Contributors therefore should have no need to meddle with these files directly.
-
-The main developers are supposed to fetch the translations from there,
-unzip the result into this folder, and NOT TOUCH the files.
+After translatable strings change in the code, regenerate the template,
+tdlib-purple.pot, with refresh-potfile.sh.
