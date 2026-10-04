@@ -55,6 +55,16 @@ if (NOT NoWebp)
     link_directories(${libwebp_LIBRARY_DIRS} ${libpng_LIBRARY_DIRS})
 endif (NOT NoWebp)
 
+if (NOT DEFINED SHARE_INSTALL_PREFIX)
+    set(SHARE_INSTALL_PREFIX "share")
+endif (NOT DEFINED SHARE_INSTALL_PREFIX)
+
+if (IS_ABSOLUTE "${SHARE_INSTALL_PREFIX}")
+    set(LOCALE_DIR "${SHARE_INSTALL_PREFIX}/locale")
+else (IS_ABSOLUTE "${SHARE_INSTALL_PREFIX}")
+    set(LOCALE_DIR "${CMAKE_INSTALL_PREFIX}/${SHARE_INSTALL_PREFIX}/locale")
+endif (IS_ABSOLUTE "${SHARE_INSTALL_PREFIX}")
+
 configure_file(buildopt.h.in buildopt.h)
 configure_file(config.cpp.in config.cpp)
 
@@ -96,10 +106,6 @@ endif (NOT NoWebp)
 set_property(TARGET telegram-tdlib PROPERTY CXX_STANDARD 14)
 
 set(BUILD_SHARED_LIBS OFF)
-
-if (NOT DEFINED SHARE_INSTALL_PREFIX)
-    set(SHARE_INSTALL_PREFIX "share")
-endif (NOT DEFINED SHARE_INSTALL_PREFIX)
 
 if (NOT tgvoip_INCLUDE_DIRS STREQUAL "")
     target_include_directories(telegram-tdlib SYSTEM PRIVATE ${tgvoip_INCLUDE_DIRS})

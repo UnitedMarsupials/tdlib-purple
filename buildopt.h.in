@@ -11,6 +11,8 @@
 
 #cmakedefine NoTranslations
 
+#define LOCALE_DIR "${LOCALE_DIR}"
+
 #cmakedefine NoVoip
 
 #endif

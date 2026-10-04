@@ -946,6 +946,16 @@ static void tdlibFatalErrorCallback(const char *message)
 
 static void tgprpl_init (PurplePlugin *plugin)
 {
+#ifndef NoTranslations
+#ifndef _WIN32
+    // libintl's default directory is ours only when we happen to share its prefix. On Windows
+    // the installer puts the catalogues among Pidgin's own instead, wherever that lives.
+    bindtextdomain(GETTEXT_PACKAGE, LOCALE_DIR);
+#endif
+    // Pidgin wants UTF-8, and gettext would otherwise convert to the encoding of the locale
+    bind_textdomain_codeset(GETTEXT_PACKAGE, "UTF-8");
+#endif
+
 #if !PURPLE_VERSION_CHECK(2,14,0)
     (void)sendFileToChat;
 #endif

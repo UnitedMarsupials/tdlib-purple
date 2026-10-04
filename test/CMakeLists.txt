@@ -61,6 +61,8 @@ if (NOT NoLottie)
 endif (NOT NoLottie)
 
 if (NOT NoTranslations)
+    # The top level finds it only after adding this directory
+    find_package(Intl REQUIRED)
     target_include_directories(tests PRIVATE ${Intl_INCLUDE_DIRS})
     target_link_libraries(tests PRIVATE ${Intl_LIBRARIES})
 endif (NOT NoTranslations)
