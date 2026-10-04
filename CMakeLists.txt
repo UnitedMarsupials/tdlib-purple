@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.2 FATAL_ERROR)
-# versions before 3.2 don't pass CMAKE_EXE_LINKER_FLAGS when using try_compile
+cmake_minimum_required(VERSION 3.10)
+# the oldest CMake 4 accepts without a deprecation warning
 
 set(VERSION 0.9.0)
 project(tdlib-purple VERSION ${VERSION} LANGUAGES CXX)
