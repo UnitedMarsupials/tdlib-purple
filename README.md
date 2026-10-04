@@ -81,8 +81,6 @@ to use another API id.
 
 To install, copy the .so to libpurple plugins directory, or run `make install`.
 
-Building using existing librlottie: `-DNoBundledLottie=True`
-
 Building without animated sticker decoding: `-DNoLottie=True`
 
 Building without localization: `-DNoTranslations=True`

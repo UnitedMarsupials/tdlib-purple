@@ -29,7 +29,6 @@ if ("${TDLIB_VERSION}" MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)")
 endif ()
 
 set(NoWebp FALSE CACHE BOOL "Do not decode webp stickers")
-set(NoBundledLottie FALSE CACHE BOOL "Do not use bundled rlottie library")
 set(NoLottie FALSE CACHE BOOL "Disable animated sticker conversion")
 set(NoTranslations FALSE CACHE BOOL "Disable translation support")
 set(NoVoip FALSE CACHE BOOL "Disable voice call support")

@@ -1,7 +1,7 @@
 # CodeQL static analysis of the plugin (not of the tests: only what the
 # `all` target compiles is analysed).  Its own workflow, apart from CI: it is
 # slower, and its findings land in the repository's Security tab rather than
-# failing a build.  Same Fedora container as the Linux jobs in ci.yml.
+# failing a build.  Same Gentoo container as the Linux jobs in ci.yml.
 
 name: CodeQL
 
@@ -24,19 +24,22 @@ jobs:
   analyze:
     name: Analyze (C++)
     runs-on: ubuntu-24.04
-    container: fedora:44
+    container: gentoo/stage3:latest
     permissions:
       contents: read
       security-events: write
     steps:
-      - name: Install dependencies
-        run: >-
-          dnf install -y --setopt=install_weak_deps=False
-          git cmake ninja-build pkgconf-pkg-config gettext gcc-c++
-          libpurple-devel tdlib-devel tdlib-static openssl-devel zlib-devel
-          fmt-devel rlottie-devel libwebp-devel libpng-devel
-
       - uses: actions/checkout@v7
+
+      # Shared with the Gentoo jobs in ci.yml, which save it.
+      - uses: actions/cache/restore@v4
+        with:
+          path: /var/cache/binpkgs
+          key: gentoo-binpkgs-${{ runner.arch }}-
+          restore-keys: gentoo-binpkgs-${{ runner.arch }}-
+
+      - name: Install dependencies
+        run: sh .github/gentoo-setup.sh
 
       - uses: github/codeql-action/init@v4
         with:

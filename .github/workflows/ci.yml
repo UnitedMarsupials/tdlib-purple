@@ -9,13 +9,15 @@
 # one table at the top of the run's page.  CodeQL is a workflow of its own
 # (codeql.yml).
 #
-# TDLib is not built here; every platform installs its own package of it.
-# Linux runs in a Fedora container, whose TDLib follows upstream closely;
-# Ubuntu has no TDLib package at all.  The BSDs run in a VM on a Linux runner,
-# through cross-platform-actions; every step after the one that boots the VM
-# runs inside it (shell: cpa.sh).  OpenBSD is experimental: its failures are
-# shown but do not fail the workflow.  NetBSD (no TDLib package) and
-# DragonFly (a TDLib that predates 1.8.6) are left out until they have one.
+# Every platform supplies its own TDLib.  Linux runs in a Gentoo container,
+# on x86-64 and on arm64, as Gentoo follows TDLib upstream closely (Ubuntu
+# has no TDLib package; Fedora's predates the API this code uses).  Gentoo builds TDLib from source, the first time and after each new
+# release; .github/gentoo-setup.sh explains how it is kept.  The BSDs run in
+# a VM on a Linux runner, through cross-platform-actions; every step after
+# the one that boots the VM runs inside it (shell: cpa.sh).  OpenBSD is
+# experimental: its failures are shown but do not fail the workflow.  NetBSD
+# (no TDLib package) and DragonFly (a TDLib that predates 1.8.6) are left out
+# until they have one.  None of these offers a 32-bit x86 TDLib.
 #
 # No -Werror: clang finds an unused private field (transceiver.h) that gcc
 # does not, and the warnings are in the log anyway.
@@ -74,35 +76,64 @@ jobs:
 
   linux:
     name: ${{ matrix.name }}
-    runs-on: ubuntu-24.04
-    container: fedora:44
+    runs-on: ${{ matrix.runner }}
+    container: gentoo/stage3:latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: Fedora 44 (g++)
+          - name: Gentoo (g++)
+            runner: ubuntu-24.04
             cxx: g++
-            compiler: gcc-c++
+            packages: ''
             options: ''
-          - name: Fedora 44 (clang++)
+          - name: Gentoo (clang++)
+            runner: ubuntu-24.04
             cxx: clang++
-            compiler: clang
+            packages: llvm-core/clang
             options: ''
-          - name: Fedora 44 (g++, NoTranslations)
+          - name: Gentoo (g++, NoTranslations)
+            runner: ubuntu-24.04
             cxx: g++
-            compiler: gcc-c++
+            packages: ''
             options: -DNoTranslations=1
+          - name: Gentoo arm64 (g++)
+            runner: ubuntu-24.04-arm
+            cxx: g++
+            packages: ''
+            options: ''
     steps:
+      # No git in the container yet: this fetches a tarball instead.
+      - uses: actions/checkout@v7
+
+      # What this or an earlier run built from source (TDLib, libpurple).
+      - uses: actions/cache/restore@v4
+        with:
+          path: /var/cache/binpkgs
+          key: gentoo-binpkgs-${{ runner.arch }}-
+          restore-keys: gentoo-binpkgs-${{ runner.arch }}-
+
       - name: Install dependencies
         id: install
         run: >-
-          dnf install -y --setopt=install_weak_deps=False
-          git cmake ninja-build pkgconf-pkg-config gettext
-          gcc-c++ ${{ matrix.compiler }}
-          libpurple-devel tdlib-devel tdlib-static openssl-devel zlib-devel
-          fmt-devel rlottie-devel libwebp-devel libpng-devel gtest-devel
+          sh .github/annotate.sh Setup
+          sh .github/gentoo-setup.sh ${{ matrix.packages }}
 
-      - uses: actions/checkout@v7
+      # Named after what it holds, so an unchanged set is not saved again.
+      - name: Name the package cache
+        id: binpkgs
+        if: steps.install.outcome == 'success'
+        run: >-
+          echo "key=gentoo-binpkgs-${{ runner.arch }}-$(find /var/cache/binpkgs
+          -type f -name '*.gpkg.tar' | sort | sha256sum | cut -c1-16)"
+          >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache/save@v4
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        with:
+          path: /var/cache/binpkgs
+          key: ${{ steps.binpkgs.outputs.key }}
 
       - name: Configure
         id: configure
