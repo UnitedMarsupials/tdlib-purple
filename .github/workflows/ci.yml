@@ -1,17 +1,21 @@
 # Build and test every push and every pull request.
 #
-# Setup, Configure, Build and Test are separate steps in every job, so a red
-# mark names which one failed.  "Test" is the mock-libpurple suite in test/
-# (`run-tests`): no account, no network.  .github/annotate.sh repeats the tail
-# of a failing step's output as an annotation, and the last job ("Summary")
-# lays every job's outcomes out as one table at the top of the run's page.
+# Setup, Configure, Build, Test and Install are separate steps in every job,
+# so a red mark names which one failed.  "Test" is the mock-libpurple suite in
+# test/ (`run-tests`): no account, no network.  "Install" is `ninja install`
+# into a scratch DESTDIR, which catches a broken install rule.
+# .github/annotate.sh repeats the tail of a failing step's output as an
+# annotation, and the last job ("Summary") lays every job's outcomes out as
+# one table at the top of the run's page.  CodeQL is a workflow of its own
+# (codeql.yml).
 #
 # TDLib is not built here; every platform installs its own package of it.
-# Linux runs in a Debian container, since Ubuntu 24.04 has no libtd-dev.  The
-# BSDs run in a VM on a Linux runner, through cross-platform-actions; every
-# step after the one that boots the VM runs inside it (shell: cpa.sh).
-# OpenBSD, NetBSD and DragonFly are experimental: their failures are shown
-# but do not fail the workflow.
+# Linux runs in a Fedora container, whose TDLib follows upstream closely;
+# Ubuntu has no TDLib package at all.  The BSDs run in a VM on a Linux runner,
+# through cross-platform-actions; every step after the one that boots the VM
+# runs inside it (shell: cpa.sh).  OpenBSD is experimental: its failures are
+# shown but do not fail the workflow.  NetBSD (no TDLib package) and
+# DragonFly (a TDLib that predates 1.8.6) are left out until they have one.
 #
 # No -Werror: clang finds an unused private field (transceiver.h) that gcc
 # does not, and the warnings are in the log anyway.
@@ -31,31 +35,72 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  WARNINGS: -Wall -Wextra -Wformat=2 -Wno-unused-parameter -Wno-parentheses
+  WARNINGS: >-
+    -Wall -Wextra -Wformat=2 -Wformat-signedness
+    -Wno-unused-parameter -Wno-parentheses
 
 jobs:
-  linux:
-    name: Debian 13 (${{ matrix.cxx }})
+  lint:
+    name: Translations (lint)
     runs-on: ubuntu-24.04
-    container: debian:trixie
+    steps:
+      - uses: actions/checkout@v7
+
+      # Not every translation needs every accelerator the linter knows of:
+      # it is only told to check those a translation has.
+      - name: Lint accelerators
+        id: lint
+        env:
+          LINTACCEL_IGNORE_MISSING: y
+        run: sh .github/annotate.sh Lint python3 po/lint_accelerators.py
+
+      - name: Record outcome
+        if: always()
+        env:
+          ORDER: 20
+          NAME: Translations (lint)
+          SETUP: success
+          CONFIGURE: n/a
+          BUILD: n/a
+          TEST: ${{ steps.lint.outcome }}
+          INSTALL: n/a
+        run: sh .github/record.sh
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: outcome-${{ github.job }}
+          path: outcome.tsv
+
+  linux:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    container: fedora:44
     strategy:
       fail-fast: false
       matrix:
         include:
-          - cxx: g++
-            compiler: g++
-          - cxx: clang++
+          - name: Fedora 44 (g++)
+            cxx: g++
+            compiler: gcc-c++
+            options: ''
+          - name: Fedora 44 (clang++)
+            cxx: clang++
             compiler: clang
+            options: ''
+          - name: Fedora 44 (g++, NoTranslations)
+            cxx: g++
+            compiler: gcc-c++
+            options: -DNoTranslations=1
     steps:
       - name: Install dependencies
         id: install
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends \
-              ca-certificates git cmake ninja-build pkg-config gettext \
-              ${{ matrix.compiler }} \
-              libpurple-dev libtd-dev libfmt-dev librlottie-dev \
-              libwebp-dev libpng-dev zlib1g-dev libgtest-dev
+        run: >-
+          dnf install -y --setopt=install_weak_deps=False
+          git cmake ninja-build pkgconf-pkg-config gettext
+          gcc-c++ ${{ matrix.compiler }}
+          libpurple-devel tdlib-devel tdlib-static openssl-devel zlib-devel
+          fmt-devel rlottie-devel libwebp-devel libpng-devel gtest-devel
 
       - uses: actions/checkout@v7
 
@@ -65,7 +110,7 @@ jobs:
           CXX: ${{ matrix.cxx }}
         run: >-
           sh .github/annotate.sh Configure
-          cmake -G Ninja -S . -B build -DNoVoip=1
+          cmake -G Ninja -S . -B build -DNoVoip=1 ${{ matrix.options }}
           -DCMAKE_CXX_FLAGS="${{ env.WARNINGS }}"
 
       - name: Build
@@ -78,15 +123,23 @@ jobs:
         id: test
         run: sh .github/annotate.sh Test cmake --build build --target run-tests
 
+      - name: Install
+        id: destdir
+        run: >-
+          sh .github/annotate.sh Install
+          env DESTDIR="$PWD/destdir" cmake --build build --target install
+          && find destdir -type f
+
       - name: Record outcome
         if: always()
         env:
           ORDER: 0${{ strategy.job-index }}
-          NAME: Debian 13 (${{ matrix.cxx }})
+          NAME: ${{ matrix.name }}
           SETUP: ${{ steps.install.outcome }}
           CONFIGURE: ${{ steps.configure.outcome }}
           BUILD: ${{ steps.build.outcome }}
           TEST: ${{ steps.test.outcome }}
+          INSTALL: ${{ steps.destdir.outcome }}
         run: sh .github/record.sh
 
       - uses: actions/upload-artifact@v7
@@ -108,6 +161,7 @@ jobs:
             version: '15.1'
             experimental: false
             prefix: /usr/local
+            options: ''
             install: >-
               sudo pkg install -y cmake ninja pkgconf gettext-tools
               libpurple tdlib libfmt rlottie webp png googletest
@@ -116,33 +170,20 @@ jobs:
             version: '14.4'
             experimental: false
             prefix: /usr/local
+            options: ''
             install: >-
               sudo pkg install -y cmake ninja pkgconf gettext-tools
               libpurple tdlib libfmt rlottie webp png googletest
-          - name: OpenBSD 7.9 (experimental)
+          # No rlottie package, so no animated stickers.
+          - name: OpenBSD 7.9 (experimental, NoLottie)
             os: openbsd
             version: '7.9'
             experimental: true
             prefix: /usr/local
+            options: -DNoLottie=1
             install: >-
               sudo pkg_add -I cmake ninja gettext-tools libpurple tdlib fmt
-              rlottie libwebp png gtest
-          - name: NetBSD 10.1 (experimental)
-            os: netbsd
-            version: '10.1'
-            experimental: true
-            prefix: /usr/pkg
-            install: >-
-              sudo pkgin -y install cmake ninja pkgconf gettext-tools
-              libpurple tdlib fmt rlottie libwebp png googletest
-          - name: DragonFly BSD 6.4 (experimental)
-            os: dragonflybsd
-            version: '6.4.2'
-            experimental: true
-            prefix: /usr/local
-            install: >-
-              sudo pkg install -y cmake ninja pkgconf gettext-tools
-              libpurple tdlib libfmt rlottie webp png googletest
+              libwebp png gtest
     defaults:
       run:
         shell: cpa.sh {0}
@@ -174,7 +215,7 @@ jobs:
           env CPATH=${{ matrix.prefix }}/include
           LIBRARY_PATH=${{ matrix.prefix }}/lib
           PKG_CONFIG_PATH=${{ matrix.prefix }}/lib/pkgconfig:${{ matrix.prefix }}/libdata/pkgconfig
-          cmake -G Ninja -S . -B build -DNoVoip=1
+          cmake -G Ninja -S . -B build -DNoVoip=1 ${{ matrix.options }}
           -DCMAKE_PREFIX_PATH=${{ matrix.prefix }}
           -DCMAKE_CXX_FLAGS="${{ env.WARNINGS }}"
 
@@ -193,6 +234,13 @@ jobs:
           env LD_LIBRARY_PATH=${{ matrix.prefix }}/lib
           cmake --build build --target run-tests
 
+      - name: Install
+        id: destdir
+        run: >-
+          sh .github/annotate.sh Install
+          env DESTDIR="$PWD/destdir" cmake --build build --target install
+          && find destdir -type f
+
       # On the runner, not in the VM: it may never have booted.
       - name: Record outcome
         if: always()
@@ -204,6 +252,7 @@ jobs:
           CONFIGURE: ${{ steps.configure.outcome }}
           BUILD: ${{ steps.build.outcome }}
           TEST: ${{ steps.test.outcome }}
+          INSTALL: ${{ steps.destdir.outcome }}
         run: sh .github/record.sh
 
       - uses: actions/upload-artifact@v7
@@ -214,7 +263,7 @@ jobs:
 
   summary:
     name: Summary
-    needs: [linux, bsd]
+    needs: [lint, linux, bsd]
     if: always()
     runs-on: ubuntu-24.04
     steps:

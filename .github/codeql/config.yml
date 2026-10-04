@@ -1,8 +1,8 @@
-name: "SerenityOS CodeQL Config"
+name: "tdlib-purple CodeQL config"
 
+# security-and-quality includes everything in security-extended.
 queries:
- - uses: security-and-quality
- - uses: security-extended 
+  - uses: security-and-quality
 
-# Documentation for configuring CodeQL is located here:
-# https://docs.github.com/en/free-pro-team@latest/github/finding-security-vulnerabilities-and-errors-in-your-code/configuring-code-scanning
+# Documentation for configuring CodeQL:
+# https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/customizing-your-advanced-setup-for-code-scanning

@@ -1,0 +1,54 @@
+# CodeQL static analysis of the plugin (not of the tests: only what the
+# `all` target compiles is analysed).  Its own workflow, apart from CI: it is
+# slower, and its findings land in the repository's Security tab rather than
+# failing a build.  Same Fedora container as the Linux jobs in ci.yml.
+
+name: CodeQL
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (C++)
+    runs-on: ubuntu-24.04
+    container: fedora:44
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Install dependencies
+        run: >-
+          dnf install -y --setopt=install_weak_deps=False
+          git cmake ninja-build pkgconf-pkg-config gettext gcc-c++
+          libpurple-devel tdlib-devel tdlib-static openssl-devel zlib-devel
+          fmt-devel rlottie-devel libwebp-devel libpng-devel
+
+      - uses: actions/checkout@v7
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: c-cpp
+          build-mode: manual
+          config-file: ./.github/codeql/config.yml
+
+      - name: Build
+        run: |
+          cmake -G Ninja -S . -B build -DNoVoip=1
+          cmake --build build --target all
+
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:c-cpp
