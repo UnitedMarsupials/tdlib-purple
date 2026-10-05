@@ -1,5 +1,6 @@
 #include "fixture.h"
 #include "libpurple-mock.h"
+#include "purple-info.h"
 #include <fmt/format.h>
 
 class PrivateChatTest: public CommTest {
@@ -1127,4 +1128,21 @@ TEST_F(PrivateChatTest, DisablingReadReceipts)
     testReadReceipt(false);
     setUiName("pidgin");
     testReadReceipt(true);
+}
+
+static void countMessage(const gchar *, GLogLevelFlags, const gchar *, gpointer count)
+{
+    ++*static_cast<int *>(count);
+}
+
+TEST(PurpleInfoTest, UiNameWithoutUiInfo)
+{
+    // GLib would return NULL from the lookup anyway; what the guard spares is its CRITICAL
+    int criticals = 0;
+    guint handler = g_log_set_handler("GLib", G_LOG_LEVEL_CRITICAL, countMessage, &criticals);
+    setUiInfoMissing(true);
+    EXPECT_STREQ("", getUiName());
+    setUiInfoMissing(false);
+    g_log_remove_handler("GLib", handler);
+    EXPECT_EQ(0, criticals);
 }

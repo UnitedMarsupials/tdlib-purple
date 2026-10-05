@@ -148,7 +148,9 @@ PurpleTdClient *getTdClient(PurpleAccount *account)
 const char *getUiName()
 {
     GHashTable *ui_info = purple_core_get_ui_info();
-    const char *name = static_cast<char *>(g_hash_table_lookup(ui_info, "name"));
+    if (ui_info == NULL)
+        return "";
+    const char *name = static_cast<const char *>(g_hash_table_lookup(ui_info, "name"));
     return name ? name : "";
 }
 

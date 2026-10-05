@@ -15,6 +15,7 @@ void clearFakeFiles();
 int  getLastImgstoreId();
 guint8 *arrayDup(gpointer data, size_t size);
 void setUiName(const char *name);
+void setUiInfoMissing(bool missing);
 
 };
 

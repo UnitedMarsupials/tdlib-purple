@@ -1542,9 +1542,12 @@ PurpleMediaCaps purple_media_manager_get_ui_caps(PurpleMediaManager *manager)
 }
 
 GHashTable *uiInfo = NULL;
+static bool uiInfoMissing = false;
 
 GHashTable *purple_core_get_ui_info()
 {
+    if (uiInfoMissing)
+        return NULL;
     if (!uiInfo)
         uiInfo = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, NULL);
 
@@ -1559,6 +1562,12 @@ void setUiName(const char *name)
     static char nameKey[] = "name";
     g_hash_table_insert(uiInfo, nameKey, const_cast<char *>(name));
 
+}
+
+// As with a libpurple front-end that registers no get_ui_info callback
+void setUiInfoMissing(bool missing)
+{
+    uiInfoMissing = missing;
 }
 
 void *purple_conversations_get_handle()
