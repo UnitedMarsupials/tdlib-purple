@@ -38,7 +38,8 @@ add_executable(tests EXCLUDE_FROM_ALL
     ../secret-chat.cpp
 )
 
-set_property(TARGET tests PROPERTY CXX_STANDARD 14)
+# C++17, not the plugin's C++14: GoogleTest requires it from 1.17 on.
+set_property(TARGET tests PROPERTY CXX_STANDARD 17)
 target_include_directories(tests PRIVATE ${CMAKE_SOURCE_DIR} ${fmt_INCLUDE_DIRS} ${rlottie_INCLUDE_DIRS})
 # The plugin gets zlib and the thread library by way of the shared libraries it loads, but this
 # binary links TDLib statically and so has to name them itself.
