@@ -136,7 +136,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v4
         if: matrix.platform == 'linux/arm/v7'
 
       # The workspace and the runner's temporary directory (where each step's

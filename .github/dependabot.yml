@@ -1,0 +1,14 @@
+# GitHub has no "latest" ref for an action, and following a branch would
+# run unreleased code.  Instead, have Dependabot propose each new release
+# as a pull request, so CI tries it before it lands.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # One pull request for all of them, rather than one per action.
+    groups:
+      actions:
+        patterns:
+          - '*'
