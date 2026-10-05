@@ -3,16 +3,20 @@
 
 #define TDLIB_VERSION_NUMBER ${TDLIB_VERSION_NUMBER}
 
-// Incompatible changes to the TDLib API, each named after what it brought and
-// keyed to the first release that has it.  A TDLib whose version could not be
-// told (0) is taken to have none of them.
-// importContacts and addContact take importedContact, not contact
-#define TDLIB_API_IMPORTED_CONTACT (TDLIB_VERSION_NUMBER >= 10856)
+#if TDLIB_VERSION_NUMBER == 0
+#warning "Cannot tell which version of TDLib this is: its API changes were guessed by probing its headers (see cmake/tdlib-version.cmake)"
+#endif
+
+// Incompatible changes to the TDLib API, each named after what it brought, and
+// 1 for a TDLib from the release that brought it on (cmake/tdlib-version.cmake).
+// importContacts and addContact take importedContact, not contact (1.8.56)
+#define TDLIB_API_IMPORTED_CONTACT ${TDLIB_API_IMPORTED_CONTACT}
 // proxy became addedProxy, which holds the server, port and type in a proxy
-#define TDLIB_API_ADDED_PROXY      (TDLIB_VERSION_NUMBER >= 10861)
+// (1.8.61)
+#define TDLIB_API_ADDED_PROXY      ${TDLIB_API_ADDED_PROXY}
 // inputMessagePhoto and inputMessageDocument wrap their file in an inputPhoto
-// and inputDocument, which also hold what used to sit beside it
-#define TDLIB_API_INPUT_PHOTO      (TDLIB_VERSION_NUMBER >= 10865)
+// and inputDocument, which also hold what used to sit beside it (1.8.65)
+#define TDLIB_API_INPUT_PHOTO      ${TDLIB_API_INPUT_PHOTO}
 
 #cmakedefine NoWebp
 

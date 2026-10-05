@@ -7,26 +7,7 @@ project(tdlib-purple VERSION ${VERSION} LANGUAGES CXX)
 set(NoPkgConfig FALSE CACHE BOOL "Do not use pkg-config")
 
 find_package(Td REQUIRED)
-set(TDLIB_VERSION "${Td_VERSION}")
-# Some packages (Debian's) install TdConfigVersion.cmake with no version in
-# it, so Td_VERSION comes out as 0.0.0; TDLib's pkg-config files have it.
-if (("${TDLIB_VERSION}" STREQUAL "" OR "${TDLIB_VERSION}" VERSION_EQUAL 0) AND NOT NoPkgConfig)
-    include(FindPkgConfig)
-    pkg_search_module(TdPkg QUIET tdclient tdjson)
-    set(TDLIB_VERSION "${TdPkg_VERSION}")
-endif ()
-if ("${TDLIB_VERSION}" STREQUAL "" OR "${TDLIB_VERSION}" VERSION_EQUAL 0)
-    message(WARNING "cannot tell which version of tdlib this is; 1.8.0 or newer is required")
-    set(TDLIB_VERSION unknown)
-elseif ("${TDLIB_VERSION}" VERSION_LESS 1.8.0)
-    # Error message must begin with "tdlib version" for a grep command from readme
-    message(FATAL_ERROR "at least tdlib version 1.8.0 is required
-(version found: ${TDLIB_VERSION})")
-endif ()
-set(TDLIB_VERSION_NUMBER 0)
-if ("${TDLIB_VERSION}" MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)")
-    math(EXPR TDLIB_VERSION_NUMBER "10000*${CMAKE_MATCH_1} + 100*${CMAKE_MATCH_2} + ${CMAKE_MATCH_3}")
-endif ()
+include(cmake/tdlib-version.cmake)
 
 set(NoWebp FALSE CACHE BOOL "Do not decode webp stickers")
 set(NoLottie FALSE CACHE BOOL "Disable animated sticker conversion")
