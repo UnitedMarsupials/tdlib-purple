@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.2 (unreleased)
+
+### Behaviour
+
+- **Self-destructing messages are shown by default.** The `show-self-destruct` account
+  option can still turn them off.
+
+### Fixes
+
+- **A front-end that supplies no UI information no longer triggers GLib warnings.**
+
 ## 0.9.1 (2026-10-04)
 
 ### Fixes
