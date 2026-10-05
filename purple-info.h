@@ -41,7 +41,7 @@ namespace AccountOptions {
     constexpr const char *AnimatedStickers           = "animated-stickers";
     constexpr gboolean    AnimatedStickersDefault    = TRUE;
     constexpr const char *ShowSelfDestruct           = "show-self-destruct";
-    constexpr gboolean    ShowSelfDestructDefault    = FALSE;
+    constexpr gboolean    ShowSelfDestructDefault    = TRUE;
     constexpr const char *DownloadBehaviour          = "download-behaviour";
     constexpr const char *DownloadBehaviourHyperlink = "hyperlink";
     constexpr const char *DownloadBehaviourStandard  = "file-transfer";
