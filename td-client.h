@@ -2,6 +2,7 @@
 #define _TD_CLIENT_H
 
 #include "account-data.h"
+#include "buildopt.h"
 #include "client-utils.h"
 #include <td/telegram/Log.h>
 #include <purple.h>
@@ -146,8 +147,15 @@ private:
     bool                  m_chatListReady = false;
     bool                  m_isProxyAdded = false;
     std::vector<PurpleRoomlist *>               m_pendingRoomLists;
-    td::td_api::object_ptr<td::td_api::proxy>   m_addedProxy;
-    td::td_api::object_ptr<td::td_api::proxies> m_proxies;
+#if TDLIB_API_ADDED_PROXY
+    using AddedProxy   = td::td_api::addedProxy;
+    using AddedProxies = td::td_api::addedProxies;
+#else
+    using AddedProxy   = td::td_api::proxy;
+    using AddedProxies = td::td_api::proxies;
+#endif
+    td::td_api::object_ptr<AddedProxy>          m_addedProxy;
+    td::td_api::object_ptr<AddedProxies>        m_proxies;
 
     struct ChatGap {
         ChatId    chatId;

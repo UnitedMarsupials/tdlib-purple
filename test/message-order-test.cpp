@@ -91,7 +91,7 @@ TEST_F(MessageOrderTest, Photo_Download_FlushAtLogout)
         chatIds[0],
         false,
         date,
-        make_object<messagePhoto>(
+        makeMessagePhoto(
             make_object<photo>(false, nullptr, std::move(sizes)),
             make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>()),
             false, false, false

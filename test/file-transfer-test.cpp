@@ -63,7 +63,7 @@ TEST_F(FileTransferTest, BigPhoto_RequestDownload)
         chatIds[0],
         false,
         date,
-        make_object<messagePhoto>(
+        makeMessagePhoto(
             make_object<photo>(false, nullptr, std::move(sizes)),
             make_object<formattedText>("caption", std::vector<object_ptr<textEntity>>()),
             false, false, false
@@ -120,7 +120,7 @@ TEST_F(FileTransferTest, BigPhoto_Ignore)
         chatIds[0],
         false,
         date,
-        make_object<messagePhoto>(
+        makeMessagePhoto(
             make_object<photo>(false, nullptr, std::move(sizes)),
             make_object<formattedText>("caption", std::vector<object_ptr<textEntity>>()),
             false, false, false
@@ -160,7 +160,7 @@ TEST_F(FileTransferTest, SecretPhoto_AlreadyDownloaded)
         chatIds[0],
         false,
         date,
-        make_object<messagePhoto>(
+        makeMessagePhoto(
             make_object<photo>(false, nullptr, std::move(sizes)),
             make_object<formattedText>("caption", std::vector<object_ptr<textEntity>>()),
             false, false, true
@@ -199,7 +199,7 @@ TEST_F(FileTransferTest, PhotoWithoutCaption)
         chatIds[0],
         false,
         date,
-        make_object<messagePhoto>(
+        makeMessagePhoto(
             make_object<photo>(false, nullptr, std::move(sizes)),
             make_object<formattedText>("", std::vector<object_ptr<textEntity>>()),
             false, false, false
@@ -290,13 +290,13 @@ TEST_F(FileTransferTest, SendFile_SendMessageResponseError)
         XferCompletedEvent(PATH, TRUE, 9000),
         XferEndEvent(PATH)
     );
-    tgl.verifyRequest(sendMessage(
+    tgl.verifyRequest(*makeSendMessage(
         chatIds[0],
         0,
         nullptr,
         nullptr,
         nullptr,
-        make_object<inputMessageDocument>(
+        makeInputMessageDocument(
             make_object<inputFileId>(fileId),
             nullptr,
             false,
@@ -659,7 +659,7 @@ TEST_F(FileTransferTest, Photo_DownloadProgress_StuckAtStart)
         chatIds[0],
         false,
         date,
-        make_object<messagePhoto>(
+        makeMessagePhoto(
             make_object<photo>(false, nullptr, std::move(sizes)),
             make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>()),
             false, false, false
@@ -747,7 +747,7 @@ TEST_F(FileTransferTest, Photo_DownloadProgress)
         chatIds[0],
         false,
         date,
-        make_object<messagePhoto>(
+        makeMessagePhoto(
             make_object<photo>(false, nullptr, std::move(sizes)),
             make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>()),
             false, false, false
@@ -835,7 +835,7 @@ TEST_F(FileTransferTest, Photo_DownloadProgress_StuckAtStart_Cancel)
         chatIds[0],
         false,
         date,
-        make_object<messagePhoto>(
+        makeMessagePhoto(
             make_object<photo>(false, nullptr, std::move(sizes)),
             make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>()),
             false, false, false
@@ -890,7 +890,7 @@ TEST_F(FileTransferTest, Photo_DownloadProgress_Cancel)
         chatIds[0],
         false,
         date,
-        make_object<messagePhoto>(
+        makeMessagePhoto(
             make_object<photo>(false, nullptr, std::move(sizes)),
             make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>()),
             false, false, false
@@ -997,13 +997,13 @@ TEST_F(FileTransferTest, SendFileToNonContact)
         XferCompletedEvent(PATH, TRUE, 10000),
         XferEndEvent(PATH)
     );
-    tgl.verifyRequest(sendMessage(
+    tgl.verifyRequest(*makeSendMessage(
         chatIds[0],
         0,
         nullptr,
         nullptr,
         nullptr,
-        make_object<inputMessageDocument>(
+        makeInputMessageDocument(
             make_object<inputFileId>(fileId),
             nullptr,
             false,
@@ -1016,7 +1016,7 @@ TEST_F(FileTransferTest, SendFileToNonContact)
         "message2",
         PURPLE_MESSAGE_SEND
     ));
-    tgl.verifyRequest(sendMessage(
+    tgl.verifyRequest(*makeSendMessage(
         chatIds[0],
         0,
         nullptr,
@@ -1257,7 +1257,7 @@ TEST_F(FileTransferTest, Photo_LongDownload_StartandDownloadsConfigured)
         chatIds[0],
         false,
         date,
-        make_object<messagePhoto>(
+        makeMessagePhoto(
             make_object<photo>(false, nullptr, std::move(sizes)),
             make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>()),
             false, false, false
@@ -1393,7 +1393,7 @@ TEST_F(FileTransferTest, ActiveDownloadAtLogout_StuckAtStart)
         chatIds[0],
         false,
         date,
-        make_object<messagePhoto>(
+        makeMessagePhoto(
             make_object<photo>(false, nullptr, std::move(sizes)),
             make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>()),
             false, false, false

@@ -3,6 +3,17 @@
 
 #define TDLIB_VERSION_NUMBER ${TDLIB_VERSION_NUMBER}
 
+// Incompatible changes to the TDLib API, each named after what it brought and
+// keyed to the first release that has it.  A TDLib whose version could not be
+// told (0) is taken to have none of them.
+// importContacts and addContact take importedContact, not contact
+#define TDLIB_API_IMPORTED_CONTACT (TDLIB_VERSION_NUMBER >= 10856)
+// proxy became addedProxy, which holds the server, port and type in a proxy
+#define TDLIB_API_ADDED_PROXY      (TDLIB_VERSION_NUMBER >= 10861)
+// inputMessagePhoto and inputMessageDocument wrap their file in an inputPhoto
+// and inputDocument, which also hold what used to sit beside it
+#define TDLIB_API_INPUT_PHOTO      (TDLIB_VERSION_NUMBER >= 10865)
+
 #cmakedefine NoWebp
 
 #define TEST_SOURCE_DIR "${CMAKE_SOURCE_DIR}/test"

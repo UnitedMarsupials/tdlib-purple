@@ -130,7 +130,7 @@ TEST_F(SecretChatTest, SendMessage)
     loginWithSecretChat();
 
     ASSERT_EQ(0, pluginInfo().send_im(connection, secretChatBuddyName.c_str(), "message", PURPLE_MESSAGE_SEND));
-    tgl.verifyRequest(sendMessage(
+    tgl.verifyRequest(*makeSendMessage(
         secretChatChatId,
         0,
         nullptr,
@@ -220,13 +220,13 @@ TEST_F(SecretChatTest, SendFile)
         XferCompletedEvent(PATH, TRUE, 9000),
         XferEndEvent(PATH)
     );
-    tgl.verifyRequest(sendMessage(
+    tgl.verifyRequest(*makeSendMessage(
         secretChatChatId,
         0,
         nullptr,
         nullptr,
         nullptr,
-        make_object<inputMessageDocument>(
+        makeInputMessageDocument(
             make_object<inputFileId>(fileId),
             nullptr,
             false,

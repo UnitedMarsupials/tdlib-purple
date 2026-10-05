@@ -1,4 +1,5 @@
 #include "file-transfer.h"
+#include "buildopt.h"
 #include "config.h"
 #include "client-utils.h"
 #include "format.h"
@@ -106,7 +107,12 @@ static void updateDocumentUploadProgress(const td::td_api::file &file, PurpleXfe
             auto sendMessageRequest = td::td_api::make_object<td::td_api::sendMessage>();
             auto content = td::td_api::make_object<td::td_api::inputMessageDocument>();
             content->caption_ = td::td_api::make_object<td::td_api::formattedText>();
+#if TDLIB_API_INPUT_PHOTO
+            content->document_ = td::td_api::make_object<td::td_api::inputDocument>();
+            content->document_->document_ = td::td_api::make_object<td::td_api::inputFileId>(file.id_);
+#else
             content->document_ = td::td_api::make_object<td::td_api::inputFileId>(file.id_);
+#endif
             sendMessageRequest->input_message_content_ = std::move(content);
             sendMessageRequest->chat_id_ = chatId.value();
 

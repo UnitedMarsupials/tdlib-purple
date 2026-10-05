@@ -18,19 +18,19 @@ TEST_F(MessageSplitTest, SplitCaption)
     ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), messageText.c_str(), PURPLE_MESSAGE_SEND));
 
     tgl.verifyRequests({
-        make_object<sendMessage>(
+        makeSendMessage(
             chatIds[0],
             0,
             nullptr,
             nullptr,
-            nullptr, make_object<inputMessagePhoto>(
+            nullptr, makeInputMessagePhoto(
                 make_object<inputFileLocal>(),
                 nullptr, std::vector<std::int32_t>(), 0, 0,
                 make_object<formattedText>("", std::vector<object_ptr<textEntity>>()),
                 false, nullptr, false
             )
         ),
-        make_object<sendMessage>(
+        makeSendMessage(
             chatIds[0],
             0,
             nullptr,
@@ -45,19 +45,19 @@ TEST_F(MessageSplitTest, SplitCaption)
     messageText = fmt::format("<img id=\"{}\">1\n123456789", id1);
     ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), messageText.c_str(), PURPLE_MESSAGE_SEND));
     tgl.verifyRequests({
-        make_object<sendMessage>(
+        makeSendMessage(
             chatIds[0],
             0,
             nullptr,
             nullptr,
-            nullptr, make_object<inputMessagePhoto>(
+            nullptr, makeInputMessagePhoto(
                 make_object<inputFileLocal>(),
                 nullptr, std::vector<std::int32_t>(), 0, 0,
                 make_object<formattedText>("1", std::vector<object_ptr<textEntity>>()),
                 false, nullptr, false
             )
         ),
-        make_object<sendMessage>(
+        makeSendMessage(
             chatIds[0],
             0,
             nullptr,
@@ -88,19 +88,19 @@ TEST_F(MessageSplitTest, SplitCaptionAndText)
     ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), messageText.c_str(), PURPLE_MESSAGE_SEND));
 
     tgl.verifyRequests({
-        make_object<sendMessage>(
+        makeSendMessage(
             chatIds[0],
             0,
             nullptr,
             nullptr,
-            nullptr, make_object<inputMessagePhoto>(
+            nullptr, makeInputMessagePhoto(
                 make_object<inputFileLocal>(),
                 nullptr, std::vector<std::int32_t>(), 0, 0,
                 make_object<formattedText>("123456789", std::vector<object_ptr<textEntity>>()),
                 false, nullptr, false
             )
         ),
-        make_object<sendMessage>(
+        makeSendMessage(
             chatIds[0],
             0,
             nullptr,
@@ -110,7 +110,7 @@ TEST_F(MessageSplitTest, SplitCaptionAndText)
                 nullptr, false
             )
         ),
-        make_object<sendMessage>(
+        makeSendMessage(
             chatIds[0],
             0,
             nullptr,
@@ -137,12 +137,12 @@ TEST_F(MessageSplitTest, SplitCaption_Utf8)
     ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), messageText.c_str(), PURPLE_MESSAGE_SEND));
 
     tgl.verifyRequests({
-        make_object<sendMessage>(
+        makeSendMessage(
             chatIds[0],
             0,
             nullptr,
             nullptr,
-            nullptr, make_object<inputMessagePhoto>(
+            nullptr, makeInputMessagePhoto(
                 make_object<inputFileLocal>(),
                 nullptr, std::vector<std::int32_t>(), 0, 0,
                 // 8 bytes (limit is 9)
@@ -150,7 +150,7 @@ TEST_F(MessageSplitTest, SplitCaption_Utf8)
                 false, nullptr, false
             )
         ),
-        make_object<sendMessage>(
+        makeSendMessage(
             chatIds[0],
             0,
             nullptr,
@@ -179,7 +179,7 @@ TEST_F(MessageSplitTest, SplitText_Utf8)
     ));
 
     tgl.verifyRequests({
-        make_object<sendMessage>(
+        makeSendMessage(
             chatIds[0],
             0,
             nullptr,
@@ -189,7 +189,7 @@ TEST_F(MessageSplitTest, SplitText_Utf8)
                 nullptr, false
             )
         ),
-        make_object<sendMessage>(
+        makeSendMessage(
             chatIds[0],
             0,
             nullptr,
@@ -199,7 +199,7 @@ TEST_F(MessageSplitTest, SplitText_Utf8)
                 nullptr, false
             )
         ),
-        make_object<sendMessage>(
+        makeSendMessage(
             chatIds[0],
             0,
             nullptr,

@@ -21,15 +21,7 @@ TEST_F(PrivateChatTest, AddContactByPhone)
     prpl.verifyEvents(RemoveBuddyEvent(account, userPhones[0]));
 
     // Adding user to contact list by phone number
-    std::vector<object_ptr<contact>> contacts;
-    contacts.push_back(make_object<contact>(
-        userPhones[0],
-        "",
-        "",
-        "",
-        0
-    ));
-    tgl.verifyRequest(importContacts(std::move(contacts)));
+    tgl.verifyRequest(*makeImportContacts(userPhones[0]));
 
     tgl.update(make_object<updateUser>(makeUser(
         userIds[0],
@@ -43,15 +35,7 @@ TEST_F(PrivateChatTest, AddContactByPhone)
         std::vector<int32_t>()
     ));
 
-    tgl.verifyRequest(addContact(
-        make_object<contact>(
-            userPhones[0],
-            "Local",
-            "Alias",
-            "",
-            userIds[0]
-        ), true
-    ));
+    tgl.verifyRequest(*makeAddContact(userIds[0], userPhones[0], "Local", "Alias"));
 
     // We are notified that the user is now a contact
     object_ptr<user> userInfo = makeUser(
@@ -122,15 +106,7 @@ TEST_F(PrivateChatTest, AddContactByUsername)
     ));
     prpl.verifyNoEvents();
 
-    tgl.verifyRequest(addContact(
-        make_object<contact>(
-            "",
-            "Local",
-            "Alias",
-            "",
-            userIds[0]
-        ), true
-    ));
+    tgl.verifyRequest(*makeAddContact(userIds[0], "", "Local", "Alias"));
 
     // tdlib actually sends updateChatTitle first (if it didn't, it should still work, the buddy
     // should be created as userFirstNames[0] + " " + userLastNames[0] and then renamed to "Local Alias"
@@ -198,15 +174,7 @@ TEST_F(PrivateChatTest, AddContactByUsername_DoesntBecomeContact)
     ));
     prpl.verifyNoEvents();
 
-    tgl.verifyRequest(addContact(
-        make_object<contact>(
-            "",
-            "Local",
-            "Alias",
-            "",
-            userIds[0]
-        ), true
-    ));
+    tgl.verifyRequest(*makeAddContact(userIds[0], "", "Local", "Alias"));
 
     tgl.update(make_object<updateChatTitle>(chatIds[0], "Local Alias"));
     tgl.update(make_object<updateUser>(makeUser(
@@ -415,7 +383,7 @@ TEST_F(PrivateChatTest, Video)
         chatIds[0],
         false,
         date,
-        make_object<messageVideo>(
+        makeMessageVideo(
             make_object<video>(
                 120, 640, 480, "video.avi", "video/whatever", false, false, nullptr, nullptr,
                 make_object<file>(
@@ -546,7 +514,7 @@ TEST_F(PrivateChatTest, Photo)
         chatIds[0],
         false,
         date,
-        make_object<messagePhoto>(
+        makeMessagePhoto(
             make_object<photo>(false, nullptr, std::move(sizes)),
             make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>()),
             false, false, false
@@ -606,7 +574,7 @@ TEST_F(PrivateChatTest, AlreadyDownloadedPhoto)
         chatIds[0],
         false,
         date,
-        make_object<messagePhoto>(
+        makeMessagePhoto(
             make_object<photo>(false, nullptr, std::move(sizes)),
             make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>()),
             false, false, false
@@ -659,7 +627,7 @@ TEST_F(PrivateChatTest, SendImage)
 
     ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), messageText.c_str(), PURPLE_MESSAGE_SEND));
     tgl.verifyRequests({
-        make_object<sendMessage>(
+        makeSendMessage(
             chatIds[0],
             0,
             nullptr,
@@ -669,24 +637,24 @@ TEST_F(PrivateChatTest, SendImage)
                 nullptr, false
             )
         ),
-        make_object<sendMessage>(
+        makeSendMessage(
             chatIds[0],
             0,
             nullptr,
             nullptr,
-            nullptr, make_object<inputMessagePhoto>(
+            nullptr, makeInputMessagePhoto(
                 make_object<inputFileLocal>(),
                 nullptr, std::vector<std::int32_t>(), 0, 0,
                 make_object<formattedText>("caption1", std::vector<object_ptr<textEntity>>()),
                 false, nullptr, false
             )
         ),
-        make_object<sendMessage>(
+        makeSendMessage(
             chatIds[0],
             0,
             nullptr,
             nullptr,
-            nullptr, make_object<inputMessagePhoto>(
+            nullptr, makeInputMessagePhoto(
                 make_object<inputFileLocal>(),
                 nullptr, std::vector<std::int32_t>(), 0, 0,
                 make_object<formattedText>("caption2", std::vector<object_ptr<textEntity>>()),
@@ -711,7 +679,7 @@ TEST_F(PrivateChatTest, SendImage)
         chatIds[0],
         true,
         1,
-        make_object<messagePhoto>(
+        makeMessagePhoto(
             makePhotoUploading(fileId[0], sizeof(data1), 0, "/path", 0, 0),
             make_object<formattedText>("caption1", std::vector<object_ptr<textEntity>>()),
             false, false, false
@@ -726,7 +694,7 @@ TEST_F(PrivateChatTest, SendImage)
         chatIds[0],
         true,
         1,
-        make_object<messagePhoto>(
+        makeMessagePhoto(
             makePhotoUploading(fileId[1], sizeof(data2), 0, "/path", 0, 0),
             make_object<formattedText>("caption2", std::vector<object_ptr<textEntity>>()),
             false, false, false
@@ -743,7 +711,7 @@ TEST_F(PrivateChatTest, SendImage)
             chatIds[0],
             true,
             1,
-            make_object<messagePhoto>(
+            makeMessagePhoto(
                 makePhotoLocal(fileId[0], sizeof(data1), "/path", 0, 0),
                 make_object<formattedText>("caption1", std::vector<object_ptr<textEntity>>()),
                 false, false, false
@@ -761,7 +729,7 @@ TEST_F(PrivateChatTest, SendImage)
             chatIds[0],
             true,
             messageFailureDate,
-            make_object<messagePhoto>(
+            makeMessagePhoto(
                 makePhotoLocal(fileId[1], sizeof(data1), "/path", 0, 0),
                 make_object<formattedText>("caption2", std::vector<object_ptr<textEntity>>()),
                 false, false, false
@@ -919,7 +887,7 @@ TEST_F(PrivateChatTest, MessageSendResponseError)
     loginWithOneContact();
 
     ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "message", PURPLE_MESSAGE_SEND));
-    tgl.verifyRequest(sendMessage(
+    tgl.verifyRequest(*makeSendMessage(
         chatIds[0],
         0,
         nullptr,
@@ -952,7 +920,7 @@ TEST_F(PrivateChatTest, SendMessage_SpecialCharactersAndHtml)
         "<font size=\"3\">1&lt;2 3&gt;2</font>",
         PURPLE_MESSAGE_SEND
     ));
-    tgl.verifyRequest(sendMessage(
+    tgl.verifyRequest(*makeSendMessage(
         chatIds[0],
         0,
         nullptr,
@@ -1075,7 +1043,7 @@ TEST_F(PrivateChatTest, CallEnded)
         chatIds[0],
         false,
         date,
-        make_object<messageCall>(false, nullptr, 137)
+        makeMessageCall(false, nullptr, 137)
     )));
 
     tgl.verifyRequest(viewMessages(

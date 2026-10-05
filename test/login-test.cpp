@@ -297,9 +297,7 @@ TEST_F(LoginTest, RenameBuddy)
     prpl.discardEvents();
     pluginInfo().alias_buddy(connection, purpleUserName(0).c_str(), "New Name");
 
-    tgl.verifyRequest(addContact(make_object<contact>(
-        "", "New", "Name", "", userIds[0]
-    ), true));
+    tgl.verifyRequest(*makeAddContact(userIds[0], "", "New", "Name"));
 
     tgl.update(make_object<updateChatTitle>(chatIds[0], "New Name"));
     object_ptr<updateUser> updateUser = standardUpdateUser(0);
@@ -344,7 +342,7 @@ TEST_F(LoginTest, AddedProxyCofiguration)
     tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitTdlibParameters>()));
     tgl.verifyRequests({
         make_object<disableProxy>(),
-        make_object<addProxy>(host, port, true, make_object<proxyTypeSocks5>(username, password)),
+        makeAddProxy(host, port, make_object<proxyTypeSocks5>(username, password)),
         make_object<getProxies>(),
         makeTdlibParameters(
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
@@ -354,10 +352,8 @@ TEST_F(LoginTest, AddedProxyCofiguration)
     });
 
     tgl.reply(make_object<ok>()); // reply to disableProxy
-    tgl.reply(make_object<proxy>(2, "", 0, 0, false, nullptr));
-    std::vector<object_ptr<proxy>> proxyList;
-    proxyList.push_back(make_object<proxy>(2, "", 0, 0, true, nullptr));
-    tgl.reply(make_object<proxies>(std::move(proxyList)));
+    tgl.reply(makeAddedProxy(2, false));
+    tgl.reply(makeAddedProxies({{2, true}}));
     tgl.reply(make_object<ok>());
 }
 
@@ -384,7 +380,7 @@ TEST_F(LoginTest, ChangedProxyCofiguration)
     tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitTdlibParameters>()));
     tgl.verifyRequests({
         make_object<disableProxy>(),
-        make_object<addProxy>(host, port, true, make_object<proxyTypeSocks5>(username, password)),
+        makeAddProxy(host, port, make_object<proxyTypeSocks5>(username, password)),
         make_object<getProxies>(),
         makeTdlibParameters(
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
@@ -394,11 +390,8 @@ TEST_F(LoginTest, ChangedProxyCofiguration)
     });
 
     tgl.reply(make_object<ok>()); // reply to disableProxy
-    tgl.reply(make_object<proxy>(2, "", 0, 0, false, nullptr));
-    std::vector<object_ptr<proxy>> proxyList;
-    proxyList.push_back(make_object<proxy>(1, "", 0, 0, false, nullptr));
-    proxyList.push_back(make_object<proxy>(2, "", 0, 0, true, nullptr));
-    tgl.reply(make_object<proxies>(std::move(proxyList)));
+    tgl.reply(makeAddedProxy(2, false));
+    tgl.reply(makeAddedProxies({{1, false}, {2, true}}));
     tgl.reply(make_object<ok>());
 
     tgl.verifyRequest(removeProxy(1));
@@ -424,9 +417,7 @@ TEST_F(LoginTest, RemovedProxyCofiguration)
     });
 
     tgl.reply(make_object<ok>()); // reply to disableProxy
-    std::vector<object_ptr<proxy>> proxyList;
-    proxyList.push_back(make_object<proxy>(1, "", 0, 0, false, nullptr));
-    tgl.reply(make_object<proxies>(std::move(proxyList)));
+    tgl.reply(makeAddedProxies({{1, false}}));
     tgl.reply(make_object<ok>());
 
     tgl.verifyRequest(removeProxy(1));

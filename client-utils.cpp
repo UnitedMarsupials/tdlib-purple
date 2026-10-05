@@ -1,5 +1,6 @@
 #include "client-utils.h"
 #include "purple-info.h"
+#include "buildopt.h"
 #include "config.h"
 #include "format.h"
 #include "receiving.h"
@@ -865,7 +866,12 @@ int transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiv
 
         if (hasImage) {
             td::td_api::object_ptr<td::td_api::inputMessagePhoto> content = td::td_api::make_object<td::td_api::inputMessagePhoto>();
+#if TDLIB_API_INPUT_PHOTO
+            content->photo_ = td::td_api::make_object<td::td_api::inputPhoto>();
+            content->photo_->photo_ = td::td_api::make_object<td::td_api::inputFileLocal>(tempFileName);
+#else
             content->photo_ = td::td_api::make_object<td::td_api::inputFileLocal>(tempFileName);
+#endif
             content->caption_ = td::td_api::make_object<td::td_api::formattedText>();
             content->caption_->text_ = input.text;
 

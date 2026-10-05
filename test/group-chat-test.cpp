@@ -137,7 +137,7 @@ TEST_F(GroupChatTest, BasicGroupReceivePhoto)
     tgl.update(standardUpdateUserNoPhone(0));
     tgl.update(make_object<updateNewMessage>(makeMessage(
         messageId, userIds[0], groupChatId, false, date,
-        make_object<messagePhoto>(
+        makeMessagePhoto(
             makePhotoRemote(fileId, 10000, 640, 480),
             make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>()),
             false, false, false
@@ -191,7 +191,7 @@ TEST_F(GroupChatTest, ExistingBasicGroupReceiveMessageAtLogin_WithMemberList_Rem
         userIds[1],
         userIds[1],
         0,
-        make_object<chatMemberStatusCreator>("", false, true),
+        makeChatMemberStatusCreator("", false, true),
         nullptr
     ));
     members.push_back(makeChatMember(
@@ -320,7 +320,7 @@ TEST_F(GroupChatTest, SendMessageWithMemberList)
         userIds[1],
         userIds[1],
         0,
-        make_object<chatMemberStatusCreator>("", false, true),
+        makeChatMemberStatusCreator("", false, true),
         nullptr
     ));
     members.push_back(makeChatMember(
@@ -394,7 +394,7 @@ TEST_F(GroupChatTest, SendMessageWithMemberList)
     tgl.verifyNoRequests();
 
     ASSERT_EQ(0, pluginInfo().chat_send(connection, purpleChatId, "message", PURPLE_MESSAGE_SEND));
-    tgl.verifyRequest(sendMessage(
+    tgl.verifyRequest(*makeSendMessage(
         groupChatId,
         0,
         nullptr,
@@ -505,7 +505,7 @@ TEST_F(GroupChatTest, JoinBasicGroupByInviteLink)
         userIds[1],
         userIds[1],
         0,
-        make_object<chatMemberStatusCreator>("", false, true),
+        makeChatMemberStatusCreator("", false, true),
         nullptr
     ));
     members.push_back(makeChatMember(
@@ -598,9 +598,7 @@ TEST_F(GroupChatTest, AddContactByGroupChatName)
 
     // The buddy is deleted right away, to be replaced later
     prpl.verifyEvents(RemoveBuddyEvent(account, userFirstNames[1] + " " + userLastNames[1]));
-    tgl.verifyRequest(addContact(make_object<contact>(
-        "", userFirstNames[1], userLastNames[1], "", userIds[1]
-    ), true));
+    tgl.verifyRequest(*makeAddContact(userIds[1], "", userFirstNames[1], userLastNames[1]));
 
     tgl.reply(make_object<ok>());
     tgl.verifyRequest(createPrivateChat(userIds[1], false));
@@ -615,7 +613,7 @@ TEST_F(GroupChatTest, CreateRemoveBasicGroupInAnotherClient)
     loginWithOneContact();
 
     tgl.update(make_object<updateBasicGroup>(make_object<basicGroup>(
-        groupId, 2, make_object<chatMemberStatusCreator>("", false, true), true, 0
+        groupId, 2, makeChatMemberStatusCreator("", false, true), true, 0
     )));
     tgl.verifyNoRequests();
 
@@ -659,7 +657,7 @@ TEST_F(GroupChatTest, CreateRemoveBasicGroupInAnotherClient)
     ));
     tgl.update(make_object<updateBasicGroup>(make_object<basicGroup>(
         groupId, 0,
-        make_object<chatMemberStatusCreator>("", false, false), // We are no longer group member
+        makeChatMemberStatusCreator("", false, false), // We are no longer group member
         true, 0
     )));
 
@@ -692,7 +690,7 @@ TEST_F(GroupChatTest, DeleteBasicGroup_Creator)
 {
     loginWithBasicGroup();
     tgl.update(make_object<updateBasicGroup>(make_object<basicGroup>(
-        groupId, 2, make_object<chatMemberStatusCreator>("", false, true), true, 0
+        groupId, 2, makeChatMemberStatusCreator("", false, true), true, 0
     )));
     PurpleChat *chat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
     ASSERT_NE(nullptr, chat);
@@ -769,7 +767,7 @@ TEST_F(GroupChatTest, UsersWithSameName)
         userIds[1],
         userIds[1],
         0,
-        make_object<chatMemberStatusCreator>("", false, true),
+        makeChatMemberStatusCreator("", false, true),
         nullptr
     ));
     members.push_back(makeChatMember(
@@ -863,7 +861,7 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
         userIds[0],
         userIds[0],
         0,
-        make_object<chatMemberStatusCreator>("", false, true),
+        makeChatMemberStatusCreator("", false, true),
         nullptr
     ));
     members.push_back(makeChatMember(
@@ -973,7 +971,7 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
         userFirstNames[0] + " " + userLastNames[0],
         nullptr, 0, 0, 0
     ));
-    tgl.verifyRequest(sendMessage(
+    tgl.verifyRequest(*makeSendMessage(
         chatIds[0],
         0,
         nullptr,
@@ -1049,7 +1047,7 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
         "message2",
         PURPLE_MESSAGE_SEND
     ));
-    tgl.verifyRequest(sendMessage(
+    tgl.verifyRequest(*makeSendMessage(
         chatIds[0],
         0,
         nullptr,
@@ -1413,13 +1411,13 @@ TEST_F(GroupChatTest, SendFile)
         XferCompletedEvent(PATH, TRUE, 10000),
         XferEndEvent(PATH)
     );
-    tgl.verifyRequest(sendMessage(
+    tgl.verifyRequest(*makeSendMessage(
         groupChatId,
         0,
         nullptr,
         nullptr,
         nullptr,
-        make_object<inputMessageDocument>(
+        makeInputMessageDocument(
             make_object<inputFileId>(fileId),
             nullptr,
             false,

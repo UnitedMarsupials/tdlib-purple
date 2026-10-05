@@ -320,10 +320,14 @@ bool PurpleTdClient::addProxy()
         return false;
     } else if (tdProxyType) {
         auto addProxy = td::td_api::make_object<td::td_api::addProxy>();
+#if TDLIB_API_ADDED_PROXY
+        addProxy->proxy_ = td::td_api::make_object<td::td_api::proxy>(host, port, std::move(tdProxyType));
+#else
         addProxy->server_ = host;
         addProxy->port_ = port;
-        addProxy->enable_ = true;
         addProxy->type_ = std::move(tdProxyType);
+#endif
+        addProxy->enable_ = true;
         m_transceiver.sendQuery(std::move(addProxy), &PurpleTdClient::addProxyResponse);
         m_isProxyAdded = true;
     }
@@ -333,8 +337,8 @@ bool PurpleTdClient::addProxy()
 
 void PurpleTdClient::addProxyResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object)
 {
-    if (object && (object->get_id() == td::td_api::proxy::ID)) {
-        m_addedProxy = td::move_tl_object_as<td::td_api::proxy>(object);
+    if (object && (object->get_id() == AddedProxy::ID)) {
+        m_addedProxy = td::move_tl_object_as<AddedProxy>(object);
         if (m_proxies)
             removeOldProxies();
     } else {
@@ -346,8 +350,8 @@ void PurpleTdClient::addProxyResponse(uint64_t requestId, td::td_api::object_ptr
 
 void PurpleTdClient::getProxiesResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object)
 {
-    if (object && (object->get_id() == td::td_api::proxies::ID)) {
-        m_proxies = td::move_tl_object_as<td::td_api::proxies>(object);
+    if (object && (object->get_id() == AddedProxies::ID)) {
+        m_proxies = td::move_tl_object_as<AddedProxies>(object);
         if (!m_isProxyAdded || m_addedProxy)
             removeOldProxies();
     } else {
@@ -359,7 +363,7 @@ void PurpleTdClient::getProxiesResponse(uint64_t requestId, td::td_api::object_p
 
 void PurpleTdClient::removeOldProxies()
 {
-    for (const td::td_api::object_ptr<td::td_api::proxy> &proxy: m_proxies->proxies_)
+    for (const td::td_api::object_ptr<AddedProxy> &proxy: m_proxies->proxies_)
         if (proxy && (!m_addedProxy || (proxy->id_ != m_addedProxy->id_)))
             m_transceiver.sendQuery(td::td_api::make_object<td::td_api::removeProxy>(proxy->id_), nullptr);
 }
@@ -1373,8 +1377,12 @@ void PurpleTdClient::addContact(const std::string &purpleName, const std::string
     if (users.size() == 1)
         addContactById(getId(*users[0]), "", purpleName, groupName);
     else if (isPhoneNumber(purpleName.c_str())) {
-        td::td_api::object_ptr<td::td_api::contact> contact =
-            td::td_api::make_object<td::td_api::contact>(purpleName, "", "", "", 0);
+#if TDLIB_API_IMPORTED_CONTACT
+        auto contact = td::td_api::make_object<td::td_api::importedContact>();
+#else
+        auto contact = td::td_api::make_object<td::td_api::contact>();
+#endif
+        contact->phone_number_ = purpleName;
         td::td_api::object_ptr<td::td_api::importContacts> importReq =
             td::td_api::make_object<td::td_api::importContacts>();
         importReq->contacts_.push_back(std::move(contact));
@@ -1412,6 +1420,25 @@ void PurpleTdClient::addBuddySearchChatResponse(uint64_t requestId, td::td_api::
         notifyFailedContact(getDisplayedError(object));
 }
 
+static td::td_api::object_ptr<td::td_api::addContact> makeAddContact(UserId userId, const std::string &phoneNumber,
+                                                                    const std::string &firstName,
+                                                                    const std::string &lastName)
+{
+    auto addContact = td::td_api::make_object<td::td_api::addContact>();
+#if TDLIB_API_IMPORTED_CONTACT
+    addContact->user_id_ = userId.value();
+    addContact->contact_ = td::td_api::make_object<td::td_api::importedContact>();
+#else
+    addContact->contact_ = td::td_api::make_object<td::td_api::contact>();
+    addContact->contact_->user_id_ = userId.value();
+#endif
+    addContact->contact_->phone_number_ = phoneNumber;
+    addContact->contact_->first_name_   = firstName;
+    addContact->contact_->last_name_    = lastName;
+    addContact->share_phone_number_     = true;
+    return addContact;
+}
+
 void PurpleTdClient::addContactById(UserId userId, const std::string &phoneNumber, const std::string &alias,
                                     const std::string &groupName)
 {
@@ -1419,11 +1446,7 @@ void PurpleTdClient::addContactById(UserId userId, const std::string &phoneNumbe
     std::string firstName, lastName;
     getNamesFromAlias(alias.c_str(), firstName, lastName);
 
-    td::td_api::object_ptr<td::td_api::contact> contact =
-        td::td_api::make_object<td::td_api::contact>(phoneNumber, firstName, lastName, "", userId.value());
-    td::td_api::object_ptr<td::td_api::addContact> addContact =
-        td::td_api::make_object<td::td_api::addContact>(std::move(contact), true);
-    uint64_t newRequestId = m_transceiver.sendQuery(std::move(addContact),
+    uint64_t newRequestId = m_transceiver.sendQuery(makeAddContact(userId, phoneNumber, firstName, lastName),
                                                     &PurpleTdClient::addContactResponse);
     m_data.addPendingRequest<ContactRequest>(newRequestId, phoneNumber, alias, groupName, userId);
 }
@@ -1506,9 +1529,7 @@ void PurpleTdClient::renameContact(const char *buddyName, const char *newAlias)
 
     std::string firstName, lastName;
     getNamesFromAlias(newAlias, firstName, lastName);
-    auto contact    = td::td_api::make_object<td::td_api::contact>("", firstName, lastName, "", userId.value());
-    auto addContact = td::td_api::make_object<td::td_api::addContact>(std::move(contact), true);
-    m_transceiver.sendQuery(std::move(addContact), nullptr);
+    m_transceiver.sendQuery(makeAddContact(userId, "", firstName, lastName), nullptr);
 }
 
 void PurpleTdClient::removeContactAndPrivateChat(const std::string &buddyName)

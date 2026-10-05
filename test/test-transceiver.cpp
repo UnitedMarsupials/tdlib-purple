@@ -181,17 +181,33 @@ static void compare(const object_ptr<InputFile> &actual, const object_ptr<InputF
     }
 }
 
-static void compare(const inputMessageDocument &actual,
-                    const inputMessageDocument &expected)
+// The file and what describes it: inputMessageDocument itself before TDLib 1.8.65, the
+// inputDocument it holds since. The fields are named alike in both.
+template <typename Document>
+static void compareDocument(const Document &actual, const Document &expected)
 {
     compare(actual.document_, expected.document_);
     ASSERT_EQ(nullptr, expected.thumbnail_) << "not supported";
     ASSERT_EQ(nullptr, actual.thumbnail_) << "not supported";
+}
+
+static void compare(const inputMessageDocument &actual,
+                    const inputMessageDocument &expected)
+{
+#if TDLIB_API_INPUT_PHOTO
+    COMPARE(document_ != nullptr);
+    if (actual.document_)
+        compareDocument(*actual.document_, *expected.document_);
+#else
+    compareDocument(actual, expected);
+#endif
     compare(actual.caption_, expected.caption_);
 }
 
-static void compare(const inputMessagePhoto &actual, const inputMessagePhoto &expected,
-                    std::vector<std::string> &m_inputPhotoPaths)
+// Likewise inputMessagePhoto before TDLib 1.8.65, and the inputPhoto it holds since.
+template <typename Photo>
+static void comparePhoto(const Photo &actual, const Photo &expected,
+                         std::vector<std::string> &m_inputPhotoPaths)
 {
     ASSERT_EQ(nullptr, expected.thumbnail_) << "not supported";
     ASSERT_EQ(nullptr, actual.thumbnail_) << "not supported";
@@ -200,9 +216,6 @@ static void compare(const inputMessagePhoto &actual, const inputMessagePhoto &ex
         COMPARE(added_sticker_file_ids_[i]);
     COMPARE(width_);
     COMPARE(height_);
-    compare(actual.caption_, expected.caption_);
-    // ttl_ became the MessageSelfDestructType object self_destruct_type_
-    COMPARE(self_destruct_type_ != nullptr);
 
     COMPARE(photo_ != nullptr);
     if (actual.photo_) {
@@ -210,6 +223,21 @@ static void compare(const inputMessagePhoto &actual, const inputMessagePhoto &ex
         if (actual.photo_->get_id() == inputFileLocal::ID)
             m_inputPhotoPaths.push_back(static_cast<const inputFileLocal &>(*actual.photo_).path_);
     }
+}
+
+static void compare(const inputMessagePhoto &actual, const inputMessagePhoto &expected,
+                    std::vector<std::string> &m_inputPhotoPaths)
+{
+#if TDLIB_API_INPUT_PHOTO
+    COMPARE(photo_ != nullptr);
+    if (actual.photo_)
+        comparePhoto(*actual.photo_, *expected.photo_, m_inputPhotoPaths);
+#else
+    comparePhoto(actual, expected, m_inputPhotoPaths);
+#endif
+    compare(actual.caption_, expected.caption_);
+    // ttl_ became the MessageSelfDestructType object self_destruct_type_
+    COMPARE(self_destruct_type_ != nullptr);
 }
 
 static void compare(const object_ptr<InputMessageContent> &actual,
@@ -259,6 +287,15 @@ static void compare(const joinChatByInviteLink &actual, const joinChatByInviteLi
     COMPARE(invite_link_);
 }
 
+#if TDLIB_API_IMPORTED_CONTACT
+static void compare(const importedContact &actual, const importedContact &expected)
+{
+    COMPARE(phone_number_);
+    COMPARE(first_name_);
+    COMPARE(last_name_);
+    COMPARE(note_ != nullptr);
+}
+#else
 static void compare(const contact &actual, const contact &expected)
 {
     COMPARE(phone_number_);
@@ -267,6 +304,7 @@ static void compare(const contact &actual, const contact &expected)
     COMPARE(vcard_);
     COMPARE(user_id_);
 }
+#endif
 
 static void compare(const importContacts &actual, const importContacts &expected)
 {
@@ -278,6 +316,9 @@ static void compare(const importContacts &actual, const importContacts &expected
 
 static void compare(const addContact &actual, const addContact &expected)
 {
+#if TDLIB_API_IMPORTED_CONTACT
+    COMPARE(user_id_);
+#endif
     compare(*actual.contact_, *expected.contact_);
     COMPARE(share_phone_number_);
 }
@@ -327,11 +368,13 @@ static void compare(const proxyTypeSocks5 &actual, const proxyTypeSocks5 &expect
     COMPARE(password_);
 }
 
-static void compare(const addProxy &actual, const addProxy &expected)
+// The server and how to reach it: addProxy itself before TDLib 1.8.61, the proxy it
+// holds since. The fields are named alike in both.
+template <typename Proxy>
+static void compareProxy(const Proxy &actual, const Proxy &expected)
 {
     COMPARE(server_);
     COMPARE(port_);
-    COMPARE(enable_);
     COMPARE(type_ != nullptr);
     if (actual.type_ != nullptr) {
         COMPARE(type_->get_id());
@@ -348,6 +391,18 @@ static void compare(const addProxy &actual, const addProxy &expected)
                 ASSERT_TRUE(false) << "Unsupported proxy type";
         }
     }
+}
+
+static void compare(const addProxy &actual, const addProxy &expected)
+{
+#if TDLIB_API_ADDED_PROXY
+    COMPARE(proxy_ != nullptr);
+    if (actual.proxy_)
+        compareProxy(*actual.proxy_, *expected.proxy_);
+#else
+    compareProxy(actual, expected);
+#endif
+    COMPARE(enable_);
 }
 
 static void compare(const removeProxy &actual, const removeProxy &expected)
@@ -781,8 +836,12 @@ object_ptr<photo> makePhotoUploading(int32_t fileId, unsigned size, unsigned upl
 object_ptr<chatMember> makeChatMember(int32_t userId, int32_t inviteUserId, time_t joinTime,
                                       object_ptr<ChatMemberStatus> &&memberStatus, const void *)
 {
-    return make_object<chatMember>(make_object<messageSenderUser>(userId),
-                                   inviteUserId, joinTime, std::move(memberStatus));
+    auto result = make_object<chatMember>();
+    result->member_id_        = make_object<messageSenderUser>(userId);
+    result->inviter_user_id_  = inviteUserId;
+    result->joined_chat_date_ = joinTime;
+    result->status_           = std::move(memberStatus);
+    return result;
 }
 
 object_ptr<createChatInviteLink> makeInviteLinkRequest(int64_t chatId)
@@ -796,6 +855,193 @@ object_ptr<chatInviteLink> makeChatInviteLink(const std::string &link)
 {
     auto result = make_object<chatInviteLink>();
     result->invite_link_ = link;
+    return result;
+}
+
+object_ptr<importContacts> makeImportContacts(const std::string &phoneNumber)
+{
+    auto result = make_object<importContacts>();
+#if TDLIB_API_IMPORTED_CONTACT
+    auto contact = make_object<importedContact>();
+#else
+    auto contact = make_object<td_api::contact>();
+#endif
+    contact->phone_number_ = phoneNumber;
+    result->contacts_.push_back(std::move(contact));
+    return result;
+}
+
+object_ptr<addContact> makeAddContact(int64_t userId, const std::string &phoneNumber,
+                                      const std::string &firstName, const std::string &lastName)
+{
+    auto result = make_object<addContact>();
+#if TDLIB_API_IMPORTED_CONTACT
+    result->user_id_ = userId;
+    result->contact_ = make_object<importedContact>();
+#else
+    result->contact_ = make_object<td_api::contact>();
+    result->contact_->user_id_ = userId;
+#endif
+    result->contact_->phone_number_ = phoneNumber;
+    result->contact_->first_name_   = firstName;
+    result->contact_->last_name_    = lastName;
+    result->share_phone_number_     = true;
+    return result;
+}
+
+object_ptr<addProxy> makeAddProxy(const std::string &server, int32_t port,
+                                  object_ptr<ProxyType> &&type)
+{
+    auto result = make_object<addProxy>();
+#if TDLIB_API_ADDED_PROXY
+    result->proxy_ = make_object<proxy>(server, port, std::move(type));
+#else
+    result->server_ = server;
+    result->port_   = port;
+    result->type_   = std::move(type);
+#endif
+    result->enable_ = true;
+    return result;
+}
+
+#if TDLIB_API_ADDED_PROXY
+using AddedProxy   = addedProxy;
+using AddedProxies = addedProxies;
+#else
+using AddedProxy   = proxy;
+using AddedProxies = proxies;
+#endif
+
+static object_ptr<AddedProxy> newAddedProxy(int32_t id, bool isEnabled)
+{
+    auto result = make_object<AddedProxy>();
+    result->id_         = id;
+    result->is_enabled_ = isEnabled;
+    return result;
+}
+
+object_ptr<Object> makeAddedProxy(int32_t id, bool isEnabled)
+{
+    return newAddedProxy(id, isEnabled);
+}
+
+object_ptr<Object> makeAddedProxies(std::initializer_list<std::pair<int32_t, bool>> idsAndEnabled)
+{
+    auto result = make_object<AddedProxies>();
+    for (const auto &idAndEnabled: idsAndEnabled)
+        result->proxies_.push_back(newAddedProxy(idAndEnabled.first, idAndEnabled.second));
+    return result;
+}
+
+object_ptr<messagePhoto> makeMessagePhoto(object_ptr<photo> &&photo_, object_ptr<formattedText> &&caption_,
+                                          bool show_caption_above_media_, bool has_spoiler_, bool is_secret_)
+{
+    auto result = make_object<messagePhoto>();
+    result->photo_                    = std::move(photo_);
+    result->caption_                  = std::move(caption_);
+    result->show_caption_above_media_ = show_caption_above_media_;
+    result->has_spoiler_              = has_spoiler_;
+    result->is_secret_                = is_secret_;
+    return result;
+}
+
+object_ptr<messageVideo> makeMessageVideo(object_ptr<video> &&video_,
+                                          std::vector<object_ptr<alternativeVideo>> &&alternative_videos_,
+                                          object_ptr<photo> &&cover_, std::int32_t start_timestamp_,
+                                          object_ptr<formattedText> &&caption_,
+                                          bool show_caption_above_media_, bool has_spoiler_, bool is_secret_)
+{
+    auto result = make_object<messageVideo>();
+    result->video_                    = std::move(video_);
+    result->alternative_videos_       = std::move(alternative_videos_);
+    result->cover_                    = std::move(cover_);
+    result->start_timestamp_          = start_timestamp_;
+    result->caption_                  = std::move(caption_);
+    result->show_caption_above_media_ = show_caption_above_media_;
+    result->has_spoiler_              = has_spoiler_;
+    result->is_secret_                = is_secret_;
+    return result;
+}
+
+object_ptr<messageCall> makeMessageCall(bool is_video_, object_ptr<CallDiscardReason> &&discard_reason_,
+                                        std::int32_t duration_)
+{
+    auto result = make_object<messageCall>();
+    result->is_video_       = is_video_;
+    result->discard_reason_ = std::move(discard_reason_);
+    result->duration_       = duration_;
+    return result;
+}
+
+object_ptr<chatMemberStatusCreator> makeChatMemberStatusCreator(std::string const &custom_title_,
+                                                                bool is_anonymous_, bool is_member_)
+{
+    // custom_title_ is gone from TDLib; the tests leave it empty anyway.
+    auto result = make_object<chatMemberStatusCreator>();
+    result->is_anonymous_ = is_anonymous_;
+    result->is_member_    = is_member_;
+    return result;
+}
+
+object_ptr<sendMessage> makeSendMessage(std::int64_t chat_id_, std::int64_t message_thread_id_,
+                                        object_ptr<InputMessageReplyTo> &&reply_to_,
+                                        object_ptr<messageSendOptions> &&options_,
+                                        object_ptr<ReplyMarkup> &&reply_markup_,
+                                        object_ptr<InputMessageContent> &&input_message_content_)
+{
+    auto result = make_object<sendMessage>();
+    result->chat_id_               = chat_id_;
+    result->reply_to_              = std::move(reply_to_);
+    result->options_               = std::move(options_);
+    result->reply_markup_          = std::move(reply_markup_);
+    result->input_message_content_ = std::move(input_message_content_);
+    return result;
+}
+
+object_ptr<inputMessagePhoto> makeInputMessagePhoto(object_ptr<InputFile> &&photo_,
+                                                    object_ptr<inputThumbnail> &&thumbnail_,
+                                                    std::vector<std::int32_t> &&added_sticker_file_ids_,
+                                                    std::int32_t width_, std::int32_t height_,
+                                                    object_ptr<formattedText> &&caption_,
+                                                    bool show_caption_above_media_,
+                                                    object_ptr<MessageSelfDestructType> &&self_destruct_type_,
+                                                    bool has_spoiler_)
+{
+    auto result = make_object<inputMessagePhoto>();
+#if TDLIB_API_INPUT_PHOTO
+    result->photo_ = make_object<inputPhoto>();
+    inputPhoto &photo = *result->photo_;
+#else
+    inputMessagePhoto &photo = *result;
+#endif
+    photo.photo_                  = std::move(photo_);
+    photo.thumbnail_              = std::move(thumbnail_);
+    photo.added_sticker_file_ids_ = std::move(added_sticker_file_ids_);
+    photo.width_                  = width_;
+    photo.height_                 = height_;
+    result->caption_                  = std::move(caption_);
+    result->show_caption_above_media_ = show_caption_above_media_;
+    result->self_destruct_type_       = std::move(self_destruct_type_);
+    result->has_spoiler_              = has_spoiler_;
+    return result;
+}
+
+object_ptr<inputMessageDocument> makeInputMessageDocument(object_ptr<InputFile> &&document_,
+                                                          object_ptr<inputThumbnail> &&thumbnail_,
+                                                          bool disable_content_type_detection_,
+                                                          object_ptr<formattedText> &&caption_)
+{
+    auto result = make_object<inputMessageDocument>();
+#if TDLIB_API_INPUT_PHOTO
+    result->document_ = make_object<inputDocument>();
+    inputDocument &document = *result->document_;
+#else
+    inputMessageDocument &document = *result;
+#endif
+    document.document_                       = std::move(document_);
+    document.thumbnail_                      = std::move(thumbnail_);
+    document.disable_content_type_detection_ = disable_content_type_detection_;
+    result->caption_ = std::move(caption_);
     return result;
 }
 

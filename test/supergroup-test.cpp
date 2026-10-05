@@ -82,7 +82,7 @@ TEST_F(SupergroupTest, AddSupergroupChatAtLogin_WithMemberList_OpenChatAfterFull
         userIds[1],
         userIds[1],
         0,
-        make_object<chatMemberStatusCreator>("", false, true),
+        makeChatMemberStatusCreator("", false, true),
         nullptr
     ));
     members->members_.push_back(makeChatMember(
@@ -106,7 +106,7 @@ TEST_F(SupergroupTest, AddSupergroupChatAtLogin_WithMemberList_OpenChatAfterFull
         userIds[1],
         userIds[1],
         0,
-        make_object<chatMemberStatusCreator>("", false, true),
+        makeChatMemberStatusCreator("", false, true),
         nullptr
     ));
     admins->members_.push_back(nullptr);
@@ -201,7 +201,7 @@ TEST_F(SupergroupTest, ExistingSupergroupReceiveMessageAtLogin_WithMemberList_Op
         userIds[1],
         userIds[1],
         0,
-        make_object<chatMemberStatusCreator>("", false, true),
+        makeChatMemberStatusCreator("", false, true),
         nullptr
     ));
     members->members_.push_back(makeChatMember(
@@ -225,7 +225,7 @@ TEST_F(SupergroupTest, ExistingSupergroupReceiveMessageAtLogin_WithMemberList_Op
         userIds[1],
         userIds[1],
         0,
-        make_object<chatMemberStatusCreator>("", false, true),
+        makeChatMemberStatusCreator("", false, true),
         nullptr
     ));
     admins->members_.push_back(nullptr);
