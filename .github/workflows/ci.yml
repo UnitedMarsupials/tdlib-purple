@@ -82,7 +82,6 @@ jobs:
   linux:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
-    continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
       matrix:
@@ -93,51 +92,35 @@ jobs:
             cxx: g++
             compiler: ''
             options: ''
-            experimental: false
           - name: Alpine x86_64 (clang++)
             runner: ubuntu-24.04
             platform: linux/amd64
             cxx: clang++
             compiler: clang
             options: ''
-            experimental: false
           - name: Alpine x86_64 (g++, NoTranslations)
             runner: ubuntu-24.04
             platform: linux/amd64
             cxx: g++
             compiler: ''
             options: -DNoTranslations=1
-            experimental: false
           - name: Alpine x86 (g++)
             runner: ubuntu-24.04
             platform: linux/386
             cxx: g++
             compiler: ''
             options: ''
-            experimental: false
           - name: Alpine aarch64 (g++)
             runner: ubuntu-24.04-arm
             platform: linux/arm64
             cxx: g++
             compiler: ''
             options: ''
-            experimental: false
-          # Under QEMU, unless the arm64 runner's CPU runs 32-bit code itself.
-          - name: Alpine armv7 (g++, experimental)
-            runner: ubuntu-24.04-arm
-            platform: linux/arm/v7
-            cxx: g++
-            compiler: ''
-            options: ''
-            experimental: true
     defaults:
       run:
         shell: docker exec alpine sh -e {0}
     steps:
       - uses: actions/checkout@v7
-
-      - uses: docker/setup-qemu-action@v3
-        if: matrix.platform == 'linux/arm/v7'
 
       # The workspace and the runner's temporary directory (where each step's
       # script is written) are mounted at the same paths inside.
