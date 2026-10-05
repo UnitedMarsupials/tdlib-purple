@@ -1,7 +1,11 @@
-# CodeQL static analysis of the plugin (not of the tests: only what the
-# `all` target compiles is analysed).  Its own workflow, apart from CI: it is
-# slower, and its findings land in the repository's Security tab rather than
-# failing a build.  Same Gentoo container as the Linux jobs in ci.yml.
+# CodeQL static analysis of the plugin.  Its own workflow, apart from CI: it
+# is slower, and its findings land in the repository's Security tab rather
+# than failing a build.
+#
+# Build mode "none": CodeQL reads the sources without compiling them.  It
+# cannot trace a build inside the Alpine containers ci.yml uses (its tools need
+# glibc, and the build runs under `docker exec`), and the platforms it can run
+# on have no TDLib recent enough to build against.
 
 name: CodeQL
 
@@ -24,33 +28,17 @@ jobs:
   analyze:
     name: Analyze (C++)
     runs-on: ubuntu-24.04
-    container: gentoo/stage3:latest
     permissions:
       contents: read
       security-events: write
     steps:
       - uses: actions/checkout@v7
 
-      # Shared with the Gentoo jobs in ci.yml, which save it.
-      - uses: actions/cache/restore@v4
-        with:
-          path: /var/cache/binpkgs
-          key: gentoo-binpkgs-${{ runner.arch }}-
-          restore-keys: gentoo-binpkgs-${{ runner.arch }}-
-
-      - name: Install dependencies
-        run: sh .github/gentoo-setup.sh
-
       - uses: github/codeql-action/init@v4
         with:
           languages: c-cpp
-          build-mode: manual
+          build-mode: none
           config-file: ./.github/codeql/config.yml
-
-      - name: Build
-        run: |
-          cmake -G Ninja -S . -B build -DNoVoip=1
-          cmake --build build --target all
 
       - uses: github/codeql-action/analyze@v4
         with:

@@ -4,5 +4,11 @@ name: "tdlib-purple CodeQL config"
 queries:
   - uses: security-and-quality
 
+# The mock libpurple and the test cases are not shipped.  (For C++ this can
+# only work in build mode "none", as the workflow runs; a traced build
+# analyses whatever it compiles.)
+paths-ignore:
+  - test
+
 # Documentation for configuring CodeQL:
 # https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/customizing-your-advanced-setup-for-code-scanning

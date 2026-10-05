@@ -9,15 +9,15 @@
 # one table at the top of the run's page.  CodeQL is a workflow of its own
 # (codeql.yml).
 #
-# Every platform supplies its own TDLib.  Linux runs in a Gentoo container,
-# on x86-64 and on arm64, as Gentoo follows TDLib upstream closely (Ubuntu
-# has no TDLib package; Fedora's predates the API this code uses).  Gentoo builds TDLib from source, the first time and after each new
-# release; .github/gentoo-setup.sh explains how it is kept.  The BSDs run in
-# a VM on a Linux runner, through cross-platform-actions; every step after
-# the one that boots the VM runs inside it (shell: cpa.sh).  OpenBSD is
-# experimental: its failures are shown but do not fail the workflow.  NetBSD
-# (no TDLib package) and DragonFly (a TDLib that predates 1.8.6) are left out
-# until they have one.  None of these offers a 32-bit x86 TDLib.
+# Every platform supplies its own TDLib, as a package; none is built here.
+# Linux is Alpine edge, whose TDLib follows upstream closely and comes for
+# x86_64, 32-bit x86 and ARM alike (Ubuntu has no TDLib package, Fedora's
+# predates the API this code uses, and Gentoo builds it from source).
+# The BSDs run in a VM on a Linux runner, through cross-platform-actions;
+# every step after the one that boots the VM runs inside it (shell: cpa.sh).
+# OpenBSD is experimental: its failures are shown but do not fail the
+# workflow.  NetBSD (no TDLib package) and DragonFly (a TDLib that predates
+# 1.8.6) are left out until they have one.
 #
 # No -Werror: clang finds an unused private field (transceiver.h) that gcc
 # does not, and the warnings are in the log anyway.
@@ -74,73 +74,98 @@ jobs:
           name: outcome-${{ github.job }}
           path: outcome.tsv
 
+  # Each job starts an Alpine container for its platform and runs every step
+  # after that inside it (shell: docker exec), as the BSD jobs do with their
+  # VM.  The `container:` key cannot be used: the runner's own JavaScript
+  # actions would have to run in the container too, and it has no 32-bit x86
+  # build of them.
   linux:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
-    container: gentoo/stage3:latest
+    continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: Gentoo (g++)
+          - name: Alpine x86_64 (g++)
             runner: ubuntu-24.04
+            platform: linux/amd64
             cxx: g++
-            packages: ''
+            compiler: ''
             options: ''
-          - name: Gentoo (clang++)
+            experimental: false
+          - name: Alpine x86_64 (clang++)
             runner: ubuntu-24.04
+            platform: linux/amd64
             cxx: clang++
-            packages: llvm-core/clang
+            compiler: clang
             options: ''
-          - name: Gentoo (g++, NoTranslations)
+            experimental: false
+          - name: Alpine x86_64 (g++, NoTranslations)
             runner: ubuntu-24.04
+            platform: linux/amd64
             cxx: g++
-            packages: ''
+            compiler: ''
             options: -DNoTranslations=1
-          - name: Gentoo arm64 (g++)
-            runner: ubuntu-24.04-arm
+            experimental: false
+          - name: Alpine x86 (g++)
+            runner: ubuntu-24.04
+            platform: linux/386
             cxx: g++
-            packages: ''
+            compiler: ''
             options: ''
+            experimental: false
+          - name: Alpine aarch64 (g++)
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            cxx: g++
+            compiler: ''
+            options: ''
+            experimental: false
+          # Under QEMU, unless the arm64 runner's CPU runs 32-bit code itself.
+          - name: Alpine armv7 (g++, experimental)
+            runner: ubuntu-24.04-arm
+            platform: linux/arm/v7
+            cxx: g++
+            compiler: ''
+            options: ''
+            experimental: true
+    defaults:
+      run:
+        shell: docker exec alpine sh -e {0}
     steps:
-      # No git in the container yet: this fetches a tarball instead.
       - uses: actions/checkout@v7
 
-      # What this or an earlier run built from source (TDLib, libpurple).
-      - uses: actions/cache/restore@v4
-        with:
-          path: /var/cache/binpkgs
-          key: gentoo-binpkgs-${{ runner.arch }}-
-          restore-keys: gentoo-binpkgs-${{ runner.arch }}-
+      - uses: docker/setup-qemu-action@v3
+        if: matrix.platform == 'linux/arm/v7'
 
+      # The workspace and the runner's temporary directory (where each step's
+      # script is written) are mounted at the same paths inside.
+      - name: Start Alpine edge (${{ matrix.platform }})
+        id: boot
+        shell: bash
+        run: >-
+          docker run -d --name alpine --platform ${{ matrix.platform }}
+          -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -v "$RUNNER_TEMP:$RUNNER_TEMP"
+          -w "$GITHUB_WORKSPACE" -e GITHUB_ACTIONS
+          alpine:edge sleep infinity
+
+      # TDLib is in edge's testing repository, as telegram-tdlib.
       - name: Install dependencies
         id: install
-        run: >-
-          sh .github/annotate.sh Setup
-          sh .github/gentoo-setup.sh ${{ matrix.packages }}
-
-      # Named after what it holds, so an unchanged set is not saved again.
-      - name: Name the package cache
-        id: binpkgs
-        if: steps.install.outcome == 'success'
-        run: >-
-          echo "key=gentoo-binpkgs-${{ runner.arch }}-$(find /var/cache/binpkgs
-          -type f -name '*.gpkg.tar' | sort | sha256sum | cut -c1-16)"
-          >> "$GITHUB_OUTPUT"
-
-      - uses: actions/cache/save@v4
-        if: steps.install.outcome == 'success'
-        continue-on-error: true
-        with:
-          path: /var/cache/binpkgs
-          key: ${{ steps.binpkgs.outputs.key }}
+        run: |
+          echo https://dl-cdn.alpinelinux.org/alpine/edge/testing >> /etc/apk/repositories
+          sh .github/annotate.sh Setup apk add --no-cache \
+              cmake samurai pkgconf gettext gettext-dev g++ ${{ matrix.compiler }} \
+              pidgin-dev telegram-tdlib-dev telegram-tdlib-static openssl-dev zlib-dev \
+              fmt-dev rlottie-dev libwebp-dev libpng-dev gtest-dev
+          apk info -v telegram-tdlib-dev
 
       - name: Configure
         id: configure
-        env:
-          CXX: ${{ matrix.cxx }}
         run: >-
           sh .github/annotate.sh Configure
+          env CXX=${{ matrix.cxx }}
           cmake -G Ninja -S . -B build -DNoVoip=1 ${{ matrix.options }}
           -DCMAKE_CXX_FLAGS="${{ env.WARNINGS }}"
 
@@ -161,12 +186,14 @@ jobs:
           env DESTDIR="$PWD/destdir" cmake --build build --target install
           && find destdir -type f
 
+      # On the runner, not in the container: it may never have started.
       - name: Record outcome
         if: always()
+        shell: bash
         env:
           ORDER: 0${{ strategy.job-index }}
           NAME: ${{ matrix.name }}
-          SETUP: ${{ steps.install.outcome }}
+          SETUP: ${{ steps.boot.outcome }} ${{ steps.install.outcome }}
           CONFIGURE: ${{ steps.configure.outcome }}
           BUILD: ${{ steps.build.outcome }}
           TEST: ${{ steps.test.outcome }}
