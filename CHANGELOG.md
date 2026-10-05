@@ -19,6 +19,7 @@
 ### Build
 
 - **CMake 4 can configure the build**, which it refused while the build asked for CMake 3.2.
+- **Improved portability.**
 
 ### Tests
 
