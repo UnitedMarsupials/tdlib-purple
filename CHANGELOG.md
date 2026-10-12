@@ -6,6 +6,7 @@
 
 - **Self-destructing messages are shown by default.** The `show-self-destruct` account
   option can still turn them off.
+- Version of TDLib is queried and runtime, and compared to that used at buildtime.
 
 ### Fixes
 
