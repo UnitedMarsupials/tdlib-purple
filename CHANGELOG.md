@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.3 (unreleased)
+
+### Fixes
+
+- **TDLib's log goes to the debug window instead of stderr.**
+
 ## 0.9.2 (2026-10-11)
 
 ### Behaviour
