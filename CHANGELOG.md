@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.2 (unreleased)
+## 0.9.2 (2026-10-11)
 
 ### Behaviour
 
