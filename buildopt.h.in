@@ -2,6 +2,7 @@
 #define _BUILDOPT_H
 
 #define TDLIB_VERSION_NUMBER ${TDLIB_VERSION_NUMBER}
+#define TDLIB_VERSION_STRING "${TDLIB_VERSION}"
 
 #if TDLIB_VERSION_NUMBER == 0
 #warning "Cannot tell which version of TDLib this is: its API changes were guessed by probing its headers (see cmake/tdlib-version.cmake)"

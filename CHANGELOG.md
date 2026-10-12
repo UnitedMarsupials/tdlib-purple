@@ -10,6 +10,11 @@
 ### Fixes
 
 - **A front-end that supplies no UI information no longer triggers GLib warnings.**
+- **A plugin built against one TDLib release no longer crashes when run with another.** TDLib's
+  C++ libraries carry no version in their sonames, so nothing stopped the mismatch, and the
+  first update holding a class whose layout had changed brought the front-end down. The plugin
+  now compares the running TDLib's version with the one it was built against and, if they
+  differ, logs a GLib CRITICAL and declines to load.
 
 ## 0.9.1 (2026-10-04)
 

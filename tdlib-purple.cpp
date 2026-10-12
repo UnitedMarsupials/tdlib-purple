@@ -882,8 +882,37 @@ static PurplePluginProtocolInfo prpl_info = {
 #endif
 };
 
+// TDLib's C++ API is classes defined in its headers, whose layout changes from one release to the
+// next, while its shared libraries carry no version in their sonames. Built against one TDLib and
+// run with another, the plugin crashes on the first update holding a class that changed -- so it
+// refuses to load instead. The version option is the one thing safe to ask about across such a
+// mismatch: getOption and optionValueString hold just a string.
+static bool checkTdlibVersion()
+{
+    if (TDLIB_VERSION_NUMBER == 0)
+        return true; // unknown at build time, nothing to compare with
+
+    td::Client::Response resp = td::Client::execute({0, td::td_api::make_object<td::td_api::getOption>("version")});
+    if (!resp.object || (resp.object->get_id() != td::td_api::optionValueString::ID)) {
+        purple_debug_warning(config::pluginId, "Cannot tell which version of tdlib is running\n");
+        return true;
+    }
+
+    const std::string &running = static_cast<const td::td_api::optionValueString &>(*resp.object).value_;
+    if (running != TDLIB_VERSION_STRING) {
+        g_critical("%s: built against tdlib %s, but running with tdlib %s; rebuild it against the latter",
+                   config::pluginId, TDLIB_VERSION_STRING, running.c_str());
+        return false;
+    }
+
+    return true;
+}
+
 static gboolean tgprpl_load (PurplePlugin *plugin)
 {
+    if (!checkTdlibVersion())
+        return FALSE;
+
     purple_cmd_register("kick", "s", PURPLE_CMD_P_PLUGIN,
                         (PurpleCmdFlag)(PURPLE_CMD_FLAG_CHAT | PURPLE_CMD_FLAG_PRPL_ONLY),
                         config::pluginId, tgprpl_cmd_kick,
