@@ -91,6 +91,14 @@ void purple_debug_warning(const char *category, const char *format, ...)
     va_end(va);
 }
 
+void purple_debug_error(const char *category, const char *format, ...)
+{
+    va_list va;
+    va_start(va, format);
+    printDebug("Error: ", category, format, va);
+    va_end(va);
+}
+
 const char *purple_account_get_username(const PurpleAccount *account)
 {
     return account->username;

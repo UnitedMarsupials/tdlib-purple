@@ -16,6 +16,8 @@
 #include <string>
 #include <vector>
 #include <array>
+#include <deque>
+#include <mutex>
 #include <ctype.h>
 #include <unistd.h>
 
@@ -973,6 +975,70 @@ static void tdlibFatalErrorCallback(const char *message)
     while (1) sleep(1000);
 }
 
+struct TdlibLogMessage {
+    int         level;
+    std::string text;
+};
+
+// TDLib's threads can log faster than the main loop goes idle, so the messages wait in a queue of
+// bounded length, which one idle source at a time empties
+enum { TDLIB_LOG_QUEUE_LENGTH = 1000 };
+static std::mutex                  g_tdlibLogMutex;
+static std::deque<TdlibLogMessage> g_tdlibLogQueue;
+static unsigned                    g_tdlibLogDropped   = 0;
+static bool                        g_tdlibLogScheduled = false;
+
+static void showTdlibLogMessage(const TdlibLogMessage &message)
+{
+    // The text ends with a newline already
+    if (message.level <= 1)
+        purple_debug_error("tdlib", "%s", message.text.c_str());
+    else if (message.level == 2)
+        purple_debug_warning("tdlib", "%s", message.text.c_str());
+    else if (message.level == 3)
+        purple_debug_info("tdlib", "%s", message.text.c_str());
+    else
+        purple_debug_misc("tdlib", "%s", message.text.c_str());
+}
+
+static gboolean tdlibLogHandler(void *)
+{
+    std::deque<TdlibLogMessage> messages;
+    unsigned                    dropped;
+    {
+        std::lock_guard<std::mutex> lock(g_tdlibLogMutex);
+        messages.swap(g_tdlibLogQueue);
+        dropped             = g_tdlibLogDropped;
+        g_tdlibLogDropped   = 0;
+        g_tdlibLogScheduled = false;
+    }
+    for (const TdlibLogMessage &message: messages)
+        showTdlibLogMessage(message);
+    if (dropped)
+        purple_debug_warning(config::pluginId, "%u TDLib log messages dropped\n", dropped);
+    return FALSE; // this idle handler will not be called again
+}
+
+static void tdlibLogCallback(int level, const char *message)
+{
+    if (level == 0) {
+        tdlibFatalErrorCallback(message);
+        return;
+    }
+
+    // Called on TDLib's threads, while libpurple's debug output, Pidgin's debug window included,
+    // belongs to the main one
+    std::lock_guard<std::mutex> lock(g_tdlibLogMutex);
+    if (g_tdlibLogQueue.size() >= TDLIB_LOG_QUEUE_LENGTH)
+        g_tdlibLogDropped++;
+    else
+        g_tdlibLogQueue.push_back(TdlibLogMessage{level, message});
+    if (!g_tdlibLogScheduled) {
+        g_tdlibLogScheduled = true;
+        g_idle_add(tdlibLogHandler, NULL);
+    }
+}
+
 static void tgprpl_init (PurplePlugin *plugin)
 {
 #ifndef NoTranslations
@@ -997,7 +1063,7 @@ static void tgprpl_init (PurplePlugin *plugin)
     else
         // Log up to fatal errors and errors
         PurpleTdClient::setLogLevel(1);
-    PurpleTdClient::setTdlibFatalErrorCallback(tdlibFatalErrorCallback);
+    PurpleTdClient::setTdlibLogCallback(tdlibLogCallback);
 
 #ifndef NoLottie
     rlottie::configureModelCacheSize(0);
