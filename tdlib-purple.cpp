@@ -973,6 +973,36 @@ static void tdlibFatalErrorCallback(const char *message)
     while (1) sleep(1000);
 }
 
+struct TdlibLogMessage {
+    int         level;
+    std::string text;
+};
+
+static gboolean tdlibLogHandler(void *data)
+{
+    std::unique_ptr<TdlibLogMessage> message(static_cast<TdlibLogMessage *>(data));
+    // The text ends with a newline already
+    if (message->level <= 1)
+        purple_debug_error("tdlib", "%s", message->text.c_str());
+    else if (message->level == 2)
+        purple_debug_warning("tdlib", "%s", message->text.c_str());
+    else if (message->level == 3)
+        purple_debug_info("tdlib", "%s", message->text.c_str());
+    else
+        purple_debug_misc("tdlib", "%s", message->text.c_str());
+    return FALSE; // this idle handler will not be called again
+}
+
+static void tdlibLogCallback(int level, const char *message)
+{
+    if (level == 0)
+        tdlibFatalErrorCallback(message);
+    else
+        // Called on TDLib's threads, while libpurple's debug output, Pidgin's debug window included,
+        // belongs to the main one
+        g_idle_add(tdlibLogHandler, new TdlibLogMessage{level, message});
+}
+
 static void tgprpl_init (PurplePlugin *plugin)
 {
 #ifndef NoTranslations
@@ -997,7 +1027,7 @@ static void tgprpl_init (PurplePlugin *plugin)
     else
         // Log up to fatal errors and errors
         PurpleTdClient::setLogLevel(1);
-    PurpleTdClient::setTdlibFatalErrorCallback(tdlibFatalErrorCallback);
+    PurpleTdClient::setTdlibLogCallback(tdlibLogCallback);
 
 #ifndef NoLottie
     rlottie::configureModelCacheSize(0);
