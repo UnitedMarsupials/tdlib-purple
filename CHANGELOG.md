@@ -6,6 +6,7 @@
 
 - **Edits and deletions of messages already shown are reported in the conversation.**
 - **Locations, venues and live locations are shown as `geo:` links.**
+- **An account option shows messages from channels and groups you have not joined.**
 
 ### Fixes
 
