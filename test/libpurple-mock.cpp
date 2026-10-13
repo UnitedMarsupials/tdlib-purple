@@ -657,6 +657,20 @@ void purple_conv_chat_set_topic(PurpleConvChat *chat, const char *who,
     EVENT(ChatSetTopicEvent, chat->conv->name, topic ? topic : "", who ? who : "");
 }
 
+const char *purple_time_format(const struct tm *tm)
+{
+    static char buf[80];
+    strftime(buf, sizeof(buf), "%X", tm);
+    return buf;
+}
+
+const char *purple_date_format_long(const struct tm *tm)
+{
+    static char buf[80];
+    strftime(buf, sizeof(buf), "%x %X", tm);
+    return buf;
+}
+
 gboolean purple_debug_is_enabled(void)
 {
     return true;

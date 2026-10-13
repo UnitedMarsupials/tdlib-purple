@@ -156,6 +156,26 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         purple_debug_misc(config::pluginId, "Incoming update: message %" G_GINT64_FORMAT " send succeeded\n",
                           sendSucceeded.old_message_id_);
         removeTempFile(sendSucceeded.old_message_id_);
+        if (sendSucceeded.message_)
+            m_data.renameShownMessage(getChatId(*sendSucceeded.message_), getOldMessageId(sendSucceeded),
+                                      getId(*sendSucceeded.message_));
+        break;
+    }
+
+    case td::td_api::updateMessageContent::ID: {
+        auto &contentUpdate = static_cast<td::td_api::updateMessageContent &>(update);
+        purple_debug_misc(config::pluginId, "Incoming update: content of message %" G_GINT64_FORMAT " changed\n",
+                          contentUpdate.message_id_);
+        updateMessageContent(m_data, getChatId(contentUpdate), getMessageId(contentUpdate),
+                             std::move(contentUpdate.new_content_));
+        break;
+    }
+
+    case td::td_api::updateDeleteMessages::ID: {
+        auto &deleteUpdate = static_cast<const td::td_api::updateDeleteMessages &>(update);
+        purple_debug_misc(config::pluginId, "Incoming update: %zu messages deleted\n",
+                          deleteUpdate.message_ids_.size());
+        deleteMessages(m_data, deleteUpdate);
         break;
     }
 
