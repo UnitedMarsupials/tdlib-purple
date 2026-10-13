@@ -439,8 +439,6 @@ void TdAccountData::addChat(TdChatPtr chat)
         it->second.chat = std::move(chat);
     else {
         auto entry = m_chatInfo.emplace(getId(*chat), ChatInfo());
-        entry.first->second.foreign  = (getBasicGroupId(*chat).valid() || getSupergroupId(*chat).valid()) &&
-                                       !isGroupChatWithMembership(*chat);
         entry.first->second.chat     = std::move(chat);
         entry.first->second.purpleId = ++m_lastChatPurpleId;
     }
@@ -707,23 +705,6 @@ bool TdAccountData::isGroupChatWithMembership(const td::td_api::chat &chat) cons
         return (group && isGroupMember(group->status_));
     }
     return false;
-}
-
-// TDLib also tells us of groups we do not belong to - a channel linked to a group we are in, or
-// the discussion group of a channel - and delivers their messages, which are none of ours. Such a
-// group stays foreign, and its messages unshown, until we join it. A group we were a member of
-// when we first heard of it is not foreign, even once we leave it, so that the news of leaving it
-// still reaches its conversation.
-bool TdAccountData::isForeignGroupChat(ChatId chatId)
-{
-    auto it = m_chatInfo.find(chatId);
-    if ((it == m_chatInfo.end()) || !it->second.foreign)
-        return false;
-    if (it->second.chat && isGroupChatWithMembership(*it->second.chat)) {
-        it->second.foreign = false;
-        return false;
-    }
-    return true;
 }
 
 const td::td_api::chat *TdAccountData::getChatBySecretChat(SecretChatId secretChatId)

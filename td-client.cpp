@@ -96,7 +96,7 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         // Every chat TDLib tells us about is tracked, including a group we are not a member of:
         // joining one later produces no second updateNewChat, so a chat dropped here could never
         // be picked up again. Whether it belongs in the buddy list is updateChat's decision, and
-        // whether its messages are shown is onIncomingMessage's (see isForeignGroupChat).
+        // whether its messages are shown is onIncomingMessage's.
         addChat(std::move(newChat.chat_));
 
         break;
@@ -958,8 +958,15 @@ void PurpleTdClient::onIncomingMessage(td::td_api::object_ptr<td::td_api::messag
         return;
     ChatId chatId = getChatId(*message);
 
-    // Nor are its earlier messages fetched
-    if (m_data.isForeignGroupChat(chatId)) {
+    // TDLib also tells us of groups and channels we do not belong to - one linked to a group we
+    // are in, a channel's discussion group, one Telegram has brought up for us - and delivers
+    // their messages, which are none of ours. Nor are their earlier messages fetched. Only the
+    // news of a member leaving gets through, as the last word on a group we have just left.
+    const td::td_api::chat *groupChat = m_data.getChat(chatId);
+    if (groupChat && (getBasicGroupId(*groupChat).valid() || getSupergroupId(*groupChat).valid()) &&
+        !m_data.isGroupChatWithMembership(*groupChat) &&
+        !(message->content_ && (message->content_->get_id() == td::td_api::messageChatDeleteMember::ID)))
+    {
         purple_debug_misc(config::pluginId, "Ignoring message %" G_GINT64_FORMAT " in chat %" G_GINT64_FORMAT
                           ", a group we are not a member of\n", message->id_, chatId.value());
         return;

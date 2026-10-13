@@ -658,4 +658,13 @@ TEST_F(SupergroupTest, ForeignChannel)
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
         ServGotChatEvent(connection, purpleChatId, "Channel post", "Welcome", PURPLE_MESSAGE_RECV, date)
     );
+
+    // ...and once we leave it, its posts are none of ours again
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusLeft>(), 2)));
+    prpl.discardEvents();
+    message = makeMessage(messageId + 2, 0, groupChatId, false, date, makeTextMessage("Still here"));
+    message->is_channel_post_ = true;
+    tgl.update(make_object<updateNewMessage>(std::move(message)));
+    prpl.verifyNoEvents();
+    tgl.verifyNoRequests();
 }
