@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: tdlib-purple\n"
 "Report-Msgid-Bugs-To: https://github.com/UnitedMarsupials/tdlib-purple/issues/new \n"
-"POT-Creation-Date: 2026-10-12 21:39-0400\n"
+"POT-Creation-Date: 2026-10-12 22:17-0400\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -213,41 +213,64 @@ msgstr ""
 msgid "Download limit"
 msgstr ""
 
+#. TRANSLATOR: In-chat message. Argument is a hyperlink, showing map coordinates.
+#: ../receiving.cpp:165
+#, c++-format
+msgid "Location: {}"
+msgstr ""
+
+#. TRANSLATOR: In-chat message, for a location shared live with no end set. Argument is a hyperlink, showing map coordinates.
+#: ../receiving.cpp:168
+#, c++-format
+msgid "Live location: {}"
+msgstr ""
+
+#. TRANSLATOR: In-chat message. Arguments are the time (or date and time) the live location will cease to be shared at, and a hyperlink, showing map coordinates.
+#: ../receiving.cpp:171
+#, c++-format
+msgid "Live location until {0}: {1}"
+msgstr ""
+
 #. message == NULL means it could not be fetched, or took too long to fetch
 #. TRANSLATOR: In-line placeholder if the original author of a quote is unknown. Is at the beginning of the line if and only if you make it so, see "<b>&bt {} wrote:"...
-#: ../receiving.cpp:343
+#: ../receiving.cpp:439
 msgid "Unknown user"
 msgstr ""
 
 #. TRANSLATOR: In-chat placeholder when something unknown is being replied to.
-#: ../receiving.cpp:349
+#: ../receiving.cpp:445
 msgid "[message unavailable]"
 msgstr ""
 
 #. TRANSLATOR: In-line placeholder when a photo is being replied to.
-#: ../receiving.cpp:362
+#: ../receiving.cpp:458
 msgid "[photo]"
 msgstr ""
 
 #. TRANSLATOR: In-line placeholder when a file is being replied to. Arguments will be the file name and MIME type (e.g. "application/gzip")
-#: ../receiving.cpp:371
+#: ../receiving.cpp:467
 #, c++-format
 msgid "[file: {0} ({1})]"
 msgstr ""
 
 #. TRANSLATOR: In-line placeholder when a video is being replied to. Argument will be the file name.
-#: ../receiving.cpp:385
+#: ../receiving.cpp:481
 #, c++-format
 msgid "[video: {}]"
 msgstr ""
 
 #. TRANSLATOR: In-line placeholder when a sticker is being replied to.
-#: ../receiving.cpp:396
+#: ../receiving.cpp:492
 msgid "[sticker]"
 msgstr ""
 
+#. TRANSLATOR: In-line placeholder when a location is being replied to.
+#: ../receiving.cpp:508
+msgid "[location]"
+msgstr ""
+
 #. TRANSLATOR: In-chat notification of a reply. Arguments will be username and the original text or description thereof. Please preserve the HTML.
-#: ../receiving.cpp:413
+#: ../receiving.cpp:522
 #, c++-format
 msgid ""
 "<b>&gt; {0} wrote:</b>\n"
@@ -255,35 +278,35 @@ msgid ""
 msgstr ""
 
 #. TRANSLATOR: In-chat notification of forward. Argument will be a username. Please preserve the HTML.
-#: ../receiving.cpp:433
+#: ../receiving.cpp:542
 #, c++-format
 msgid "<b>Forwarded from {}:</b>"
 msgstr ""
 
 #. TRANSLATOR: In-chat status update
-#: ../receiving.cpp:531
+#: ../receiving.cpp:640
 msgid "Converting sticker"
 msgstr ""
 
 #. TRANSLATOR: Download dialog, primary content, argument will be a username.
-#: ../receiving.cpp:638
+#: ../receiving.cpp:747
 #, c++-format
 msgid "Download file from {}?"
 msgstr ""
 
 #. TRANSLATOR: Download dialog, placeholder chat title, in the sentence "posted in a private chat".
-#: ../receiving.cpp:644
+#: ../receiving.cpp:753
 msgid "a private chat"
 msgstr ""
 
 #. TRANSLATOR: Download dialog, secondary content. Arguments will be file description (text), chat name (text), and a file size (text!)
-#: ../receiving.cpp:646
+#: ../receiving.cpp:755
 #, c++-format
 msgid "{0} posted in {1}, size: {2}"
 msgstr ""
 
 #. TRANSLATOR: Download dialog, title
-#: ../receiving.cpp:659
+#: ../receiving.cpp:768
 msgid "Download"
 msgstr ""
 
@@ -291,7 +314,7 @@ msgstr ""
 #. TRANSLATOR: Owning group deletion dialog, alternative is "_No"
 #. TRANSLATOR: Group leave dialog, alternative is "_No"
 #. TRANSLATOR: Group deletion dialog, alternative is "_No"
-#: ../receiving.cpp:662 ../tdlib-purple.cpp:142 ../tdlib-purple.cpp:152
+#: ../receiving.cpp:771 ../tdlib-purple.cpp:142 ../tdlib-purple.cpp:152
 #: ../tdlib-purple.cpp:184
 msgid "_Yes"
 msgstr ""
@@ -300,67 +323,73 @@ msgstr ""
 #. TRANSLATOR: Owning group deletion dialog, alternative is "_Yes"
 #. TRANSLATOR: Group leave dialog, alternative is "_Yes"
 #. TRANSLATOR: Group deletion dialog, alternative is "_Yes"
-#: ../receiving.cpp:664 ../tdlib-purple.cpp:144 ../tdlib-purple.cpp:154
+#: ../receiving.cpp:773 ../tdlib-purple.cpp:144 ../tdlib-purple.cpp:154
 #: ../tdlib-purple.cpp:186
 msgid "_No"
 msgstr ""
 
 #. TRANSLATOR: In-chat notification, appears after a colon (':'). Argument is a file *type*, not a filename.
-#: ../receiving.cpp:708
+#: ../receiving.cpp:817
 #, c++-format
 msgid "Downloading {}"
 msgstr ""
 
 #. TRANSLATOR: In-chat notification, appears after a colon (':'). Argument is a file *type*, not a filename.
-#: ../receiving.cpp:713
+#: ../receiving.cpp:822
 #, c++-format
 msgid "Requesting {} download"
 msgstr ""
 
 #. File size above limit, so it's non-zero
 #. TRANSLATOR: In-chat notification, appears after a colon (':'). Arguments are a file *type*, not a filename; second argument is a file size with unit.
-#: ../receiving.cpp:718
+#: ../receiving.cpp:827
 #, c++-format
 msgid "Ignoring {0} download ({1})"
 msgstr ""
 
 #. TRANSLATOR: File-type, used to describe what is being downloaded, in sentences like "Downloading photo" or "Ignoring photo download".
-#: ../receiving.cpp:784 ../receiving.cpp:1220
+#: ../receiving.cpp:893 ../receiving.cpp:1354
 msgid "photo"
 msgstr ""
 
 #. TRANSLATOR: File-type, used to describe what is being downloaded, in sentences like "Downloading photo" or "Ignoring photo download".
 #. will not be needed - inline download only
 #. TRANSLATOR: File-type, used to describe what is being downloaded, in sentences like "Downloading photo" or "Ignoring photo download".
-#: ../receiving.cpp:844 ../receiving.cpp:1279
+#: ../receiving.cpp:953 ../receiving.cpp:1413
 msgid "sticker"
 msgstr ""
 
+#. TRANSLATOR: In-chat notification, followed by the last position. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
+#: ../receiving.cpp:992
+#, c++-format
+msgid "{0} stops sharing the live location from {1}:"
+msgstr ""
+
 #. TRANSLATOR: In-chat notification. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
-#: ../receiving.cpp:865
+#: ../receiving.cpp:995
 #, c++-format
 msgid "{0} removes the caption of the message from {1}"
 msgstr ""
 
 #. TRANSLATOR: In-chat notification, followed by the message as edited. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
-#: ../receiving.cpp:868
+#: ../receiving.cpp:998
 #, c++-format
 msgid "{0} edits the message from {1}:"
 msgstr ""
 
 #. TRANSLATOR: In-chat status update, arguments are chat names.
-#: ../receiving.cpp:962
+#: ../receiving.cpp:1092
 #, c++-format
 msgid "{0} changed group name to {1}"
 msgstr ""
 
 #. TRANSLATOR: In-chat notification. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
-#: ../receiving.cpp:1583
+#: ../receiving.cpp:1717
 #, c++-format
 msgid "Message from {} has been deleted"
 msgstr ""
 
-#: ../receiving.cpp:1631
+#: ../receiving.cpp:1765
 #, c++-format
 msgid "Failed to fetch earlier messages: {}"
 msgstr ""
