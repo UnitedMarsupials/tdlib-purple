@@ -2,6 +2,10 @@
 
 ## 0.9.3 (unreleased)
 
+### Features
+
+- **Edits and deletions of messages already shown are reported in the conversation.**
+
 ### Fixes
 
 - **TDLib's log goes to the debug window instead of stderr.**
