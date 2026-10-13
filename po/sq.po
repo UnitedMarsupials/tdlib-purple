@@ -14,8 +14,8 @@ msgstr ""
 "Project-Id-Version: tdlib-purple\n"
 "Report-Msgid-Bugs-To: https://github.com/UnitedMarsupials/tdlib-purple/"
 "issues/new \n"
-"POT-Creation-Date: 2026-10-13 18:13-0400\n"
-"PO-Revision-Date: 2026-10-13 00:30-0400\n"
+"POT-Creation-Date: 2026-10-13 19:29-0400\n"
+"PO-Revision-Date: 2026-10-13 19:10-0400\n"
 "Last-Translator: Claude Opus 5.5 (effort medium), 2026\n"
 "Language-Team: Albanian (https://www.transifex.com/tdlib-purple-developers/"
 "teams/110016/sq/)\n"
@@ -72,9 +72,9 @@ msgstr "{} dëshiron të nisë një thirrje me ju."
 #. TRANSLATOR: 2FA setup confirmation dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
 #. TRANSLATOR: Group creation dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
 #. TRANSLATOR: 2FA settings, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
-#: ../call.cpp:220 ../td-client.cpp:495 ../td-client.cpp:559
-#: ../td-client.cpp:590 ../td-client.cpp:2081 ../tdlib-purple.cpp:521
-#: ../tdlib-purple.cpp:1139
+#: ../call.cpp:220 ../td-client.cpp:496 ../td-client.cpp:560
+#: ../td-client.cpp:591 ../td-client.cpp:2099 ../tdlib-purple.cpp:521
+#: ../tdlib-purple.cpp:1145
 msgid "_OK"
 msgstr "_OK"
 
@@ -85,9 +85,9 @@ msgstr "_OK"
 #. TRANSLATOR: 2FA setup confirmation dialog, alternative is "_OK". The underscore marks accelerator keys, they must be different!
 #. TRANSLATOR: Group creation dialog, alternative is "_OK". The underscore marks accelerator keys, they must be different!
 #. TRANSLATOR: 2FA settings, alternative is "_OK". The underscore marks accelerator keys, they must be different!
-#: ../call.cpp:222 ../td-client.cpp:497 ../td-client.cpp:561
-#: ../td-client.cpp:592 ../td-client.cpp:2083 ../tdlib-purple.cpp:523
-#: ../tdlib-purple.cpp:1141
+#: ../call.cpp:222 ../td-client.cpp:498 ../td-client.cpp:562
+#: ../td-client.cpp:593 ../td-client.cpp:2101 ../tdlib-purple.cpp:523
+#: ../tdlib-purple.cpp:1147
 msgid "_Cancel"
 msgstr "_Anuloje"
 
@@ -156,7 +156,7 @@ msgstr "Postim kanali"
 
 #. TRANSLATOR: In-chat error message, argument will be text.
 #. TRANSLATOR: In-chat error message, argument will be a user-sent message
-#: ../client-utils.cpp:931 ../td-client.cpp:1066
+#: ../client-utils.cpp:931 ../td-client.cpp:1084
 #, c++-format
 msgid "Failed to send message: {}"
 msgstr "S’u arrit të dërgohet mesazh: {}"
@@ -373,7 +373,8 @@ msgstr "ngjitës"
 #: ../receiving.cpp:997
 #, c++-format
 msgid "{0} stopped sharing the live location from {1}: {2}"
-msgstr "{0} ndali ndarjen e vendndodhjes drejtpërsëdrejti nga mesazhi i {1}: {2}"
+msgstr ""
+"{0} ndali ndarjen e vendndodhjes drejtpërsëdrejti nga mesazhi i {1}: {2}"
 
 #. TRANSLATOR: In-chat notification. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
 #: ../receiving.cpp:1001
@@ -422,237 +423,237 @@ msgid "The secret chat will be available when activated by the peer"
 msgstr "Fjalosja e fshehtë do të jetë e passhme, kur ta aktivizojë pala tjetër"
 
 #. TRANSLATOR: Buddy-window error message, argument will be some kind of proxy-identifier.
-#: ../td-client.cpp:338
+#: ../td-client.cpp:339
 #, c++-format
 msgid "Proxy type {} is not supported"
 msgstr "Nuk mbulohet lloji {} i ndërmjetësit"
 
 #. TRANSLATOR: Buddy-window error message
-#: ../td-client.cpp:370
+#: ../td-client.cpp:371
 #, c++-format
 msgid "Could not set proxy: {}"
 msgstr "S’u ujdis dot ndërmjetës: {}"
 
 #. TRANSLATOR: Buddy-window error message
-#: ../td-client.cpp:383
+#: ../td-client.cpp:384
 #, c++-format
 msgid "Could not get proxies: {}"
 msgstr "S’u morën do ndërmjetës: {}"
 
 #. TRANSLATOR: Authentication dialog, secondary content. Appears after a colon (':'). Argument is a number.
-#: ../td-client.cpp:449
+#: ../td-client.cpp:450
 #, c++-format
 msgid "Telegram message (length: {})"
 msgstr "Mesazh Telegram (gjatësi: {})"
 
 #. TRANSLATOR: Authentication dialog, secondary content. Appears after a colon (':'). Argument is a number.
-#: ../td-client.cpp:453
+#: ../td-client.cpp:454
 #, c++-format
 msgid "SMS (length: {})"
 msgstr "SMS (gjatësi: {})"
 
 #. TRANSLATOR: Authentication dialog, secondary content. Appears after a colon (':'). Argument is a number.
-#: ../td-client.cpp:457
+#: ../td-client.cpp:458
 #, c++-format
 msgid "Phone call (length: {})"
 msgstr "Thirrje telefonike (gjatësi: {})"
 
 #. TRANSLATOR: Authentication dialog, secondary content. Official name "flash call". Appears after a colon (':'). Argument is some text-string-ish.
-#: ../td-client.cpp:461
+#: ../td-client.cpp:462
 #, c++-format
 msgid "Poor man's phone call (pattern: {})"
 msgstr "Thirrje e çastit (model: {})"
 
 #. TRANSLATOR: Authentication dialog, primary content. Will be followed by instructions and an input box.
-#: ../td-client.cpp:472
+#: ../td-client.cpp:473
 msgid "Enter authentication code"
 msgstr "Jepni kod mirëfilltësimi"
 
 #. TRANSLATOR: Authentication dialog, secondary content. Argument will be a term.
-#: ../td-client.cpp:477
+#: ../td-client.cpp:478
 #, c++-format
 msgid "Code sent via: {}"
 msgstr "Kodi u dërgua përmes: {}"
 
 #. TRANSLATOR: Authentication dialog, secondary content. Argument will be a term.
-#: ../td-client.cpp:481
+#: ../td-client.cpp:482
 #, c++-format
 msgid "Next code will be: {}"
 msgstr "Kodi i ardhshëm do të jetë: {}"
 
 #. TRANSLATOR: Authentication dialog, title.
-#: ../td-client.cpp:487
+#: ../td-client.cpp:488
 msgid "Login code"
 msgstr "Kod hyrjeje"
 
 #. TRANSLATOR: Connection failure, error message (title; empty content)
-#: ../td-client.cpp:517
+#: ../td-client.cpp:518
 msgid "Authentication code required"
 msgstr "Lypset kod mirëfilltësimi"
 
 #. TRANSLATOR: Connection failure, error message title (title; empty content)
-#: ../td-client.cpp:532
+#: ../td-client.cpp:533
 msgid "Password required"
 msgstr "Lypset fjalëkalim"
 
 #. TRANSLATOR: 2FA dialog, secondary content, appears in new line. Argument is an arbitrary string from Telegram.
-#: ../td-client.cpp:540
+#: ../td-client.cpp:541
 #, c++-format
 msgid "Hint: {}"
 msgstr "Ndihmëz: {}"
 
 #. TRANSLATOR: 2FA dialog, secondary content, appears in new line. Argument is an e-mail address.
-#: ../td-client.cpp:546
+#: ../td-client.cpp:547
 #, c++-format
 msgid "Recovery e-mail may have been sent to {}"
 msgstr "Email-i i rikthimit mund të jetë dërguar te {}"
 
 #. TRANSLATOR: 2FA dialog, title
-#: ../td-client.cpp:550
+#: ../td-client.cpp:551
 msgid "Password"
 msgstr "Fjalëkalim"
 
 #. TRANSLATOR: 2FA dialog, primary content
-#: ../td-client.cpp:552
+#: ../td-client.cpp:553
 msgid "Enter password for two-factor authentication"
 msgstr "Jepni fjalëkalimin për mirëfilltësim dyfaktorësh"
 
 #. TRANSLATOR: Registration dialog, title
-#: ../td-client.cpp:581
+#: ../td-client.cpp:582
 msgid "Registration"
 msgstr "Regjistrim"
 
 #. TRANSLATOR: Registration dialog, content
-#: ../td-client.cpp:583
+#: ../td-client.cpp:584
 msgid "New account is being created. Please enter your display name."
 msgstr "Llogaria e re po krijohet. Ju lutemi, jepni emrin tuaj për në ekran."
 
 #. TRANSLATOR: Connection error message after failed registration.
-#: ../td-client.cpp:614 ../td-client.cpp:624
+#: ../td-client.cpp:615 ../td-client.cpp:625
 msgid "Display name is required for registration"
 msgstr "Emri në ekran është i domosdoshëm për regjistrim"
 
 #. TRANSLATOR: Connection error message, argument is text (a proper reason)
-#: ../td-client.cpp:641
+#: ../td-client.cpp:642
 #, c++-format
 msgid "Authentication error: {}"
 msgstr "Gabim mirëfilltësimi: {}"
 
 #. TRANSLATOR: In-chat error message, arguments will be a file name and a proper reason
-#: ../td-client.cpp:939
+#: ../td-client.cpp:940
 #, c++-format
 msgid "Could not read sticker file {0}: {1}"
 msgstr "S’u lexua dot kartelë ngjitësi {0}: {1}"
 
 #. TRANSLATOR: Error dialog, content
-#: ../td-client.cpp:1368
+#: ../td-client.cpp:1386
 #, c++-format
 msgid "Failed to add contact: {}"
 msgstr "S’u arrit të shtohej kontakt: {}"
 
 #. TRANSLATOR: Error dialog, title
-#: ../td-client.cpp:1370
+#: ../td-client.cpp:1388
 msgid "Failed to add contact"
 msgstr "S’u arrit të shtohej kontakt"
 
 #. TRANSLATOR: Buddy-window error message, title (no content), argument will be a phone number.
-#: ../td-client.cpp:1496
+#: ../td-client.cpp:1514
 #, c++-format
 msgid "No user found with phone number '{}'"
 msgstr "S’u gjet përdorues me numër telefoni '{}'"
 
 #. TRANSLATOR: Error dialog, content
-#: ../td-client.cpp:1692
+#: ../td-client.cpp:1710
 #, c++-format
 msgid "Failed to join chat: {}"
 msgstr "S’u arrit të hyhej në fjalosje: {}"
 
 #. TRANSLATOR: Error dialog, title
 #. TRANSLATOR: Join error dialog, title
-#: ../td-client.cpp:1694 ../td-client.cpp:1719 ../td-client.cpp:1726
+#: ../td-client.cpp:1712 ../td-client.cpp:1737 ../td-client.cpp:1744
 #: ../tdlib-purple.cpp:552 ../tdlib-purple.cpp:571
 msgid "Failed to join chat"
 msgstr "S’u arrit të hyhej në fjalosje"
 
 #. TRANSLATOR: Error dialog, content
-#: ../td-client.cpp:1721
+#: ../td-client.cpp:1739
 msgid "The name belongs to a user, not a group"
 msgstr "Emri i përket një përdoruesi, jo një grupi"
 
 #. TRANSLATOR: Error dialog, content, argument is a reason (text)
-#: ../td-client.cpp:1724
+#: ../td-client.cpp:1742
 #, c++-format
 msgid "Could not find group: {}"
 msgstr "S’u gjet dot grup: {}"
 
 #. TRANSLATOR: Error dialog, secondary content
-#: ../td-client.cpp:1742
+#: ../td-client.cpp:1760
 msgid "Cannot create basic group without additional members"
 msgstr "S’mund të krijohet grup elementar pa anëtarë shtesë"
 
-#: ../td-client.cpp:1748
+#: ../td-client.cpp:1766
 #, c++-format
 msgid "No known user with id {}"
 msgstr "S’ka përdorues të njohur me ID-në {}"
 
 #. TRANSLATOR: Error dialog, secondary content, argument is a username
-#: ../td-client.cpp:1757
+#: ../td-client.cpp:1775
 #, c++-format
 msgid "No known user by the name '{}'"
 msgstr "S’ka përdorues të njohur me emrin '{}'"
 
 #. TRANSLATOR: Error dialog, title
-#: ../td-client.cpp:1771
+#: ../td-client.cpp:1789
 msgid "Failed to create group"
 msgstr "S’u arrit të krijohej grup"
 
 #. TRANSLATOR: Error dialog, primary content
-#: ../td-client.cpp:1773
+#: ../td-client.cpp:1791
 msgid "Invalid group members"
 msgstr "Anëtarë të pavlefshëm grupi"
 
 #. TRANSLATOR: Error dialog, title
-#: ../td-client.cpp:1836
+#: ../td-client.cpp:1854
 msgid "Failed to delete group or channel"
 msgstr "S’u arrit të fshihej grup ose kanal"
 
 #. TRANSLATOR: Error dialog, title
-#: ../td-client.cpp:1863
+#: ../td-client.cpp:1881
 msgid "Failed to set group description"
 msgstr "S’u arrit të caktohej përshkrim grupi"
 
 #. TRANSLATOR: In-chat error message, appears after a colon (':')
 #. TRANSLATOR: Buddy infobox, error
-#: ../td-client.cpp:1882 ../td-client.cpp:1957 ../tdlib-purple.cpp:366
+#: ../td-client.cpp:1900 ../td-client.cpp:1975 ../tdlib-purple.cpp:366
 msgid "User not found"
 msgstr "S’u gjet përdoruesi"
 
 #. TRANSLATOR: In-chat error message, argument is a reason (text)
-#: ../td-client.cpp:1886 ../td-client.cpp:1923
+#: ../td-client.cpp:1904 ../td-client.cpp:1941
 #, c++-format
 msgid "Cannot kick user: {}"
 msgstr "S’mund të përzihet përdoruesi: {}"
 
 #. TRANSLATOR: In-chat error message, argument is a reason (text)
-#: ../td-client.cpp:1927 ../td-client.cpp:1961
+#: ../td-client.cpp:1945 ../td-client.cpp:1979
 #, c++-format
 msgid "Cannot add user to group: {}"
 msgstr "S’mund të shtohet përdorues te grupi: {}"
 
 #. TRANSLATOR: In-chat error message, argument is a reason (text)
-#: ../td-client.cpp:1931
+#: ../td-client.cpp:1949
 #, c++-format
 msgid "Cannot generate invite link: {}"
 msgstr "S’mund të prodhohet lidhje ftese: {}"
 
 #. "description" is hard-coded in bitlbee as possible field for chat topic
 #. TRANSLATOR: Groupchat infobox key
-#: ../td-client.cpp:2022
+#: ../td-client.cpp:2040
 msgid "Description"
 msgstr "Përshkrim"
 
 #. TRANSLATOR: 2FA setup confirmation dialog, secondary content, argument is an e-mail description (address and code length)
-#: ../td-client.cpp:2070
+#: ../td-client.cpp:2088
 #, c++-format
 msgid ""
 "Password will be changed after new e-mail is confirmed\n"
@@ -665,70 +666,70 @@ msgstr ""
 #. TRANSLATOR: 2FA success notification, title
 #. TRANSLATOR: 2FA failure notification, title
 #. TRANSLATOR: 2FA settings, title
-#: ../td-client.cpp:2073 ../td-client.cpp:2093 ../td-client.cpp:2119
-#: ../td-client.cpp:2142 ../td-client.cpp:2146 ../tdlib-purple.cpp:1137
+#: ../td-client.cpp:2091 ../td-client.cpp:2111 ../td-client.cpp:2137
+#: ../td-client.cpp:2160 ../td-client.cpp:2164 ../tdlib-purple.cpp:1143
 msgid "Two-factor authentication"
 msgstr "Mirëfilltësim dyfaktorësh"
 
 #. TRANSLATOR: 2FA setup confirmation dialog, primary content
-#: ../td-client.cpp:2075
+#: ../td-client.cpp:2093
 msgid "Enter verification code received in the e-mail"
 msgstr "Jepni kod verifikimi të marrë te email-i"
 
 #. TRANSLATOR: 2FA success notification, primary content
-#: ../td-client.cpp:2095
+#: ../td-client.cpp:2113
 msgid "Password set"
 msgstr "Fjalëkalimi u caktua"
 
 #. TRANSLATOR: 2FA success notification, primary content
-#: ../td-client.cpp:2097
+#: ../td-client.cpp:2115
 msgid "Password cleared"
 msgstr "Fjalëkalimi u spastrua"
 
 #. TRANSLATOR: 2FA success notification, secondary content
-#: ../td-client.cpp:2099
+#: ../td-client.cpp:2117
 msgid "Recovery e-mail is configured"
 msgstr "Email-i i rikthimeve është formësuar"
 
 #. TRANSLATOR: 2FA success notification, secondary content
-#: ../td-client.cpp:2101
+#: ../td-client.cpp:2119
 msgid "No recovery e-mail configured"
 msgstr "S’është formësuar email rikthimesh"
 
 #. TRANSLATOR: 2FA setup confirmation dialog, e-mail description
-#: ../td-client.cpp:2110
+#: ../td-client.cpp:2128
 #, c++-format
 msgid "Code sent to {0} (length: {1})"
 msgstr "Kod i dërguar për {0} (gjatësi: {1})"
 
 #. TRANSLATOR: 2FA failure notification, primary content
-#: ../td-client.cpp:2121
+#: ../td-client.cpp:2139
 msgid "Failed to set password"
 msgstr "S’u arrit të caktohet fjalëkalim"
 
 #. TRANSLATOR: 2FA failure notification, content
-#: ../td-client.cpp:2148
+#: ../td-client.cpp:2166
 msgid "Looks like the code was wrong"
 msgstr "Duket sikur kodi të qe gabim"
 
 #. TRANSLATOR: In-chat error message
-#: ../td-client.cpp:2233
+#: ../td-client.cpp:2251
 msgid "Unable to send message: The message is too large."
 msgstr "S’arrihet të dërgohet mesazh: Mesazhi është shumë i madh."
 
 #. TRANSLATOR: In-chat error message
-#: ../td-client.cpp:2236
+#: ../td-client.cpp:2254
 msgid "Unable to send message."
 msgstr "S’arrihet të dërgohet mesazh."
 
 #. TRANSLATOR: In-chat(?) error message, argument is an error description (text)
-#: ../td-client.cpp:2240
+#: ../td-client.cpp:2258
 #, c++-format
 msgid "Failed to open chat: {}"
 msgstr "S’u arrit të hapej fjalosje: {}"
 
 #. TRANSLATOR: Failure notification, title
-#: ../td-client.cpp:2321
+#: ../td-client.cpp:2339
 msgid "Failed to create secret chat"
 msgstr "S’u arrit të krijohet fjalosje e fshehtë"
 
@@ -971,43 +972,48 @@ msgstr "Shfaq ngjitës të animuar"
 msgid "Show self-destructing messages anyway"
 msgstr "Shfaq sido qoftë mesazhe të vetëasgjësueshëm"
 
+#. TRANSLATOR: Account settings, key (boolean)
+#: ../tdlib-purple.cpp:1095
+msgid "Show messages from channels and groups you have not joined"
+msgstr "Shfaq mesazhe nga kanale dhe grupe ku s’jeni bërë pjesë"
+
 #. TRANSLATOR: 2FA settings, key
-#: ../tdlib-purple.cpp:1110
+#: ../tdlib-purple.cpp:1116
 msgid "Current password"
 msgstr "Fjalëkalimi i tanishëm"
 
 #. TRANSLATOR: 2FA settings, key
-#: ../tdlib-purple.cpp:1115
+#: ../tdlib-purple.cpp:1121
 msgid "New password"
 msgstr "Fjalëkalim i ri"
 
 #. TRANSLATOR: 2FA settings, key
-#: ../tdlib-purple.cpp:1120
+#: ../tdlib-purple.cpp:1126
 msgid "Repeat password"
 msgstr "Përsëritni fjalëkalimin"
 
 #. TRANSLATOR: 2FA settings, key
-#: ../tdlib-purple.cpp:1125
+#: ../tdlib-purple.cpp:1131
 msgid "Password hint"
 msgstr "Ndihmëz fjalëkalimi"
 
 #. TRANSLATOR: 2FA settings, key
-#: ../tdlib-purple.cpp:1129
+#: ../tdlib-purple.cpp:1135
 msgid "Recovery e-mail"
 msgstr "Email rimarrjesh"
 
 #. TRANSLATOR: 2FA settings, primary content (after mistype)
-#: ../tdlib-purple.cpp:1150
+#: ../tdlib-purple.cpp:1156
 msgid "Please enter same password twice"
 msgstr "Ju lutemi, jepeni fjalëkalimin dy herë"
 
 #. TRANSLATOR: 2FA settings, primary content
-#: ../tdlib-purple.cpp:1181
+#: ../tdlib-purple.cpp:1187
 msgid "Enter new password and recovery e-mail address"
 msgstr "Jepni fjalëkalim të ri dhe adresë email rimarrjesh"
 
 #. TRANSLATOR: 2FA settings, title
-#: ../tdlib-purple.cpp:1190
+#: ../tdlib-purple.cpp:1196
 msgid "Configure two-factor authentication..."
 msgstr "Formësoni mirëfilltësim dyfaktorësh…"
 
