@@ -945,6 +945,50 @@ object_ptr<messagePhoto> makeMessagePhoto(object_ptr<photo> &&photo_, object_ptr
     return result;
 }
 
+static object_ptr<location> makeLocationObject(double latitude, double longitude, double accuracy)
+{
+    auto result = make_object<location>();
+    result->latitude_            = latitude;
+    result->longitude_           = longitude;
+    result->horizontal_accuracy_ = accuracy;
+    return result;
+}
+
+object_ptr<MessageContent> makeMessageLocation(double latitude, double longitude, double accuracy,
+                                               std::int32_t livePeriod, std::int32_t expiresIn)
+{
+#if TDLIB_API_LIVE_LOCATION
+    if (livePeriod) {
+        auto live = make_object<liveLocation>();
+        live->location_    = makeLocationObject(latitude, longitude, accuracy);
+        live->live_period_ = livePeriod;
+        auto result = make_object<messageLiveLocation>();
+        result->location_   = std::move(live);
+        result->expires_in_ = expiresIn;
+        return result;
+    }
+#endif
+    auto result = make_object<messageLocation>();
+    result->location_ = makeLocationObject(latitude, longitude, accuracy);
+#if !TDLIB_API_LIVE_LOCATION
+    result->live_period_ = livePeriod;
+    result->expires_in_  = expiresIn;
+#endif
+    return result;
+}
+
+object_ptr<messageVenue> makeMessageVenue(double latitude, double longitude, const std::string &title,
+                                          const std::string &address)
+{
+    auto place = make_object<venue>();
+    place->location_ = makeLocationObject(latitude, longitude, 0);
+    place->title_    = title;
+    place->address_  = address;
+    auto result = make_object<messageVenue>();
+    result->venue_ = std::move(place);
+    return result;
+}
+
 object_ptr<messageVideo> makeMessageVideo(object_ptr<video> &&video_,
                                           std::vector<object_ptr<alternativeVideo>> &&alternative_videos_,
                                           object_ptr<photo> &&cover_, std::int32_t start_timestamp_,

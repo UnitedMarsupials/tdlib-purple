@@ -109,6 +109,11 @@ object_ptr<messageVideo> makeMessageVideo(object_ptr<video> &&video_,
                                           object_ptr<photo> &&cover_, std::int32_t start_timestamp_,
                                           object_ptr<formattedText> &&caption_,
                                           bool show_caption_above_media_, bool has_spoiler_, bool is_secret_);
+// A location, live if livePeriod is not 0; TDLib 1.8.65 made live locations a type of their own
+object_ptr<MessageContent> makeMessageLocation(double latitude, double longitude, double accuracy,
+                                               std::int32_t livePeriod = 0, std::int32_t expiresIn = 0);
+object_ptr<messageVenue> makeMessageVenue(double latitude, double longitude, const std::string &title,
+                                          const std::string &address);
 object_ptr<messageCall> makeMessageCall(bool is_video_, object_ptr<CallDiscardReason> &&discard_reason_,
                                         std::int32_t duration_);
 object_ptr<chatMemberStatusCreator> makeChatMemberStatusCreator(std::string const &custom_title_,

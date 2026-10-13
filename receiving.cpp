@@ -7,6 +7,7 @@
 #include "config.h"
 #include "call.h"
 #include <algorithm>
+#include <fmt/format.h>
 
 enum {
     HISTORY_MESSAGES_ABSOLUTE_LIMIT = 80
@@ -91,6 +92,86 @@ static std::string getFileKey(const td::td_api::file *file)
     if (file->remote_ && !file->remote_->unique_id_.empty())
         return file->remote_->unique_id_;
     return std::to_string(file->id_);
+}
+
+// A location a message holds: where, and in the case of a venue, what is there. A live one has a
+// period it was shared for, and the time left of it; TDLib 1.8.65 gave it a type of its own.
+struct ShownLocation {
+    const td::td_api::location *location   = nullptr;
+    const td::td_api::venue    *venue      = nullptr;
+    int32_t                     livePeriod = 0; // 0 if not live, 0x7FFFFFFF if without end
+    int32_t                     expiresIn  = 0;
+};
+
+static bool getShownLocation(const td::td_api::MessageContent &content, ShownLocation &result)
+{
+    switch (content.get_id()) {
+        case td::td_api::messageVenue::ID: {
+            const auto &venue = static_cast<const td::td_api::messageVenue &>(content);
+            result.venue = venue.venue_.get();
+            if (result.venue)
+                result.location = result.venue->location_.get();
+            break;
+        }
+        case td::td_api::messageLocation::ID: {
+            const auto &location = static_cast<const td::td_api::messageLocation &>(content);
+            result.location = location.location_.get();
+#if !TDLIB_API_LIVE_LOCATION
+            result.livePeriod = location.live_period_;
+            result.expiresIn  = location.expires_in_;
+#endif
+            break;
+        }
+#if TDLIB_API_LIVE_LOCATION
+        case td::td_api::messageLiveLocation::ID: {
+            const auto &location = static_cast<const td::td_api::messageLiveLocation &>(content);
+            if (location.location_) {
+                result.location   = location.location_->location_.get();
+                result.livePeriod = location.location_->live_period_;
+            }
+            result.expiresIn = location.expires_in_;
+            break;
+        }
+#endif
+    }
+
+    return (result.location != nullptr);
+}
+
+static bool isStoppedLiveLocation(const ShownLocation &location)
+{
+    return (location.livePeriod != 0) && (location.expiresIn == 0);
+}
+
+// A link to the place as a geo: URI (RFC 5870), which leaves the choice of map to whatever opens
+// it. The coordinates are written the same in every locale, with a decimal point.
+static std::string makeLocationText(const ShownLocation &shown)
+{
+    const td::td_api::location &location = *shown.location;
+    std::string coordinates = fmt::format("{:.6f}, {:.6f}", location.latitude_, location.longitude_);
+    std::string uri         = fmt::format("geo:{:.6f},{:.6f}", location.latitude_, location.longitude_);
+    if (location.horizontal_accuracy_ > 0)
+        uri += fmt::format(";u={:.0f}", location.horizontal_accuracy_);
+    std::string link = "<a href=\"" + escapeForDisplay(makeLinkTarget(uri)) + "\">" + coordinates + "</a>";
+
+    std::string text;
+    if (shown.venue) {
+        text = "<b>" + escapeForDisplay(shown.venue->title_) + "</b>\n";
+        if (!shown.venue->address_.empty())
+            text += escapeForDisplay(shown.venue->address_) + "\n";
+    }
+
+    if ((shown.livePeriod == 0) || isStoppedLiveLocation(shown))
+        // TRANSLATOR: In-chat message. Argument is a hyperlink, showing map coordinates.
+        text += formatMessage(_("Location: {}"), link);
+    else if (shown.livePeriod == 0x7FFFFFFF)
+        // TRANSLATOR: In-chat message, for a location shared live with no end set. Argument is a hyperlink, showing map coordinates.
+        text += formatMessage(_("Live location: {}"), link);
+    else
+        // TRANSLATOR: In-chat message. Arguments are the time (or date and time) the live location will cease to be shared at, and a hyperlink, showing map coordinates.
+        text += formatMessage(_("Live location until {0}: {1}"),
+                              {formatMessageTime(time(NULL) + shown.expiresIn), link});
+    return text;
 }
 
 // What the conversation shows of a message's content, as far as its sender can change it.
@@ -180,17 +261,21 @@ static void getShownContent(const td::td_api::MessageContent &content, ShownMess
                 result.content = "closed";
             break;
         }
+        case td::td_api::messageLocation::ID:
 #if TDLIB_API_LIVE_LOCATION
         case td::td_api::messageLiveLocation::ID:
-            // It moves all the time
-            break;
-#else
-        case td::td_api::messageLocation::ID:
-            // A live location moves all the time, while one that is not live stays put
-            if (static_cast<const td::td_api::messageLocation &>(content).live_period_ == 0)
-                result.content = describeUnsupportedContent(content);
-            break;
 #endif
+        {
+            // A live location moves all the time, which is no edit; that it no longer does is shown
+            ShownLocation location;
+            if (getShownLocation(content, location)) {
+                if (location.livePeriod == 0)
+                    result.content = makeLocationText(location);
+                else if (isStoppedLiveLocation(location))
+                    result.content = "stopped";
+            }
+            break;
+        }
         default:
             // Its type only: Telegram updates some on its own, as a dice once it has been rolled
             result.content = std::to_string(content.get_id());
@@ -412,6 +497,19 @@ static std::string quoteMessage(const td::td_api::message *message, TdAccountDat
             const td::td_api::messageAnimatedEmoji &animatedEmoji =
                 static_cast<const td::td_api::messageAnimatedEmoji &>(*message->content_);
             text = animatedEmoji.emoji_;
+            break;
+        }
+        case td::td_api::messageLocation::ID:
+#if TDLIB_API_LIVE_LOCATION
+        case td::td_api::messageLiveLocation::ID:
+#endif
+        case td::td_api::messageVenue::ID: {
+            ShownLocation location;
+            getShownLocation(*message->content_, location);
+            // TRANSLATOR: In-line placeholder when a location is being replied to.
+            text = _("[location]");
+            if (location.venue)
+                text += " " + location.venue->title_;
             break;
         }
         default:
@@ -860,6 +958,22 @@ static void showStickerMessage(const td::td_api::chat &chat, IncomingMessage &fu
 
 static void showPendingEdit(TdAccountData &account, ChatId chatId, MessageId messageId);
 
+static void showUnsupportedMessage(const td::td_api::chat &chat, const TgMessageInfo &messageInfo,
+                                   const td::td_api::MessageContent &content, TdAccountData &account)
+{
+    // TRANSLATOR: In-chat error message, argument will be a Telegram type.
+    std::string notice = getUnsupportedMessageDescription(content);
+    notice = makeNoticeWithSender(chat, messageInfo, notice.c_str(), account.purpleAccount);
+    showMessageText(account, chat, messageInfo, NULL, notice.c_str());
+
+    // Show what the message holds anyway, in TDLib's own words. Escaping is what keeps any
+    // markup in it inert; the font merely lines up the indentation.
+    std::string text = "\n<font face=\"monospace\">" +
+                       escapeForDisplay(describeUnsupportedContent(content)) + "</font>";
+    showMessageText(account, chat, messageInfo, text.c_str(), NULL);
+}
+
+
 // Introduces a message shown again because it was edited. Returns true if that already says
 // it all, which is when only its caption changed.
 static bool showEditNotice(const td::td_api::chat &chat, IncomingMessage &fullMessage,
@@ -872,8 +986,13 @@ static bool showEditNotice(const td::td_api::chat &chat, IncomingMessage &fullMe
     FileInfo             fileInfo;
     getFileFromMessage(fullMessage, fileInfo);
 
-    std::string notice;
-    if (fullMessage.captionOnly && fileInfo.caption.empty())
+    ShownLocation location;
+    std::string   notice;
+    if (fullMessage.message->content_ && getShownLocation(*fullMessage.message->content_, location) &&
+        isStoppedLiveLocation(location))
+        // TRANSLATOR: In-chat notification, followed by the last position. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
+        notice = formatMessage(_("{0} stops sharing the live location from {1}:"), {sender, sentAt});
+    else if (fullMessage.captionOnly && fileInfo.caption.empty())
         // TRANSLATOR: In-chat notification. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
         notice = formatMessage(_("{0} removes the caption of the message from {1}"), {sender, sentAt});
     else
@@ -988,18 +1107,22 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
             showMessageText(account, chat, messageInfo, animatedEmoji.emoji_.c_str(), NULL);
             break;
         }
-        default: {
-            // TRANSLATOR: In-chat error message, argument will be a Telegram type.
-            std::string notice = getUnsupportedMessageDescription(*message.content_);
-            notice = makeNoticeWithSender(chat, messageInfo, notice.c_str(), account.purpleAccount);
-            showMessageText(account, chat, messageInfo, NULL, notice.c_str());
-
-            // Show what the message holds anyway, in TDLib's own words. Escaping is what keeps any
-            // markup in it inert; the font merely lines up the indentation.
-            std::string text = "\n<font face=\"monospace\">" +
-                               escapeForDisplay(describeUnsupportedContent(*message.content_)) + "</font>";
-            showMessageText(account, chat, messageInfo, text.c_str(), NULL);
+        case td::td_api::messageLocation::ID:
+#if TDLIB_API_LIVE_LOCATION
+        case td::td_api::messageLiveLocation::ID:
+#endif
+        case td::td_api::messageVenue::ID: {
+            ShownLocation location;
+            if (getShownLocation(*message.content_, location)) {
+                std::string text = makeLocationText(location);
+                showMessageText(account, chat, messageInfo, text.c_str(), NULL);
+            } else
+                // Not supposed to be possible, but just in case
+                showUnsupportedMessage(chat, messageInfo, *message.content_, account);
+            break;
         }
+        default:
+            showUnsupportedMessage(chat, messageInfo, *message.content_, account);
     }
 
     // Put it back - may be needed if long download is in progress
