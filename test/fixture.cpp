@@ -104,6 +104,12 @@ void CommTest::login(std::initializer_list<object_ptr<Object>> extraUpdates, obj
         selfPhoneNumber, // Phone number here without + to make it more interesting
         make_object<userStatusOffline>()
     )));
+    auto myId = make_object<td::td_api::updateOption>();
+    myId->name_ = "my_id";
+    auto myIdValue = make_object<optionValueInteger>();
+    myIdValue->value_ = selfId;
+    myId->value_ = std::move(myIdValue);
+    tgl.update(std::move(myId));
     for (const object_ptr<Object> &update: extraUpdates)
         tgl.update(std::move(const_cast<object_ptr<Object> &>(update))); // Take that!
     prpl.verifyEvents2(std::move(postUpdateEvents));

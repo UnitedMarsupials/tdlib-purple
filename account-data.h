@@ -335,6 +335,7 @@ public:
     struct {
         unsigned maxCaptionLength = 0;
         unsigned maxMessageLength = 0;
+        int64_t  myUserId         = 0;
     } options;
 
     PurpleAccount *const  purpleAccount;
