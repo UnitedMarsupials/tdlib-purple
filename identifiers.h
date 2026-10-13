@@ -77,6 +77,8 @@ DEFINE_ID_CLASS(ChatId, int64_t)
     friend ChatId getChatId(const td::td_api::message &message);
     friend ChatId getChatId(const td::td_api::updateChatAction &update);
     friend ChatId getChatId(const td::td_api::updateChatLastMessage &update);
+    friend ChatId getChatId(const td::td_api::updateMessageContent &update);
+    friend ChatId getChatId(const td::td_api::updateDeleteMessages &update);
 };
 
 DEFINE_ID_CLASS(BasicGroupId, int64_t)
@@ -99,6 +101,9 @@ DEFINE_ID_CLASS(SecretChatId, int32_t)
 DEFINE_ID_CLASS(MessageId, int64_t)
     friend MessageId getId(const td::td_api::message &message);
     friend MessageId getReplyMessageId(const td::td_api::message &message);
+    friend MessageId getMessageId(const td::td_api::updateMessageContent &update);
+    friend MessageId getMessageId(const td::td_api::updateDeleteMessages &update, unsigned index);
+    friend MessageId getOldMessageId(const td::td_api::updateMessageSendSucceeded &update);
 };
 
 #undef DEFINE_ID_CLASS
@@ -128,6 +133,8 @@ ChatId       getChatId(const td::td_api::messageOriginChannel &forwardOrigin);
 ChatId       getChatId(const td::td_api::message &message);
 ChatId       getChatId(const td::td_api::updateChatAction &update);
 ChatId       getChatId(const td::td_api::updateChatLastMessage &update);
+ChatId       getChatId(const td::td_api::updateMessageContent &update);
+ChatId       getChatId(const td::td_api::updateDeleteMessages &update);
 
 BasicGroupId getBasicGroupId(const td::td_api::updateBasicGroupFullInfo &update);
 BasicGroupId getBasicGroupId(const td::td_api::chatTypeBasicGroup &chatType);
@@ -138,6 +145,9 @@ SupergroupId getSupergroupId(const td::td_api::chatTypeSupergroup &chatType);
 SecretChatId getSecretChatId(const td::td_api::chatTypeSecret &update);
 
 MessageId    getReplyMessageId(const td::td_api::message &message);
+MessageId    getMessageId(const td::td_api::updateMessageContent &update);
+MessageId    getMessageId(const td::td_api::updateDeleteMessages &update, unsigned index);
+MessageId    getOldMessageId(const td::td_api::updateMessageSendSucceeded &update);
 
 namespace std {
     static inline std::string to_string(UserId id) { return to_string(id.value()); }

@@ -18,6 +18,9 @@
 // inputMessagePhoto and inputMessageDocument wrap their file in an inputPhoto
 // and inputDocument, which also hold what used to sit beside it (1.8.65)
 #define TDLIB_API_INPUT_PHOTO      ${TDLIB_API_INPUT_PHOTO}
+// a live location is a messageLiveLocation, no longer a messageLocation with a
+// live_period (1.8.65)
+#define TDLIB_API_LIVE_LOCATION    ${TDLIB_API_LIVE_LOCATION}
 
 #cmakedefine NoWebp
 
