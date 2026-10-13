@@ -11,6 +11,7 @@
 
 - **TDLib's log goes to the debug window instead of stderr.**
 - **File links work in front-ends other than Pidgin.**
+- **Channels you are not a member of no longer open conversations.**
 
 ### Translations
 
