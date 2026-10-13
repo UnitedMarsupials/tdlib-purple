@@ -5,10 +5,12 @@
 ### Features
 
 - **Edits and deletions of messages already shown are reported in the conversation.**
+- **Locations, venues and live locations are shown as `geo:` links.**
 
 ### Fixes
 
 - **TDLib's log goes to the debug window instead of stderr.**
+- **File links work in front-ends other than Pidgin.**
 
 ## 0.9.2 (2026-10-11)
 
