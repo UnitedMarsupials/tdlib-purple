@@ -26,7 +26,7 @@ static std::string makeFileUri(const std::string &filePath)
     return result;
 }
 
-// ...and then the scheme has to be written twice, which deserves an explanation.
+// ...and then, for Pidgin, the scheme has to be written twice, which deserves an explanation.
 //
 // Pidgin does not treat the target of a "file://" link as a URI at all. Its handler
 // strips the scheme and passes the remainder to purple_notify_uri() as if it were a plain
@@ -40,9 +40,20 @@ static std::string makeFileUri(const std::string &filePath)
 // correctly encoded URI. purple_uri_escape_for_open() permits "%" and "/" and passes such
 // a URI through untouched, and every opener it may invoke - xdg-open, gnome-open,
 // kfmclient - accepts a URI as readily as a path.
+//
+// The same handler is the only way Pidgin opens a URI of a scheme it does not know, such as
+// "geo:": it follows a link only if it has registered the scheme, and does nothing at all
+// otherwise. Other front-ends take a link as it is written, and get it so.
+static std::string makeLinkTarget(const std::string &uri)
+{
+    if (!strcasecmp(getUiName(), "pidgin"))
+        return "file://" + uri;
+    return uri;
+}
+
 static std::string makeFileLinkTarget(const std::string &filePath)
 {
-    return "file://" + makeFileUri(filePath);
+    return makeLinkTarget(makeFileUri(filePath));
 }
 
 // Anything chosen by a remote party - a file name, a contact's display name, a group
