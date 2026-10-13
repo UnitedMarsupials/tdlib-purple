@@ -394,7 +394,7 @@ msgstr "{0} edytuje wiadomość z {1}:"
 #: ../receiving.cpp:1092
 #, c++-format
 msgid "{0} changed group name to {1}"
-msgstr "Nazwa grupy „{0}” została zmieniona na „{1}”"
+msgstr "{0} zmienia nazwę grupy na „{1}”"
 
 #. TRANSLATOR: In-chat notification. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
 #: ../receiving.cpp:1717
