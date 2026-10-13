@@ -618,3 +618,44 @@ TEST_F(SupergroupTest, ReceiveChannelPost)
 }
 
 // TODO: test non-user member
+
+TEST_F(SupergroupTest, ForeignChannel)
+{
+    constexpr int32_t date         = 12345;
+    constexpr int64_t messageId    = 10000;
+    constexpr int     purpleChatId = 1;
+    login();
+
+    // A channel TDLib knows of, such as one linked to a group we are in, without our being a
+    // member of it: its posts are none of ours
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusLeft>(), 2)));
+    tgl.update(make_object<updateNewChat>(makeChat(
+        groupChatId, make_object<chatTypeSupergroup>(groupId, true), groupChatTitle,
+        nullptr, 0, 0, 0
+    )));
+    prpl.discardEvents();
+
+    auto message = makeMessage(messageId, 0, groupChatId, false, date, makeTextMessage("Hello"));
+    message->is_channel_post_ = true;
+    tgl.update(make_object<updateNewMessage>(std::move(message)));
+    prpl.verifyNoEvents();
+    tgl.verifyNoRequests();
+
+    // ...until we join it
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusMember>(), 2)));
+    tgl.update(makeUpdateChatListMain(groupChatId));
+    prpl.discardEvents();
+    tgl.verifyRequests({
+        make_object<getSupergroupFullInfo>(groupId),
+        make_object<getSupergroupMembers>(groupId, make_object<supergroupMembersFilterRecent>(), 0, 200),
+    });
+
+    message = makeMessage(messageId + 1, 0, groupChatId, false, date, makeTextMessage("Welcome"));
+    message->is_channel_post_ = true;
+    tgl.update(make_object<updateNewMessage>(std::move(message)));
+    tgl.verifyRequest(viewMessages(groupChatId, {messageId + 1}, nullptr, true));
+    prpl.verifyEvents(
+        ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
+        ServGotChatEvent(connection, purpleChatId, "Channel post", "Welcome", PURPLE_MESSAGE_RECV, date)
+    );
+}

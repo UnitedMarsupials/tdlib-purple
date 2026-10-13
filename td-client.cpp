@@ -95,7 +95,8 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         purple_debug_misc(config::pluginId, "Incoming update: new chat\n");
         // Every chat TDLib tells us about is tracked, including a group we are not a member of:
         // joining one later produces no second updateNewChat, so a chat dropped here could never
-        // be picked up again. Whether it belongs in the buddy list is updateChat's decision.
+        // be picked up again. Whether it belongs in the buddy list is updateChat's decision, and
+        // whether its messages are shown is onIncomingMessage's (see isForeignGroupChat).
         addChat(std::move(newChat.chat_));
 
         break;
@@ -956,6 +957,13 @@ void PurpleTdClient::onIncomingMessage(td::td_api::object_ptr<td::td_api::messag
     if (!message)
         return;
     ChatId chatId = getChatId(*message);
+
+    // Nor are its earlier messages fetched
+    if (m_data.isForeignGroupChat(chatId)) {
+        purple_debug_misc(config::pluginId, "Ignoring message %" G_GINT64_FORMAT " in chat %" G_GINT64_FORMAT
+                          ", a group we are not a member of\n", message->id_, chatId.value());
+        return;
+    }
 
     auto pGap = std::find_if(m_chatGaps.begin(), m_chatGaps.end(),
                              [chatId](const ChatGap &gap) { return (gap.chatId == chatId); });

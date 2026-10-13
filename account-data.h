@@ -380,6 +380,7 @@ public:
     const td::td_api::chat       *getBasicGroupChatByGroup(BasicGroupId groupId) const;
     const td::td_api::chat       *getSupergroupChatByGroup(SupergroupId groupId) const;
     bool                          isGroupChatWithMembership(const td::td_api::chat &chat) const;
+    bool                          isForeignGroupChat(ChatId chatId);
 
     const td::td_api::chat       *getChatBySecretChat(SecretChatId secretChatId);
 
@@ -453,8 +454,10 @@ private:
     struct ChatInfo {
         int32_t   purpleId;
         TdChatPtr chat;
+        // A group we were not a member of when TDLib first told us of it (see isForeignGroupChat)
+        bool      foreign;
 
-        ChatInfo() : purpleId(0), chat() {}
+        ChatInfo() : purpleId(0), chat(), foreign(false) {}
     };
 
     struct GroupInfo {
