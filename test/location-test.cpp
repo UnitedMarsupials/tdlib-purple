@@ -84,17 +84,12 @@ TEST_F(LocationTest, LiveLocationStopped)
     char sentAt[80];
     time_t timestamp = date;
     strftime(sentAt, sizeof(sentAt), "%x %X", localtime(&timestamp));
-    prpl.verifyEvents(
-        ConversationWriteEvent(
-            purpleUserName(0), purpleUserName(0),
-            userFirstNames[0] + " " + userLastNames[0] + " stops sharing the live location from " +
-            sentAt + ":",
-            PURPLE_MESSAGE_SYSTEM, editDate
-        ),
-        ServGotImEvent(connection, purpleUserName(0),
-                       "Location: <a href=\"file://geo:50.450300,30.523600\">50.450300, 30.523600</a>",
-                       PURPLE_MESSAGE_RECV, editDate)
-    );
+    prpl.verifyEvents(ConversationWriteEvent(
+        purpleUserName(0), purpleUserName(0),
+        userFirstNames[0] + " " + userLastNames[0] + " stopped sharing the live location from " +
+        sentAt + ": <a href=\"file://geo:50.450300,30.523600\">50.450300, 30.523600</a>",
+        PURPLE_MESSAGE_SYSTEM, editDate
+    ));
     tgl.verifyNoRequests();
 }
 

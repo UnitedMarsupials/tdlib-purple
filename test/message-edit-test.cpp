@@ -73,15 +73,12 @@ TEST_F(MessageEditTest, TextEdited)
                                              makeTextMessage("new"));
     edited->edit_date_ = editDate;
     tgl.reply(std::move(edited));
-    prpl.verifyEvents(
-        ConversationWriteEvent(
-            purpleUserName(0), purpleUserName(0),
-            userFirstNames[0] + " " + userLastNames[0] + " edits the message from " +
-            messageTime(date) + ":",
-            PURPLE_MESSAGE_SYSTEM, editDate
-        ),
-        ServGotImEvent(connection, purpleUserName(0), "new", PURPLE_MESSAGE_RECV, editDate)
-    );
+    prpl.verifyEvents(ConversationWriteEvent(
+        purpleUserName(0), purpleUserName(0),
+        userFirstNames[0] + " " + userLastNames[0] + " edited the message from " +
+        messageTime(date) + ": new",
+        PURPLE_MESSAGE_SYSTEM, editDate
+    ));
     tgl.verifyNoRequests();
 }
 
@@ -142,16 +139,13 @@ TEST_F(MessageEditTest, CaptionEdited)
                                              makePhoto("bleh", "new"));
     edited->edit_date_ = editDate;
     tgl.reply(std::move(edited));
-    // The picture is the same, so only the caption is shown again
-    prpl.verifyEvents(
-        ConversationWriteEvent(
-            purpleUserName(0), purpleUserName(0),
-            userFirstNames[0] + " " + userLastNames[0] + " edits the message from " +
-            messageTime(date) + ":",
-            PURPLE_MESSAGE_SYSTEM, editDate
-        ),
-        ServGotImEvent(connection, purpleUserName(0), "new", PURPLE_MESSAGE_RECV, editDate)
-    );
+    // The picture is the same, so only the caption is shown again, on the same line
+    prpl.verifyEvents(ConversationWriteEvent(
+        purpleUserName(0), purpleUserName(0),
+        userFirstNames[0] + " " + userLastNames[0] + " edited the message from " +
+        messageTime(date) + ": new",
+        PURPLE_MESSAGE_SYSTEM, editDate
+    ));
     tgl.verifyNoRequests();
 }
 
@@ -170,7 +164,7 @@ TEST_F(MessageEditTest, CaptionRemoved)
     prpl.verifyEvents(
         ConversationWriteEvent(
             purpleUserName(0), purpleUserName(0),
-            userFirstNames[0] + " " + userLastNames[0] + " removes the caption of the message from " +
+            userFirstNames[0] + " " + userLastNames[0] + " removed the caption of the message from " +
             messageTime(date),
             PURPLE_MESSAGE_SYSTEM, editDate
         )
@@ -194,7 +188,7 @@ TEST_F(MessageEditTest, PhotoReplaced)
     prpl.verifyEvents(
         ConversationWriteEvent(
             purpleUserName(0), purpleUserName(0),
-            userFirstNames[0] + " " + userLastNames[0] + " edits the message from " +
+            userFirstNames[0] + " " + userLastNames[0] + " edited the message from " +
             messageTime(date) + ":",
             PURPLE_MESSAGE_SYSTEM, editDate
         ),

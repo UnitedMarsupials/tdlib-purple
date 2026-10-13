@@ -145,15 +145,18 @@ static bool isStoppedLiveLocation(const ShownLocation &location)
 
 // A link to the place as a geo: URI (RFC 5870), which leaves the choice of map to whatever opens
 // it. The coordinates are written the same in every locale, with a decimal point.
-static std::string makeLocationText(const ShownLocation &shown)
+static std::string makeLocationLink(const td::td_api::location &location)
 {
-    const td::td_api::location &location = *shown.location;
     std::string coordinates = fmt::format("{:.6f}, {:.6f}", location.latitude_, location.longitude_);
     std::string uri         = fmt::format("geo:{:.6f},{:.6f}", location.latitude_, location.longitude_);
     if (location.horizontal_accuracy_ > 0)
         uri += fmt::format(";u={:.0f}", location.horizontal_accuracy_);
-    std::string link = "<a href=\"" + escapeForDisplay(makeLinkTarget(uri)) + "\">" + coordinates + "</a>";
+    return "<a href=\"" + escapeForDisplay(makeLinkTarget(uri)) + "\">" + coordinates + "</a>";
+}
 
+static std::string makeLocationText(const ShownLocation &shown)
+{
+    std::string link = makeLocationLink(*shown.location);
     std::string text;
     if (shown.venue) {
         text = "<b>" + escapeForDisplay(shown.venue->title_) + "</b>\n";
@@ -974,12 +977,14 @@ static void showUnsupportedMessage(const td::td_api::chat &chat, const TgMessage
 }
 
 
-// Introduces a message shown again because it was edited. Returns true if that already says
-// it all, which is when only its caption changed.
+// Shows a message again because it was edited: a line saying so, as of the edit, which names the
+// message by the time it was sent and holds the new text, where text is all there is to show.
+// Returns false if the message is to follow in full, as it does when it brings a new file.
 static bool showEditNotice(const td::td_api::chat &chat, IncomingMessage &fullMessage,
                            TdAccountData &account)
 {
     const TgMessageInfo &messageInfo = fullMessage.messageInfo;
+    const td::td_api::MessageContent &content = *fullMessage.message->content_;
     std::string          sender      = escapeForDisplay(getSenderDisplayName(chat, messageInfo,
                                                                             account.purpleAccount));
     std::string          sentAt      = formatMessageTime(fullMessage.editedMessageTime);
@@ -988,23 +993,30 @@ static bool showEditNotice(const td::td_api::chat &chat, IncomingMessage &fullMe
 
     ShownLocation location;
     std::string   notice;
-    if (fullMessage.message->content_ && getShownLocation(*fullMessage.message->content_, location) &&
-        isStoppedLiveLocation(location))
-        // TRANSLATOR: In-chat notification, followed by the last position. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
-        notice = formatMessage(_("{0} stops sharing the live location from {1}:"), {sender, sentAt});
+    bool          complete = true;
+    if (getShownLocation(content, location) && isStoppedLiveLocation(location))
+        // TRANSLATOR: In-chat notification. Arguments are a username, the time (or date and time) the message was sent at, as the conversation window shows it, and a hyperlink, showing the map coordinates last shared.
+        notice = formatMessage(_("{0} stopped sharing the live location from {1}: {2}"),
+                               {sender, sentAt, makeLocationLink(*location.location)});
     else if (fullMessage.captionOnly && fileInfo.caption.empty())
         // TRANSLATOR: In-chat notification. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
-        notice = formatMessage(_("{0} removes the caption of the message from {1}"), {sender, sentAt});
-    else
+        notice = formatMessage(_("{0} removed the caption of the message from {1}"), {sender, sentAt});
+    else if (fullMessage.captionOnly || (content.get_id() == td::td_api::messageText::ID)) {
+        const td::td_api::messageText *text = nullptr;
+        if (content.get_id() == td::td_api::messageText::ID)
+            text = static_cast<const td::td_api::messageText *>(&content);
+        std::string newText = fullMessage.captionOnly ? fileInfo.caption :
+                              (text && text->text_) ? getMessageText(*text->text_) : std::string();
+        // TRANSLATOR: In-chat notification. Arguments are a username, the time (or date and time) the message was sent at, as the conversation window shows it, and the message's new text.
+        notice = formatMessage(_("{0} edited the message from {1}: {2}"), {sender, sentAt, newText});
+    } else {
         // TRANSLATOR: In-chat notification, followed by the message as edited. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
-        notice = formatMessage(_("{0} edits the message from {1}:"), {sender, sentAt});
+        notice = formatMessage(_("{0} edited the message from {1}:"), {sender, sentAt});
+        complete = false;
+    }
     showMessageText(account, chat, messageInfo, NULL, notice.c_str());
 
-    if (!fullMessage.captionOnly)
-        return false;
-    if (!fileInfo.caption.empty())
-        showMessageText(account, chat, messageInfo, fileInfo.caption.c_str(), NULL);
-    return true;
+    return complete;
 }
 
 void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
