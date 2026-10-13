@@ -668,3 +668,29 @@ TEST_F(SupergroupTest, ForeignChannel)
     prpl.verifyNoEvents();
     tgl.verifyNoRequests();
 }
+
+TEST_F(SupergroupTest, UnjoinedChannelShownOnRequest)
+{
+    constexpr int32_t date         = 12345;
+    constexpr int64_t messageId    = 10000;
+    constexpr int     purpleChatId = 1;
+    login();
+    purple_account_set_bool(account, "show-unjoined-chats", TRUE);
+
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusLeft>(), 2)));
+    tgl.update(make_object<updateNewChat>(makeChat(
+        groupChatId, make_object<chatTypeSupergroup>(groupId, true), groupChatTitle,
+        nullptr, 0, 0, 0
+    )));
+    prpl.discardEvents();
+
+    auto message = makeMessage(messageId, 0, groupChatId, false, date, makeTextMessage("Hello"));
+    message->is_channel_post_ = true;
+    tgl.update(make_object<updateNewMessage>(std::move(message)));
+    tgl.verifyRequest(viewMessages(groupChatId, {messageId}, nullptr, true));
+    prpl.verifyEvents(
+        ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatPurpleName),
+        ConvSetTitleEvent(groupChatPurpleName, groupChatTitle),
+        ServGotChatEvent(connection, purpleChatId, "Channel post", "Hello", PURPLE_MESSAGE_RECV, date)
+    );
+}

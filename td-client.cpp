@@ -960,11 +960,14 @@ void PurpleTdClient::onIncomingMessage(td::td_api::object_ptr<td::td_api::messag
 
     // TDLib also tells us of groups and channels we do not belong to - one linked to a group we
     // are in, a channel's discussion group, one Telegram has brought up for us - and delivers
-    // their messages, which are none of ours. Nor are their earlier messages fetched. Only the
-    // news of a member leaving gets through, as the last word on a group we have just left.
+    // their messages, which are none of ours unless the account says otherwise. Nor are their
+    // earlier messages fetched. Only the news of a member leaving gets through, as the last word
+    // on a group we have just left.
     const td::td_api::chat *groupChat = m_data.getChat(chatId);
     if (groupChat && (getBasicGroupId(*groupChat).valid() || getSupergroupId(*groupChat).valid()) &&
         !m_data.isGroupChatWithMembership(*groupChat) &&
+        !purple_account_get_bool(m_account, AccountOptions::ShowUnjoinedChats,
+                                 AccountOptions::ShowUnjoinedChatsDefault) &&
         !(message->content_ && (message->content_->get_id() == td::td_api::messageChatDeleteMember::ID)))
     {
         purple_debug_misc(config::pluginId, "Ignoring message %" G_GINT64_FORMAT " in chat %" G_GINT64_FORMAT
