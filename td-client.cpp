@@ -24,6 +24,7 @@ PurpleTdClient::PurpleTdClient(PurpleAccount *acct, ITransceiverBackend *testBac
 {
     StickerConversionThread::setCallback(&PurpleTdClient::onAnimatedStickerConverted);
     m_account = acct;
+    m_data.loadTempFileUploads();
     setPurpleConnectionInProgress();
 }
 
@@ -861,6 +862,7 @@ void PurpleTdClient::updateSupergroupFull(SupergroupId groupId, td::td_api::obje
 void PurpleTdClient::onChatListReady()
 {
     m_chatListReady = true;
+    checkTempFileUploads();
     std::vector<const td::td_api::chat *> chats;
     m_data.getChats(chats);
 
@@ -1081,7 +1083,7 @@ void PurpleTdClient::sendMessageResponse(uint64_t requestId, td::td_api::object_
     if (object && (object->get_id() == td::td_api::message::ID)) {
         if (!request->tempFile.empty()) {
             const td::td_api::message &message = static_cast<td::td_api::message &>(*object);
-            m_data.addTempFileUpload(message.id_, request->tempFile);
+            m_data.addTempFileUpload(request->chatId, message.id_, request->tempFile);
         }
     } else {
         // No message, so no update will come to say the file can go
@@ -2057,6 +2059,36 @@ void PurpleTdClient::getGroupChatList(PurpleRoomlist *roomlist)
         purple_roomlist_ref(roomlist);
         m_pendingRoomLists.push_back(roomlist);
     }
+}
+
+void PurpleTdClient::checkTempFileUploads()
+{
+    // Files left from an earlier session: once the chats are known, see which messages TDLib is still
+    // sending. Pending messages are kept locally, so an error means the message is gone.
+    std::vector<std::pair<ChatId, int64_t>> messages;
+    m_data.getTempFileUploads(messages);
+    for (const auto &message: messages) {
+        auto getMessageReq = td::td_api::make_object<td::td_api::getMessage>(message.first.value(),
+                                                                            message.second);
+        uint64_t requestId = m_transceiver.sendQuery(std::move(getMessageReq),
+                                                     &PurpleTdClient::tempFileCheckResponse);
+        m_data.addPendingRequest<TempFileCheckRequest>(requestId, message.second);
+    }
+}
+
+void PurpleTdClient::tempFileCheckResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object)
+{
+    std::unique_ptr<TempFileCheckRequest> request = m_data.getPendingRequest<TempFileCheckRequest>(requestId);
+    if (!request)
+        return;
+
+    // Gone, sent, or failed for good: nothing will read the file any more
+    if (object && (object->get_id() == td::td_api::message::ID) &&
+        static_cast<const td::td_api::message &>(*object).sending_state_ &&
+        (static_cast<const td::td_api::message &>(*object).sending_state_->get_id() ==
+         td::td_api::messageSendingStatePending::ID))
+        return;
+    removeTempFile(request->messageId);
 }
 
 void PurpleTdClient::removeTempFile(int64_t messageId)

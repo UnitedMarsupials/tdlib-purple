@@ -110,6 +110,15 @@ public:
     : PendingRequest(requestId), chatId(chatId), tempFile(tempFile ? tempFile : "") {}
 };
 
+// Checking whether TDLib still needs an image file sent in an earlier session
+class TempFileCheckRequest: public PendingRequest {
+public:
+    int64_t messageId;
+
+    TempFileCheckRequest(uint64_t requestId, int64_t messageId)
+    : PendingRequest(requestId), messageId(messageId) {}
+};
+
 class UploadRequest: public PendingRequest {
 public:
     PurpleXfer *xfer;
@@ -406,8 +415,10 @@ public:
     }
 
     const ContactRequest *     findContactRequest(UserId userId);
-    void                       addTempFileUpload(int64_t messageId, const std::string &path);
+    void                       addTempFileUpload(ChatId chatId, int64_t messageId, const std::string &path);
     std::string                extractTempFileUpload(int64_t messageId);
+    void                       loadTempFileUploads();
+    void                       getTempFileUploads(std::vector<std::pair<ChatId, int64_t>> &messages);
     DownloadRequest *          findDownloadRequest(int32_t fileId);
     void                       extractFileTransferRequests(std::vector<PurpleXfer *> &transfers);
 
@@ -471,6 +482,7 @@ private:
     };
 
     struct SendMessageInfo {
+        ChatId      chatId;
         int64_t     messageId;
         std::string tempFile;
     };
@@ -513,6 +525,7 @@ private:
     int32_t                                 m_callId;
 
     std::unique_ptr<PendingRequest> getPendingRequestImpl(uint64_t requestId);
+    void                            saveTempFileUploads();
     PendingRequest *                findPendingRequestImpl(uint64_t requestId);
 
     // Read receipts not sent immediately due to away status (grouped per chat)

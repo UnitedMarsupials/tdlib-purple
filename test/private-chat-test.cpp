@@ -853,10 +853,59 @@ TEST_F(PrivateChatTest, SendImageCancelled)
     msg->sending_state_ = make_object<messageSendingStatePending>();
     tgl.reply(std::move(msg));
     checkFile(tgl.getInputPhotoPath(0).c_str(), data, sizeof(data));
+    // Remembered in case the account disconnects meanwhile
+    ASSERT_EQ(std::to_string(chatIds[0]) + " " + std::to_string(messageId) + " " + tgl.getInputPhotoPath(0) + "\n",
+              std::string(purple_account_get_string(account, "temp-image-uploads", "")));
 
     // Deleted before the upload finished, which is the end of it as far as TDLib is concerned
     tgl.update(make_object<updateDeleteMessages>(chatIds[0], std::vector<int64_t>{messageId}, true, false));
     ASSERT_FALSE(g_file_test(tgl.getInputPhotoPath(0).c_str(), G_FILE_TEST_EXISTS));
+    ASSERT_EQ(nullptr, purple_account_get_string(account, "temp-image-uploads", nullptr));
+    prpl.verifyNoEvents();
+    tgl.verifyNoRequests();
+}
+
+TEST_F(PrivateChatTest, SendImageFromEarlierSession)
+{
+    // Still sending, sent while we were away but never reported, and forgotten by TDLib
+    const int64_t messageIds[3] = {10, 11, 12};
+    std::string   paths[3];
+    std::string   setting;
+    for (unsigned i = 0; i < 3; i++) {
+        char *path = NULL;
+        int   fd   = g_file_open_tmp("tdlib_test_XXXXXX", &path, NULL);
+        ASSERT_TRUE(fd >= 0);
+        ::close(fd);
+        paths[i] = path;
+        g_free(path);
+        setting += std::to_string(chatIds[0]) + " " + std::to_string(messageIds[i]) + " " + paths[i] + "\n";
+    }
+    purple_account_set_string(account, "temp-image-uploads", setting.c_str());
+
+    loginWithOneContact();
+    tgl.verifyRequests({
+        make_object<getMessage>(chatIds[0], messageIds[0]),
+        make_object<getMessage>(chatIds[0], messageIds[1]),
+        make_object<getMessage>(chatIds[0], messageIds[2])
+    });
+    tgl.reply(makeMessage(messageIds[0], userIds[0], chatIds[0], true, 1, makeTextMessage("")));
+    object_ptr<message> msg = makeMessage(messageIds[1], userIds[0], chatIds[0], true, 1, makeTextMessage(""));
+    msg->sending_state_ = nullptr;
+    tgl.reply(std::move(msg));
+    tgl.reply(make_object<error>(404, "Not Found"));
+
+    ASSERT_TRUE(g_file_test(paths[0].c_str(), G_FILE_TEST_EXISTS));
+    ASSERT_FALSE(g_file_test(paths[1].c_str(), G_FILE_TEST_EXISTS));
+    ASSERT_FALSE(g_file_test(paths[2].c_str(), G_FILE_TEST_EXISTS));
+    ASSERT_EQ(std::to_string(chatIds[0]) + " " + std::to_string(messageIds[0]) + " " + paths[0] + "\n",
+              std::string(purple_account_get_string(account, "temp-image-uploads", "")));
+
+    // TDLib finishes what it began in the earlier session
+    tgl.update(make_object<updateMessageSendSucceeded>(
+        makeMessage(20, userIds[0], chatIds[0], true, 1, makeTextMessage("")), messageIds[0]
+    ));
+    ASSERT_FALSE(g_file_test(paths[0].c_str(), G_FILE_TEST_EXISTS));
+    ASSERT_EQ(nullptr, purple_account_get_string(account, "temp-image-uploads", nullptr));
     prpl.verifyNoEvents();
     tgl.verifyNoRequests();
 }
