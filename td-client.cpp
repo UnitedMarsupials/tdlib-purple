@@ -176,6 +176,10 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         auto &deleteUpdate = static_cast<const td::td_api::updateDeleteMessages &>(update);
         purple_debug_misc(config::pluginId, "Incoming update: %zu messages deleted\n",
                           deleteUpdate.message_ids_.size());
+        // Deleting a message that is still being sent cancels the sending, without another update
+        if (deleteUpdate.is_permanent_ && !deleteUpdate.from_cache_)
+            for (int64_t messageId: deleteUpdate.message_ids_)
+                removeTempFile(messageId);
         deleteMessages(m_data, deleteUpdate);
         break;
     }
