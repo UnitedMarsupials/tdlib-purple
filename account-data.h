@@ -193,6 +193,8 @@ public:
         if (message.repliedMessage)
             this->message.repliedMessage = std::move(message.repliedMessage);
     }
+    // An inline download still in progress, as at logout, leaves its temporary file behind otherwise
+    ~DownloadRequest();
 };
 
 class AvatarDownloadRequest: public PendingRequest {

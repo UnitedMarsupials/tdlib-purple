@@ -4,6 +4,8 @@
 #include "format.h"
 #include <purple.h>
 #include <algorithm>
+#include <stdio.h>
+#include <unistd.h>
 
 static bool isCanonicalPhoneNumber(const char *s)
 {
@@ -791,6 +793,14 @@ const ContactRequest *TdAccountData::findContactRequest(UserId userId)
     if (it != m_requests.end())
         return static_cast<const ContactRequest *>(it->get());
     return nullptr;
+}
+
+DownloadRequest::~DownloadRequest()
+{
+    if (tempFd >= 0)
+        close(tempFd);
+    if (!tempFileName.empty())
+        remove(tempFileName.c_str());
 }
 
 DownloadRequest* TdAccountData::findDownloadRequest(int32_t fileId)
