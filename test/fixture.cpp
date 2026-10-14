@@ -29,6 +29,7 @@ void CommTest::TearDown()
         pluginInfo().close(connection);
     tgl.verifyNoRequests();
     prpl.verifyNoEvents();
+    tgl.removeTempFiles();
 
     delete connection;
     account->gc = NULL;
