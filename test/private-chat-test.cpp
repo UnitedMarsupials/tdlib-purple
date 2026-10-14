@@ -809,6 +809,48 @@ TEST_F(PrivateChatTest, SendImageRejected)
     );
 }
 
+TEST_F(PrivateChatTest, SendImageCancelled)
+{
+    const int64_t messageId = 10;
+    const int32_t fileId    = 101;
+    loginWithOneContact();
+
+    uint8_t data[] = {1, 2, 3, 4, 5};
+    const int id = purple_imgstore_add_with_id(arrayDup(data, sizeof(data)), sizeof(data), "filename");
+    const std::string messageText = fmt::format("<img id=\"{}\">caption", id);
+
+    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), messageText.c_str(), PURPLE_MESSAGE_SEND));
+    tgl.verifyRequest(*makeSendMessage(
+        chatIds[0],
+        0,
+        nullptr,
+        nullptr,
+        nullptr, makeInputMessagePhoto(
+            make_object<inputFileLocal>(),
+            nullptr, std::vector<std::int32_t>(), 0, 0,
+            make_object<formattedText>("caption", std::vector<object_ptr<textEntity>>()),
+            false, nullptr, false
+        )
+    ));
+    object_ptr<message> msg = makeMessage(
+        messageId, userIds[0], chatIds[0], true, 1,
+        makeMessagePhoto(
+            makePhotoUploading(fileId, sizeof(data), 0, "/path", 0, 0),
+            make_object<formattedText>("caption", std::vector<object_ptr<textEntity>>()),
+            false, false, false
+        )
+    );
+    msg->sending_state_ = make_object<messageSendingStatePending>();
+    tgl.reply(std::move(msg));
+    checkFile(tgl.getInputPhotoPath(0).c_str(), data, sizeof(data));
+
+    // Deleted before the upload finished, which is the end of it as far as TDLib is concerned
+    tgl.update(make_object<updateDeleteMessages>(chatIds[0], std::vector<int64_t>{messageId}, true, false));
+    ASSERT_FALSE(g_file_test(tgl.getInputPhotoPath(0).c_str(), G_FILE_TEST_EXISTS));
+    prpl.verifyNoEvents();
+    tgl.verifyNoRequests();
+}
+
 TEST_F(PrivateChatTest, ReplyToOldMessage)
 {
     const int32_t date     = 10002;
