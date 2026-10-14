@@ -1080,6 +1080,9 @@ void PurpleTdClient::sendMessageResponse(uint64_t requestId, td::td_api::object_
             m_data.addTempFileUpload(message.id_, request->tempFile);
         }
     } else {
+        // No message, so no update will come to say the file can go
+        if (!request->tempFile.empty())
+            remove(request->tempFile.c_str());
         // TRANSLATOR: In-chat error message, argument will be a user-sent message
         std::string errorMessage = formatMessage(_("Failed to send message: {}"), getDisplayedError(object));
         const td::td_api::chat *chat = m_data.getChat(request->chatId);

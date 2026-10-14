@@ -785,6 +785,40 @@ TEST_F(PrivateChatTest, SendImage)
     );
 }
 
+TEST_F(PrivateChatTest, SendImageRejected)
+{
+    loginWithOneContact();
+
+    uint8_t data[] = {1, 2, 3, 4, 5};
+    const int id = purple_imgstore_add_with_id(arrayDup(data, sizeof(data)), sizeof(data), "filename");
+    const std::string messageText = fmt::format("<img id=\"{}\">caption", id);
+
+    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), messageText.c_str(), PURPLE_MESSAGE_SEND));
+    tgl.verifyRequest(*makeSendMessage(
+        chatIds[0],
+        0,
+        nullptr,
+        nullptr,
+        nullptr, makeInputMessagePhoto(
+            make_object<inputFileLocal>(),
+            nullptr, std::vector<std::int32_t>(), 0, 0,
+            make_object<formattedText>("caption", std::vector<object_ptr<textEntity>>()),
+            false, nullptr, false
+        )
+    ));
+    checkFile(tgl.getInputPhotoPath(0).c_str(), data, sizeof(data));
+
+    // No message is created, so nothing else would ever free the file
+    tgl.reply(make_object<error>(400, "PHOTO_INVALID"));
+    ASSERT_FALSE(g_file_test(tgl.getInputPhotoPath(0).c_str(), G_FILE_TEST_EXISTS));
+    prpl.verifyEvents(
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+        ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                               "Failed to send message: code 400 (PHOTO_INVALID)",
+                               PURPLE_MESSAGE_SYSTEM, 0)
+    );
+}
+
 TEST_F(PrivateChatTest, ReplyToOldMessage)
 {
     const int32_t date     = 10002;
