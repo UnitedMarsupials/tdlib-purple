@@ -1764,18 +1764,21 @@ static void showCustomEmojiFile(TdAccountData &account, const std::string &path,
 {
     // Custom emoji are 100 pixels square
     enum { CUSTOM_EMOJI_SIZE = 100 };
+    // Whatever it is shown as, it leads to the file
+    std::string linkStart = "<a href=\"" + escapeForDisplay(makeFileLinkTarget(path)) + "\">";
+    std::string linkEnd   = "</a>";
 
     if (format == td::td_api::stickerFormatTgs::ID) {
         if (!canConvertAnimatedSticker(account.purpleAccount)) {
-            shown(account, fallback, false);
+            shown(account, linkStart + fallback + linkEnd, false);
             return;
         }
         ReactionStickerThread *thread = new ReactionStickerThread(account.purpleAccount, path,
-            [fallback, shown](TdAccountData &account, int imageId) {
+            [fallback, shown, linkStart, linkEnd](TdAccountData &account, int imageId) {
                 if (imageId)
-                    shown(account, makeReactionImageText(imageId), true);
+                    shown(account, linkStart + makeReactionImageText(imageId) + linkEnd, true);
                 else
-                    shown(account, fallback, false);
+                    shown(account, linkStart + fallback + linkEnd, false);
             });
         thread->setSize(CUSTOM_EMOJI_SIZE);
         thread->startThread();
@@ -1788,14 +1791,14 @@ static void showCustomEmojiFile(TdAccountData &account, const std::string &path,
     if ((support == ImageSupport::Supported) && g_file_get_contents(path.c_str(), &data, &size, NULL)) {
         // The imgstore takes the data
         int imageId = purple_imgstore_add_with_id(data, size, NULL);
-        shown(account, makeReactionImageText(imageId), true);
+        shown(account, linkStart + makeReactionImageText(imageId) + linkEnd, true);
         return;
     }
 
     purple_debug_misc(config::pluginId, "Cannot show custom emoji %s\n", path.c_str());
     if (support == ImageSupport::Unrecognized)
         warnMissingImageLoader(path);
-    shown(account, fallback, false);
+    shown(account, linkStart + fallback + linkEnd, false);
 }
 
 static void customEmojiResponse(TdAccountData &account, td::td_api::object_ptr<td::td_api::Object> object,
