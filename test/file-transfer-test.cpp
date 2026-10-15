@@ -334,11 +334,7 @@ TEST_F(FileTransferTest, SendFile_UnknownUser)
     );
 }
 
-#ifndef NoWebp
-TEST_F(FileTransferTest, WebpStickerDecode)
-#else
-TEST_F(FileTransferTest, DISABLED_WebpStickerDecode)
-#endif
+TEST_F(FileTransferTest, WebpSticker)
 {
     const int32_t date      = 10001;
     const int32_t fileId    = 1234;
@@ -363,6 +359,42 @@ TEST_F(FileTransferTest, DISABLED_WebpStickerDecode)
         purpleUserName(0),
         "\n<img id=\"" + std::to_string(getLastImgstoreId()) + "\">",
         (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES),
+        date
+    ));
+    // As it is, for the front-end's GdkPixbuf to decode
+    gchar *data = NULL;
+    gsize  size = 0;
+    ASSERT_TRUE(g_file_get_contents(TEST_SOURCE_DIR "/test.webp", &data, &size, NULL));
+    g_free(data);
+    ASSERT_EQ(size, purple_imgstore_get_size(purple_imgstore_find_by_id(getLastImgstoreId())));
+}
+
+TEST_F(FileTransferTest, WebpSticker_NoLoader)
+{
+    const int32_t date      = 10001;
+    const int32_t fileId    = 1234;
+    setImageLoaders({});
+    loginWithOneContact();
+
+    tgl.update(make_object<updateNewMessage>(makeMessage(
+        1,
+        userIds[0],
+        chatIds[0],
+        false,
+        date,
+        make_object<messageSticker>(makeSticker(320, 200, "",
+            make_object<file>(
+                fileId, 10000, 10000,
+                make_object<localFile>(TEST_SOURCE_DIR "/test.webp", true, true, false, true, 0, 10000, 10000),
+                make_object<remoteFile>("beh", "bleh", false, true, 10000)
+            )), false)
+    )));
+    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
+    prpl.verifyEvents(ServGotImEvent(
+        connection,
+        purpleUserName(0),
+        "<a href=\"file://file://" TEST_SOURCE_DIR "/test.webp\">sticker</a>",
+        PURPLE_MESSAGE_RECV,
         date
     ));
 }

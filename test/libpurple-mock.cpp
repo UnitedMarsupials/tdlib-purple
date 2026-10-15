@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <vector>
 #include <gtest/gtest.h>
-#include <gdk-pixbuf/gdk-pixbuf.h>
 
 struct AccountInfo {
     PurpleAccount                     *account;
@@ -1317,16 +1316,6 @@ extern "C++" void setImageLoaders(std::initializer_list<std::string> formats)
     g_imageLoaders = formats;
 }
 
-struct MockPixbufLoader {
-    std::string data;
-    bool        closed = false;
-};
-
-static MockPixbufLoader *getMockLoader(void *loader)
-{
-    return static_cast<MockPixbufLoader *>(loader);
-}
-
 static bool isImageFormat(const std::string &data, const std::string &format)
 {
     if (format == "webp")
@@ -1340,35 +1329,23 @@ static bool isImageFormat(const std::string &data, const std::string &format)
 
 extern "C" {
 
-GdkPixbufLoader *gdk_pixbuf_loader_new()
+// Returns a GdkPixbufFormat, which the plugin does not look into, if a loader takes the file
+void *gdk_pixbuf_get_file_info(const gchar *filename, gint *width, gint *height)
 {
-    return reinterpret_cast<GdkPixbufLoader *>(new MockPixbufLoader);
-}
+    static int format;
+    gchar     *data = NULL;
+    gsize      size = 0;
+    if (!g_file_get_contents(filename, &data, &size, NULL))
+        return NULL;
+    std::string contents(data, size);
+    g_free(data);
 
-gboolean gdk_pixbuf_loader_write(GdkPixbufLoader *loader, const guchar *buf, gsize count, GError **error)
-{
-    getMockLoader(loader)->data.append(reinterpret_cast<const char *>(buf), count);
-    return TRUE;
-}
-
-gboolean gdk_pixbuf_loader_close(GdkPixbufLoader *loader, GError **error)
-{
-    MockPixbufLoader *mock = getMockLoader(loader);
-    EXPECT_FALSE(mock->closed) << "GdkPixbufLoader closed twice";
-    mock->closed = true;
-    for (const std::string &format: g_imageLoaders)
-        if (isImageFormat(mock->data, format))
-            return TRUE;
-    g_set_error(error, g_quark_from_static_string("gdk-pixbuf-error-quark"), 3,
-                "Unrecognized image file format");
-    return FALSE;
-}
-
-void g_object_unref(gpointer object)
-{
-    MockPixbufLoader *mock = getMockLoader(object);
-    EXPECT_TRUE(mock->closed) << "GdkPixbufLoader finalized without calling gdk_pixbuf_loader_close()";
-    delete mock;
+    for (const std::string &loader: g_imageLoaders)
+        if (isImageFormat(contents, loader)) {
+            *width = *height = 100;
+            return &format;
+        }
+    return NULL;
 }
 
 }

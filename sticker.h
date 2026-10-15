@@ -4,21 +4,20 @@
 #include "client-utils.h"
 #include <functional>
 
-// Returns the imgstore id of the picture, or 0 if it could not be read
-int p2tgl_imgstore_add_with_id_webp(const char *filename);
-
 enum class ImageSupport {
     Supported,    // the front-end can show it as it is
     Unrecognized, // the front-end shows images, but has no loader for this one
     NoLoader      // the front-end does not show images through GdkPixbuf at all
 };
 
-// Whether the front-end can show the image, by asking its GdkPixbuf, the way Pidgin will load it.
-// The plugin does not link GdkPixbuf, but uses the front-end's, if it has one. When the answer is
-// no, error says why.
-ImageSupport probeImage(const gchar *data, gsize size, std::string &error);
+// Whether the front-end can show the image, by asking its GdkPixbuf, which Pidgin loads it with, to
+// look at the file. The plugin does not link GdkPixbuf, but looks for the front-end's.
+ImageSupport probeImageFile(const std::string &path);
 
-void showWebpSticker(const td::td_api::chat &chat, const TgMessageInfo &message,
+// Says, once for each format, that a GdkPixbuf loader for it would show such pictures
+void warnMissingImageLoader(const std::string &path);
+
+void showStickerFile(const td::td_api::chat &chat, const TgMessageInfo &message,
                      const std::string &filePath, const std::string &fileDescription,
                      TdAccountData &account);
 

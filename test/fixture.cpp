@@ -13,7 +13,7 @@ CommTest::CommTest()
 
 void CommTest::SetUp()
 {
-    setImageLoaders({});
+    setImageLoaders({"webp"});
     account = purple_account_new(("+" + selfPhoneNumber).c_str(), NULL);
     connection = new PurpleConnection;
     connection->state = PURPLE_DISCONNECTED;
