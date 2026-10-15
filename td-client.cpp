@@ -23,6 +23,7 @@ PurpleTdClient::PurpleTdClient(PurpleAccount *acct, ITransceiverBackend *testBac
     m_data(acct, m_transceiver)
 {
     StickerConversionThread::setCallback(&PurpleTdClient::onAnimatedStickerConverted);
+    ReactionStickerThread::setCallback(&PurpleTdClient::onReactionStickerConverted);
     m_account = acct;
     m_data.loadTempFileUploads();
     setPurpleConnectionInProgress();
@@ -909,6 +910,26 @@ void PurpleTdClient::onChatListReady()
             purple_account_get_username(m_account));
 
     purple_blist_add_account(m_account);
+}
+
+void PurpleTdClient::onReactionStickerConverted(AccountThread *arg)
+{
+    std::unique_ptr<AccountThread> baseThread(arg);
+    ReactionStickerThread *thread = dynamic_cast<ReactionStickerThread *>(arg);
+    if (!thread)
+        return;
+
+    int imageId = 0;
+    if (thread->getErrorMessage().empty()) {
+        gchar *imageData = NULL;
+        gsize  imageSize = 0;
+        if (g_file_get_contents(thread->getOutputFileName().c_str(), &imageData, &imageSize, NULL))
+            imageId = purple_imgstore_add_with_id(imageData, imageSize, NULL);
+        remove(thread->getOutputFileName().c_str());
+    } else
+        purple_debug_warning(config::pluginId, "Could not convert custom emoji %s: %s\n",
+                             thread->inputFileName.c_str(), thread->getErrorMessage().c_str());
+    thread->done(m_data, imageId);
 }
 
 void PurpleTdClient::onAnimatedStickerConverted(AccountThread *arg)

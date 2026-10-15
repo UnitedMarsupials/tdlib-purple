@@ -1097,6 +1097,12 @@ static void tgprpl_init (PurplePlugin *plugin)
                                          AccountOptions::ShowUnjoinedChatsDefault);
     prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
 
+    // TRANSLATOR: Account settings, key (boolean). Custom emoji are pictures of their own, each standing for an ordinary emoji.
+    opt = purple_account_option_bool_new(_("Show custom emoji in reactions as ordinary emoji"),
+                                         AccountOptions::FoldCustomEmoji,
+                                         AccountOptions::FoldCustomEmojiDefault);
+    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+
     if (canDisableReadReceipts()) {
         opt = purple_account_option_bool_new ("Send read receipts",
                                               AccountOptions::ReadReceipts,

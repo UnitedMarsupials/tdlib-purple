@@ -195,3 +195,123 @@ TEST_F(ReactionTest, UnreadToEarlierMessage)
     prpl.verifyNoEvents();
     tgl.verifyNoRequests();
 }
+
+class CustomEmojiReactionTest: public ReactionTest {
+protected:
+    const int64_t customEmojiId = 5000;
+    const int32_t fileId        = 1234;
+
+    void reactWithCustomEmoji();
+    void replyWithSticker(object_ptr<StickerFormat> format, const std::string &path, bool downloaded = true);
+    void verifyReaction(const std::string &reaction, bool image);
+};
+
+void CustomEmojiReactionTest::reactWithCustomEmoji()
+{
+    std::vector<object_ptr<messageReaction>> list;
+    std::vector<object_ptr<MessageSender>>   senders;
+    senders.push_back(make_object<messageSenderUser>(userIds[0]));
+    list.push_back(make_object<messageReaction>(make_object<reactionTypeCustomEmoji>(customEmojiId), 1,
+                                                false, nullptr, std::move(senders)));
+    tgl.update(make_object<updateMessageInteractionInfo>(chatIds[0], messageId,
+        make_object<messageInteractionInfo>(0, 0, nullptr, make_object<messageReactions>(
+            std::move(list), false, std::vector<object_ptr<paidReactor>>(), false
+        ))));
+    tgl.verifyRequest(getCustomEmojiStickers({customEmojiId}));
+}
+
+void CustomEmojiReactionTest::replyWithSticker(object_ptr<StickerFormat> format, const std::string &path,
+                                               bool downloaded)
+{
+    object_ptr<sticker> emoji = makeSticker(100, 100, "\U0001F63A", make_object<file>(
+        fileId, 10000, 10000,
+        make_object<localFile>(downloaded ? path : "", true, true, false, downloaded, 0, 10000, 10000),
+        make_object<remoteFile>("beh", "bleh", false, true, 10000)
+    ), nullptr);
+    emoji->format_ = std::move(format);
+    std::vector<object_ptr<sticker>> list;
+    list.push_back(std::move(emoji));
+    tgl.reply(make_object<stickers>(std::move(list)));
+}
+
+void CustomEmojiReactionTest::verifyReaction(const std::string &reaction, bool image)
+{
+    prpl.verifyEvents(ServGotImEvent(
+        connection, purpleUserName(0), "reacted with " + reaction + " to message „hi“.",
+        image ? (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES) : PURPLE_MESSAGE_RECV, 0
+    ));
+    tgl.verifyNoRequests();
+}
+
+TEST_F(CustomEmojiReactionTest, Webp)
+{
+    loginWithOneContact();
+    receive(makeTextMessage("hi"), "hi");
+
+    reactWithCustomEmoji();
+    replyWithSticker(make_object<stickerFormatWebp>(), TEST_SOURCE_DIR "/test.webp");
+    verifyReaction("<img id=\"" + std::to_string(getLastImgstoreId()) + "\">", true);
+}
+
+TEST_F(CustomEmojiReactionTest, NotDownloadedYet)
+{
+    loginWithOneContact();
+    receive(makeTextMessage("hi"), "hi");
+
+    reactWithCustomEmoji();
+    replyWithSticker(make_object<stickerFormatWebp>(), TEST_SOURCE_DIR "/test.webp", false);
+    tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
+    prpl.verifyNoEvents();
+    tgl.reply(make_object<file>(
+        fileId, 10000, 10000,
+        make_object<localFile>(TEST_SOURCE_DIR "/test.webp", true, true, false, true, 0, 10000, 10000),
+        make_object<remoteFile>("beh", "bleh", false, true, 10000)
+    ));
+    verifyReaction("<img id=\"" + std::to_string(getLastImgstoreId()) + "\">", true);
+}
+
+TEST_F(CustomEmojiReactionTest, Animated)
+{
+    loginWithOneContact();
+    receive(makeTextMessage("hi"), "hi");
+
+    reactWithCustomEmoji();
+    replyWithSticker(make_object<stickerFormatTgs>(), TEST_SOURCE_DIR "/test.tgs");
+#ifndef NoLottie
+    verifyReaction("<img id=\"" + std::to_string(getLastImgstoreId()) + "\">", true);
+#else
+    verifyReaction("\U0001F63A", false);
+#endif
+}
+
+TEST_F(CustomEmojiReactionTest, Webm)
+{
+    loginWithOneContact();
+    receive(makeTextMessage("hi"), "hi");
+
+    // Nothing to play it with: the emoji it stands for instead
+    reactWithCustomEmoji();
+    replyWithSticker(make_object<stickerFormatWebm>(), "/path.webm");
+    verifyReaction("\U0001F63A", false);
+}
+
+TEST_F(CustomEmojiReactionTest, Folded)
+{
+    purple_account_set_bool(account, "fold-custom-emoji", TRUE);
+    loginWithOneContact();
+    receive(makeTextMessage("hi"), "hi");
+
+    reactWithCustomEmoji();
+    replyWithSticker(make_object<stickerFormatWebp>(), TEST_SOURCE_DIR "/test.webp");
+    verifyReaction("\U0001F63A", false);
+}
+
+TEST_F(CustomEmojiReactionTest, NotFound)
+{
+    loginWithOneContact();
+    receive(makeTextMessage("hi"), "hi");
+
+    reactWithCustomEmoji();
+    tgl.reply(make_object<error>(400, "Bad Request"));
+    verifyReaction("[custom emoji]", false);
+}

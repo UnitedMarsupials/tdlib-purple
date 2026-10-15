@@ -1672,19 +1672,6 @@ static void getGivenReactions(const td::td_api::messageInteractionInfo *info, st
     }
 }
 
-static std::string getReactionText(const td::td_api::ReactionType &type)
-{
-    switch (type.get_id()) {
-    case td::td_api::reactionTypeEmoji::ID:
-        return static_cast<const td::td_api::reactionTypeEmoji &>(type).emoji_;
-    case td::td_api::reactionTypeCustomEmoji::ID:
-        // TRANSLATOR: In-chat reaction, in place of one that is a picture of its own rather than an emoji, as in "reacted with [custom emoji] to message ...".
-        return _("[custom emoji]");
-    default:
-        // Paid in Telegram Stars
-        return "⭐";
-    }
-}
 
 static std::string getReactionSenderName(TdAccountData &account, const std::string &reactionKey)
 {
@@ -1700,10 +1687,11 @@ static std::string getReactionSenderName(TdAccountData &account, const std::stri
 }
 
 // Shown as a message from whoever reacted, as purple-gowhatsapp has it, which names the message by
-// the beginning of its text, or failing that, by what it is and when it was sent. Without a
-// reaction, it is one taken back.
-static void showReaction(TdAccountData &account, const td::td_api::chat &chat, const ShownMessage &shownMessage,
-                         const std::string &reactionKey, bool self, const td::td_api::ReactionType *reaction)
+// the beginning of its text, or failing that, by what it is and when it was sent. The reaction is
+// markup, a picture perhaps; without one, it is one taken back.
+static void showReactionText(TdAccountData &account, const td::td_api::chat &chat,
+                             const ShownMessage &shownMessage, const std::string &reactionKey, bool self,
+                             const std::string *reaction, bool image)
 {
     enum { MAX_QUOTE_LENGTH = 50 };
     std::string quote;
@@ -1723,7 +1711,7 @@ static void showReaction(TdAccountData &account, const td::td_api::chat &chat, c
 
     std::string text;
     if (reaction) {
-        std::string emoji = escapeForDisplay(getReactionText(*reaction));
+        const std::string &emoji = *reaction;
         if (!quote.empty())
             // TRANSLATOR: In-chat message, shown as sent by whoever reacted. Arguments are a reaction (an emoji, mostly) and the beginning of the message's text. Use the quotation marks of your language.
             text = formatMessage(_("reacted with {0} to message „{1}“."), {emoji, quote});
@@ -1744,7 +1732,147 @@ static void showReaction(TdAccountData &account, const td::td_api::chat &chat, c
     messageInfo.timestamp               = time(NULL);
     messageInfo.outgoing                = self;
     messageInfo.incomingGroupchatSender = getReactionSenderName(account, reactionKey);
-    showMessageText(account, chat, messageInfo, text.c_str(), NULL);
+    showMessageText(account, chat, messageInfo, text.c_str(), NULL, image ? PURPLE_MESSAGE_IMAGES : 0);
+}
+
+// Given the reaction as markup: the emoji, or the picture of a custom one
+using CustomEmojiShown = std::function<void(TdAccountData &account, const std::string &reaction, bool image)>;
+
+static bool canConvertAnimatedSticker(PurpleAccount *purpleAccount)
+{
+#ifndef NoLottie
+    return purple_account_get_bool(purpleAccount, AccountOptions::AnimatedStickers,
+                                   AccountOptions::AnimatedStickersDefault);
+#else
+    return false;
+#endif
+}
+
+// In the line, unlike a sticker, which has one of its own
+static std::string makeReactionImageText(int imageId)
+{
+    return "<img id=\"" + std::to_string(imageId) + "\">";
+}
+
+static void showCustomEmojiFile(TdAccountData &account, const std::string &path, bool animated,
+                                const std::string &fallback, CustomEmojiShown shown)
+{
+    // Custom emoji are 100 pixels square
+    enum { CUSTOM_EMOJI_SIZE = 100 };
+
+    if (animated) {
+        ReactionStickerThread *thread = new ReactionStickerThread(account.purpleAccount, path,
+            [fallback, shown](TdAccountData &account, int imageId) {
+                if (imageId)
+                    shown(account, makeReactionImageText(imageId), true);
+                else
+                    shown(account, fallback, false);
+            });
+        thread->setSize(CUSTOM_EMOJI_SIZE);
+        thread->startThread();
+    } else {
+        int imageId = p2tgl_imgstore_add_with_id_webp(path.c_str());
+        if (imageId)
+            shown(account, makeReactionImageText(imageId), true);
+        else
+            shown(account, fallback, false);
+    }
+}
+
+static void customEmojiResponse(TdAccountData &account, td::td_api::object_ptr<td::td_api::Object> object,
+                                CustomEmojiShown shown)
+{
+    const td::td_api::sticker *sticker = nullptr;
+    if (object && (object->get_id() == td::td_api::stickers::ID)) {
+        const auto &stickers = static_cast<const td::td_api::stickers &>(*object);
+        if (!stickers.stickers_.empty())
+            sticker = stickers.stickers_.front().get();
+    }
+
+    // The emoji it stands for will do, where the picture will not
+    // TRANSLATOR: In-chat reaction, in place of one that is a picture of its own rather than an emoji, where it cannot be shown, as in "reacted with [custom emoji] to message ...".
+    std::string fallback = escapeForDisplay((sticker && !sticker->emoji_.empty()) ? sticker->emoji_ :
+                                            std::string(_("[custom emoji]")));
+    if (!sticker || !sticker->sticker_ || !sticker->format_ ||
+        purple_account_get_bool(account.purpleAccount, AccountOptions::FoldCustomEmoji,
+                                AccountOptions::FoldCustomEmojiDefault))
+    {
+        shown(account, fallback, false);
+        return;
+    }
+
+    // There is nothing to play WebM with
+    bool animated = (sticker->format_->get_id() == td::td_api::stickerFormatTgs::ID);
+    if ((sticker->format_->get_id() == td::td_api::stickerFormatWebm::ID) ||
+        (animated && !canConvertAnimatedSticker(account.purpleAccount)))
+    {
+        shown(account, fallback, false);
+        return;
+    }
+
+    const td::td_api::file &file = *sticker->sticker_;
+    if (file.local_ && file.local_->is_downloading_completed_) {
+        showCustomEmojiFile(account, file.local_->path_, animated, fallback, shown);
+        return;
+    }
+
+    auto downloadReq = td::td_api::make_object<td::td_api::downloadFile>(file.id_, 1, 0, 0, true);
+    account.transceiver.sendQuery(std::move(downloadReq),
+        [&account, animated, fallback, shown](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
+            const td::td_api::file *file = nullptr;
+            if (object && (object->get_id() == td::td_api::file::ID))
+                file = static_cast<const td::td_api::file *>(object.get());
+            if (file && file->local_ && file->local_->is_downloading_completed_)
+                showCustomEmojiFile(account, file->local_->path_, animated, fallback, shown);
+            else
+                shown(account, fallback, false);
+        });
+}
+
+static void showReaction(TdAccountData &account, const td::td_api::chat &chat, const ShownMessage &shownMessage,
+                         const std::string &reactionKey, bool self, const td::td_api::ReactionType *reaction)
+{
+    if (!reaction) {
+        showReactionText(account, chat, shownMessage, reactionKey, self, nullptr, false);
+        return;
+    }
+
+    switch (reaction->get_id()) {
+    case td::td_api::reactionTypeEmoji::ID: {
+        std::string emoji = escapeForDisplay(static_cast<const td::td_api::reactionTypeEmoji &>(*reaction).emoji_);
+        showReactionText(account, chat, shownMessage, reactionKey, self, &emoji, false);
+        break;
+    }
+    case td::td_api::reactionTypeCustomEmoji::ID: {
+        // A sticker of its own, to be looked up first; the message may be forgotten meanwhile
+        int64_t customEmojiId = static_cast<const td::td_api::reactionTypeCustomEmoji &>(*reaction).custom_emoji_id_;
+        purple_debug_misc(config::pluginId, "Fetching custom emoji %" G_GINT64_FORMAT "\n", customEmojiId);
+        ChatId       chatId = getId(chat);
+        ShownMessage message;
+        message.content   = shownMessage.content;
+        message.quotable  = shownMessage.quotable;
+        message.kind      = shownMessage.kind;
+        message.timestamp = shownMessage.timestamp;
+        CustomEmojiShown shown = [chatId, message, reactionKey, self](TdAccountData &account,
+                                                                     const std::string &reaction, bool image) {
+            const td::td_api::chat *chat = account.getChat(chatId);
+            if (chat)
+                showReactionText(account, *chat, message, reactionKey, self, &reaction, image);
+        };
+        auto request = td::td_api::make_object<td::td_api::getCustomEmojiStickers>(
+            std::vector<int64_t>{customEmojiId});
+        account.transceiver.sendQuery(std::move(request),
+            [&account, shown](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
+                customEmojiResponse(account, std::move(object), shown);
+            });
+        break;
+    }
+    default: {
+        // Paid in Telegram Stars
+        std::string star = "\u2B50";
+        showReactionText(account, chat, shownMessage, reactionKey, self, &star, false);
+    }
+    }
 }
 
 void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,

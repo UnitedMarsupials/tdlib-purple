@@ -357,6 +357,11 @@ static void compare(const getMessage &actual, const getMessage &expected)
     COMPARE(message_id_);
 }
 
+static void compare(const getCustomEmojiStickers &actual, const getCustomEmojiStickers &expected)
+{
+    COMPARE(custom_emoji_ids_);
+}
+
 static void compare(const sendChatAction &actual, const sendChatAction &expected)
 {
     COMPARE(chat_id_);
@@ -576,6 +581,7 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(checkAuthenticationCode)
         C(registerUser)
         C(getMessage)
+        C(getCustomEmojiStickers)
         C(sendChatAction)
         C(addProxy)
         case disableProxy::ID: break; // no data fields
