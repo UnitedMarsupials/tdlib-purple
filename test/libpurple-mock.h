@@ -19,6 +19,9 @@ void setUiInfoMissing(bool missing);
 
 };
 
+// What the mock GdkPixbuf has loaders for, out of "webp", "tgs" and "webm"; none by default
+void setImageLoaders(std::initializer_list<std::string> formats);
+
 using RoomlistData = std::vector<std::pair<PurpleRoomlistFieldType, std::string>>;
 
 #if !GLIB_CHECK_VERSION(2, 34, 0)

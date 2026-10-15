@@ -85,7 +85,8 @@ add_library(telegram-tdlib SHARED
 #target_compile_options(telegram-tdlib PRIVATE -Wmissing-declarations)
 
 include_directories(${Purple_INCLUDE_DIRS} ${CMAKE_BINARY_DIR} ${fmt_INCLUDE_DIRS} ${rlottie_INCLUDE_DIRS})
-target_link_libraries(telegram-tdlib PRIVATE Td::TdStatic ${Purple_LIBRARIES} ${fmt_LIBRARIES} ${rlottie_LIBRARIES})
+target_link_libraries(telegram-tdlib PRIVATE Td::TdStatic ${Purple_LIBRARIES} ${fmt_LIBRARIES} ${rlottie_LIBRARIES}
+                      ${CMAKE_DL_LIBS})
 
 set(VERSION_SCRIPT_FLAG "-Wl,--version-script=${CMAKE_SOURCE_DIR}/ld_version_script")
 set(CMAKE_EXE_LINKER_FLAGS ${VERSION_SCRIPT_FLAG})
