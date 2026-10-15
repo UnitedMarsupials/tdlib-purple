@@ -28,7 +28,9 @@ void showStickerFile(const td::td_api::chat &chat, const TgMessageInfo &message,
     } else {
         if (support == ImageSupport::Unrecognized)
             warnMissingImageLoader(filePath);
-        showGenericFileInline(chat, message, filePath, NULL, fileDescription, std::string(), account);
+        // The emoji it goes with, where it has one
+        showGenericFileInline(chat, message, filePath, NULL,
+                              message.altText.empty() ? fileDescription : message.altText, std::string(), account);
     }
 }
 
@@ -215,12 +217,26 @@ void StickerConversionThread::callback(PurpleTdClient* tdClient)
         (tdClient->*g_callback)(this);
 }
 
+// The one function of GdkPixbuf the plugin needs; the name is there for tests to pretend it is missing
+const char *gdkPixbufGetFileInfoName = "gdk_pixbuf_get_file_info";
+
+// GdkPixbufFormat *gdk_pixbuf_get_file_info(const gchar *filename, gint *width, gint *height), from the
+// front-end, Pidgin having GdkPixbuf loaded; the plugin does not link it
+using GetFileInfo = void *(*)(const gchar *filename, gint *width, gint *height);
+
+static GetFileInfo findGetFileInfo()
+{
+    return reinterpret_cast<GetFileInfo>(dlsym(RTLD_DEFAULT, gdkPixbufGetFileInfoName));
+}
+
+bool canShowImages()
+{
+    return findGetFileInfo() != nullptr;
+}
+
 ImageSupport probeImageFile(const std::string &path)
 {
-    // GdkPixbufFormat *gdk_pixbuf_get_file_info(const gchar *filename, gint *width, gint *height),
-    // from the front-end, Pidgin having GdkPixbuf loaded; the plugin does not link it
-    using GetFileInfo = void *(*)(const gchar *filename, gint *width, gint *height);
-    auto getFileInfo = reinterpret_cast<GetFileInfo>(dlsym(RTLD_DEFAULT, "gdk_pixbuf_get_file_info"));
+    GetFileInfo getFileInfo = findGetFileInfo();
     if (!getFileInfo)
         return ImageSupport::NoLoader;
 

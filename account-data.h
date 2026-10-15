@@ -143,6 +143,7 @@ struct TgMessageInfo {
     MessageId   repliedMessageId;
     td::td_api::object_ptr<td::td_api::message> repliedMessage;
     std::string forwardedFrom;
+    std::string altText; // to show instead of the picture, where it cannot be shown
 
     void assign(const TgMessageInfo &other)
     {
@@ -155,6 +156,7 @@ struct TgMessageInfo {
         repliedMessageId = other.repliedMessageId;
         repliedMessage = nullptr;
         forwardedFrom = other.forwardedFrom;
+        altText = other.altText;
     }
 };
 

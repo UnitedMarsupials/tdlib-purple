@@ -1,6 +1,7 @@
 #include "fixture.h"
 #include "libpurple-mock.h"
 #include "buildopt.h"
+#include "sticker.h"
 #include <ctime>
 #include <unistd.h>
 
@@ -384,4 +385,16 @@ TEST_F(CustomEmojiReactionTest, NotFound)
     reactWithCustomEmoji();
     tgl.reply(make_object<error>(400, "Bad Request"));
     verifyReaction("[custom emoji]", false);
+}
+
+TEST_F(CustomEmojiReactionTest, NoGdkPixbuf)
+{
+    // Like BitlBee
+    gdkPixbufGetFileInfoName = "no_such_function";
+    loginWithOneContact();
+    receive(makeTextMessage("hi"), "hi");
+
+    reactWithCustomEmoji();
+    replyWithSticker(make_object<stickerFormatTgs>(), TEST_SOURCE_DIR "/test.tgs");
+    verifyReaction(linked(TEST_SOURCE_DIR "/test.tgs", "\U0001F63A"), false);
 }
