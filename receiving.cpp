@@ -1757,13 +1757,59 @@ static std::string makeReactionImageText(int imageId)
     return "<img id=\"" + std::to_string(imageId) + "\">";
 }
 
-static void showCustomEmojiFile(TdAccountData &account, const std::string &path, bool animated,
+static const char *getStickerFormatName(int32_t format)
+{
+    switch (format) {
+    case td::td_api::stickerFormatWebp::ID: return "WebP";
+    case td::td_api::stickerFormatTgs::ID:  return "TGS (Lottie)";
+    case td::td_api::stickerFormatWebm::ID: return "WebM";
+    default:                                return "unknown";
+    }
+}
+
+// Once for each format, for as long as the front-end runs
+static void warnMissingImageLoader(int32_t format, const std::string &error)
+{
+    static std::set<int32_t> warned;
+    if (warned.insert(format).second)
+        g_warning("Custom emoji in %s format are shown as the emoji they stand for: the front-end "
+                  "has no GdkPixbuf loader for it (%s). Installing one would show them as pictures.",
+                  getStickerFormatName(format), error.c_str());
+}
+
+// Given to the front-end as it is, if it can show it, and otherwise converted where the plugin knows
+// how, as it does stickers. Failing that, the emoji the custom one stands for will do.
+static void showCustomEmojiFile(TdAccountData &account, const std::string &path, int32_t format,
                                 const std::string &fallback, CustomEmojiShown shown)
 {
     // Custom emoji are 100 pixels square
     enum { CUSTOM_EMOJI_SIZE = 100 };
 
-    if (animated) {
+    gchar *data = NULL;
+    gsize  size = 0;
+    if (!g_file_get_contents(path.c_str(), &data, &size, NULL)) {
+        shown(account, fallback, false);
+        return;
+    }
+
+    std::string  error;
+    ImageSupport support = probeImage(data, size, error);
+    if (support == ImageSupport::Supported) {
+        // The imgstore takes the data
+        int imageId = purple_imgstore_add_with_id(data, size, NULL);
+        shown(account, makeReactionImageText(imageId), true);
+        return;
+    }
+    g_free(data);
+    purple_debug_misc(config::pluginId, "Cannot show custom emoji %s as it is: %s\n", path.c_str(), error.c_str());
+
+    if (format == td::td_api::stickerFormatWebp::ID) {
+        int imageId = p2tgl_imgstore_add_with_id_webp(path.c_str());
+        if (imageId) {
+            shown(account, makeReactionImageText(imageId), true);
+            return;
+        }
+    } else if ((format == td::td_api::stickerFormatTgs::ID) && canConvertAnimatedSticker(account.purpleAccount)) {
         ReactionStickerThread *thread = new ReactionStickerThread(account.purpleAccount, path,
             [fallback, shown](TdAccountData &account, int imageId) {
                 if (imageId)
@@ -1773,13 +1819,12 @@ static void showCustomEmojiFile(TdAccountData &account, const std::string &path,
             });
         thread->setSize(CUSTOM_EMOJI_SIZE);
         thread->startThread();
-    } else {
-        int imageId = p2tgl_imgstore_add_with_id_webp(path.c_str());
-        if (imageId)
-            shown(account, makeReactionImageText(imageId), true);
-        else
-            shown(account, fallback, false);
+        return;
     }
+
+    if (support == ImageSupport::Unrecognized)
+        warnMissingImageLoader(format, error);
+    shown(account, fallback, false);
 }
 
 static void customEmojiResponse(TdAccountData &account, td::td_api::object_ptr<td::td_api::Object> object,
@@ -1807,10 +1852,11 @@ static void customEmojiResponse(TdAccountData &account, td::td_api::object_ptr<t
         return;
     }
 
-    // There is nothing to play WebM with
-    bool animated = (sticker->format_->get_id() == td::td_api::stickerFormatTgs::ID);
-    if ((sticker->format_->get_id() == td::td_api::stickerFormatWebm::ID) ||
-        (animated && !canConvertAnimatedSticker(account.purpleAccount)))
+    // Those who would rather not see stickers move, would not like reactions to either
+    int32_t format = sticker->format_->get_id();
+    if ((format != td::td_api::stickerFormatWebp::ID) &&
+        !purple_account_get_bool(account.purpleAccount, AccountOptions::AnimatedStickers,
+                                 AccountOptions::AnimatedStickersDefault))
     {
         shown(account, fallback, false);
         return;
@@ -1818,7 +1864,7 @@ static void customEmojiResponse(TdAccountData &account, td::td_api::object_ptr<t
 
     const td::td_api::file &file = *sticker->sticker_;
     if (file.local_ && file.local_->is_downloading_completed_) {
-        showCustomEmojiFile(account, file.local_->path_, animated, fallback, shown);
+        showCustomEmojiFile(account, file.local_->path_, format, fallback, shown);
         return;
     }
 
@@ -1829,12 +1875,12 @@ static void customEmojiResponse(TdAccountData &account, td::td_api::object_ptr<t
     downloadReq->limit_       = 0;
     downloadReq->synchronous_ = true;
     account.transceiver.sendQuery(std::move(downloadReq),
-        [&account, animated, fallback, shown](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
+        [&account, format, fallback, shown](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
             const td::td_api::file *file = nullptr;
             if (object && (object->get_id() == td::td_api::file::ID))
                 file = static_cast<const td::td_api::file *>(object.get());
             if (file && file->local_ && file->local_->is_downloading_completed_)
-                showCustomEmojiFile(account, file->local_->path_, animated, fallback, shown);
+                showCustomEmojiFile(account, file->local_->path_, format, fallback, shown);
             else
                 shown(account, fallback, false);
         });

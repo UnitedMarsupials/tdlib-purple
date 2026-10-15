@@ -3,6 +3,7 @@
 #include "config.h"
 #include "format.h"
 #include "receiving.h"
+#include <dlfcn.h>
 
 #ifndef NoWebp
 #include <png.h>
@@ -348,6 +349,38 @@ void StickerConversionThread::callback(PurpleTdClient* tdClient)
 {
     if (g_callback)
         (tdClient->*g_callback)(this);
+}
+
+ImageSupport probeImage(const gchar *data, gsize size, std::string &error)
+{
+    using LoaderNew   = void *(*)();
+    using LoaderWrite = gboolean (*)(void *loader, const guchar *buf, gsize count, GError **error);
+    using LoaderClose = gboolean (*)(void *loader, GError **error);
+    using ObjectUnref = void (*)(void *object);
+
+    // Pidgin has them loaded already; front-ends without GTK do not
+    auto loaderNew   = reinterpret_cast<LoaderNew>(dlsym(RTLD_DEFAULT, "gdk_pixbuf_loader_new"));
+    auto loaderWrite = reinterpret_cast<LoaderWrite>(dlsym(RTLD_DEFAULT, "gdk_pixbuf_loader_write"));
+    auto loaderClose = reinterpret_cast<LoaderClose>(dlsym(RTLD_DEFAULT, "gdk_pixbuf_loader_close"));
+    auto objectUnref = reinterpret_cast<ObjectUnref>(dlsym(RTLD_DEFAULT, "g_object_unref"));
+    if (!loaderNew || !loaderWrite || !loaderClose || !objectUnref) {
+        error = "no GdkPixbuf in this front-end";
+        return ImageSupport::NoLoader;
+    }
+
+    void   *loader  = loaderNew();
+    GError *gerror  = NULL;
+    bool    written = loaderWrite(loader, reinterpret_cast<const guchar *>(data), size, &gerror);
+    // Closed in any case, or it complains when it goes; but only once
+    bool    loaded  = loaderClose(loader, written ? &gerror : NULL) && written;
+    if (!loaded) {
+        error = gerror ? gerror->message : "unknown error";
+        if (gerror)
+            g_error_free(gerror);
+    }
+    objectUnref(loader);
+
+    return loaded ? ImageSupport::Supported : ImageSupport::Unrecognized;
 }
 
 StickerConversionThread::Callback ReactionStickerThread::g_reactionCallback = nullptr;

@@ -2,6 +2,7 @@
 #include "libpurple-mock.h"
 #include "buildopt.h"
 #include <ctime>
+#include <unistd.h>
 
 // A reaction, the number of those who gave it, whether we did, and the latest of them
 struct Given {
@@ -221,7 +222,23 @@ protected:
     void reactWithCustomEmoji();
     void replyWithSticker(object_ptr<StickerFormat> format, const std::string &path, bool downloaded = true);
     void verifyReaction(const std::string &reaction, bool image);
+    std::string lastImage() { return "<img id=\"" + std::to_string(getLastImgstoreId()) + "\">"; }
+    size_t      lastImageSize() { return purple_imgstore_get_size(purple_imgstore_find_by_id(getLastImgstoreId())); }
+    std::string makeWebmFile();
 };
+
+// Nothing that would play, but it starts the way WebM does
+std::string CustomEmojiReactionTest::makeWebmFile()
+{
+    char *path = NULL;
+    int   fd   = g_file_open_tmp("tdlib_test_XXXXXX", &path, NULL);
+    EXPECT_TRUE(fd >= 0);
+    EXPECT_EQ(8, write(fd, "\x1A\x45\xDF\xA3webm", 8));
+    ::close(fd);
+    std::string result = path;
+    g_free(path);
+    return result;
+}
 
 void CustomEmojiReactionTest::reactWithCustomEmoji()
 {
@@ -262,12 +279,34 @@ void CustomEmojiReactionTest::verifyReaction(const std::string &reaction, bool i
 
 TEST_F(CustomEmojiReactionTest, Webp)
 {
+    setImageLoaders({"webp"});
     loginWithOneContact();
     receive(makeTextMessage("hi"), "hi");
 
+    // Given to the front-end as it is
     reactWithCustomEmoji();
     replyWithSticker(make_object<stickerFormatWebp>(), TEST_SOURCE_DIR "/test.webp");
-    verifyReaction("<img id=\"" + std::to_string(getLastImgstoreId()) + "\">", true);
+    verifyReaction(lastImage(), true);
+    gchar *data = NULL;
+    gsize  size = 0;
+    ASSERT_TRUE(g_file_get_contents(TEST_SOURCE_DIR "/test.webp", &data, &size, NULL));
+    g_free(data);
+    ASSERT_EQ(size, lastImageSize());
+}
+
+TEST_F(CustomEmojiReactionTest, Webp_NoLoader)
+{
+    loginWithOneContact();
+    receive(makeTextMessage("hi"), "hi");
+
+    // Decoded by the plugin, as stickers are
+    reactWithCustomEmoji();
+    replyWithSticker(make_object<stickerFormatWebp>(), TEST_SOURCE_DIR "/test.webp");
+#ifndef NoWebp
+    verifyReaction(lastImage(), true);
+#else
+    verifyReaction("\U0001F63A", false);
+#endif
 }
 
 TEST_F(CustomEmojiReactionTest, NotDownloadedYet)
@@ -284,7 +323,7 @@ TEST_F(CustomEmojiReactionTest, NotDownloadedYet)
         make_object<localFile>(TEST_SOURCE_DIR "/test.webp", true, true, false, true, 0, 10000, 10000),
         make_object<remoteFile>("beh", "bleh", false, true, 10000)
     ));
-    verifyReaction("<img id=\"" + std::to_string(getLastImgstoreId()) + "\">", true);
+    verifyReaction(lastImage(), true);
 }
 
 TEST_F(CustomEmojiReactionTest, Animated)
@@ -294,8 +333,9 @@ TEST_F(CustomEmojiReactionTest, Animated)
 
     reactWithCustomEmoji();
     replyWithSticker(make_object<stickerFormatTgs>(), TEST_SOURCE_DIR "/test.tgs");
+    // No GdkPixbuf loader for Lottie is known, so the plugin converts it, as it does stickers
 #ifndef NoLottie
-    verifyReaction("<img id=\"" + std::to_string(getLastImgstoreId()) + "\">", true);
+    verifyReaction(lastImage(), true);
 #else
     verifyReaction("\U0001F63A", false);
 #endif
@@ -303,12 +343,41 @@ TEST_F(CustomEmojiReactionTest, Animated)
 
 TEST_F(CustomEmojiReactionTest, Webm)
 {
+    const std::string path = makeWebmFile();
     loginWithOneContact();
     receive(makeTextMessage("hi"), "hi");
 
     // Nothing to play it with: the emoji it stands for instead
     reactWithCustomEmoji();
-    replyWithSticker(make_object<stickerFormatWebm>(), "/path.webm");
+    replyWithSticker(make_object<stickerFormatWebm>(), path);
+    verifyReaction("\U0001F63A", false);
+    remove(path.c_str());
+}
+
+TEST_F(CustomEmojiReactionTest, Webm_Loader)
+{
+    const std::string path = makeWebmFile();
+    setImageLoaders({"webp", "webm"});
+    loginWithOneContact();
+    receive(makeTextMessage("hi"), "hi");
+
+    // Some day
+    reactWithCustomEmoji();
+    replyWithSticker(make_object<stickerFormatWebm>(), path);
+    verifyReaction(lastImage(), true);
+    ASSERT_EQ(8U, lastImageSize());
+    remove(path.c_str());
+}
+
+TEST_F(CustomEmojiReactionTest, Webm_AnimationsOff)
+{
+    setImageLoaders({"webm"});
+    purple_account_set_bool(account, "animated-stickers", FALSE);
+    loginWithOneContact();
+    receive(makeTextMessage("hi"), "hi");
+
+    reactWithCustomEmoji();
+    replyWithSticker(make_object<stickerFormatWebm>(), "/path.webm", false);
     verifyReaction("\U0001F63A", false);
 }
 
