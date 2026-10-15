@@ -399,6 +399,37 @@ TEST_F(FileTransferTest, WebpSticker_NoLoader)
     ));
 }
 
+TEST_F(FileTransferTest, WebpSticker_NoLoader_Emoji)
+{
+    const int32_t date      = 10001;
+    const int32_t fileId    = 1234;
+    setImageLoaders({});
+    loginWithOneContact();
+
+    // Where it cannot be shown, the emoji it goes with stands in for it
+    tgl.update(make_object<updateNewMessage>(makeMessage(
+        1,
+        userIds[0],
+        chatIds[0],
+        false,
+        date,
+        make_object<messageSticker>(makeSticker(320, 200, "\U0001F63A",
+            make_object<file>(
+                fileId, 10000, 10000,
+                make_object<localFile>(TEST_SOURCE_DIR "/test.webp", true, true, false, true, 0, 10000, 10000),
+                make_object<remoteFile>("beh", "bleh", false, true, 10000)
+            )), false)
+    )));
+    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
+    prpl.verifyEvents(ServGotImEvent(
+        connection,
+        purpleUserName(0),
+        "<a href=\"file://file://" TEST_SOURCE_DIR "/test.webp\">\U0001F63A</a>",
+        PURPLE_MESSAGE_RECV,
+        date
+    ));
+}
+
 #ifndef NoLottie
 TEST_F(FileTransferTest, AnimatedStickerDecode)
 #else

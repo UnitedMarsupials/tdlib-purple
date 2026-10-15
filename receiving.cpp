@@ -625,6 +625,13 @@ static void showDownloadedImage(const td::td_api::chat &chat, TgMessageInfo &mes
     gchar       *data   = NULL;
     size_t       len    = 0;
 
+    // A front-end that shows no pictures gets the link to the file
+    if (!canShowImages()) {
+        // TRANSLATOR: File-type, used to describe what is being downloaded, in sentences like "Downloading photo" or "Ignoring photo download".
+        showGenericFileInline(chat, message, filePath, caption, _("photo"), std::string(), account);
+        return;
+    }
+
     if (g_file_get_contents (filePath.c_str(), &data, &len, NULL)) {
         int id = purple_imgstore_add_with_id (data, len, NULL);
         text = makeInlineImageText(id);
@@ -649,7 +656,8 @@ bool isStickerAnimated(const std::string &filePath)
 bool shouldConvertAnimatedSticker(const TgMessageInfo &message, const PurpleAccount *purpleAccount)
 {
 #ifndef NoLottie
-    return !message.outgoing &&
+    // Not for a front-end that shows no pictures anyway
+    return !message.outgoing && canShowImages() &&
            purple_account_get_bool(purpleAccount, AccountOptions::AnimatedStickers,
                                    AccountOptions::AnimatedStickersDefault);
 #else
@@ -1296,6 +1304,9 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
         } else if (message->content_->get_id() == td::td_api::messageSticker::ID) {
             messageInfo.type = TgMessageInfo::Type::Sticker;
             td::td_api::messageSticker &sticker = static_cast<td::td_api::messageSticker &>(*message->content_);
+            // Shown where the sticker cannot be; set before anything copies the message's info
+            if (sticker.sticker_)
+                messageInfo.altText = sticker.sticker_->emoji_;
             if (sticker.sticker_ && sticker.sticker_->thumbnail_) {
                 fullMessage.thumbnail = std::move(sticker.sticker_->thumbnail_->file_);
             }
@@ -1744,7 +1755,7 @@ using CustomEmojiShown = std::function<void(TdAccountData &account, const std::s
 static bool canConvertAnimatedSticker(PurpleAccount *purpleAccount)
 {
 #ifndef NoLottie
-    return purple_account_get_bool(purpleAccount, AccountOptions::AnimatedStickers,
+    return canShowImages() && purple_account_get_bool(purpleAccount, AccountOptions::AnimatedStickers,
                                    AccountOptions::AnimatedStickersDefault);
 #else
     return false;

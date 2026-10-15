@@ -10,6 +10,10 @@ enum class ImageSupport {
     NoLoader      // the front-end does not show images through GdkPixbuf at all
 };
 
+// Whether the front-end shows pictures at all, which it does with GdkPixbuf, if it has it
+bool canShowImages();
+extern const char *gdkPixbufGetFileInfoName;
+
 // Whether the front-end can show the image, by asking its GdkPixbuf, which Pidgin loads it with, to
 // look at the file. The plugin does not link GdkPixbuf, but looks for the front-end's.
 ImageSupport probeImageFile(const std::string &path);
