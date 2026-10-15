@@ -186,6 +186,21 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         break;
     }
 
+    case td::td_api::updateMessageInteractionInfo::ID: {
+        auto &interactionUpdate = static_cast<const td::td_api::updateMessageInteractionInfo &>(update);
+        updateMessageReactions(m_data, getChatId(interactionUpdate), getMessageId(interactionUpdate),
+                               interactionUpdate.interaction_info_.get());
+        break;
+    }
+
+    case td::td_api::updateMessageUnreadReactions::ID: {
+        auto &reactionsUpdate = static_cast<td::td_api::updateMessageUnreadReactions &>(update);
+        purple_debug_misc(config::pluginId, "Incoming update: %zu unread reactions to message %" G_GINT64_FORMAT "\n",
+                          reactionsUpdate.unread_reactions_.size(), reactionsUpdate.message_id_);
+        updateUnreadReactions(m_data, reactionsUpdate);
+        break;
+    }
+
     case td::td_api::updateMessageSendFailed::ID: {
         auto &sendFailed = static_cast<const td::td_api::updateMessageSendFailed &>(update);
         purple_debug_misc(config::pluginId, "Incoming update: message %" G_GINT64_FORMAT " send failed\n",
