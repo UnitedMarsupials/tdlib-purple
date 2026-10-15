@@ -59,6 +59,9 @@ void fetchHistory(TdAccountData &account, ChatId chatId, MessageId fetchFrom, Me
 void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messageId,
                           td::td_api::object_ptr<td::td_api::MessageContent> content);
 void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessages &update);
+void updateMessageReactions(TdAccountData &account, ChatId chatId, MessageId messageId,
+                            const td::td_api::messageInteractionInfo *info);
+void updateUnreadReactions(TdAccountData &account, td::td_api::updateMessageUnreadReactions &update);
 
 #endif
 

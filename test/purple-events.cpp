@@ -169,7 +169,10 @@ static void compare(const ServGotImEvent &actual, const ServGotImEvent &expected
     COMPARE(username);
     COMPARE(message);
     COMPARE(flags);
-    COMPARE(mtime);
+    // Of something that happened just now, rather than of a message
+    if (expected.mtime) {
+        COMPARE(mtime);
+    }
 }
 
 static void compare(const ServGotJoinedChatEvent &actual, const ServGotJoinedChatEvent &expected)

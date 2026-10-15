@@ -314,7 +314,11 @@ struct ReadReceipt {
 struct ShownMessage {
     std::string file;      // the file the message carries, if any
     std::string content;   // what is shown of it besides: its text, caption or description
+    bool        quotable = false; // content is the text or caption, as written
+    std::string kind;      // what the message is, to name it by where there is no text to quote
     time_t      timestamp;
+    // Who gave which reaction, as far as anyone has been named, and whether it was us
+    std::map<std::string, bool> reactions;
 };
 
 // An edit to a message that was still waiting to be shown at the time
