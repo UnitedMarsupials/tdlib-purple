@@ -128,6 +128,7 @@ private:
     void       chatActionResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
 
     void       onAnimatedStickerConverted(AccountThread *arg);
+    void       onReactionStickerConverted(AccountThread *arg);
     void       sendMessageCreatePrivateChatResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void       uploadResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
 

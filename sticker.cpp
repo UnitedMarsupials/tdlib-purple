@@ -17,8 +17,6 @@
 
 constexpr int MAX_W = 256;
 constexpr int MAX_H = 256;
-constexpr unsigned ANIMATED_WIDTH  = 200;
-constexpr unsigned ANIMATED_HEIGHT = 200;
 
 #ifndef NoWebp
 
@@ -91,7 +89,7 @@ static int p2tgl_imgstore_add_with_id_png (const unsigned char *raw_bitmap, unsi
     return purple_imgstore_add_with_id (png_data, png_size, NULL);
 }
 
-static int p2tgl_imgstore_add_with_id_webp (const char *filename)
+int p2tgl_imgstore_add_with_id_webp (const char *filename)
 {
     const uint8_t *data = NULL;
     size_t len;
@@ -317,8 +315,8 @@ void StickerConversionThread::run()
     m_outputFileName = tempFileName;
     g_free(tempFileName);
 
-    unsigned w = ANIMATED_WIDTH;
-    unsigned h = ANIMATED_HEIGHT;
+    unsigned w = m_size;
+    unsigned h = m_size;
     auto buffer = std::unique_ptr<uint32_t[]>(new uint32_t[w * h]);
     size_t frameCount = player->totalFrame();
 
@@ -350,4 +348,17 @@ void StickerConversionThread::callback(PurpleTdClient* tdClient)
 {
     if (g_callback)
         (tdClient->*g_callback)(this);
+}
+
+StickerConversionThread::Callback ReactionStickerThread::g_reactionCallback = nullptr;
+
+void ReactionStickerThread::setCallback(AccountThread::Callback callback)
+{
+    g_reactionCallback = callback;
+}
+
+void ReactionStickerThread::callback(PurpleTdClient* tdClient)
+{
+    if (g_reactionCallback)
+        (tdClient->*g_reactionCallback)(this);
 }
