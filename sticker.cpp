@@ -236,8 +236,9 @@ void warnMissingImageLoader(const std::string &path)
     const char *dot    = strrchr(path.c_str(), '.');
     std::string format = (dot && !strchr(dot, G_DIR_SEPARATOR)) ? dot + 1 : "unknown";
     if (warned.insert(format).second)
-        g_warning("Pictures in %s format are shown as text: the front-end has no GdkPixbuf loader "
-                  "for them. Installing one would show them as pictures.", format.c_str());
+        purple_debug_warning(config::pluginId, "Pictures in %s format are shown as text: the front-end has "
+                             "no GdkPixbuf loader for them. Installing one would show them as pictures.\n",
+                             format.c_str());
 }
 
 StickerConversionThread::Callback ReactionStickerThread::g_reactionCallback = nullptr;
