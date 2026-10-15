@@ -22,7 +22,6 @@
 // live_period (1.8.65)
 #define TDLIB_API_LIVE_LOCATION    ${TDLIB_API_LIVE_LOCATION}
 
-#cmakedefine NoWebp
 
 #define TEST_SOURCE_DIR "${CMAKE_SOURCE_DIR}/test"
 

@@ -686,7 +686,7 @@ static void showDownloadedSticker(const td::td_api::chat &chat, TgMessageInfo &m
             showGenericFileInline(chat, message, filePath, NULL, fileDescription, std::string(), account);
         }
     } else {
-        showWebpSticker(chat, message, filePath, fileDescription, account);
+        showStickerFile(chat, message, filePath, fileDescription, account);
     }
 }
 
@@ -1757,59 +1757,19 @@ static std::string makeReactionImageText(int imageId)
     return "<img id=\"" + std::to_string(imageId) + "\">";
 }
 
-static const char *getStickerFormatName(int32_t format)
-{
-    switch (format) {
-    case td::td_api::stickerFormatWebp::ID: return "WebP";
-    case td::td_api::stickerFormatTgs::ID:  return "TGS (Lottie)";
-    case td::td_api::stickerFormatWebm::ID: return "WebM";
-    default:                                return "unknown";
-    }
-}
-
-// Once for each format, for as long as the front-end runs
-static void warnMissingImageLoader(int32_t format, const std::string &error)
-{
-    static std::set<int32_t> warned;
-    if (warned.insert(format).second)
-        g_warning("Custom emoji in %s format are shown as the emoji they stand for: the front-end "
-                  "has no GdkPixbuf loader for it (%s). Installing one would show them as pictures.",
-                  getStickerFormatName(format), error.c_str());
-}
-
-// Given to the front-end as it is, if it can show it, and otherwise converted where the plugin knows
-// how, as it does stickers. Failing that, the emoji the custom one stands for will do.
+// Given to the front-end as it is, if it can show it; TGS, which nothing can, is converted, as it is
+// for stickers. Failing that, the emoji the custom one stands for will do.
 static void showCustomEmojiFile(TdAccountData &account, const std::string &path, int32_t format,
                                 const std::string &fallback, CustomEmojiShown shown)
 {
     // Custom emoji are 100 pixels square
     enum { CUSTOM_EMOJI_SIZE = 100 };
 
-    gchar *data = NULL;
-    gsize  size = 0;
-    if (!g_file_get_contents(path.c_str(), &data, &size, NULL)) {
-        shown(account, fallback, false);
-        return;
-    }
-
-    std::string  error;
-    ImageSupport support = probeImage(data, size, error);
-    if (support == ImageSupport::Supported) {
-        // The imgstore takes the data
-        int imageId = purple_imgstore_add_with_id(data, size, NULL);
-        shown(account, makeReactionImageText(imageId), true);
-        return;
-    }
-    g_free(data);
-    purple_debug_misc(config::pluginId, "Cannot show custom emoji %s as it is: %s\n", path.c_str(), error.c_str());
-
-    if (format == td::td_api::stickerFormatWebp::ID) {
-        int imageId = p2tgl_imgstore_add_with_id_webp(path.c_str());
-        if (imageId) {
-            shown(account, makeReactionImageText(imageId), true);
+    if (format == td::td_api::stickerFormatTgs::ID) {
+        if (!canConvertAnimatedSticker(account.purpleAccount)) {
+            shown(account, fallback, false);
             return;
         }
-    } else if ((format == td::td_api::stickerFormatTgs::ID) && canConvertAnimatedSticker(account.purpleAccount)) {
         ReactionStickerThread *thread = new ReactionStickerThread(account.purpleAccount, path,
             [fallback, shown](TdAccountData &account, int imageId) {
                 if (imageId)
@@ -1822,8 +1782,19 @@ static void showCustomEmojiFile(TdAccountData &account, const std::string &path,
         return;
     }
 
+    gchar       *data    = NULL;
+    gsize        size    = 0;
+    ImageSupport support = probeImageFile(path);
+    if ((support == ImageSupport::Supported) && g_file_get_contents(path.c_str(), &data, &size, NULL)) {
+        // The imgstore takes the data
+        int imageId = purple_imgstore_add_with_id(data, size, NULL);
+        shown(account, makeReactionImageText(imageId), true);
+        return;
+    }
+
+    purple_debug_misc(config::pluginId, "Cannot show custom emoji %s\n", path.c_str());
     if (support == ImageSupport::Unrecognized)
-        warnMissingImageLoader(format, error);
+        warnMissingImageLoader(path);
     shown(account, fallback, false);
 }
 

@@ -58,9 +58,6 @@ if (DEFINED GTEST_PATH)
     link_directories(${GTEST_PATH}/lib)
 endif (DEFINED GTEST_PATH)
 
-if (NOT NoWebp)
-    target_link_libraries(tests PRIVATE ${libwebp_LIBRARIES} ${libpng_LIBRARIES})
-endif (NOT NoWebp)
 
 if (NOT NoLottie)
     target_compile_definitions(tests PRIVATE LOT_BUILD)

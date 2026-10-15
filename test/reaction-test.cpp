@@ -296,17 +296,13 @@ TEST_F(CustomEmojiReactionTest, Webp)
 
 TEST_F(CustomEmojiReactionTest, Webp_NoLoader)
 {
+    setImageLoaders({});
     loginWithOneContact();
     receive(makeTextMessage("hi"), "hi");
 
-    // Decoded by the plugin, as stickers are
     reactWithCustomEmoji();
     replyWithSticker(make_object<stickerFormatWebp>(), TEST_SOURCE_DIR "/test.webp");
-#ifndef NoWebp
-    verifyReaction(lastImage(), true);
-#else
     verifyReaction("\U0001F63A", false);
-#endif
 }
 
 TEST_F(CustomEmojiReactionTest, NotDownloadedYet)
