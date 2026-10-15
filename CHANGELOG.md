@@ -20,6 +20,10 @@
 
 - **Czech, German, Polish and Albanian are complete again.**
 
+### Build
+
+- **libwebp and libpng are no longer needed: stickers are decoded by the front-end's GdkPixbuf.**
+
 ## 0.9.2 (2026-10-11)
 
 ### Behaviour
