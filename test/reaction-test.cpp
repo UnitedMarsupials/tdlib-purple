@@ -206,6 +206,11 @@ protected:
     void replyWithSticker(object_ptr<StickerFormat> format, const std::string &path, bool downloaded = true);
     void verifyReaction(const std::string &reaction, bool image);
     std::string lastImage() { return "<img id=\"" + std::to_string(getLastImgstoreId()) + "\">"; }
+    // Leading to the file, behind Pidgin's extra "file://"
+    std::string linked(const std::string &path, const std::string &inner)
+    {
+        return "<a href=\"file://file://" + path + "\">" + inner + "</a>";
+    }
     size_t      lastImageSize() { return purple_imgstore_get_size(purple_imgstore_find_by_id(getLastImgstoreId())); }
     std::string makeWebmFile();
 };
@@ -269,7 +274,7 @@ TEST_F(CustomEmojiReactionTest, Webp)
     // Given to the front-end as it is
     reactWithCustomEmoji();
     replyWithSticker(make_object<stickerFormatWebp>(), TEST_SOURCE_DIR "/test.webp");
-    verifyReaction(lastImage(), true);
+    verifyReaction(linked(TEST_SOURCE_DIR "/test.webp", lastImage()), true);
     gchar *data = NULL;
     gsize  size = 0;
     ASSERT_TRUE(g_file_get_contents(TEST_SOURCE_DIR "/test.webp", &data, &size, NULL));
@@ -285,7 +290,7 @@ TEST_F(CustomEmojiReactionTest, Webp_NoLoader)
 
     reactWithCustomEmoji();
     replyWithSticker(make_object<stickerFormatWebp>(), TEST_SOURCE_DIR "/test.webp");
-    verifyReaction("\U0001F63A", false);
+    verifyReaction(linked(TEST_SOURCE_DIR "/test.webp", "\U0001F63A"), false);
 }
 
 TEST_F(CustomEmojiReactionTest, NotDownloadedYet)
@@ -302,7 +307,7 @@ TEST_F(CustomEmojiReactionTest, NotDownloadedYet)
         make_object<localFile>(TEST_SOURCE_DIR "/test.webp", true, true, false, true, 0, 10000, 10000),
         make_object<remoteFile>("beh", "bleh", false, true, 10000)
     ));
-    verifyReaction(lastImage(), true);
+    verifyReaction(linked(TEST_SOURCE_DIR "/test.webp", lastImage()), true);
 }
 
 TEST_F(CustomEmojiReactionTest, Animated)
@@ -314,9 +319,9 @@ TEST_F(CustomEmojiReactionTest, Animated)
     replyWithSticker(make_object<stickerFormatTgs>(), TEST_SOURCE_DIR "/test.tgs");
     // No GdkPixbuf loader for Lottie is known, so the plugin converts it, as it does stickers
 #ifndef NoLottie
-    verifyReaction(lastImage(), true);
+    verifyReaction(linked(TEST_SOURCE_DIR "/test.tgs", lastImage()), true);
 #else
-    verifyReaction("\U0001F63A", false);
+    verifyReaction(linked(TEST_SOURCE_DIR "/test.tgs", "\U0001F63A"), false);
 #endif
 }
 
@@ -329,7 +334,7 @@ TEST_F(CustomEmojiReactionTest, Webm)
     // Nothing to play it with: the emoji it stands for instead
     reactWithCustomEmoji();
     replyWithSticker(make_object<stickerFormatWebm>(), path);
-    verifyReaction("\U0001F63A", false);
+    verifyReaction(linked(path, "\U0001F63A"), false);
     remove(path.c_str());
 }
 
@@ -343,7 +348,7 @@ TEST_F(CustomEmojiReactionTest, Webm_Loader)
     // Some day
     reactWithCustomEmoji();
     replyWithSticker(make_object<stickerFormatWebm>(), path);
-    verifyReaction(lastImage(), true);
+    verifyReaction(linked(path, lastImage()), true);
     ASSERT_EQ(8U, lastImageSize());
     remove(path.c_str());
 }
