@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <vector>
 #include <gtest/gtest.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 
 struct AccountInfo {
     PurpleAccount                     *account;
@@ -1321,6 +1322,11 @@ struct MockPixbufLoader {
     bool        closed = false;
 };
 
+static MockPixbufLoader *getMockLoader(void *loader)
+{
+    return static_cast<MockPixbufLoader *>(loader);
+}
+
 static bool isImageFormat(const std::string &data, const std::string &format)
 {
     if (format == "webp")
@@ -1334,20 +1340,20 @@ static bool isImageFormat(const std::string &data, const std::string &format)
 
 extern "C" {
 
-void *gdk_pixbuf_loader_new()
+GdkPixbufLoader *gdk_pixbuf_loader_new()
 {
-    return new MockPixbufLoader;
+    return reinterpret_cast<GdkPixbufLoader *>(new MockPixbufLoader);
 }
 
-gboolean gdk_pixbuf_loader_write(void *loader, const guchar *buf, gsize count, GError **error)
+gboolean gdk_pixbuf_loader_write(GdkPixbufLoader *loader, const guchar *buf, gsize count, GError **error)
 {
-    static_cast<MockPixbufLoader *>(loader)->data.append(reinterpret_cast<const char *>(buf), count);
+    getMockLoader(loader)->data.append(reinterpret_cast<const char *>(buf), count);
     return TRUE;
 }
 
-gboolean gdk_pixbuf_loader_close(void *loader, GError **error)
+gboolean gdk_pixbuf_loader_close(GdkPixbufLoader *loader, GError **error)
 {
-    MockPixbufLoader *mock = static_cast<MockPixbufLoader *>(loader);
+    MockPixbufLoader *mock = getMockLoader(loader);
     EXPECT_FALSE(mock->closed) << "GdkPixbufLoader closed twice";
     mock->closed = true;
     for (const std::string &format: g_imageLoaders)
@@ -1358,9 +1364,9 @@ gboolean gdk_pixbuf_loader_close(void *loader, GError **error)
     return FALSE;
 }
 
-void g_object_unref(void *object)
+void g_object_unref(gpointer object)
 {
-    MockPixbufLoader *mock = static_cast<MockPixbufLoader *>(object);
+    MockPixbufLoader *mock = getMockLoader(object);
     EXPECT_TRUE(mock->closed) << "GdkPixbufLoader finalized without calling gdk_pixbuf_loader_close()";
     delete mock;
 }

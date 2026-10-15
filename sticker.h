@@ -14,7 +14,7 @@ enum class ImageSupport {
 };
 
 // Whether the front-end can show the image, by asking its GdkPixbuf, the way Pidgin will load it.
-// The library is looked up at run time, the plugin itself not depending on GTK. When the answer is
+// The plugin does not link GdkPixbuf, but uses the front-end's, if it has one. When the answer is
 // no, error says why.
 ImageSupport probeImage(const gchar *data, gsize size, std::string &error);
 
