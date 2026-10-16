@@ -630,7 +630,8 @@ TEST_F(GroupChatTest, CreateRemoveBasicGroupInAnotherClient)
     ));
     tgl.verifyRequest(viewMessages(groupChatId, {messageId[0]}, nullptr, true));
     prpl.verifyEvents(
-        ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatPurpleName),
+        AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), NULL),
+        ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
         ConvSetTitleEvent(groupChatPurpleName, groupChatTitle),
         ConversationWriteEvent(groupChatPurpleName, NotificationWho,
                                selfFirstName + " " + selfLastName +

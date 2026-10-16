@@ -352,7 +352,8 @@ TEST_F(SupergroupTest, LeaveSupergroup)
     ));
     tgl.verifyRequest(viewMessages(groupChatId, {messageId}, nullptr, true));
     prpl.verifyEvents(
-        ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatPurpleName),
+        AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), NULL),
+        ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
         ConvSetTitleEvent(groupChatPurpleName, groupChatTitle),
         ChatSetTopicEvent(groupChatPurpleName, "", ""),
         ChatClearUsersEvent(groupChatPurpleName),
@@ -725,9 +726,29 @@ TEST_F(SupergroupTest, UnjoinedChannelShownOnRequest)
     message->is_channel_post_ = true;
     tgl.update(make_object<updateNewMessage>(std::move(message)));
     tgl.verifyRequest(viewMessages(groupChatId, {messageId}, nullptr, true));
+    // An entry in the buddy list for this run only, which Pidgin takes the tab's title from
+    PurpleGroup *notJoined = purple_find_group("Telegram: not joined");
+    ASSERT_NE(nullptr, notJoined);
+    ASSERT_TRUE(purple_blist_node_get_flags(&notJoined->node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
     prpl.verifyEvents(
-        ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatPurpleName),
+        AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), NULL),
+        ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
         ConvSetTitleEvent(groupChatPurpleName, groupChatTitle),
         ServGotChatEvent(connection, purpleChatId, "Channel post", "Hello", PURPLE_MESSAGE_RECV, date)
     );
+    PurpleChat *purpleChat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
+    ASSERT_NE(nullptr, purpleChat);
+    ASSERT_TRUE(purple_blist_node_get_flags(&purpleChat->node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+
+    // Pidgin, updating the tab, finds it
+    PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_CHAT,
+                                                                     groupChatPurpleName.c_str(), account);
+    ASSERT_NE(nullptr, conv);
+    purple_conversation_autoset_title(conv);
+    prpl.verifyEvents(ConvSetTitleEvent(groupChatPurpleName, groupChatTitle));
+
+    // Joined, it is ours to keep, and moves to where joined chats are
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusMember>(), 2)));
+    ASSERT_FALSE(purple_blist_node_get_flags(&purpleChat->node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+    prpl.verifyEvents(AddChatEvent(groupChatPurpleName, groupChatTitle, account, NULL, NULL));
 }

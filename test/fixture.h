@@ -48,6 +48,8 @@ protected:
     object_ptr<updateUser>     standardUpdateUserNoPhone(unsigned index);
     object_ptr<updateNewChat>  standardPrivateChat(unsigned index, object_ptr<ChatList> chatList = nullptr);
     PurplePluginProtocolInfo  &pluginInfo();
+    // Where chats not joined go in the buddy list, for this run only; stands for it in expectations
+    PurpleGroup               *notJoinedGroup();
 };
 
 void checkFile(const char *filename, void *content, unsigned size);
