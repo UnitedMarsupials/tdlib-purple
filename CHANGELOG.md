@@ -17,6 +17,7 @@
 - **Channels you are not a member of no longer open conversations.**
 - **Front-ends that show no pictures, such as BitlBee, get links to photos and stickers instead.**
 - **Notices in channels no longer begin with "Channel post".**
+- **The tab of a channel you have not joined keeps its title.**
 - **Temporary files of images sent and of downloads are no longer left behind.**
 
 ### Translations
