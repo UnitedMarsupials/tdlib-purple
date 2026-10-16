@@ -232,6 +232,28 @@ PurpleConversation *getImConversation(PurpleAccount *account, const char *userna
 
     return conv;
 }
+// Pidgin takes the title of a group chat's tab from its entry in the buddy list whenever it updates
+// the tab, and failing that, from the conversation's name, chat-<id>. A group we are not a member of
+// has no entry, so it gets one for as long as the program runs, in a group of its own; neither is
+// saved. Joining the group makes it a lasting one (see updateGroupChat).
+static void addTransientChat(TdAccountData &account, const td::td_api::chat &chat)
+{
+    // TRANSLATOR: Buddy-list group, holding channels and groups shown in a conversation though not joined. It lasts until the program quits.
+    const char  *groupName = _("Telegram: not joined");
+    PurpleGroup *group     = purple_find_group(groupName);
+    if (!group) {
+        group = purple_group_new(groupName);
+        purple_blist_node_set_flags(PURPLE_BLIST_NODE(group), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+        purple_blist_add_group(group, NULL);
+    }
+
+    purple_debug_misc(config::pluginId, "Adding chat %s to the buddy list until the program quits\n",
+                      chat.title_.c_str());
+    PurpleChat *purpleChat = purple_chat_new(account.purpleAccount, chat.title_.c_str(), getChatComponents(chat));
+    purple_blist_node_set_flags(PURPLE_BLIST_NODE(purpleChat), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+    purple_blist_add_chat(purpleChat, group, NULL);
+}
+
 
 PurpleConvChat *getChatConversation(TdAccountData &account, const td::td_api::chat &chat,
                                     int chatPurpleId)
@@ -254,18 +276,18 @@ PurpleConvChat *getChatConversation(TdAccountData &account, const td::td_api::ch
         if (chatPurpleId != 0) {
             purple_debug_misc(config::pluginId, "Creating conversation for chat %s (purple id %d)\n",
                               chat.title_.c_str(), chatPurpleId);
+            bool transient = !purple_blist_find_chat(account.purpleAccount, chatName.c_str());
+            if (transient)
+                addTransientChat(account, chat);
             serv_got_joined_chat(purple_account_get_connection(account.purpleAccount), chatPurpleId, chatName.c_str());
             conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_CHAT, chatName.c_str(),
                                                          account.purpleAccount);
             if (conv == NULL)
                 purple_debug_warning(config::pluginId, "Did not create conversation for chat %s\n", chat.title_.c_str());
             else {
-                // Sometimes when the group has just been created, or we left it and then got
-                // messageChatDeleteMember, the chat will not be in buddy list. In that case,
-                // libpurpleis going to use chatXXXXXXXXXXX as chat title. Set chat title explicitly
-                // to prevent that.
-                PurpleChat *purpleChat = purple_blist_find_chat(account.purpleAccount, chatName.c_str());
-                if (!purpleChat) {
+                // The conversation was named before it could know of the entry, which Pidgin will
+                // only look at when it next updates the tab
+                if (transient) {
                     purple_debug_misc(config::pluginId, "Setting conversation title to '%s'\n", chat.title_.c_str());
                     purple_conversation_set_title(conv, chat.title_.c_str());
                 }
@@ -413,6 +435,14 @@ static void updateGroupChat(TdAccountData &account, const td::td_api::chat &chat
         purpleChat = purple_chat_new(account.purpleAccount, chat.title_.c_str(), getChatComponents(chat));
         purple_blist_add_chat(purpleChat, NULL, NULL);
     } else {
+        // Shown before we joined, it is ours now, and to be kept
+        PurpleBlistNode *node = PURPLE_BLIST_NODE(purpleChat);
+        if (purple_blist_node_get_flags(node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE) {
+            purple_debug_misc(config::pluginId, "Keeping chat %s in the buddy list\n", chat.title_.c_str());
+            purple_blist_node_set_flags(node, (PurpleBlistNodeFlags)(purple_blist_node_get_flags(node) &
+                                                                     ~PURPLE_BLIST_NODE_FLAG_NO_SAVE));
+            purple_blist_add_chat(purpleChat, NULL, NULL);
+        }
         const char *oldName = purple_chat_get_name(purpleChat);
         if (chat.title_ != oldName) {
             purple_debug_misc(config::pluginId, "Renaming chat '%s' to '%s'\n", oldName, chat.title_.c_str());
@@ -505,8 +535,17 @@ void removeGroupChat(PurpleAccount *purpleAccount, const td::td_api::chat &chat)
     std::string  chatName   = getPurpleChatName(chat);
     PurpleChat  *purpleChat = purple_blist_find_chat(purpleAccount, chatName.c_str());
 
-    if (purpleChat)
-        purple_blist_remove_chat(purpleChat);
+    if (!purpleChat)
+        return;
+    // One of a chat not joined, shown in a conversation, stays as long as the program runs, under
+    // the chat's latest title, which the tab takes from it
+    if (purple_blist_node_get_flags(PURPLE_BLIST_NODE(purpleChat)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE) {
+        const char *oldName = purple_chat_get_name(purpleChat);
+        if (chat.title_ != oldName)
+            purple_blist_alias_chat(purpleChat, chat.title_.c_str());
+        return;
+    }
+    purple_blist_remove_chat(purpleChat);
     // TODO: uncomment when updateNewChat(chat_list=NULL) + updateChatChatList(non-NULL) at login
     // no longer removes chat
     //std::string setting = lastMessageSetting(getId(chat));

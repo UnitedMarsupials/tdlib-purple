@@ -42,6 +42,7 @@ void CommTest::TearDown()
     purple_account_destroy(account);
     account = NULL;
     clearFakeFiles();
+    clearGroups();
 }
 
 // Is this a request the plugin sent, or something TDLib sent back? This used to be decided by
@@ -223,4 +224,12 @@ void checkFile(const char *filename, void *content, unsigned size)
     ASSERT_EQ(actualSize, size) << "Wrong file size for " << filename;
     ASSERT_EQ(0, memcmp(content, actualContent, size)) << "Wrong content for " << filename;
     g_free(actualContent);
+}
+
+PurpleGroup *CommTest::notJoinedGroup()
+{
+    static char        name[] = "Telegram: not joined";
+    static PurpleGroup group  = {};
+    group.name = name;
+    return &group;
 }

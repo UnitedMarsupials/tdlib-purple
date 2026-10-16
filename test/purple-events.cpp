@@ -39,7 +39,9 @@ static void compare(const AddChatEvent &actual, const AddChatEvent &expected)
     COMPARE(name);
     COMPARE(alias);
     COMPARE(account);
-    COMPARE(group);
+    // By name, so that a group yet to be made can be expected
+    ASSERT_EQ(std::string(expected.group ? expected.group->name : ""),
+              std::string(actual.group ? actual.group->name : ""));
     COMPARE(node);
 }
 

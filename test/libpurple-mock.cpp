@@ -342,6 +342,7 @@ static void newNode(PurpleBlistNode &node, PurpleBlistNodeType type)
     node.parent = NULL;
     node.prev = NULL;
     node.type = type;
+    node.flags = (PurpleBlistNodeFlags)0;
     node.settings = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
 }
 
@@ -401,6 +402,13 @@ void purple_blist_add_chat(PurpleChat *chat, PurpleGroup *group, PurpleBlistNode
     auto pAccount = std::find_if(g_accounts.begin(), g_accounts.end(),
                                  [chat](const AccountInfo &info) { return (info.account == chat->account); });
     ASSERT_FALSE(pAccount == g_accounts.end()) << "Adding chat with unknown account";
+
+    // One in the buddy list already is moved, as real libpurple does
+    if (std::find(pAccount->chats.begin(), pAccount->chats.end(), chat) != pAccount->chats.end()) {
+        chat->node.parent = group ? &group->node : NULL;
+        EVENT(AddChatEvent, name, chat->alias, chat->account, group, node);
+        return;
+    }
 
     ASSERT_TRUE(std::find_if(pAccount->chats.begin(), pAccount->chats.end(), 
                              [name](const PurpleChat *existing) {
@@ -1273,11 +1281,45 @@ PurpleGroup standardPurpleGroup = {
 	.online = 0
 };
 
+static std::vector<PurpleGroup *> g_groups;
+
 PurpleGroup *purple_find_group(const char *name)
 {
     if (!strcmp(name, standardPurpleGroup.name))
         return &standardPurpleGroup;
+    for (PurpleGroup *group: g_groups)
+        if (!strcmp(name, group->name))
+            return group;
     return NULL;
+}
+
+PurpleGroup *purple_group_new(const char *name)
+{
+    PurpleGroup *group = new PurpleGroup();
+    newNode(group->node, PURPLE_BLIST_GROUP_NODE);
+    group->name = strdup(name);
+    return group;
+}
+
+void purple_blist_add_group(PurpleGroup *group, PurpleBlistNode *node)
+{
+    g_groups.push_back(group);
+}
+
+// Groups last for the run of the test case, like the rest of the buddy list
+void clearGroups()
+{
+    g_groups.clear();
+}
+
+void purple_blist_node_set_flags(PurpleBlistNode *node, PurpleBlistNodeFlags flags)
+{
+    node->flags = flags;
+}
+
+PurpleBlistNodeFlags purple_blist_node_get_flags(PurpleBlistNode *node)
+{
+    return node->flags;
 }
 
 const char *purple_group_get_name(PurpleGroup *group)
@@ -1662,6 +1704,18 @@ gulong purple_signal_connect(void *instance, const char *signal,
 	void *handle, PurpleCallback func, void *data)
 {
     return 0;
+}
+
+// As libpurple's, which Pidgin calls whenever it updates a tab
+void purple_conversation_autoset_title(PurpleConversation *conv)
+{
+    const char *text = NULL;
+    if (conv->type == PURPLE_CONV_TYPE_CHAT) {
+        PurpleChat *chat = purple_blist_find_chat(conv->account, conv->name);
+        if (chat)
+            text = purple_chat_get_name(chat);
+    }
+    purple_conversation_set_title(conv, text ? text : conv->name);
 }
 
 };
