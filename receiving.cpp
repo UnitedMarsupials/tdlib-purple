@@ -315,6 +315,9 @@ static void getShownContent(const td::td_api::MessageContent &content, ShownMess
 std::string makeNoticeWithSender(const td::td_api::chat &chat, const TgMessageInfo &message,
                                  const char *noticeText, PurpleAccount *account)
 {
+    // In a channel, "Channel post" says nothing a notice there does not
+    if (message.anonymousChannelPost)
+        return noticeText;
     std::string prefix = escapeForDisplay(getSenderDisplayName(chat, message, account));
     if (!prefix.empty())
         prefix += ": ";
@@ -1286,6 +1289,7 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
     messageInfo.id               = getId(*message);
     messageInfo.type             = TgMessageInfo::Type::Other;
     messageInfo.incomingGroupchatSender = getIncomingGroupchatSenderPurpleName(chat, *message, account);
+    messageInfo.anonymousChannelPost    = isAnonymousChannelPost(chat, *message);
     messageInfo.timestamp        = message->date_;
     messageInfo.outgoing         = message->is_outgoing_;
     messageInfo.sentLocally      = (message->sending_state_ != nullptr);

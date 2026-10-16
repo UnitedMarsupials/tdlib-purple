@@ -145,6 +145,7 @@ struct TgMessageInfo {
     td::td_api::object_ptr<td::td_api::message> repliedMessage;
     std::string forwardedFrom;
     std::string altText; // to show instead of the picture, where it cannot be shown
+    bool        anonymousChannelPost = false; // incomingGroupchatSender is "Channel post", naming nobody
 
     void assign(const TgMessageInfo &other)
     {
@@ -158,6 +159,7 @@ struct TgMessageInfo {
         repliedMessage = nullptr;
         forwardedFrom = other.forwardedFrom;
         altText = other.altText;
+        anonymousChannelPost = other.anonymousChannelPost;
     }
 };
 
