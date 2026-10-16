@@ -545,6 +545,13 @@ std::string makeBasicDisplayName(const td::td_api::user &user)
     return result;
 }
 
+// Posted in a channel, by nobody named: its sender is "Channel post"
+bool isAnonymousChannelPost(const td::td_api::chat &chat, const td::td_api::message &message)
+{
+    return !message.is_outgoing_ && (getBasicGroupId(chat).valid() || getSupergroupId(chat).valid()) &&
+           !getSenderUserId(message).valid() && message.author_signature_.empty() && message.is_channel_post_;
+}
+
 std::string getIncomingGroupchatSenderPurpleName(const td::td_api::chat &chat, const td::td_api::message &message,
                                                  const TdAccountData &account)
 {

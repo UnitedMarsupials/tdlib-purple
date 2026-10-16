@@ -617,6 +617,43 @@ TEST_F(SupergroupTest, ReceiveChannelPost)
 
 }
 
+TEST_F(SupergroupTest, ChannelPostNotice)
+{
+    constexpr int32_t date         = 12345;
+    constexpr int64_t messageId    = 10000;
+    constexpr int     purpleChatId = 1;
+    constexpr int32_t fileId       = 1234;
+    purple_account_set_string(account, "media-size-threshold", "0.5");
+    purple_account_set_string(account, "media-handling-behavior", "discard");
+    loginWithSupergroup();
+
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(make_object<file>(
+            fileId, 655360, 655360,
+            make_object<localFile>("", true, true, false, false, 0, 0, 0),
+            make_object<remoteFile>("beh", "bleh", false, true, 655360)
+        ), 640, 480));
+    auto message = makeMessage(messageId, 0, groupChatId, false, date, makeMessagePhoto(
+        make_object<photo>(false, nullptr, std::move(sizes)),
+        make_object<formattedText>("caption", std::vector<object_ptr<textEntity>>()),
+        false, false, false
+    ));
+    message->is_channel_post_ = true;
+    tgl.update(make_object<updateNewMessage>(std::move(message)));
+
+    tgl.verifyRequest(viewMessages(groupChatId, {messageId}, nullptr, true));
+    // Every message in a channel is a channel post, which the notice need not repeat
+    prpl.verifyEvents(
+        ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
+        ChatSetTopicEvent(groupChatPurpleName, "", ""),
+        ChatClearUsersEvent(groupChatPurpleName),
+        ServGotChatEvent(connection, purpleChatId, "Channel post", "caption", PURPLE_MESSAGE_RECV, date),
+        ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+                               "Ignoring photo download (purple_str_size_to_units)",
+                               PURPLE_MESSAGE_SYSTEM, date)
+    );
+}
+
 // TODO: test non-user member
 
 TEST_F(SupergroupTest, ForeignChannel)
