@@ -1,5 +1,6 @@
 #include "fixture.h"
 #include "sticker.h"
+#include "client-utils.h"
 #include "tdlib-purple.h"
 #include "libpurple-mock.h"
 #include "printout.h"
@@ -16,6 +17,7 @@ void CommTest::SetUp()
 {
     setImageLoaders({"webp"});
     gdkPixbufGetFileInfoName = "gdk_pixbuf_get_file_info";
+    setMessageLinksEnabled(false);
     account = purple_account_new(("+" + selfPhoneNumber).c_str(), NULL);
     connection = new PurpleConnection;
     connection->state = PURPLE_DISCONNECTED;

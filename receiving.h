@@ -8,6 +8,10 @@ std::string makeNoticeWithSender(const td::td_api::chat &chat, const TgMessageIn
                                  const char *noticeText, PurpleAccount *account);
 std::string getMessageText(const td::td_api::formattedText &text);
 std::string makeInlineImageText(int imgstoreId);
+// For the conversation window, which renders text as HTML
+std::string escapeForDisplay(const std::string &text);
+// A file:// URI for the path
+std::string makeFileUri(const std::string &filePath);
 void sendConversationReadReceipts(TdAccountData &account, PurpleConversation *conv);
 void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const TgMessageInfo &message,
                      const char *text, const char *notification, uint32_t extraFlags = 0);

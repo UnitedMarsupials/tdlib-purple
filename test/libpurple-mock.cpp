@@ -751,6 +751,12 @@ void *purple_notify_message(void *handle, PurpleNotifyMsgType type,
     return NULL;
 }
 
+void *purple_notify_uri(void *handle, const char *uri)
+{
+    EVENT(NotifyUriEvent, uri);
+    return NULL;
+}
+
 PurpleNotifyUserInfo *purple_notify_user_info_new(void)
 {
     return NULL;

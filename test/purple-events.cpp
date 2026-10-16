@@ -115,6 +115,11 @@ static void compare(const ConvSetTitleEvent &actual, const ConvSetTitleEvent &ex
     COMPARE(newTitle);
 }
 
+static void compare(const NotifyUriEvent &actual, const NotifyUriEvent &expected)
+{
+    COMPARE(uri);
+}
+
 static void compare(const NotifyMessageEvent &actual, const NotifyMessageEvent &expected)
 {
     COMPARE(handle);
@@ -337,6 +342,7 @@ static void compareEvents(const PurpleEvent &actual, const PurpleEvent &expected
         C(ConversationWrite)
         C(ConvSetTitle)
         C(NotifyMessage)
+        C(NotifyUri)
         C(UserStatus)
         C(RequestInput)
         C(RequestAction)
@@ -484,6 +490,7 @@ std::string PurpleEvent::toString() const
     C(ConversationWrite)
     C(ConvSetTitle)
     C(NotifyMessage)
+    C(NotifyUri)
     C(UserStatus)
     C(RequestInput)
     C(RequestAction)

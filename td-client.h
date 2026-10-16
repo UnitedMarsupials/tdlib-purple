@@ -54,6 +54,9 @@ public:
     bool terminateCall(PurpleConversation *conv);
 
     void createSecretChat(const char *buddyName);
+
+    // A link to the message's file was clicked: fetches the file, if need be, and opens it
+    void openMessageFile(ChatId chatId, MessageId messageId);
 private:
     using TdObjectPtr   = td::td_api::object_ptr<td::td_api::Object>;
     using ResponseCb    = void (PurpleTdClient::*)(uint64_t requestId, TdObjectPtr object);
@@ -165,6 +168,20 @@ private:
         MessageId lastMessage;
     };
     std::vector<ChatGap> m_chatGaps;
+
+    // Files being opened, or opened lately, so that clicking a link again while the program for the
+    // file is still starting does not start another
+    struct OpenedFile {
+        bool   inProgress;
+        time_t openedAt;
+    };
+    std::map<std::pair<ChatId, MessageId>, OpenedFile> m_openedFiles;
+
+    void openMessageFileResponse(ChatId chatId, MessageId messageId, TdObjectPtr object);
+    void openDownloadedFile(ChatId chatId, MessageId messageId, const std::string &description,
+                            TdObjectPtr object);
+    void finishOpeningFile(ChatId chatId, MessageId messageId, const std::string &description,
+                           const std::string &path, const std::string &error);
 };
 
 #endif
