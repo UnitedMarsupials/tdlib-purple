@@ -16,7 +16,7 @@ enum {
 // The name is chosen by whoever sent the file and routinely contains spaces and other
 // characters a URI cannot carry literally, so the path has to be percent-encoded before
 // it is handed to a viewer.
-static std::string makeFileUri(const std::string &filePath)
+std::string makeFileUri(const std::string &filePath)
 {
     gchar *uri = g_filename_to_uri(filePath.c_str(), NULL, NULL);
     if (uri == NULL)
@@ -61,7 +61,7 @@ static std::string makeFileLinkTarget(const std::string &filePath)
 // title - reaches the conversation window, which libpurple renders as HTML. Escape it at
 // the point it enters that markup, or a value containing markup characters is mangled or
 // swallowed outright. Not for text going to purple_request_*, which Pidgin escapes itself.
-static std::string escapeForDisplay(const std::string &text)
+std::string escapeForDisplay(const std::string &text)
 {
     gchar *escaped = purple_markup_escape_text(text.c_str(), text.size());
     std::string result(escaped);
@@ -698,10 +698,23 @@ static void showDownloadedSticker(const td::td_api::chat &chat, TgMessageInfo &m
     }
 }
 
+static void showFileLink(const td::td_api::chat &chat, const TgMessageInfo &message,
+                         const std::string &linkTarget, const char *caption,
+                         const std::string &fileDescription, const std::string &preview,
+                         TdAccountData &account);
+
 void showGenericFileInline(const td::td_api::chat &chat, const TgMessageInfo &message,
                            const std::string &filePath, const char *caption,
                            const std::string &fileDescription, const std::string &preview,
                            TdAccountData &account)
+{
+    showFileLink(chat, message, makeFileLinkTarget(filePath), caption, fileDescription, preview, account);
+}
+
+static void showFileLink(const td::td_api::chat &chat, const TgMessageInfo &message,
+                         const std::string &linkTarget, const char *caption,
+                         const std::string &fileDescription, const std::string &preview,
+                         TdAccountData &account)
 {
     // A video's thumbnail leads, so that the link to the video sits directly beneath the picture.
     // The picture is part of the link, although Pidgin 2.14 will only ever activate one from its
@@ -710,7 +723,7 @@ void showGenericFileInline(const td::td_api::chat &chat, const TgMessageInfo &me
     // picture belongs to the link costs nothing meanwhile, and is what a conversation widget
     // would have to be told in order to make it clickable.
     std::string text = preview.empty() ? "" : "\n";
-    text += "<a href=\"" + escapeForDisplay(makeFileLinkTarget(filePath)) + "\">";
+    text += "<a href=\"" + escapeForDisplay(linkTarget) + "\">";
     if (!preview.empty())
         text += preview + "\n";
     text += escapeForDisplay(fileDescription) + "</a>";
@@ -810,6 +823,13 @@ static void requestInlineDownload(const char *sender, const td::td_api::file &fi
                           _("_No"), ignoreInlineDownload);
 }
 
+// A file shown as a link to its message, rather than to the file, which the plugin opens when the
+// link is clicked; pictures, which are shown as they are, still need the file before they can be
+static bool linksToMessage(const IncomingMessage &fullMessage)
+{
+    return messageLinksEnabled() && (fullMessage.messageInfo.type == TgMessageInfo::Type::Other);
+}
+
 // The thumbnail fetched for a video, as markup for the conversation window; empty if there is none
 static std::string makePreviewImageText(const IncomingMessage &fullMessage)
 {
@@ -840,6 +860,24 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
     // A video's thumbnail goes inside the hyperlink where there is one (see showGenericFileInline);
     // where there is only a notice, it goes above the caption. Either way it precedes the caption.
     std::string preview = makePreviewImageText(fullMessage);
+
+    // Fetched and opened only when clicked, if it is not here by then, so it is no reason to wait
+    if (linksToMessage(fullMessage)) {
+        showFileLink(chat, fullMessage.messageInfo,
+                     makeMessageLink(account.purpleAccount, getId(chat), fullMessage.messageInfo.id),
+                     caption, fileDesc, preview, account);
+        // Fetched beforehand, within the limit, so that a click opens it at once
+        if (!(file.local_ && file.local_->is_downloading_completed_) &&
+            isSizeWithinLimit(fileSize, fullMessage.inlineFileSizeLimit))
+        {
+            purple_debug_misc(config::pluginId, "Fetching %s (file id %d) in the background\n",
+                              fileDesc.c_str(), (int)file.id_);
+            transceiver.sendQuery(td::td_api::make_object<td::td_api::downloadFile>(
+                                      file.id_, BACKGROUND_DOWNLOAD_PRIORITY, 0, 0, false),
+                                  nullptr);
+        }
+        return;
+    }
 
     if (file.local_ && file.local_->is_downloading_completed_) {
         autoDownload = true;
@@ -1363,6 +1401,9 @@ static bool isFileMessageReady(const IncomingMessage &fullMessage, ChatId chatId
     const td::td_api::chat *chat = account.getChat(chatId);
 
     if (chat && isInlineDownload(fullMessage, content, *chat)) {
+        // A link to the message needs nothing but the message
+        if (linksToMessage(fullMessage))
+            return true;
         // File will be shown inline
         // Animated stickers are not ready until converted
         if (fullMessage.inlineDownloadComplete)
@@ -1562,7 +1603,7 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
                 thread->startThread();
             }
             // TODO: if animated stickers are disabled, fetch thumbnail instead
-        } else if (inlineDownloadNeedAutoDl(fullMessage, *fileInfo.file)) {
+        } else if (inlineDownloadNeedAutoDl(fullMessage, *fileInfo.file) && !linksToMessage(fullMessage)) {
             // TgMessageInfo on fullMessage has replyMessage=NULL which will be copied onto DownloadRequest.
             // If message leaves PendingMessageQueue while download is still active, there's probably
             // a replyMessage on IncomingMessage by then, and it needs to be moved over to DownloadRequest.

@@ -43,6 +43,16 @@ std::vector<PurpleChat *> findChatsByNewGroup(const char *name, int type);
 
 std::string getSenderDisplayName(const td::td_api::chat &chat, const TgMessageInfo &message,
                                  PurpleAccount *account);
+// Links to a message's file, which the plugin fetches and opens when one is clicked. Only where the
+// front-end lets the plugin handle a scheme of its own, which Pidgin does; elsewhere, files are
+// linked to directly.
+constexpr const char *MESSAGE_LINK_SCHEME = "tdlib://";
+bool        messageLinksEnabled();
+void        setMessageLinksEnabled(bool enabled);
+std::string makeMessageLink(PurpleAccount *account, ChatId chatId, MessageId messageId);
+bool        parseMessageLink(const char *link, std::string &accountName, ChatId &chatId,
+                             MessageId &messageId);
+
 std::string getDownloadXferPeerName(ChatId chatId,
                                     const TgMessageInfo &message,
                                     TdAccountData &account);

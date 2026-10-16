@@ -19,6 +19,7 @@ add_executable(tests EXCLUDE_FROM_ALL
     message-edit-test.cpp
     location-test.cpp
     reaction-test.cpp
+    message-link-test.cpp
     test-transceiver.cpp
     libpurple-mock.cpp
     printout.cpp

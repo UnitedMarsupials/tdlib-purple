@@ -17,6 +17,7 @@
 #include <vector>
 #include <array>
 #include <ctype.h>
+#include <dlfcn.h>
 #include <unistd.h>
 
 #ifndef NoLottie
@@ -908,10 +909,86 @@ static bool checkTdlibVersion()
     return true;
 }
 
+void tgprpl_open_message_link(const char *link)
+{
+    std::string accountName;
+    ChatId      chatId;
+    MessageId   messageId;
+    if (!parseMessageLink(link, accountName, chatId, messageId)) {
+        purple_debug_warning(config::pluginId, "Not a link to a message: %s\n", link);
+        return;
+    }
+
+    PurpleAccount    *account = purple_accounts_find(accountName.c_str(), config::pluginId);
+    PurpleConnection *gc      = account ? purple_account_get_connection(account) : NULL;
+    PurpleTdClient   *client  = gc ? static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc)) : NULL;
+    if (!client || !PURPLE_CONNECTION_IS_CONNECTED(gc)) {
+        // TRANSLATOR: Error dialog, secondary content. Argument is the account's name, its phone number.
+        std::string reason = formatMessage(_("Account {} is not connected."), accountName);
+        // TRANSLATOR: Error dialog, primary content, after a file's link in a conversation was clicked.
+        purple_notify_error(NULL, config::pluginName, _("Cannot open the file"), reason.c_str());
+        return;
+    }
+    client->openMessageFile(chatId, messageId);
+}
+
+// Pidgin's conversation window, GtkIMHtml, lets a program handle links of a scheme of its own.
+// Looked up by name, as the plugin does not depend on GTK; front-ends without it get links to
+// files instead. The declarations, from gtkimhtml.h:
+//   gboolean gtk_imhtml_class_register_protocol(const char *name,
+//       gboolean (*activate)(GtkIMHtml *imhtml, GtkIMHtmlLink *link),
+//       gboolean (*context_menu)(GtkIMHtml *imhtml, GtkIMHtmlLink *link, GtkWidget *menu));
+//   const char *gtk_imhtml_link_get_url(GtkIMHtmlLink *link);
+using LinkActivate     = gboolean (*)(void *imhtml, void *link);
+using LinkContextMenu  = gboolean (*)(void *imhtml, void *link, void *menu);
+using RegisterProtocol = gboolean (*)(const char *name, LinkActivate activate, LinkContextMenu contextMenu);
+using LinkGetUrl       = const char *(*)(void *link);
+static RegisterProtocol g_registerProtocol;
+static LinkGetUrl       g_linkGetUrl;
+
+static gboolean messageLinkClicked(void *imhtml, void *link)
+{
+    const char *url = g_linkGetUrl(link);
+    if (url)
+        tgprpl_open_message_link(url);
+    return TRUE;
+}
+
+// Called whenever the link is right-clicked; it adds nothing to the menu
+static gboolean messageLinkContextMenu(void *imhtml, void *link, void *menu)
+{
+    return TRUE;
+}
+
+static void registerMessageLinks()
+{
+    g_registerProtocol = reinterpret_cast<RegisterProtocol>(dlsym(RTLD_DEFAULT, "gtk_imhtml_class_register_protocol"));
+    g_linkGetUrl       = reinterpret_cast<LinkGetUrl>(dlsym(RTLD_DEFAULT, "gtk_imhtml_link_get_url"));
+    setMessageLinksEnabled(g_registerProtocol && g_linkGetUrl &&
+                           g_registerProtocol(MESSAGE_LINK_SCHEME, messageLinkClicked, messageLinkContextMenu));
+    purple_debug_info(config::pluginId, "Links to messages' files: %s\n",
+                      messageLinksEnabled() ? MESSAGE_LINK_SCHEME : "file://");
+}
+
+static void unregisterMessageLinks()
+{
+    // Registering a scheme without a handler removes it
+    if (messageLinksEnabled())
+        g_registerProtocol(MESSAGE_LINK_SCHEME, NULL, NULL);
+    setMessageLinksEnabled(false);
+}
+
+static gboolean tgprpl_unload (PurplePlugin *plugin)
+{
+    unregisterMessageLinks();
+    return TRUE;
+}
+
 static gboolean tgprpl_load (PurplePlugin *plugin)
 {
     if (!checkTdlibVersion())
         return FALSE;
+    registerMessageLinks();
 
     purple_cmd_register("kick", "s", PURPLE_CMD_P_PLUGIN,
                         (PurpleCmdFlag)(PURPLE_CMD_FLAG_CHAT | PURPLE_CMD_FLAG_PRPL_ONLY),
@@ -1223,7 +1300,7 @@ static PurplePluginInfo plugin_info = {
     .author            = config::pluginAuthor,
     .homepage          = config::projectUrl,
     .load              = tgprpl_load,
-    .unload            = NULL,
+    .unload            = tgprpl_unload,
     .destroy           = NULL,
     .ui_info           = NULL,
     .extra_info        = &prpl_info,

@@ -911,6 +911,51 @@ std::string getSenderDisplayName(const td::td_api::chat &chat, const TgMessageIn
         return message.incomingGroupchatSender;
 }
 
+static bool g_messageLinksEnabled = false;
+
+bool messageLinksEnabled()
+{
+    return g_messageLinksEnabled;
+}
+
+void setMessageLinksEnabled(bool enabled)
+{
+    g_messageLinksEnabled = enabled;
+}
+
+// tdlib://<account>/<chat id>/<message id>: the message, rather than its file, which may not be
+// there yet, and whose path would not outlive TDLib's file cache
+std::string makeMessageLink(PurpleAccount *account, ChatId chatId, MessageId messageId)
+{
+    gchar *accountName = g_uri_escape_string(purple_account_get_username(account), NULL, FALSE);
+    std::string result = std::string(MESSAGE_LINK_SCHEME) + accountName + '/' +
+                         std::to_string(chatId.value()) + '/' + std::to_string(messageId.value());
+    g_free(accountName);
+    return result;
+}
+
+bool parseMessageLink(const char *link, std::string &accountName, ChatId &chatId, MessageId &messageId)
+{
+    size_t schemeLength = strlen(MESSAGE_LINK_SCHEME);
+    if (strncmp(link, MESSAGE_LINK_SCHEME, schemeLength))
+        return false;
+
+    gchar **parts = g_strsplit(link + schemeLength, "/", -1);
+    bool    valid = (g_strv_length(parts) == 3);
+    if (valid) {
+        gchar *name = g_uri_unescape_string(parts[0], NULL);
+        valid = (name != NULL);
+        if (name)
+            accountName = name;
+        g_free(name);
+        chatId    = ChatId::fromString(parts[1]);
+        messageId = MessageId::fromString(parts[2]);
+        valid = valid && chatId.valid() && messageId.valid();
+    }
+    g_strfreev(parts);
+    return valid;
+}
+
 std::string getDownloadXferPeerName(ChatId chatId,
                                     const TgMessageInfo &message,
                                     TdAccountData &account)

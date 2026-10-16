@@ -85,6 +85,7 @@ enum class PurpleEventType: uint8_t {
     ConversationWrite,
     ConvSetTitle,
     NotifyMessage,
+    NotifyUri,
     UserStatus,
     RequestInput,
     RequestAction,
@@ -264,6 +265,13 @@ struct NotifyMessageEvent: PurpleEvent {
     std::string          title;
     std::string          primary;
     std::string          secondary;
+};
+
+struct NotifyUriEvent: PurpleEvent {
+    std::string uri;
+
+    NotifyUriEvent(const std::string &uri)
+    : PurpleEvent(PurpleEventType::NotifyUri), uri(uri) {}
 };
 
 struct UserStatusEvent: PurpleEvent {
