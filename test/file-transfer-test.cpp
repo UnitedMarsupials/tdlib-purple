@@ -1,6 +1,7 @@
 #include "fixture.h"
 #include "libpurple-mock.h"
 #include "buildopt.h"
+#include "receiving.h"
 
 class FileTransferTest: public CommTest {};
 
@@ -1477,4 +1478,30 @@ TEST_F(FileTransferTest, ActiveDownloadAtLogout_StuckAtStart)
     pluginInfo().close(connection);
     prpl.verifyEvents(XferLocalCancelEvent(tempFileName));
     ASSERT_FALSE(g_file_test(tempFileName.c_str(), G_FILE_TEST_EXISTS));
+}
+
+TEST_F(FileTransferTest, PhotoSizeWithinLimit)
+{
+    purple_account_set_string(account, "media-size-threshold", "0.5");
+    login();
+
+    // Listed with one above the limit first
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(make_object<file>(
+            1, 700 * 1024, 700 * 1024,
+            make_object<localFile>("", true, true, false, false, 0, 0, 0),
+            make_object<remoteFile>("beh", "big", false, true, 700 * 1024)
+        ), 1280, 960));
+    sizes.push_back(makePhotoSize(make_object<file>(
+            2, 100 * 1024, 100 * 1024,
+            make_object<localFile>("", true, true, false, false, 0, 0, 0),
+            make_object<remoteFile>("beh", "small", false, true, 100 * 1024)
+        ), 320, 240));
+    object_ptr<messagePhoto> content = makeMessagePhoto(
+        make_object<photo>(false, nullptr, std::move(sizes)),
+        make_object<formattedText>("", std::vector<object_ptr<textEntity>>()), false, false, false);
+
+    const file *selected = selectPhotoSize(account, *content);
+    ASSERT_NE(nullptr, selected);
+    ASSERT_EQ(2, selected->id_);
 }

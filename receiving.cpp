@@ -1344,7 +1344,7 @@ const td::td_api::file *selectPhotoSize(PurpleAccount *account, const td::td_api
 {
     unsigned                     sizeLimit        = getAutoDownloadLimitKb(account);
     const td::td_api::photoSize *selectedSize     = nullptr;
-    bool                         selectedFileSize = 0;
+    unsigned                     selectedFileSize = 0;
     if (photo.photo_)
         for (const auto &newSize: photo.photo_->sizes_)
             if (newSize && newSize->photo_) {
