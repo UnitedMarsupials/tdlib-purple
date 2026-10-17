@@ -76,6 +76,8 @@ object_ptr<photoSize> makePhotoSize(object_ptr<file> &&photo, unsigned width, un
 object_ptr<sticker> makeSticker(std::int32_t width_, std::int32_t height_,
                                 const std::string &emoji_, object_ptr<file> &&sticker_,
                                 object_ptr<thumbnail> &&thumbnail_ = nullptr);
+// The owner's status; its constructor differs between TDLib versions
+object_ptr<chatMemberStatusCreator> makeCreatorStatus();
 object_ptr<supergroup> makeSupergroup(std::int64_t id_, object_ptr<ChatMemberStatus> &&status_,
                                       std::int32_t member_count_);
 object_ptr<Object> getChatsNoChatsResponse();

@@ -388,6 +388,9 @@ TEST_F(SupergroupTest, GetInviteLink)
 {
     constexpr int     purpleChatId = 1;
     loginWithSupergroup();
+    // Only those allowed to invite can make an invitation
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, makeCreatorStatus(), 2)));
+    prpl.discardEvents();
 
     PurpleChat *chat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
     ASSERT_NE(nullptr, chat);
@@ -425,6 +428,55 @@ TEST_F(SupergroupTest, GetInviteLink)
             "http://invite",
             PURPLE_MESSAGE_SYSTEM, 0
         )
+    );
+
+    g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
+}
+
+TEST_F(SupergroupTest, GetInviteLink_Public)
+{
+    loginWithSupergroup();
+    auto group = makeSupergroup(groupId, make_object<chatMemberStatusMember>(), 2);
+    group->usernames_ = make_object<usernames>();
+    group->usernames_->active_usernames_.push_back("somechannel");
+    tgl.update(make_object<updateSupergroup>(std::move(group)));
+    prpl.discardEvents();
+
+    PurpleChat *chat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
+    ASSERT_NE(nullptr, chat);
+    GList *actions = pluginInfo().blist_node_menu(&chat->node);
+
+    // Its address, which needs no invitation, nor anyone's rights to make one
+    nodeMenuAction(&chat->node, actions, "Show invite link");
+    tgl.verifyNoRequests();
+    prpl.verifyEvents(
+        ServGotJoinedChatEvent(connection, 1, groupChatPurpleName, groupChatTitle),
+        ChatSetTopicEvent(groupChatPurpleName, "", ""),
+        ChatClearUsersEvent(groupChatPurpleName),
+        ConversationWriteEvent(groupChatPurpleName, NotificationWho, "https://t.me/somechannel",
+                               PURPLE_MESSAGE_SYSTEM, 0)
+    );
+
+    g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
+}
+
+TEST_F(SupergroupTest, GetInviteLink_NotAllowed)
+{
+    loginWithSupergroup();
+
+    PurpleChat *chat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
+    ASSERT_NE(nullptr, chat);
+    GList *actions = pluginInfo().blist_node_menu(&chat->node);
+
+    nodeMenuAction(&chat->node, actions, "Show invite link");
+    tgl.verifyNoRequests();
+    prpl.verifyEvents(
+        ServGotJoinedChatEvent(connection, 1, groupChatPurpleName, groupChatTitle),
+        ChatSetTopicEvent(groupChatPurpleName, "", ""),
+        ChatClearUsersEvent(groupChatPurpleName),
+        ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+                               "This chat has no public link or invite link, and only its administrators can create one",
+                               PURPLE_MESSAGE_SYSTEM, 0)
     );
 
     g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);

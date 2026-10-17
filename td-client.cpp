@@ -2177,8 +2177,31 @@ void PurpleTdClient::showInviteLink(const std::string& purpleChatName)
             inviteLink = supergroupInfo->invite_link_->invite_link_;
     }
 
+    // A public group or channel has an address that needs no invitation
+    const td::td_api::supergroup *supergroup = supergroupId.valid() ? m_data.getSupergroup(supergroupId) : nullptr;
+    if (supergroup && supergroup->usernames_ && !supergroup->usernames_->active_usernames_.empty()) {
+        std::string publicLink = "https://t.me/" + supergroup->usernames_->active_usernames_.front();
+        showChatNotification(m_data, *chat, publicLink.c_str());
+        return;
+    }
+
+    // Only those allowed to invite can make an invitation
+    const td::td_api::ChatMemberStatus *status = nullptr;
+    if (supergroup)
+        status = supergroup->status_.get();
+    else if (basicGroupId.valid() && m_data.getBasicGroup(basicGroupId))
+        status = m_data.getBasicGroup(basicGroupId)->status_.get();
+    bool canInvite = status &&
+        ((status->get_id() == td::td_api::chatMemberStatusCreator::ID) ||
+         ((status->get_id() == td::td_api::chatMemberStatusAdministrator::ID) &&
+          static_cast<const td::td_api::chatMemberStatusAdministrator &>(*status).rights_ &&
+          static_cast<const td::td_api::chatMemberStatusAdministrator &>(*status).rights_->can_invite_users_));
+
     if (!inviteLink.empty())
         showChatNotification(m_data, *chat, inviteLink.c_str());
+    else if (!canInvite)
+        // TRANSLATOR: In-chat error message, after "Show invite link" was chosen for a chat that has none
+        showChatNotification(m_data, *chat, _("This chat has no public link or invite link, and only its administrators can create one"));
     else if (fullInfoKnown) {
         auto linkRequest = td::td_api::make_object<td::td_api::createChatInviteLink>();
         linkRequest->chat_id_ = chat->id_;

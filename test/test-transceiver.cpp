@@ -753,6 +753,13 @@ object_ptr<sticker> makeSticker(std::int32_t width_, std::int32_t height_,
 
 // supergroup's username became a usernames object, and it has gained boost_level_ and a dozen
 // flags besides; only what the tests assert on is set here.
+object_ptr<chatMemberStatusCreator> makeCreatorStatus()
+{
+    auto result = make_object<chatMemberStatusCreator>();
+    result->is_member_ = true;
+    return result;
+}
+
 object_ptr<supergroup> makeSupergroup(std::int64_t id_, object_ptr<ChatMemberStatus> &&status_,
                                       std::int32_t member_count_)
 {
