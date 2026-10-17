@@ -12,7 +12,7 @@ msgstr ""
 "Project-Id-Version: tdlib-purple\n"
 "Report-Msgid-Bugs-To: https://github.com/UnitedMarsupials/tdlib-purple/"
 "issues/new \n"
-"POT-Creation-Date: 2026-10-16 13:57-0400\n"
+"POT-Creation-Date: 2026-10-17 15:16-0400\n"
 "PO-Revision-Date: 2026-10-13 19:10-0400\n"
 "Last-Translator: Claude Opus 5.5 (effort medium), 2026\n"
 "Language-Team: Ukrainian\n"
@@ -250,7 +250,7 @@ msgstr "повідомлення"
 
 #. TRANSLATOR: File-type, used to describe what is being downloaded, in sentences like "Downloading photo" or "Ignoring photo download".
 #: ../receiving.cpp:201 ../receiving.cpp:631 ../receiving.cpp:968
-#: ../receiving.cpp:1444
+#: ../receiving.cpp:1465
 msgid "photo"
 msgstr "фото"
 
@@ -287,7 +287,7 @@ msgstr "відеоповідомлення"
 #. TRANSLATOR: File-type, used to describe what is being downloaded, in sentences like "Downloading photo" or "Ignoring photo download".
 #. will not be needed - inline download only
 #. TRANSLATOR: File-type, used to describe what is being downloaded, in sentences like "Downloading photo" or "Ignoring photo download".
-#: ../receiving.cpp:266 ../receiving.cpp:1030 ../receiving.cpp:1503
+#: ../receiving.cpp:266 ../receiving.cpp:1030 ../receiving.cpp:1524
 msgid "sticker"
 msgstr "наліпка"
 
@@ -416,71 +416,95 @@ msgstr "Запит на завантаження: {}"
 msgid "Ignoring {0} download ({1})"
 msgstr "Завантаження пропущено: {0} ({1})"
 
+#. TRANSLATOR: In-chat notification in a channel. Arguments are the time (or date and time) the message was sent at, as the conversation window shows it, and a hyperlink, showing the map coordinates last shared.
+#: ../receiving.cpp:1077
+#, c++-format
+msgid "The live location from {0} is no longer shared: {1}"
+msgstr "Трансляцію геопозиції з повідомлення від {0} припинено: {1}"
+
 #. TRANSLATOR: In-chat notification. Arguments are a username, the time (or date and time) the message was sent at, as the conversation window shows it, and a hyperlink, showing the map coordinates last shared.
-#: ../receiving.cpp:1071
+#: ../receiving.cpp:1080
 #, c++-format
 msgid "{0} stopped sharing the live location from {1}: {2}"
 msgstr "{0} припиняє трансляцію геопозиції з повідомлення від {1}: {2}"
 
+#. TRANSLATOR: In-chat notification in a channel. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
+#: ../receiving.cpp:1085
+#, c++-format
+msgid "The caption of the message from {0} was removed"
+msgstr "Підпис повідомлення від {0} прибрано"
+
 #. TRANSLATOR: In-chat notification. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
-#: ../receiving.cpp:1075
+#: ../receiving.cpp:1088
 #, c++-format
 msgid "{0} removed the caption of the message from {1}"
 msgstr "{0} прибирає підпис повідомлення від {1}"
 
+#. TRANSLATOR: In-chat notification in a channel. Arguments are the time (or date and time) the message was sent at, as the conversation window shows it, and the message's new text.
+#: ../receiving.cpp:1097
+#, c++-format
+msgid "The message from {0} was edited: {1}"
+msgstr "Повідомлення від {0} відредаговано: {1}"
+
 #. TRANSLATOR: In-chat notification. Arguments are a username, the time (or date and time) the message was sent at, as the conversation window shows it, and the message's new text.
-#: ../receiving.cpp:1083
+#: ../receiving.cpp:1100
 #, c++-format
 msgid "{0} edited the message from {1}: {2}"
 msgstr "{0} редагує повідомлення від {1}: {2}"
 
+#. TRANSLATOR: In-chat notification in a channel, followed by the message as edited. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
+#: ../receiving.cpp:1104
+#, c++-format
+msgid "The message from {0} was edited:"
+msgstr "Повідомлення від {0} відредаговано:"
+
 #. TRANSLATOR: In-chat notification, followed by the message as edited. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
-#: ../receiving.cpp:1086
+#: ../receiving.cpp:1107
 #, c++-format
 msgid "{0} edited the message from {1}:"
 msgstr "{0} редагує повідомлення від {1}:"
 
 #. TRANSLATOR: In-chat status update, arguments are chat names.
-#: ../receiving.cpp:1178
+#: ../receiving.cpp:1199
 #, c++-format
 msgid "{0} changed group name to {1}"
 msgstr "{0} змінює назву групи на «{1}»"
 
 #. TRANSLATOR: In-chat message, shown as sent by whoever reacted. Arguments are a reaction (an emoji, mostly) and the beginning of the message's text. Use the quotation marks of your language.
-#: ../receiving.cpp:1772
+#: ../receiving.cpp:1793
 #, c++-format
 msgid "reacted with {0} to message „{1}“."
 msgstr "реагує {0} на повідомлення „{1}“."
 
 #. TRANSLATOR: In-chat message, shown as sent by whoever reacted. Arguments are a reaction (an emoji, mostly), what the message is ("photo", "sticker" and the like), and the time (or date and time) it was sent at, as the conversation window shows it.
-#: ../receiving.cpp:1775
+#: ../receiving.cpp:1796
 #, c++-format
 msgid "reacted with {0} to {1} from {2}."
 msgstr "реагує {0} на: {1} від {2}."
 
 #. TRANSLATOR: In-chat message, shown as sent by whoever reacted. Argument is the beginning of the message's text. Use the quotation marks of your language.
-#: ../receiving.cpp:1779
+#: ../receiving.cpp:1800
 #, c++-format
 msgid "removed their reaction to message „{0}“."
 msgstr "скасовує свою реакцію на повідомлення „{0}“."
 
 #. TRANSLATOR: In-chat message, shown as sent by whoever reacted. Arguments are what the message is ("photo", "sticker" and the like), and the time (or date and time) it was sent at, as the conversation window shows it.
-#: ../receiving.cpp:1782
+#: ../receiving.cpp:1803
 #, c++-format
 msgid "removed their reaction to {0} from {1}."
 msgstr "скасовує свою реакцію на: {0} від {1}."
 
-#: ../receiving.cpp:1869
+#: ../receiving.cpp:1890
 msgid "[custom emoji]"
 msgstr "[власне емодзі]"
 
 #. TRANSLATOR: In-chat notification. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
-#: ../receiving.cpp:2097
+#: ../receiving.cpp:2118
 #, c++-format
 msgid "Message from {} has been deleted"
 msgstr "Повідомлення від {} видалено"
 
-#: ../receiving.cpp:2145
+#: ../receiving.cpp:2166
 #, c++-format
 msgid "Failed to fetch earlier messages: {}"
 msgstr "Не вдалося отримати попередні повідомлення: {}"
