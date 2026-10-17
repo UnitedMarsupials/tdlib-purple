@@ -38,6 +38,7 @@ add_executable(tests EXCLUDE_FROM_ALL
     ../format.cpp
     ../sticker.cpp
     ../custom-emoji.cpp
+    ../media-variants.cpp
     ../file-transfer.cpp
     ../call.cpp
     ../identifiers.cpp

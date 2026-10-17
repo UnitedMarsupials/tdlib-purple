@@ -63,6 +63,7 @@ add_library(telegram-tdlib SHARED
     format.cpp
     sticker.cpp
     custom-emoji.cpp
+    media-variants.cpp
     file-transfer.cpp
     call.cpp
     identifiers.cpp

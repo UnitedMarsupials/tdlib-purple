@@ -914,7 +914,8 @@ void tgprpl_open_message_link(const char *link)
     std::string accountName;
     ChatId      chatId;
     MessageId   messageId;
-    if (!parseMessageLink(link, accountName, chatId, messageId)) {
+    std::string variant;
+    if (!parseMessageLink(link, accountName, chatId, messageId, variant)) {
         purple_debug_warning(config::pluginId, "Not a link to a message: %s\n", link);
         return;
     }
@@ -929,7 +930,7 @@ void tgprpl_open_message_link(const char *link)
         purple_notify_error(NULL, config::pluginName, _("Cannot open the file"), reason.c_str());
         return;
     }
-    client->openMessageFile(chatId, messageId);
+    client->openMessageFile(chatId, messageId, variant);
 }
 
 // Pidgin's conversation window, GtkIMHtml, lets a program handle links of a scheme of its own.
@@ -1130,6 +1131,22 @@ static void tgprpl_init (PurplePlugin *plugin)
     opt = purple_account_option_string_new (_("Inline auto-download size limit, MB (0 for unlimited)"),
                                             AccountOptions::AutoDownloadLimit,
                                             AccountOptions::AutoDownloadLimitDefault);
+    prpl_info.protocol_options = g_list_append (prpl_info.protocol_options, opt);
+
+    // Telegram may have a video in several sizes, of which one can be downloaded beforehand, to be
+    // played as soon as clicked; the default first
+    choices = NULL;
+    // TRANSLATOR: Account settings, value for "Prefetch videos"; "the auto-download limit" is the option "Inline auto-download size limit".
+    addChoice(choices, _("Highest resolution within the auto-download limit (if one is set)"),
+              AccountOptions::PrefetchVideosLargestWithinLimit);
+    // TRANSLATOR: Account settings, value for "Prefetch videos": the highest resolution, or nothing if that is above the auto-download limit.
+    addChoice(choices, _("Highest resolution only"), AccountOptions::PrefetchVideosLargest);
+    // TRANSLATOR: Account settings, value for "Prefetch videos"
+    addChoice(choices, _("Smallest file"), AccountOptions::PrefetchVideosSmallest);
+    // TRANSLATOR: Account settings, value for "Prefetch videos"
+    addChoice(choices, _("Don't prefetch"), AccountOptions::PrefetchVideosNone);
+    // TRANSLATOR: Account settings, key (choice). Videos are downloaded beforehand, so that they play as soon as clicked.
+    opt = purple_account_option_list_new(_("Prefetch videos"), AccountOptions::PrefetchVideos, choices);
     prpl_info.protocol_options = g_list_append (prpl_info.protocol_options, opt);
 
     static_assert(AccountOptions::BigDownloadHandlingDefault == AccountOptions::BigDownloadHandlingAsk,

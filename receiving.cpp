@@ -5,6 +5,7 @@
 #include "file-transfer.h"
 #include "sticker.h"
 #include "custom-emoji.h"
+#include "media-variants.h"
 #include "config.h"
 #include "call.h"
 #include <algorithm>
@@ -703,6 +704,8 @@ static void showDownloadedImage(const td::td_api::chat &chat, TgMessageInfo &mes
         text = makeInlineImageText(id);
     } else
         text = "<img src=\"" + escapeForDisplay(makeFileUri(filePath)) + "\">";
+    if (!message.mediaVariantLinks.empty())
+        text += "\n" + message.mediaVariantLinks;
 
     if (caption && *caption) {
         if (!text.empty())
@@ -793,6 +796,8 @@ static void showFileLink(const td::td_api::chat &chat, const TgMessageInfo &mess
     if (!preview.empty())
         text += preview + "\n";
     text += escapeForDisplay(fileDescription) + "</a>";
+    if (!message.mediaVariantLinks.empty())
+        text += "\n" + message.mediaVariantLinks;
     if (caption && *caption) {
         text += "\n";
         text += caption;
@@ -938,14 +943,22 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
         showFileLink(chat, fullMessage.messageInfo,
                      makeMessageLink(account.purpleAccount, getId(chat), fullMessage.messageInfo.id),
                      caption, fileDesc, preview, account);
-        // Fetched beforehand, within the limit, so that a click opens it at once
-        if (!(file.local_ && file.local_->is_downloading_completed_) &&
-            isSizeWithinLimit(fileSize, fullMessage.inlineFileSizeLimit))
+        // Fetched beforehand, within the limit, so that a click opens it at once; of a video in
+        // several sizes, the one the account asks for
+        const td::td_api::file *prefetch = &file;
+        if (fullMessage.message && fullMessage.message->content_ &&
+            (fullMessage.message->content_->get_id() == td::td_api::messageVideo::ID))
         {
+            std::vector<MediaVariant> variants;
+            getMediaVariants(*fullMessage.message->content_, variants);
+            prefetch = choosePrefetchVariant(account.purpleAccount, variants, fullMessage.inlineFileSizeLimit);
+        } else if (!isSizeWithinLimit(fileSize, fullMessage.inlineFileSizeLimit))
+            prefetch = nullptr;
+        if (prefetch && !(prefetch->local_ && prefetch->local_->is_downloading_completed_)) {
             purple_debug_misc(config::pluginId, "Fetching %s (file id %d) in the background\n",
-                              fileDesc.c_str(), (int)file.id_);
+                              fileDesc.c_str(), (int)prefetch->id_);
             transceiver.sendQuery(td::td_api::make_object<td::td_api::downloadFile>(
-                                      file.id_, BACKGROUND_DOWNLOAD_PRIORITY, 0, 0, false),
+                                      prefetch->id_, BACKGROUND_DOWNLOAD_PRIORITY, 0, 0, false),
                                   nullptr);
         }
         return;
@@ -1420,6 +1433,14 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
     messageInfo.type             = TgMessageInfo::Type::Other;
     messageInfo.incomingGroupchatSender = getIncomingGroupchatSenderPurpleName(chat, *message, account);
     messageInfo.anonymousChannelPost    = isAnonymousChannelPost(chat, *message);
+    // In Pidgin, links to each size a photo or video comes in, below it; here already, as a download
+    // may start, and finish, before the message is shown
+    if (messageLinksEnabled() && message->content_) {
+        std::vector<MediaVariant> variants;
+        getMediaVariants(*message->content_, variants);
+        messageInfo.mediaVariantLinks = makeMediaVariantLinks(account.purpleAccount, getId(chat), getId(*message),
+                                                              variants);
+    }
     messageInfo.timestamp        = message->date_;
     messageInfo.outgoing         = message->is_outgoing_;
     messageInfo.sentLocally      = (message->sending_state_ != nullptr);

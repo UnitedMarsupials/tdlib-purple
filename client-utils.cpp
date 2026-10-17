@@ -955,23 +955,29 @@ void setMessageLinksEnabled(bool enabled)
 
 // tdlib://<account>/<chat id>/<message id>: the message, rather than its file, which may not be
 // there yet, and whose path would not outlive TDLib's file cache
-std::string makeMessageLink(PurpleAccount *account, ChatId chatId, MessageId messageId)
+std::string makeMessageLink(PurpleAccount *account, ChatId chatId, MessageId messageId,
+                            const std::string &variant)
 {
     gchar *accountName = g_uri_escape_string(purple_account_get_username(account), NULL, FALSE);
     std::string result = std::string(MESSAGE_LINK_SCHEME) + accountName + '/' +
                          std::to_string(chatId.value()) + '/' + std::to_string(messageId.value());
     g_free(accountName);
+    if (!variant.empty())
+        result += '/' + variant;
     return result;
 }
 
-bool parseMessageLink(const char *link, std::string &accountName, ChatId &chatId, MessageId &messageId)
+bool parseMessageLink(const char *link, std::string &accountName, ChatId &chatId, MessageId &messageId,
+                      std::string &variant)
 {
     size_t schemeLength = strlen(MESSAGE_LINK_SCHEME);
     if (strncmp(link, MESSAGE_LINK_SCHEME, schemeLength))
         return false;
 
     gchar **parts = g_strsplit(link + schemeLength, "/", -1);
-    bool    valid = (g_strv_length(parts) == 3);
+    guint   count = g_strv_length(parts);
+    bool    valid = (count == 3) || ((count == 4) && *parts[3]);
+    variant = (count == 4) ? parts[3] : "";
     if (valid) {
         gchar *name = g_uri_unescape_string(parts[0], NULL);
         valid = (name != NULL);

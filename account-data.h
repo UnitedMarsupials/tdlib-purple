@@ -146,6 +146,7 @@ struct TgMessageInfo {
     std::string altText; // to show instead of the picture, where it cannot be shown
     bool        anonymousChannelPost = false; // incomingGroupchatSender is "Channel post", naming nobody
     bool        fromHistory = false; // fetched to catch up with a chat, rather than just sent
+    std::string mediaVariantLinks; // markup: links to each size a photo or video comes in
 
     void assign(const TgMessageInfo &other)
     {
@@ -161,6 +162,7 @@ struct TgMessageInfo {
         altText = other.altText;
         anonymousChannelPost = other.anonymousChannelPost;
         fromHistory = other.fromHistory;
+        mediaVariantLinks = other.mediaVariantLinks;
     }
 };
 
