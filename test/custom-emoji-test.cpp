@@ -12,7 +12,8 @@ protected:
     const int32_t     fileId        = 1234;
     const int32_t     thumbnailId   = 1235;
     const std::string emoji         = "\U0001F63A";
-    const std::string code          = ":\U0001F63A5000:";
+    // The cat, with 5000 in invisible tag characters
+    const std::string code          = "\U0001F63A\U000E0035\U000E0030\U000E0030\U000E0030\U000E007F";
 
     void SetUp() override
     {

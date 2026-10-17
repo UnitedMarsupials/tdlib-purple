@@ -61,10 +61,20 @@ void getCustomEmoji(const td::td_api::formattedText &text, std::vector<CustomEmo
         }
 }
 
-// Unique to the custom emoji, and readable where it shows: in its tooltip, and copied as text
+// The ordinary emoji, which is what shows of the code, in its tooltip and copied as text, followed
+// by the id in Unicode tag characters, which show as nothing: the code has to be unique to the custom
+// emoji, or every ordinary one like it in the conversation would turn into its picture
 static std::string makeSmileyCode(const CustomEmoji &emoji)
 {
-    return ":" + emoji.emoji + std::to_string(emoji.id) + ":";
+    std::string code = emoji.emoji;
+    for (char digit: std::to_string(emoji.id)) {
+        // TAG DIGIT ZERO .. NINE, U+E0030 .. U+E0039, in UTF-8
+        code += "\xF3\xA0\x80";
+        code += (char)(0xB0 + (digit - '0'));
+    }
+    // CANCEL TAG, U+E007F
+    code += "\xF3\xA0\x81\xBF";
+    return code;
 }
 
 static void finishSmiley(const SmileyTarget &target, const gchar *data, gsize size)
