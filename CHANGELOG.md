@@ -9,6 +9,7 @@
 - **An account option shows messages from channels and groups you have not joined.**
 - **Reactions are shown, custom emoji among them, as messages from whoever reacted.**
 - **In Pidgin, a file is linked to its message and fetched when clicked, so the message is shown whole at once.**
+- **Custom emoji are shown as pictures in Pidgin, in messages as in reactions.**
 
 ### Fixes
 
