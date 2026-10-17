@@ -1068,27 +1068,48 @@ static bool showEditNotice(const td::td_api::chat &chat, IncomingMessage &fullMe
     FileInfo             fileInfo;
     getFileFromMessage(fullMessage, fileInfo);
 
+    // A channel's post signed by nobody has no sender to name, "Channel post" being no one who
+    // could edit it, so the notice says what was done, not who did it
+    bool anonymous = messageInfo.anonymousChannelPost;
+
     ShownLocation location;
     std::string   notice;
     bool          complete = true;
-    if (getShownLocation(content, location) && isStoppedLiveLocation(location))
-        // TRANSLATOR: In-chat notification. Arguments are a username, the time (or date and time) the message was sent at, as the conversation window shows it, and a hyperlink, showing the map coordinates last shared.
-        notice = formatMessage(_("{0} stopped sharing the live location from {1}: {2}"),
-                               {sender, sentAt, makeLocationLink(*location.location)});
-    else if (fullMessage.captionOnly && fileInfo.caption.empty())
-        // TRANSLATOR: In-chat notification. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
-        notice = formatMessage(_("{0} removed the caption of the message from {1}"), {sender, sentAt});
-    else if (fullMessage.captionOnly || (content.get_id() == td::td_api::messageText::ID)) {
+    if (getShownLocation(content, location) && isStoppedLiveLocation(location)) {
+        std::string link = makeLocationLink(*location.location);
+        if (anonymous)
+            // TRANSLATOR: In-chat notification in a channel. Arguments are the time (or date and time) the message was sent at, as the conversation window shows it, and a hyperlink, showing the map coordinates last shared.
+            notice = formatMessage(_("The live location from {0} is no longer shared: {1}"), {sentAt, link});
+        else
+            // TRANSLATOR: In-chat notification. Arguments are a username, the time (or date and time) the message was sent at, as the conversation window shows it, and a hyperlink, showing the map coordinates last shared.
+            notice = formatMessage(_("{0} stopped sharing the live location from {1}: {2}"),
+                                   {sender, sentAt, link});
+    } else if (fullMessage.captionOnly && fileInfo.caption.empty()) {
+        if (anonymous)
+            // TRANSLATOR: In-chat notification in a channel. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
+            notice = formatMessage(_("The caption of the message from {0} was removed"), sentAt);
+        else
+            // TRANSLATOR: In-chat notification. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
+            notice = formatMessage(_("{0} removed the caption of the message from {1}"), {sender, sentAt});
+    } else if (fullMessage.captionOnly || (content.get_id() == td::td_api::messageText::ID)) {
         const td::td_api::messageText *text = nullptr;
         if (content.get_id() == td::td_api::messageText::ID)
             text = static_cast<const td::td_api::messageText *>(&content);
         std::string newText = fullMessage.captionOnly ? fileInfo.caption :
                               (text && text->text_) ? getMessageText(*text->text_) : std::string();
-        // TRANSLATOR: In-chat notification. Arguments are a username, the time (or date and time) the message was sent at, as the conversation window shows it, and the message's new text.
-        notice = formatMessage(_("{0} edited the message from {1}: {2}"), {sender, sentAt, newText});
+        if (anonymous)
+            // TRANSLATOR: In-chat notification in a channel. Arguments are the time (or date and time) the message was sent at, as the conversation window shows it, and the message's new text.
+            notice = formatMessage(_("The message from {0} was edited: {1}"), {sentAt, newText});
+        else
+            // TRANSLATOR: In-chat notification. Arguments are a username, the time (or date and time) the message was sent at, as the conversation window shows it, and the message's new text.
+            notice = formatMessage(_("{0} edited the message from {1}: {2}"), {sender, sentAt, newText});
     } else {
-        // TRANSLATOR: In-chat notification, followed by the message as edited. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
-        notice = formatMessage(_("{0} edited the message from {1}:"), {sender, sentAt});
+        if (anonymous)
+            // TRANSLATOR: In-chat notification in a channel, followed by the message as edited. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
+            notice = formatMessage(_("The message from {0} was edited:"), sentAt);
+        else
+            // TRANSLATOR: In-chat notification, followed by the message as edited. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
+            notice = formatMessage(_("{0} edited the message from {1}:"), {sender, sentAt});
         complete = false;
     }
     showMessageText(account, chat, messageInfo, NULL, notice.c_str());
