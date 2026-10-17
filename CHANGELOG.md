@@ -10,6 +10,7 @@
 - **Reactions are shown, custom emoji among them, as messages from whoever reacted.**
 - **In Pidgin, a file is linked to its message and fetched when clicked, so the message is shown whole at once.**
 - **Custom emoji are shown as pictures in Pidgin, in messages as in reactions.**
+- **In Pidgin, each size of a photo or video has a link of its own, and an account option chooses which video to prefetch.**
 
 ### Fixes
 
