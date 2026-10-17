@@ -11,6 +11,8 @@ public:
     guint addTimeout(guint interval, GSourceFunc function, gpointer data) override;
     void  cancelTimer(guint id) override;
     void  runTimeouts();
+    // Of the timers set and not yet run, in the order set
+    std::vector<guint> getTimeoutIntervals();
 
     // Check that given requests, and no others, have been received, and clear the queue
     uint64_t verifyRequest(const td::td_api::Function &request);
@@ -30,6 +32,7 @@ public:
 private:
     struct TimerInfo {
         guint       id;
+        guint       interval;
         GSourceFunc function;
         gpointer    data;
     };

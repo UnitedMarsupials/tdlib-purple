@@ -146,6 +146,7 @@ struct TgMessageInfo {
     std::string forwardedFrom;
     std::string altText; // to show instead of the picture, where it cannot be shown
     bool        anonymousChannelPost = false; // incomingGroupchatSender is "Channel post", naming nobody
+    bool        fromHistory = false; // fetched to catch up with a chat, rather than just sent
 
     void assign(const TgMessageInfo &other)
     {
@@ -160,6 +161,7 @@ struct TgMessageInfo {
         forwardedFrom = other.forwardedFrom;
         altText = other.altText;
         anonymousChannelPost = other.anonymousChannelPost;
+        fromHistory = other.fromHistory;
     }
 };
 
