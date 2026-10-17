@@ -700,6 +700,37 @@ TEST_F(SupergroupTest, ChannelPostEdited)
     tgl.verifyNoRequests();
 }
 
+TEST_F(SupergroupTest, ChannelPostQuotesChannelPost)
+{
+    constexpr int32_t date         = 12345;
+    constexpr int64_t messageId    = 10000;
+    constexpr int64_t quotedId     = 9000;
+    constexpr int     purpleChatId = 1;
+    loginWithSupergroup();
+
+    // Both sent by the channel, as channels' posts are
+    auto message = makeMessage(messageId, 0, groupChatId, false, date, makeTextMessage("reply"));
+    message->is_channel_post_ = true;
+    message->sender_id_       = make_object<messageSenderChat>(groupChatId);
+    message->reply_to_        = makeReplyTo(quotedId);
+    tgl.update(make_object<updateNewMessage>(std::move(message)));
+    tgl.verifyRequest(getMessage(groupChatId, quotedId));
+
+    auto quoted = makeMessage(quotedId, 0, groupChatId, false, date - 1, makeTextMessage("original"));
+    quoted->is_channel_post_ = true;
+    quoted->sender_id_       = make_object<messageSenderChat>(groupChatId);
+    tgl.reply(std::move(quoted));
+    tgl.verifyRequest(viewMessages(groupChatId, {messageId}, nullptr, true));
+    prpl.verifyEvents(
+        ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
+        ChatSetTopicEvent(groupChatPurpleName, "", ""),
+        ChatClearUsersEvent(groupChatPurpleName),
+        ServGotChatEvent(connection, purpleChatId, "Channel post",
+                         "<b>&gt; " + groupChatTitle + " wrote:</b>\n&gt; original\nreply",
+                         PURPLE_MESSAGE_RECV, date)
+    );
+}
+
 // TODO: test non-user member
 
 TEST_F(SupergroupTest, ForeignChannel)
