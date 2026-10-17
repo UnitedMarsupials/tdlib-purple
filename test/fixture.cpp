@@ -16,6 +16,8 @@ CommTest::CommTest()
 void CommTest::SetUp()
 {
     setImageLoaders({"webp"});
+    setCustomSmileys(false);
+    clearConversationData();
     gdkPixbufGetFileInfoName = "gdk_pixbuf_get_file_info";
     setMessageLinksEnabled(false);
     account = purple_account_new(("+" + selfPhoneNumber).c_str(), NULL);

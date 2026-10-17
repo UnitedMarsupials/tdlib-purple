@@ -117,6 +117,25 @@ static void compare(const ConvSetTitleEvent &actual, const ConvSetTitleEvent &ex
     COMPARE(newTitle);
 }
 
+static void compare(const CustomSmileyAddEvent &actual, const CustomSmileyAddEvent &expected)
+{
+    COMPARE(conversation);
+    COMPARE(code);
+}
+
+static void compare(const CustomSmileyWriteEvent &actual, const CustomSmileyWriteEvent &expected)
+{
+    COMPARE(conversation);
+    COMPARE(code);
+    COMPARE(size);
+}
+
+static void compare(const CustomSmileyCloseEvent &actual, const CustomSmileyCloseEvent &expected)
+{
+    COMPARE(conversation);
+    COMPARE(code);
+}
+
 static void compare(const NotifyUriEvent &actual, const NotifyUriEvent &expected)
 {
     COMPARE(uri);
@@ -345,6 +364,9 @@ static void compareEvents(const PurpleEvent &actual, const PurpleEvent &expected
         C(ConvSetTitle)
         C(NotifyMessage)
         C(NotifyUri)
+        C(CustomSmileyAdd)
+        C(CustomSmileyWrite)
+        C(CustomSmileyClose)
         C(UserStatus)
         C(RequestInput)
         C(RequestAction)
@@ -493,6 +515,9 @@ std::string PurpleEvent::toString() const
     C(ConvSetTitle)
     C(NotifyMessage)
     C(NotifyUri)
+    C(CustomSmileyAdd)
+    C(CustomSmileyWrite)
+    C(CustomSmileyClose)
     C(UserStatus)
     C(RequestInput)
     C(RequestAction)
