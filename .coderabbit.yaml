@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=https://storage.googleapis.com/coderabbit_public_assets/schema.v2.json
+#
+# CodeRabbit's pull-request reviews: somewhat pickier than its defaults.
+# Anything not set here keeps CodeRabbit's default.  Its linters for this
+# repository's files (cppcheck, clang, shellcheck, actionlint, yamllint)
+# are on by default.
+language: en-US
+
+reviews:
+  # `assertive` rather than the default `chill`: every remark is posted
+  # inline on the line it is about, instead of the less certain ones being
+  # folded into a collapsed "nitpicks" section of the summary comment.
+  profile: assertive
+
+  # What this code base gets wrong easily, so that the extra attention goes
+  # where it is worth something.
+  path_instructions:
+    - path: "**/*.cpp"
+      instructions: &cpp |
+        - The plugin must build against both older and newer TDLib APIs.
+          Code that uses a TDLib type whose shape changed must choose its
+          form with the matching TDLIB_API_* macro from buildopt.h.in, and a
+          new incompatible TDLib change needs a new macro there and in
+          cmake/tdlib-version.cmake. Flag positional construction of TDLib
+          objects (make_object<T>(a, b, ...)): TDLib keeps inserting fields,
+          so create the object empty and set fields by name.
+        - printf-style calls (purple_debug_*, g_strdup_printf, ...): every
+          argument must match its conversion exactly, signedness included;
+          CI compiles with -Wformat=2 -Wformat-signedness.
+        - Text inserted into conversation markup (messages, notices, file
+          links, captions, names) must be HTML-escaped. Text passed to
+          purple_request_* dialogs must not be, as Pidgin escapes it itself.
+        - User-visible strings go through _() and formatMessage() with {}
+          placeholders; one whose meaning is not obvious out of context
+          needs a "// TRANSLATOR:" comment.
+        - The plugin is C++14 (the tests are C++17): flag newer features in
+          plugin code.
+    - path: "**/*.h"
+      instructions: *cpp
+    - path: "test/**"
+      instructions: |
+        Tests build TDLib objects through the helpers in test-transceiver.h,
+        which set fields by name and hide the TDLib version differences;
+        flag positional make_object<T>(...) of TDLib types in tests. A
+        changed behaviour of the plugin needs a test that would have failed
+        before it.
+    - path: "po/*.po"
+      instructions: |
+        Each translation must keep the {} placeholders of its msgid, and the
+        menu accelerators (_x) used together in one dialog must not clash
+        (po/lint_accelerators.py checks the pairs it knows of).
+    - path: ".github/**/*.sh"
+      instructions: |
+        These run under plain /bin/sh on FreeBSD and OpenBSD and under
+        BusyBox on Alpine: flag bashisms and GNU-only options.
+    - path: "**/CMakeLists.txt"
+      instructions: &cmake |
+        The build must keep working with CMake 3.10, and with TDLib, libpurple
+        and the other libraries as found in distribution packages
+        (pkg-config, or CMake package files that may lack a version).
+    - path: "cmake/**"
+      instructions: *cmake
