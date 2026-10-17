@@ -1,4 +1,5 @@
 #include "supergroup-test.h"
+#include <ctime>
 #include <glib/gstrfuncs.h>
 
 static const char *NotificationWho = " ";
@@ -653,6 +654,42 @@ TEST_F(SupergroupTest, ChannelPostNotice)
                                "Ignoring photo download (purple_str_size_to_units)",
                                PURPLE_MESSAGE_SYSTEM, date)
     );
+}
+
+TEST_F(SupergroupTest, ChannelPostEdited)
+{
+    constexpr int32_t date         = 12345;
+    constexpr int32_t editDate     = 12400;
+    constexpr int64_t messageId    = 10000;
+    constexpr int     purpleChatId = 1;
+    loginWithSupergroup();
+
+    auto message = makeMessage(messageId, 0, groupChatId, false, date, makeTextMessage("old"));
+    message->is_channel_post_ = true;
+    tgl.update(make_object<updateNewMessage>(std::move(message)));
+    tgl.verifyRequest(viewMessages(groupChatId, {messageId}, nullptr, true));
+    prpl.verifyEvents(
+        ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
+        ChatSetTopicEvent(groupChatPurpleName, "", ""),
+        ChatClearUsersEvent(groupChatPurpleName),
+        ServGotChatEvent(connection, purpleChatId, "Channel post", "old", PURPLE_MESSAGE_RECV, date)
+    );
+
+    tgl.update(make_object<updateMessageContent>(groupChatId, messageId, makeTextMessage("new")));
+    tgl.verifyRequest(getMessage(groupChatId, messageId));
+    auto edited = makeMessage(messageId, 0, groupChatId, false, date, makeTextMessage("new"));
+    edited->is_channel_post_ = true;
+    edited->edit_date_       = editDate;
+    tgl.reply(std::move(edited));
+
+    // "Channel post" is no one who could have edited it
+    char   sentAt[80];
+    time_t timestamp = date;
+    strftime(sentAt, sizeof(sentAt), "%x %X", localtime(&timestamp));
+    prpl.verifyEvents(ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+                                             std::string("The message from ") + sentAt + " was edited: new",
+                                             PURPLE_MESSAGE_SYSTEM, editDate));
+    tgl.verifyNoRequests();
 }
 
 // TODO: test non-user member
