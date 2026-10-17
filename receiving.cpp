@@ -329,6 +329,12 @@ std::string getMessageText(const td::td_api::formattedText &text)
     return result;
 }
 
+unsigned getMessageWaitSeconds(const TgMessageInfo &message)
+{
+    enum { MESSAGE_WAIT_SECONDS = 1, HISTORY_WAIT_SECONDS = 5 };
+    return message.fromHistory ? HISTORY_WAIT_SECONDS : MESSAGE_WAIT_SECONDS;
+}
+
 std::string makeInlineImageText(int imgstoreId)
 {
     return "\n<img id=\"" + std::to_string(imgstoreId) + "\">";
@@ -1591,7 +1597,8 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
         auto getMessageReq = td::td_api::make_object<td::td_api::getMessage>();
         getMessageReq->chat_id_    = chatId.value();
         getMessageReq->message_id_ = replyMessageId.value();
-        transceiver.sendQueryWithTimeout(std::move(getMessageReq), onFetchReply, 1);
+        transceiver.sendQueryWithTimeout(std::move(getMessageReq), onFetchReply,
+                                         getMessageWaitSeconds(fullMessage.messageInfo));
     }
 
     if (fullMessage.previewFileId && !fullMessage.previewFetchDone) {
@@ -1607,7 +1614,7 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
         transceiver.sendQueryWithTimeout(std::move(downloadReq),
             [&account, chatId, messageId](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
                 previewDownloadResponse(account, chatId, messageId, std::move(object));
-            }, 1);
+            }, getMessageWaitSeconds(fullMessage.messageInfo));
     }
 
     FileInfo fileInfo;
@@ -1995,6 +2002,7 @@ void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
 
     IncomingMessage fullMessage;
     makeFullMessage(chat, std::move(message), fullMessage, account);
+    fullMessage.messageInfo.fromHistory = (action == PendingMessageQueue::Prepend);
     queueMessage(account, chat, std::move(fullMessage), action);
 }
 

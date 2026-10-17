@@ -58,6 +58,7 @@ guint TestTransceiver::addTimeout(guint interval, GSourceFunc function, gpointer
 {
     m_timers.emplace_back();
     m_timers.back().id = m_nextTimerId;
+    m_timers.back().interval = interval;
     m_timers.back().function = function;
     m_timers.back().data = data;
 
@@ -69,6 +70,14 @@ void TestTransceiver::cancelTimer(guint id)
     m_timers.erase(std::remove_if(m_timers.begin(), m_timers.end(),
                                  [id](const TimerInfo &timer) { return (timer.id == id); }),
                    m_timers.end());
+}
+
+std::vector<guint> TestTransceiver::getTimeoutIntervals()
+{
+    std::vector<guint> result;
+    for (const TimerInfo &timer: m_timers)
+        result.push_back(timer.interval);
+    return result;
 }
 
 void TestTransceiver::runTimeouts()
