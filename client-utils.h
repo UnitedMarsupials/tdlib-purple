@@ -49,9 +49,11 @@ std::string getSenderDisplayName(const td::td_api::chat &chat, const TgMessageIn
 constexpr const char *MESSAGE_LINK_SCHEME = "tdlib://";
 bool        messageLinksEnabled();
 void        setMessageLinksEnabled(bool enabled);
-std::string makeMessageLink(PurpleAccount *account, ChatId chatId, MessageId messageId);
+// A variant, if given, names one of the sizes a photo or video comes in
+std::string makeMessageLink(PurpleAccount *account, ChatId chatId, MessageId messageId,
+                            const std::string &variant = std::string());
 bool        parseMessageLink(const char *link, std::string &accountName, ChatId &chatId,
-                             MessageId &messageId);
+                             MessageId &messageId, std::string &variant);
 
 std::string getDownloadXferPeerName(ChatId chatId,
                                     const TgMessageInfo &message,

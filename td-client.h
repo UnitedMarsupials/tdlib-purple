@@ -55,8 +55,9 @@ public:
 
     void createSecretChat(const char *buddyName);
 
-    // A link to the message's file was clicked: fetches the file, if need be, and opens it
-    void openMessageFile(ChatId chatId, MessageId messageId);
+    // A link to the message's file was clicked: fetches the file, if need be, and opens it; a variant,
+    // if given, names one of the sizes a photo or video comes in
+    void openMessageFile(ChatId chatId, MessageId messageId, const std::string &variant = std::string());
 private:
     using TdObjectPtr   = td::td_api::object_ptr<td::td_api::Object>;
     using ResponseCb    = void (PurpleTdClient::*)(uint64_t requestId, TdObjectPtr object);
@@ -175,12 +176,14 @@ private:
         bool   inProgress;
         time_t openedAt;
     };
-    std::map<std::pair<ChatId, MessageId>, OpenedFile> m_openedFiles;
+    // By the link clicked: the chat, the message and the variant
+    std::map<std::string, OpenedFile> m_openedFiles;
 
-    void openMessageFileResponse(ChatId chatId, MessageId messageId, TdObjectPtr object);
-    void openDownloadedFile(ChatId chatId, MessageId messageId, const std::string &description,
+    void openMessageFileResponse(ChatId chatId, MessageId messageId, const std::string &variant,
+                                 TdObjectPtr object);
+    void openDownloadedFile(ChatId chatId, const std::string &key, const std::string &description,
                             TdObjectPtr object);
-    void finishOpeningFile(ChatId chatId, MessageId messageId, const std::string &description,
+    void finishOpeningFile(ChatId chatId, const std::string &key, const std::string &description,
                            const std::string &path, const std::string &error);
 };
 
