@@ -23,6 +23,7 @@
 - **Photos and quotes in messages fetched to catch up with a chat no longer arrive out of order.**
 - **A quote of a channel's post names the channel, not "Unknown user".**
 - **"Show invite link" shows a public chat's t.me address.**
+- **A photo is shown in a size within the auto-download limit, where it has one, rather than asked about.**
 - **Temporary files of images sent and of downloads are no longer left behind.**
 
 ### Translations
