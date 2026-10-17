@@ -3,15 +3,22 @@
 
 #include "account-data.h"
 #include <purple.h>
+#include <map>
 
 std::string makeNoticeWithSender(const td::td_api::chat &chat, const TgMessageInfo &message,
                                  const char *noticeText, PurpleAccount *account);
-std::string getMessageText(const td::td_api::formattedText &text);
+// As markup; custom emoji given in smileys, by id, are shown by their codes
+std::string getMessageText(const td::td_api::formattedText &text,
+                           const std::map<int64_t, std::string> *smileys = nullptr);
 std::string makeInlineImageText(int imgstoreId);
 // How long a message may wait for its picture, preview or quoted message before it is shown
 // without: longer when catching up with a chat, where keeping messages in order matters more than
 // showing each at once, but not so long that a message just sent waits behind them for long
 unsigned getMessageWaitSeconds(const TgMessageInfo &message);
+// Whether an animated sticker is to be converted into a picture the front-end can show
+bool canConvertAnimatedSticker(PurpleAccount *purpleAccount);
+// The conversation a message in the chat goes to; made, if there is none yet
+PurpleConversation *getMessageConversation(TdAccountData &account, const td::td_api::chat &chat);
 // For the conversation window, which renders text as HTML
 std::string escapeForDisplay(const std::string &text);
 // A file:// URI for the path

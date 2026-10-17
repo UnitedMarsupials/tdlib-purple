@@ -23,6 +23,9 @@ void clearGroups();
 // What the mock GdkPixbuf has loaders for, out of "webp", "tgs" and "webm"; WebP by default, as
 // Pidgin mostly has
 void setImageLoaders(std::initializer_list<std::string> formats);
+// Whether the front-end takes custom smileys, as Pidgin does; off by default
+void setCustomSmileys(bool supported);
+void clearConversationData();
 
 using RoomlistData = std::vector<std::pair<PurpleRoomlistFieldType, std::string>>;
 

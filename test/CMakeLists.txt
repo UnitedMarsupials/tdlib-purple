@@ -20,6 +20,7 @@ add_executable(tests EXCLUDE_FROM_ALL
     location-test.cpp
     reaction-test.cpp
     message-link-test.cpp
+    custom-emoji-test.cpp
     test-transceiver.cpp
     libpurple-mock.cpp
     printout.cpp
@@ -36,6 +37,7 @@ add_executable(tests EXCLUDE_FROM_ALL
     ../receiving.cpp
     ../format.cpp
     ../sticker.cpp
+    ../custom-emoji.cpp
     ../file-transfer.cpp
     ../call.cpp
     ../identifiers.cpp
