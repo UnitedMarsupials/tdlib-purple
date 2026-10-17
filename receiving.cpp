@@ -468,7 +468,20 @@ static std::string quoteMessage(const td::td_api::message *message, TdAccountDat
     std::string originalName;
     if (originalAuthor)
         originalName = account.getDisplayName(*originalAuthor);
-    else {
+    else if (message && message->sender_id_ &&
+             (message->sender_id_->get_id() == td::td_api::messageSenderChat::ID))
+    {
+        // Posted by a channel, or by a group in its own name: signed by its author, or else by the
+        // chat itself
+        const td::td_api::chat *senderChat = account.getChat(
+            getChatId(static_cast<const td::td_api::messageSenderChat &>(*message->sender_id_)));
+        if (!message->author_signature_.empty())
+            originalName = message->author_signature_;
+        else if (senderChat)
+            originalName = senderChat->title_;
+        else
+            originalName = _("Channel post");
+    } else {
         // message == NULL means it could not be fetched, or took too long to fetch
         // TRANSLATOR: In-line placeholder if the original author of a quote is unknown. Is at the beginning of the line if and only if you make it so, see "<b>&bt {} wrote:"...
         originalName = _("Unknown user");
