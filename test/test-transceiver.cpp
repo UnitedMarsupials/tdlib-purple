@@ -945,6 +945,14 @@ object_ptr<messagePhoto> makeMessagePhoto(object_ptr<photo> &&photo_, object_ptr
     return result;
 }
 
+object_ptr<error> makeError(std::int32_t code, const std::string &message)
+{
+    auto result = make_object<error>();
+    result->code_    = code;
+    result->message_ = message;
+    return result;
+}
+
 object_ptr<file> makeFile(std::int32_t id, std::int64_t size, const std::string &path,
                           const std::string &uniqueId)
 {

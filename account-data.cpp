@@ -1036,9 +1036,12 @@ void TdAccountData::addPendingEdit(const PendingEdit &edit)
     });
     if (it == m_pendingEdits.end())
         m_pendingEdits.push_back(edit);
-    else
-        // One showing will do for both, and the file is new if either brought one
+    else {
+        // One showing will do for both, and the file is new if either brought one. Should it fail,
+        // what was shown before the first comes back, but only over what the last put in place
         it->captionOnly = it->captionOnly && edit.captionOnly;
+        it->installed   = edit.installed;
+    }
 }
 
 bool TdAccountData::extractPendingEdit(ChatId chatId, MessageId messageId, PendingEdit &edit)

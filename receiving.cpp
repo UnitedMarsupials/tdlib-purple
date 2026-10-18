@@ -1620,6 +1620,18 @@ static void editedMessageResponse(TdAccountData &account, const PendingEdit &edi
     if (!chat || !object || (object->get_id() != td::td_api::message::ID)) {
         purple_debug_warning(config::pluginId, "Failed to fetch edited message %" G_GINT64_FORMAT "\n",
                              edit.messageId.value());
+        // Not shown, so the same change coming again is still news, unless a later edit has
+        // taken this one's place
+        ShownMessage *shownMessage = account.findShownMessage(edit.chatId, edit.messageId);
+        if (shownMessage && (*shownMessage == edit.installed))
+            *shownMessage = edit.previous;
+        return;
+    }
+
+    // Deleted meanwhile, which has been reported already
+    if (!account.findShownMessage(edit.chatId, edit.messageId)) {
+        purple_debug_misc(config::pluginId, "Edited message %" G_GINT64_FORMAT " is gone\n",
+                          edit.messageId.value());
         return;
     }
 
@@ -1685,7 +1697,9 @@ void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messa
     edit.messageId   = messageId;
     edit.messageTime = shownMessage->timestamp;
     edit.captionOnly = !editedMessage.file.empty() && (editedMessage.file == shownMessage->file);
+    edit.previous    = *shownMessage;
     editedMessage.timestamp = shownMessage->timestamp;
+    edit.installed   = editedMessage;
     *shownMessage = std::move(editedMessage);
 
     IncomingMessage *pendingMessage = account.pendingMessages.findPendingMessage(chatId, messageId);
@@ -1723,10 +1737,12 @@ void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessag
 
         PendingEdit edit;
         account.extractPendingEdit(chatId, messageId, edit);
+        // A message still waiting to be shown is simply not shown; but one waiting to be shown again,
+        // as edited, is in the conversation already
         IncomingMessage *pendingMessage = account.pendingMessages.findPendingMessage(chatId, messageId);
         if (pendingMessage)
             pendingMessage->deleted = true;
-        else if (chat) {
+        if ((!pendingMessage || pendingMessage->editedMessageTime) && chat) {
             // Telegram does not say who deleted it, so the notice cannot either.
             std::string notice = formatMessage(
                 // TRANSLATOR: In-chat notification. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.

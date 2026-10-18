@@ -304,14 +304,21 @@ struct ShownMessage {
     std::string file;      // the file the message carries, if any
     std::string content;   // what is shown of it besides: its text, caption or description
     time_t      timestamp;
+
+    bool operator==(const ShownMessage &other) const
+    {
+        return (file == other.file) && (content == other.content) && (timestamp == other.timestamp);
+    }
 };
 
 // An edit to a message that was still waiting to be shown at the time
 struct PendingEdit {
-    ChatId    chatId;
-    MessageId messageId;
-    time_t    messageTime;
-    bool      captionOnly;
+    ChatId       chatId;
+    MessageId    messageId;
+    time_t       messageTime;
+    bool         captionOnly;
+    ShownMessage previous;    // as shown before, to go back to if the edit cannot be fetched...
+    ShownMessage installed;   // ...unless a later edit has replaced this one's since
 };
 
 class TdAccountData {

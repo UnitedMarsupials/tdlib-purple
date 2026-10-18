@@ -74,6 +74,42 @@ TEST_F(MessageEditTest, TextEdited)
     tgl.verifyNoRequests();
 }
 
+TEST_F(MessageEditTest, EditNotFetched)
+{
+    loginWithOneContact();
+    receiveText("old");
+
+    tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makeTextMessage("new")));
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(makeError(500, "Internal Server Error"));
+    prpl.verifyNoEvents();
+
+    // Never shown, so the same edit is fetched again when it comes again
+    tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makeTextMessage("new")));
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+}
+
+TEST_F(MessageEditTest, DeletedWhileFetchingEdit)
+{
+    loginWithOneContact();
+    receiveText("old");
+
+    tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makeTextMessage("new")));
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                                             "Message from " + messageTime(date) + " has been deleted",
+                                             PURPLE_MESSAGE_SYSTEM, 0));
+
+    // The edit of a message reported deleted is no news
+    object_ptr<message> edited = makeMessage(messageId, userIds[0], chatIds[0], false, date,
+                                             makeTextMessage("new"));
+    edited->edit_date_ = editDate;
+    tgl.reply(std::move(edited));
+    prpl.verifyNoEvents();
+    tgl.verifyNoRequests();
+}
+
 TEST_F(MessageEditTest, ChangeOutOfSight)
 {
     loginWithOneContact();
@@ -194,6 +230,35 @@ TEST_F(MessageEditTest, PhotoReplaced)
         )
     );
     tgl.verifyNoRequests();
+}
+
+TEST_F(MessageEditTest, DeletedWhileEditDownloads)
+{
+    loginWithOneContact();
+    receivePhoto("caption");
+
+    tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makePhoto("other", "caption")));
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+
+    // The new picture is still to be fetched, so the edit waits for it
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(makeFile(fileId + 1, 10000, "", "other"), 640, 480));
+    object_ptr<message> edited = makeMessage(messageId, userIds[0], chatIds[0], false, date,
+        makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText("caption"), false, false, false));
+    edited->edit_date_ = editDate;
+    tgl.reply(std::move(edited));
+    tgl.verifyRequest(downloadFile(fileId + 1, 1, 0, 0, true));
+    prpl.verifyNoEvents();
+
+    // The message shown before is deleted all the same
+    tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                                             "Message from " + messageTime(date) + " has been deleted",
+                                             PURPLE_MESSAGE_SYSTEM, 0));
+
+    // ...and its edit is not shown once the picture is here
+    tgl.reply(makeFile(fileId + 1, 10000, "/path2", "other"));
+    prpl.verifyNoEvents();
 }
 
 TEST_F(MessageEditTest, Deleted)

@@ -109,6 +109,7 @@ object_ptr<messageVideo> makeMessageVideo(object_ptr<video> &&video_,
                                           object_ptr<photo> &&cover_, std::int32_t start_timestamp_,
                                           object_ptr<formattedText> &&caption_,
                                           bool show_caption_above_media_, bool has_spoiler_, bool is_secret_);
+object_ptr<error> makeError(std::int32_t code, const std::string &message);
 // A file Telegram has, downloaded here if it has a path
 object_ptr<file> makeFile(std::int32_t id, std::int64_t size, const std::string &path = "",
                           const std::string &uniqueId = "bleh");
