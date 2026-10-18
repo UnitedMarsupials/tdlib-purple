@@ -81,12 +81,16 @@ TEST_F(MessageEditTest, EditNotFetched)
 
     tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makeTextMessage("new")));
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    prpl.verifyNoEvents();
     tgl.reply(makeError(500, "Internal Server Error"));
     prpl.verifyNoEvents();
+
+    tgl.verifyNoRequests();
 
     // Never shown, so the same edit is fetched again when it comes again
     tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makeTextMessage("new")));
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    prpl.verifyNoEvents();
 }
 
 TEST_F(MessageEditTest, DeletedWhileFetchingEdit)
@@ -141,7 +145,16 @@ TEST_F(MessageEditTest, DiceRolled)
     tgl.update(make_object<updateNewMessage>(makeMessage(messageId, userIds[0], chatIds[0], false, date,
                                                          makeDice(0))));
     tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
-    prpl.discardEvents();
+    prpl.verifyEvents(
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+        ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                               userFirstNames[0] + " " + userLastNames[0] + ": Unsupported message type messageDice",
+                               PURPLE_MESSAGE_SYSTEM, date),
+        // ...followed by what it holds, as TDLib describes it
+        ServGotImEvent(connection, purpleUserName(0),
+                       "\n<font face=\"monospace\">messageDice {\n  emoji = \"\U0001F3B2\"\n}</font>",
+                       PURPLE_MESSAGE_RECV, date)
+    );
 
     // Telegram's own news of a message not shown in full, which nobody edited
     tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makeDice(4)));
@@ -166,6 +179,7 @@ TEST_F(MessageEditTest, CaptionEdited)
 
     tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makePhoto("bleh", "new")));
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    prpl.verifyNoEvents();
 
     object_ptr<message> edited = makeMessage(messageId, userIds[0], chatIds[0], false, date,
                                              makePhoto("bleh", "new"));
@@ -259,6 +273,7 @@ TEST_F(MessageEditTest, DeletedWhileEditDownloads)
     // ...and its edit is not shown once the picture is here
     tgl.reply(makeFile(fileId + 1, 10000, "/path2", "other"));
     prpl.verifyNoEvents();
+    tgl.verifyNoRequests();
 }
 
 TEST_F(MessageEditTest, Deleted)
@@ -326,6 +341,7 @@ TEST_F(MessageEditTest, EditedWhilePending)
 
     tgl.update(makeUpdateMessageContent(chatIds[0], replyId, makeTextMessage("new")));
     tgl.verifyNoRequests();
+    prpl.verifyNoEvents();
 
     tgl.reply(makeMessage(repliedId, userIds[0], chatIds[0], false, date - 1, makeTextMessage("source")));
     prpl.verifyEvents(ServGotImEvent(
@@ -334,4 +350,5 @@ TEST_F(MessageEditTest, EditedWhilePending)
         PURPLE_MESSAGE_RECV, date
     ));
     tgl.verifyRequest(viewMessages(chatIds[0], {replyId}, nullptr, true));
+    prpl.verifyNoEvents();
 }
