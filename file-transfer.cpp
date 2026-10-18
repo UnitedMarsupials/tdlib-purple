@@ -587,6 +587,18 @@ std::string makeDocumentDescription(const td::td_api::videoNote *document)
     return formatMessage(_("video note [{}]"), formatDuration(document->duration_));
 }
 
+std::string makeDocumentDescription(const td::td_api::video *document)
+{
+    if (!document)
+        // Unlikely error message not worth translating
+        return "(faulty file)";
+    // Its picture size too, as the links to its other sizes give theirs
+    std::string result = document->file_name_ + " [" + document->mime_type_;
+    if (document->width_ && document->height_)
+        result += ", " + std::to_string(document->width_) + "×" + std::to_string(document->height_);
+    return result + "]";
+}
+
 std::string getFileName(const td::td_api::voiceNote* document)
 {
     td::Client::Response resp = td::Client::execute({0, td::td_api::make_object<td::td_api::getFileExtension>(document->mime_type_)});

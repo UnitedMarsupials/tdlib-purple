@@ -1371,17 +1371,42 @@ const td::td_api::file *selectPhotoSize(PurpleAccount *account, const td::td_api
 
 // The thumbnail the sender attached to a video, if it is one the conversation window can show:
 // Telegram also sends MPEG4 thumbnails for some videos and animations, and those are skipped.
+// Of a cover the sender chose for a video, the size that does for a preview: the smallest at least as
+// wide as the video's thumbnail, which is what the preview would be without a cover, or else the widest
+static const td::td_api::file *getCoverPreview(const td::td_api::photo *cover,
+                                               const td::td_api::thumbnail *thumbnail)
+{
+    // Telegram's thumbnails are 320 pixels wide, should one not say
+    int32_t previewWidth = (thumbnail && (thumbnail->width_ > 0)) ? thumbnail->width_ : 320;
+    const td::td_api::photoSize *chosen = nullptr;
+    if (cover)
+        for (const auto &size: cover->sizes_) {
+            if (!size || !size->photo_)
+                continue;
+            bool wideEnough = (size->width_ >= previewWidth);
+            if (!chosen ||
+                (wideEnough && ((chosen->width_ < previewWidth) || (size->width_ < chosen->width_))) ||
+                (!wideEnough && (chosen->width_ < previewWidth) && (size->width_ > chosen->width_)))
+                chosen = size.get();
+        }
+    return chosen ? chosen->photo_.get() : nullptr;
+}
+
 static const td::td_api::file *getVideoPreview(const td::td_api::MessageContent &content,
                                                PurpleAccount *account)
 {
     const td::td_api::thumbnail *thumbnail = nullptr;
+    const td::td_api::file      *cover     = nullptr;
     bool                         secret    = false;
 
     switch (content.get_id()) {
         case td::td_api::messageVideo::ID: {
             const auto &video = static_cast<const td::td_api::messageVideo &>(content);
+            // The thumbnail is the first frame, which is often a title card; a cover, where the
+            // sender chose one, is what Telegram's own apps show instead
             if (video.video_)
                 thumbnail = video.video_->thumbnail_.get();
+            cover = getCoverPreview(video.cover_.get(), thumbnail);
             secret = video.is_secret_;
             break;
         }
@@ -1406,6 +1431,8 @@ static const td::td_api::file *getVideoPreview(const td::td_api::MessageContent 
                                            AccountOptions::ShowSelfDestructDefault))
         return nullptr;
 
+    if (cover)
+        return cover;
     if (thumbnail && thumbnail->format_ &&
         (thumbnail->format_->get_id() == td::td_api::thumbnailFormatJpeg::ID))
         return thumbnail->file_.get();

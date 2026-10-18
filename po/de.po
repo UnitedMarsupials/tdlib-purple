@@ -1243,3 +1243,8 @@ msgstr "Zwei-Faktor-Authentifizierung einstellen..."
 
 #~ msgid "Accept secret chats"
 #~ msgstr "Geheime Chats annehmen"
+
+#. TRANSLATOR: Of a video in several sizes, the one as it was sent, in place of a codec, as in "720×576 (original), 14 MiB".
+#: ../media-variants.cpp:34
+msgid "original"
+msgstr "Original"
