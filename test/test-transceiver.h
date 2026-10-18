@@ -122,6 +122,16 @@ object_ptr<updateMessageContent> makeUpdateMessageContent(std::int64_t chatId, s
                                                           object_ptr<MessageContent> &&content);
 object_ptr<updateDeleteMessages> makeUpdateDeleteMessages(std::int64_t chatId, std::int64_t messageId,
                                                           bool isPermanent, bool fromCache);
+object_ptr<messageReaction> makeMessageReaction(object_ptr<ReactionType> &&type, std::int32_t totalCount,
+                                                bool isChosen, object_ptr<MessageSender> &&usedSender,
+                                                std::vector<object_ptr<MessageSender>> &&recentSenders);
+object_ptr<messageInteractionInfo> makeInteractionInfo(std::vector<object_ptr<messageReaction>> &&reactions);
+object_ptr<updateMessageInteractionInfo> makeUpdateReactions(std::int64_t chatId, std::int64_t messageId,
+                                                             std::vector<object_ptr<messageReaction>> &&reactions);
+object_ptr<unreadReaction> makeUnreadReaction(object_ptr<ReactionType> &&type, object_ptr<MessageSender> &&sender);
+object_ptr<updateMessageUnreadReactions> makeUpdateUnreadReactions(std::int64_t chatId, std::int64_t messageId,
+                                                                   std::vector<object_ptr<unreadReaction>> &&reactions,
+                                                                   std::int32_t unreadCount);
 // A location, live if livePeriod is not 0; TDLib 1.8.65 made live locations a type of their own
 object_ptr<MessageContent> makeMessageLocation(double latitude, double longitude, double accuracy,
                                                std::int32_t livePeriod = 0, std::int32_t expiresIn = 0);

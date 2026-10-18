@@ -32,30 +32,29 @@ void ReactionTest::receive(object_ptr<MessageContent> content, const std::string
     )));
     prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0), expectedText, flags, date));
     tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
+    prpl.verifyNoEvents();
+    tgl.verifyNoRequests();
 }
 
-static object_ptr<messageInteractionInfo> makeInteractionInfo(int32_t selfId,
-                                                              std::initializer_list<Given> reactions)
+static std::vector<object_ptr<messageReaction>> makeReactions(int32_t selfId,
+                                                               std::initializer_list<Given> reactions)
 {
     std::vector<object_ptr<messageReaction>> list;
     for (const Given &given: reactions) {
         std::vector<object_ptr<MessageSender>> senders;
         for (int64_t sender: given.senders)
             senders.push_back(make_object<messageSenderUser>(sender));
-        list.push_back(make_object<messageReaction>(
-            make_object<reactionTypeEmoji>(given.emoji), given.totalCount, given.chosen,
-            given.chosen ? make_object<messageSenderUser>(selfId) : nullptr, std::move(senders)
-        ));
+        list.push_back(makeMessageReaction(make_object<reactionTypeEmoji>(given.emoji), given.totalCount,
+                                           given.chosen,
+                                           given.chosen ? make_object<messageSenderUser>(selfId) : nullptr,
+                                           std::move(senders)));
     }
-    return make_object<messageInteractionInfo>(0, 0, nullptr, make_object<messageReactions>(
-        std::move(list), false, std::vector<object_ptr<paidReactor>>(), false
-    ));
+    return list;
 }
 
 void ReactionTest::react(std::initializer_list<Given> reactions, int64_t id)
 {
-    tgl.update(make_object<updateMessageInteractionInfo>(chatIds[0], id ? id : messageId,
-                                                         makeInteractionInfo(selfId, reactions)));
+    tgl.update(makeUpdateReactions(chatIds[0], id ? id : messageId, makeReactions(selfId, reactions)));
 }
 
 std::string ReactionTest::messageTime(time_t timestamp)
@@ -89,6 +88,65 @@ TEST_F(ReactionTest, AddedChangedRemoved)
     prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0),
                                      "removed their reaction to message „Did you ask already?“.",
                                      PURPLE_MESSAGE_RECV, 0));
+    tgl.verifyNoRequests();
+}
+
+TEST_F(ReactionTest, KeptAcrossEdit)
+{
+    loginWithOneContact();
+    receive(makeTextMessage("old"), "old");
+    react({{"\U0001F44D", 1, false, {userIds[0]}}});
+    prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0), "reacted with \U0001F44D to message „old“.",
+                                     PURPLE_MESSAGE_RECV, 0));
+
+    tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makeTextMessage("new")));
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    object_ptr<message> edited = makeMessage(messageId, userIds[0], chatIds[0], false, date, makeTextMessage("new"));
+    edited->edit_date_ = date + 1;
+    tgl.reply(std::move(edited));
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                                             userFirstNames[0] + " " + userLastNames[0] +
+                                             " edited the message from " + messageTime(date) + ": new",
+                                             PURPLE_MESSAGE_SYSTEM, date + 1));
+
+    // The same reaction, after the edit, is still no news
+    react({{"\U0001F44D", 1, false, {userIds[0]}}});
+    prpl.verifyNoEvents();
+    tgl.verifyNoRequests();
+}
+
+TEST_F(ReactionTest, WhileEditDownloads)
+{
+    loginWithOneContact();
+    receive(makeTextMessage("text"), "text");
+
+    // Edited into a photo still to be fetched, so the edit waits for it
+    tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makeTextMessage("photo")));
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(makeFile(1234, 10000), 640, 480));
+    object_ptr<message> edited = makeMessage(messageId, userIds[0], chatIds[0], false, date,
+        makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText("photo"), false, false, false));
+    edited->edit_date_ = date + 1;
+    tgl.reply(std::move(edited));
+    tgl.verifyRequest(downloadFile(1234, 1, 0, 0, true));
+    prpl.verifyNoEvents();
+
+    // The message is in the conversation already, so its reactions are news
+    react({{"\U0001F44D", 1, false, {userIds[0]}}});
+    prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0), "reacted with \U0001F44D to message „photo“.",
+                                     PURPLE_MESSAGE_RECV, 0));
+
+    // ...before the edit, shown once its picture is here
+    tgl.reply(makeFile(1234, 10000, "/path"));
+    prpl.verifyEvents(
+        ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                               userFirstNames[0] + " " + userLastNames[0] + " edited the message from " +
+                               messageTime(date) + ":",
+                               PURPLE_MESSAGE_SYSTEM, date + 1),
+        ServGotImEvent(connection, purpleUserName(0), "<img src=\"file:///path\">\nphoto",
+                       (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES), date + 1)
+    );
     tgl.verifyNoRequests();
 }
 
@@ -132,11 +190,7 @@ TEST_F(ReactionTest, LongTextWithMarkup)
 TEST_F(ReactionTest, NoText)
 {
     loginWithOneContact();
-    receive(make_object<messageLocation>(make_object<location>(50.4501, 30.5234, 0)
-#if !TDLIB_API_LIVE_LOCATION
-                                         , 0, 0, 0, 0
-#endif
-                                         ),
+    receive(makeMessageLocation(50.4501, 30.5234, 0),
             "Location: <a href=\"file://geo:50.450100,30.523400\">50.450100, 30.523400</a>");
 
     react({{"\U0001F44D", 1, false, {userIds[0]}}});
@@ -148,10 +202,7 @@ TEST_F(ReactionTest, NoText)
 TEST_F(ReactionTest, Venue)
 {
     loginWithOneContact();
-    receive(make_object<messageVenue>(make_object<venue>(
-                make_object<td::td_api::location>(50.4501, 30.5234, 0),
-                "Mriya", "Khreshchatyk 1", "foursquare", "id", "food"
-            )),
+    receive(makeMessageVenue(50.4501, 30.5234, "Mriya", "Khreshchatyk 1"),
             "<b>Mriya</b>\nKhreshchatyk 1\n"
             "Location: <a href=\"file://geo:50.450100,30.523400\">50.450100, 30.523400</a>");
 
@@ -193,18 +244,18 @@ TEST_F(ReactionTest, UnreadToEarlierMessage)
     loginWithOneContact();
 
     std::vector<object_ptr<unreadReaction>> unread;
-    unread.push_back(make_object<unreadReaction>(make_object<reactionTypeEmoji>("\U0001F525"),
-                                                 make_object<messageSenderUser>(userIds[0]), false));
-    tgl.update(make_object<updateMessageUnreadReactions>(chatIds[0], messageId, std::move(unread), 1));
+    unread.push_back(makeUnreadReaction(make_object<reactionTypeEmoji>("\U0001F525"),
+                                        make_object<messageSenderUser>(userIds[0])));
+    tgl.update(makeUpdateUnreadReactions(chatIds[0], messageId, std::move(unread), 1));
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
 
     // The other reaction is old news
     object_ptr<message> reacted = makeMessage(messageId, selfId, chatIds[0], true, date, makeTextMessage("my news"));
     reacted->sending_state_    = nullptr;
-    reacted->interaction_info_ = makeInteractionInfo(selfId, {
+    reacted->interaction_info_ = makeInteractionInfo(makeReactions(selfId, {
         {"\U0001F525", 1, false, {userIds[0]}},
         {"\U0001F44D", 1, true, {selfId}}
-    });
+    }));
     tgl.reply(std::move(reacted));
     prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0),
                                      "reacted with \U0001F525 to message „my news“.", PURPLE_MESSAGE_RECV, 0));
@@ -251,23 +302,17 @@ void CustomEmojiReactionTest::reactWithCustomEmoji()
     std::vector<object_ptr<messageReaction>> list;
     std::vector<object_ptr<MessageSender>>   senders;
     senders.push_back(make_object<messageSenderUser>(userIds[0]));
-    list.push_back(make_object<messageReaction>(make_object<reactionTypeCustomEmoji>(customEmojiId), 1,
-                                                false, nullptr, std::move(senders)));
-    tgl.update(make_object<updateMessageInteractionInfo>(chatIds[0], messageId,
-        make_object<messageInteractionInfo>(0, 0, nullptr, make_object<messageReactions>(
-            std::move(list), false, std::vector<object_ptr<paidReactor>>(), false
-        ))));
+    list.push_back(makeMessageReaction(make_object<reactionTypeCustomEmoji>(customEmojiId), 1,
+                                       false, nullptr, std::move(senders)));
+    tgl.update(makeUpdateReactions(chatIds[0], messageId, std::move(list)));
     tgl.verifyRequest(getCustomEmojiStickers({customEmojiId}));
 }
 
 void CustomEmojiReactionTest::replyWithSticker(object_ptr<StickerFormat> format, const std::string &path,
                                                bool downloaded)
 {
-    object_ptr<sticker> emoji = makeSticker(100, 100, "\U0001F63A", make_object<file>(
-        fileId, 10000, 10000,
-        make_object<localFile>(downloaded ? path : "", true, true, false, downloaded, 0, 10000, 10000),
-        make_object<remoteFile>("beh", "bleh", false, true, 10000)
-    ), nullptr);
+    object_ptr<sticker> emoji = makeSticker(100, 100, "\U0001F63A",
+                                            makeFile(fileId, 10000, downloaded ? path : ""), nullptr);
     emoji->format_ = std::move(format);
     std::vector<object_ptr<sticker>> list;
     list.push_back(std::move(emoji));
@@ -320,11 +365,7 @@ TEST_F(CustomEmojiReactionTest, NotDownloadedYet)
     replyWithSticker(make_object<stickerFormatWebp>(), TEST_SOURCE_DIR "/test.webp", false);
     tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
     prpl.verifyNoEvents();
-    tgl.reply(make_object<file>(
-        fileId, 10000, 10000,
-        make_object<localFile>(TEST_SOURCE_DIR "/test.webp", true, true, false, true, 0, 10000, 10000),
-        make_object<remoteFile>("beh", "bleh", false, true, 10000)
-    ));
+    tgl.reply(makeFile(fileId, 10000, TEST_SOURCE_DIR "/test.webp"));
     verifyReaction(linked(TEST_SOURCE_DIR "/test.webp", lastImage()), true);
 }
 
@@ -400,7 +441,7 @@ TEST_F(CustomEmojiReactionTest, NotFound)
     receive(makeTextMessage("hi"), "hi");
 
     reactWithCustomEmoji();
-    tgl.reply(make_object<error>(400, "Bad Request"));
+    tgl.reply(makeError(400, "Bad Request"));
     verifyReaction("[custom emoji]", false);
 }
 

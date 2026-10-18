@@ -634,11 +634,7 @@ TEST_F(PrivateChatTest, AlreadyDownloadedPhoto_NoGdkPixbuf)
     loginWithOneContact();
 
     std::vector<object_ptr<photoSize>> sizes;
-    sizes.push_back(makePhotoSize(make_object<file>(
-            fileId, 10000, 10000,
-            make_object<localFile>("/path", true, true, false, true, 0, 10000, 10000),
-            make_object<remoteFile>("beh", "bleh", false, true, 10000)
-        ), 640, 480));
+    sizes.push_back(makePhotoSize(makeFile(fileId, 10000, "/path"), 640, 480));
     tgl.update(make_object<updateNewMessage>(makeMessage(
         1,
         userIds[0],
@@ -646,8 +642,8 @@ TEST_F(PrivateChatTest, AlreadyDownloadedPhoto_NoGdkPixbuf)
         false,
         date,
         makeMessagePhoto(
-            make_object<photo>(false, nullptr, std::move(sizes)),
-            make_object<formattedText>("caption", std::vector<object_ptr<textEntity>>()),
+            makePhotoWithSizes(std::move(sizes)),
+            makeFormattedText("caption"),
             false, false, false
         )
     )));

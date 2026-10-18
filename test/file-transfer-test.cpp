@@ -347,11 +347,7 @@ TEST_F(FileTransferTest, WebpSticker)
         false,
         date,
         make_object<messageSticker>(makeSticker(320, 200, "",
-            make_object<file>(
-                fileId, 10000, 10000,
-                make_object<localFile>(TEST_SOURCE_DIR "/test.webp", true, true, false, true, 0, 10000, 10000),
-                make_object<remoteFile>("beh", "bleh", false, true, 10000)
-            )), false)
+            makeFile(fileId, 10000, TEST_SOURCE_DIR "/test.webp")), false)
     )));
     tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
     prpl.verifyEvents(ServGotImEvent(
@@ -383,11 +379,7 @@ TEST_F(FileTransferTest, WebpSticker_NoLoader)
         false,
         date,
         make_object<messageSticker>(makeSticker(320, 200, "",
-            make_object<file>(
-                fileId, 10000, 10000,
-                make_object<localFile>(TEST_SOURCE_DIR "/test.webp", true, true, false, true, 0, 10000, 10000),
-                make_object<remoteFile>("beh", "bleh", false, true, 10000)
-            )), false)
+            makeFile(fileId, 10000, TEST_SOURCE_DIR "/test.webp")), false)
     )));
     tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
     prpl.verifyEvents(ServGotImEvent(
@@ -414,11 +406,7 @@ TEST_F(FileTransferTest, WebpSticker_NoLoader_Emoji)
         false,
         date,
         make_object<messageSticker>(makeSticker(320, 200, "\U0001F63A",
-            make_object<file>(
-                fileId, 10000, 10000,
-                make_object<localFile>(TEST_SOURCE_DIR "/test.webp", true, true, false, true, 0, 10000, 10000),
-                make_object<remoteFile>("beh", "bleh", false, true, 10000)
-            )), false)
+            makeFile(fileId, 10000, TEST_SOURCE_DIR "/test.webp")), false)
     )));
     tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
     prpl.verifyEvents(ServGotImEvent(
