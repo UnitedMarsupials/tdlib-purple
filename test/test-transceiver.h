@@ -26,6 +26,7 @@ public:
     void reply(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
 
     const std::string &getInputPhotoPath(unsigned index) { return m_inputPhotoPaths.at(index); }
+    void removeTempFiles();
 private:
     struct TimerInfo {
         guint       id;

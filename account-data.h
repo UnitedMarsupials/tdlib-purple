@@ -110,6 +110,16 @@ public:
     : PendingRequest(requestId), chatId(chatId), tempFile(tempFile ? tempFile : "") {}
 };
 
+// Checking whether TDLib still needs an image file sent in an earlier session
+class TempFileCheckRequest: public PendingRequest {
+public:
+    ChatId  chatId;
+    int64_t messageId;
+
+    TempFileCheckRequest(uint64_t requestId, ChatId chatId, int64_t messageId)
+    : PendingRequest(requestId), chatId(chatId), messageId(messageId) {}
+};
+
 class UploadRequest: public PendingRequest {
 public:
     PurpleXfer *xfer;
@@ -184,6 +194,8 @@ public:
         if (message.repliedMessage)
             this->message.repliedMessage = std::move(message.repliedMessage);
     }
+    // An inline download still in progress, as at logout, leaves its temporary file behind otherwise
+    ~DownloadRequest();
 };
 
 class AvatarDownloadRequest: public PendingRequest {
@@ -335,6 +347,7 @@ public:
     struct {
         unsigned maxCaptionLength = 0;
         unsigned maxMessageLength = 0;
+        int64_t  myUserId         = 0;
     } options;
 
     PurpleAccount *const  purpleAccount;
@@ -413,8 +426,10 @@ public:
     }
 
     const ContactRequest *     findContactRequest(UserId userId);
-    void                       addTempFileUpload(int64_t messageId, const std::string &path);
-    std::string                extractTempFileUpload(int64_t messageId);
+    void                       addTempFileUpload(ChatId chatId, int64_t messageId, const std::string &path);
+    std::string                extractTempFileUpload(ChatId chatId, int64_t messageId);
+    void                       loadTempFileUploads();
+    void                       getTempFileUploads(std::vector<std::pair<ChatId, int64_t>> &messages);
     DownloadRequest *          findDownloadRequest(int32_t fileId);
     void                       extractFileTransferRequests(std::vector<PurpleXfer *> &transfers);
 
@@ -478,6 +493,7 @@ private:
     };
 
     struct SendMessageInfo {
+        ChatId      chatId;
         int64_t     messageId;
         std::string tempFile;
     };
@@ -520,6 +536,7 @@ private:
     int32_t                                 m_callId;
 
     std::unique_ptr<PendingRequest> getPendingRequestImpl(uint64_t requestId);
+    void                            saveTempFileUploads();
     PendingRequest *                findPendingRequestImpl(uint64_t requestId);
 
     // Read receipts not sent immediately due to away status (grouped per chat)

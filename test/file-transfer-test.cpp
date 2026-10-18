@@ -1422,6 +1422,8 @@ TEST_F(FileTransferTest, ActiveDownloadAtLogout_StuckAtStart)
     );
     tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
 
+    ASSERT_TRUE(g_file_test(tempFileName.c_str(), G_FILE_TEST_EXISTS));
     pluginInfo().close(connection);
     prpl.verifyEvents(XferLocalCancelEvent(tempFileName));
+    ASSERT_FALSE(g_file_test(tempFileName.c_str(), G_FILE_TEST_EXISTS));
 }

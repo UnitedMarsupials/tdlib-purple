@@ -24,6 +24,7 @@ PurpleTdClient::PurpleTdClient(PurpleAccount *acct, ITransceiverBackend *testBac
 {
     StickerConversionThread::setCallback(&PurpleTdClient::onAnimatedStickerConverted);
     m_account = acct;
+    m_data.loadTempFileUploads();
     setPurpleConnectionInProgress();
 }
 
@@ -95,7 +96,8 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         purple_debug_misc(config::pluginId, "Incoming update: new chat\n");
         // Every chat TDLib tells us about is tracked, including a group we are not a member of:
         // joining one later produces no second updateNewChat, so a chat dropped here could never
-        // be picked up again. Whether it belongs in the buddy list is updateChat's decision.
+        // be picked up again. Whether it belongs in the buddy list is updateChat's decision, and
+        // whether its messages are shown is onIncomingMessage's.
         addChat(std::move(newChat.chat_));
 
         break;
@@ -155,10 +157,11 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         auto &sendSucceeded = static_cast<const td::td_api::updateMessageSendSucceeded &>(update);
         purple_debug_misc(config::pluginId, "Incoming update: message %" G_GINT64_FORMAT " send succeeded\n",
                           sendSucceeded.old_message_id_);
-        removeTempFile(sendSucceeded.old_message_id_);
-        if (sendSucceeded.message_)
+        if (sendSucceeded.message_) {
+            removeTempFile(getChatId(*sendSucceeded.message_), sendSucceeded.old_message_id_);
             m_data.renameShownMessage(getChatId(*sendSucceeded.message_), getOldMessageId(sendSucceeded),
                                       getId(*sendSucceeded.message_));
+        }
         break;
     }
 
@@ -175,6 +178,10 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         auto &deleteUpdate = static_cast<const td::td_api::updateDeleteMessages &>(update);
         purple_debug_misc(config::pluginId, "Incoming update: %zu messages deleted\n",
                           deleteUpdate.message_ids_.size());
+        // Deleting a message that is still being sent cancels the sending, without another update
+        if (deleteUpdate.is_permanent_ && !deleteUpdate.from_cache_)
+            for (int64_t messageId: deleteUpdate.message_ids_)
+                removeTempFile(getChatId(deleteUpdate), messageId);
         deleteMessages(m_data, deleteUpdate);
         break;
     }
@@ -183,7 +190,8 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         auto &sendFailed = static_cast<const td::td_api::updateMessageSendFailed &>(update);
         purple_debug_misc(config::pluginId, "Incoming update: message %" G_GINT64_FORMAT " send failed\n",
                           sendFailed.old_message_id_);
-        removeTempFile(sendFailed.old_message_id_);
+        if (sendFailed.message_)
+            removeTempFile(getChatId(*sendFailed.message_), sendFailed.old_message_id_);
         notifySendFailed(sendFailed, m_data);
         // TODO notify in chat
         break;
@@ -856,6 +864,7 @@ void PurpleTdClient::updateSupergroupFull(SupergroupId groupId, td::td_api::obje
 void PurpleTdClient::onChatListReady()
 {
     m_chatListReady = true;
+    checkTempFileUploads();
     std::vector<const td::td_api::chat *> chats;
     m_data.getChats(chats);
 
@@ -951,11 +960,35 @@ void PurpleTdClient::sendReadReceipts(PurpleConversation *conversation)
     }
 }
 
+static bool isLeavingOf(const td::td_api::message &message, int64_t userId)
+{
+    return userId && message.content_ &&
+           (message.content_->get_id() == td::td_api::messageChatDeleteMember::ID) &&
+           (static_cast<const td::td_api::messageChatDeleteMember &>(*message.content_).user_id_ == userId);
+}
+
 void PurpleTdClient::onIncomingMessage(td::td_api::object_ptr<td::td_api::message> message)
 {
     if (!message)
         return;
     ChatId chatId = getChatId(*message);
+
+    // TDLib also tells us of groups and channels we do not belong to - one linked to a group we
+    // are in, a channel's discussion group, one Telegram has brought up for us - and delivers
+    // their messages, which are none of ours unless the account says otherwise. Nor are their
+    // earlier messages fetched. Only the news of our leaving gets through, as the last word on a
+    // group we have just left.
+    const td::td_api::chat *groupChat = m_data.getChat(chatId);
+    if (groupChat && (getBasicGroupId(*groupChat).valid() || getSupergroupId(*groupChat).valid()) &&
+        !m_data.isGroupChatWithMembership(*groupChat) &&
+        !purple_account_get_bool(m_account, AccountOptions::ShowUnjoinedChats,
+                                 AccountOptions::ShowUnjoinedChatsDefault) &&
+        !isLeavingOf(*message, m_data.options.myUserId))
+    {
+        purple_debug_misc(config::pluginId, "Ignoring message %" G_GINT64_FORMAT " in chat %" G_GINT64_FORMAT
+                          ", a group we are not a member of\n", message->id_, chatId.value());
+        return;
+    }
 
     auto pGap = std::find_if(m_chatGaps.begin(), m_chatGaps.end(),
                              [chatId](const ChatGap &gap) { return (gap.chatId == chatId); });
@@ -1059,9 +1092,12 @@ void PurpleTdClient::sendMessageResponse(uint64_t requestId, td::td_api::object_
     if (object && (object->get_id() == td::td_api::message::ID)) {
         if (!request->tempFile.empty()) {
             const td::td_api::message &message = static_cast<td::td_api::message &>(*object);
-            m_data.addTempFileUpload(message.id_, request->tempFile);
+            m_data.addTempFileUpload(request->chatId, message.id_, request->tempFile);
         }
     } else {
+        // No message, so no update will come to say the file can go
+        if (!request->tempFile.empty())
+            remove(request->tempFile.c_str());
         // TRANSLATOR: In-chat error message, argument will be a user-sent message
         std::string errorMessage = formatMessage(_("Failed to send message: {}"), getDisplayedError(object));
         const td::td_api::chat *chat = m_data.getChat(request->chatId);
@@ -2034,9 +2070,50 @@ void PurpleTdClient::getGroupChatList(PurpleRoomlist *roomlist)
     }
 }
 
-void PurpleTdClient::removeTempFile(int64_t messageId)
+void PurpleTdClient::checkTempFileUploads()
 {
-    std::string path = m_data.extractTempFileUpload(messageId);
+    // Files left from an earlier session: once the chats are known, see which messages TDLib is still
+    // sending. Pending messages are kept locally, so an error means the message is gone.
+    std::vector<std::pair<ChatId, int64_t>> messages;
+    m_data.getTempFileUploads(messages);
+    for (const auto &message: messages) {
+        auto getMessageReq = td::td_api::make_object<td::td_api::getMessage>();
+        getMessageReq->chat_id_    = message.first.value();
+        getMessageReq->message_id_ = message.second;
+        uint64_t requestId = m_transceiver.sendQuery(std::move(getMessageReq),
+                                                     &PurpleTdClient::tempFileCheckResponse);
+        m_data.addPendingRequest<TempFileCheckRequest>(requestId, message.first, message.second);
+    }
+}
+
+void PurpleTdClient::tempFileCheckResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object)
+{
+    std::unique_ptr<TempFileCheckRequest> request = m_data.getPendingRequest<TempFileCheckRequest>(requestId);
+    if (!request)
+        return;
+
+    // Still being sent: the file is needed yet
+    if (object && (object->get_id() == td::td_api::message::ID) &&
+        static_cast<const td::td_api::message &>(*object).sending_state_ &&
+        (static_cast<const td::td_api::message &>(*object).sending_state_->get_id() ==
+         td::td_api::messageSendingStatePending::ID))
+        return;
+    // No answer that says the message is gone: the file is kept, to be asked about at the next login
+    if (!object || ((object->get_id() == td::td_api::error::ID) &&
+                    (static_cast<const td::td_api::error &>(*object).code_ != 404) &&
+                    (static_cast<const td::td_api::error &>(*object).code_ != 400)))
+    {
+        purple_debug_misc(config::pluginId, "Cannot tell whether message %" G_GINT64_FORMAT " is still sent\n",
+                          request->messageId);
+        return;
+    }
+    // Gone, sent, or failed for good: nothing will read the file any more
+    removeTempFile(request->chatId, request->messageId);
+}
+
+void PurpleTdClient::removeTempFile(ChatId chatId, int64_t messageId)
+{
+    std::string path = m_data.extractTempFileUpload(chatId, messageId);
     if (!path.empty()) {
         purple_debug_misc(config::pluginId, "Removing temporary file %s\n", path.c_str());
         remove(path.c_str());

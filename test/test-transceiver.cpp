@@ -80,6 +80,17 @@ void TestTransceiver::runTimeouts()
     m_timers.clear();
 }
 
+void TestTransceiver::removeTempFiles()
+{
+    // The plugin removes its image file once TDLib reports on the message, which most test cases
+    // never get as far as. Only its own temporary files, and not the made-up paths tests use.
+    std::string prefix = std::string(g_get_tmp_dir()) + G_DIR_SEPARATOR_S "tdlib_upload_";
+    for (const std::string &path: m_inputPhotoPaths)
+        if (path.compare(0, prefix.size(), prefix) == 0)
+            remove(path.c_str());
+    m_inputPhotoPaths.clear();
+}
+
 #define COMPARE(param) ASSERT_EQ(expected.param, actual.param)
 
 // As of TDLib 1.8 the parameters live directly on the request rather than in a nested

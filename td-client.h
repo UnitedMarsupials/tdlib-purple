@@ -132,7 +132,9 @@ private:
     void       uploadResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
 
     void       sendMessageResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
-    void       removeTempFile(int64_t messageId);
+    void       removeTempFile(ChatId chatId, int64_t messageId);
+    void       checkTempFileUploads();
+    void       tempFileCheckResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
 
     void        setTwoFactorAuthResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void        requestRecoveryEmailConfirmation(const std::string &emailInfo);
