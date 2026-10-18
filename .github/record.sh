@@ -2,7 +2,7 @@
 #
 # Write this job's outcomes to outcome.tsv, one line, for .github/summary.sh:
 #
-#	ORDER  NAME  setup  configure  build  test  install  valgrind
+#	ORDER  NAME  setup  configure  build  test  install  valgrind  sanitize
 #
 # SETUP holds the outcomes of every preparatory step (boot, packages); the
 # first that is not "success" speaks for all of them.  The others are the
@@ -14,6 +14,7 @@ for o in $SETUP; do
 	[ "$o" = success ] || { setup=$o; break; }
 done
 
-printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$ORDER" "$NAME" "$setup" \
+printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$ORDER" "$NAME" "$setup" \
     "${CONFIGURE:-skipped}" "${BUILD:-skipped}" "${TEST:-skipped}" \
-    "${INSTALL:-skipped}" "${VALGRIND:-n/a}" > outcome.tsv
+    "${INSTALL:-skipped}" "${VALGRIND:-n/a}" \
+    "${SANITIZE:-n/a}" > outcome.tsv
