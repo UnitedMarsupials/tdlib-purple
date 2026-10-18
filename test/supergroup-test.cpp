@@ -867,6 +867,11 @@ TEST_F(SupergroupTest, UnjoinedChannelShownOnRequest)
     purple_conversation_autoset_title(conv);
     prpl.verifyEvents(ConvSetTitleEvent(groupChatPurpleName, groupChatTitle));
 
+    // Telegram's news of the chat, such as its title, leave the entry be
+    tgl.update(make_object<updateChatTitle>(groupChatId, groupChatTitle));
+    ASSERT_EQ(purpleChat, purple_blist_find_chat(account, groupChatPurpleName.c_str()));
+    prpl.verifyNoEvents();
+
     // Joined, it is ours to keep, and moves to where joined chats are
     tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusMember>(), 2)));
     ASSERT_FALSE(purple_blist_node_get_flags(&purpleChat->node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);

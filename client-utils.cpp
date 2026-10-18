@@ -534,7 +534,8 @@ void removeGroupChat(PurpleAccount *purpleAccount, const td::td_api::chat &chat)
     std::string  chatName   = getPurpleChatName(chat);
     PurpleChat  *purpleChat = purple_blist_find_chat(purpleAccount, chatName.c_str());
 
-    if (purpleChat)
+    // One of a chat not joined, shown in a conversation, stays as long as the program runs
+    if (purpleChat && !(purple_blist_node_get_flags(PURPLE_BLIST_NODE(purpleChat)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE))
         purple_blist_remove_chat(purpleChat);
     // TODO: uncomment when updateNewChat(chat_list=NULL) + updateChatChatList(non-NULL) at login
     // no longer removes chat
