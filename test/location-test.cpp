@@ -67,13 +67,13 @@ TEST_F(LocationTest, LiveLocationStopped)
             "Live location: <a href=\"file://geo:50.450100,30.523400\">50.450100, 30.523400</a>");
 
     // Moving is no edit
-    tgl.update(make_object<updateMessageContent>(chatIds[0], messageId,
+    tgl.update(makeUpdateMessageContent(chatIds[0], messageId,
                                                  makeLocation(50.4502, 30.5235, 0, 0x7FFFFFFF, 0x7FFFFFFF)));
     tgl.verifyNoRequests();
     prpl.verifyNoEvents();
 
     // ...but stopping is
-    tgl.update(make_object<updateMessageContent>(chatIds[0], messageId,
+    tgl.update(makeUpdateMessageContent(chatIds[0], messageId,
                                                  makeLocation(50.4503, 30.5236, 0, 0x7FFFFFFF, 0)));
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
     object_ptr<message> stopped = makeMessage(messageId, userIds[0], chatIds[0], false, date,

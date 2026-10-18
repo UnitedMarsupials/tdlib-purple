@@ -36,16 +36,8 @@ void MessageEditTest::receiveText(const std::string &text)
 object_ptr<messagePhoto> MessageEditTest::makePhoto(const std::string &uniqueId, const std::string &caption)
 {
     std::vector<object_ptr<photoSize>> sizes;
-    sizes.push_back(makePhotoSize(make_object<file>(
-            fileId, 10000, 10000,
-            make_object<localFile>("/path", true, true, false, true, 0, 10000, 10000),
-            make_object<remoteFile>("beh", uniqueId, false, true, 10000)
-        ), 640, 480));
-    return makeMessagePhoto(
-        make_object<photo>(false, nullptr, std::move(sizes)),
-        make_object<formattedText>(caption, std::vector<object_ptr<textEntity>>()),
-        false, false, false
-    );
+    sizes.push_back(makePhotoSize(makeFile(fileId, 10000, "/path", uniqueId), 640, 480));
+    return makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText(caption), false, false, false);
 }
 
 void MessageEditTest::receivePhoto(const std::string &caption)
@@ -65,7 +57,7 @@ TEST_F(MessageEditTest, TextEdited)
     loginWithOneContact();
     receiveText("old");
 
-    tgl.update(make_object<updateMessageContent>(chatIds[0], messageId, makeTextMessage("new")));
+    tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makeTextMessage("new")));
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
     prpl.verifyNoEvents();
 
@@ -89,8 +81,12 @@ TEST_F(MessageEditTest, ChangeOutOfSight)
 
     // Formatting, which the conversation does not show
     object_ptr<messageText> content = makeTextMessage("text");
-    content->text_->entities_.push_back(make_object<textEntity>(0, 4, make_object<textEntityTypeBold>()));
-    tgl.update(make_object<updateMessageContent>(chatIds[0], messageId, std::move(content)));
+    auto bold = make_object<textEntity>();
+    bold->offset_ = 0;
+    bold->length_ = 4;
+    bold->type_   = make_object<textEntityTypeBold>();
+    content->text_->entities_.push_back(std::move(bold));
+    tgl.update(makeUpdateMessageContent(chatIds[0], messageId, std::move(content)));
     tgl.verifyNoRequests();
     prpl.verifyNoEvents();
 }
@@ -112,7 +108,7 @@ TEST_F(MessageEditTest, DiceRolled)
     prpl.discardEvents();
 
     // Telegram's own news of a message not shown in full, which nobody edited
-    tgl.update(make_object<updateMessageContent>(chatIds[0], messageId, makeDice(4)));
+    tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makeDice(4)));
     tgl.verifyNoRequests();
     prpl.verifyNoEvents();
 }
@@ -121,8 +117,8 @@ TEST_F(MessageEditTest, NotShownInThisSession)
 {
     loginWithOneContact();
 
-    tgl.update(make_object<updateMessageContent>(chatIds[0], messageId, makeTextMessage("new")));
-    tgl.update(make_object<updateDeleteMessages>(chatIds[0], std::vector<int64_t>{messageId}, true, false));
+    tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makeTextMessage("new")));
+    tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
     tgl.verifyNoRequests();
     prpl.verifyNoEvents();
 }
@@ -132,7 +128,7 @@ TEST_F(MessageEditTest, CaptionEdited)
     loginWithOneContact();
     receivePhoto("old");
 
-    tgl.update(make_object<updateMessageContent>(chatIds[0], messageId, makePhoto("bleh", "new")));
+    tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makePhoto("bleh", "new")));
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
 
     object_ptr<message> edited = makeMessage(messageId, userIds[0], chatIds[0], false, date,
@@ -154,7 +150,7 @@ TEST_F(MessageEditTest, CaptionRemoved)
     loginWithOneContact();
     receivePhoto("old");
 
-    tgl.update(make_object<updateMessageContent>(chatIds[0], messageId, makePhoto("bleh", "")));
+    tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makePhoto("bleh", "")));
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
 
     object_ptr<message> edited = makeMessage(messageId, userIds[0], chatIds[0], false, date,
@@ -177,7 +173,7 @@ TEST_F(MessageEditTest, PhotoReplaced)
     loginWithOneContact();
     receivePhoto("caption");
 
-    tgl.update(make_object<updateMessageContent>(chatIds[0], messageId, makePhoto("other", "caption")));
+    tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makePhoto("other", "caption")));
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
 
     object_ptr<message> edited = makeMessage(messageId, userIds[0], chatIds[0], false, date,
@@ -206,10 +202,10 @@ TEST_F(MessageEditTest, Deleted)
     receiveText("text");
 
     // Merely dropped from TDLib's cache
-    tgl.update(make_object<updateDeleteMessages>(chatIds[0], std::vector<int64_t>{messageId}, false, true));
+    tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, false, true));
     prpl.verifyNoEvents();
 
-    tgl.update(make_object<updateDeleteMessages>(chatIds[0], std::vector<int64_t>{messageId}, true, false));
+    tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
     prpl.verifyEvents(
         ConversationWriteEvent(
             purpleUserName(0), purpleUserName(0),
@@ -219,7 +215,7 @@ TEST_F(MessageEditTest, Deleted)
     );
 
     // Gone, so a second deletion has nothing to report
-    tgl.update(make_object<updateDeleteMessages>(chatIds[0], std::vector<int64_t>{messageId}, true, false));
+    tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
     prpl.verifyNoEvents();
     tgl.verifyNoRequests();
 }
@@ -238,11 +234,11 @@ TEST_F(MessageEditTest, EditedAndDeletedWhilePending)
     tgl.verifyRequest(getMessage(chatIds[0], repliedId));
 
     // Text takes the old one's place quietly
-    tgl.update(make_object<updateMessageContent>(chatIds[0], replyId, makeTextMessage("new")));
+    tgl.update(makeUpdateMessageContent(chatIds[0], replyId, makeTextMessage("new")));
     tgl.verifyNoRequests();
     prpl.verifyNoEvents();
 
-    tgl.update(make_object<updateDeleteMessages>(chatIds[0], std::vector<int64_t>{replyId}, true, false));
+    tgl.update(makeUpdateDeleteMessages(chatIds[0], replyId, true, false));
     prpl.verifyNoEvents();
 
     // ...and when it could be shown, nobody missed it
@@ -263,7 +259,7 @@ TEST_F(MessageEditTest, EditedWhilePending)
     tgl.update(make_object<updateNewMessage>(std::move(reply)));
     tgl.verifyRequest(getMessage(chatIds[0], repliedId));
 
-    tgl.update(make_object<updateMessageContent>(chatIds[0], replyId, makeTextMessage("new")));
+    tgl.update(makeUpdateMessageContent(chatIds[0], replyId, makeTextMessage("new")));
     tgl.verifyNoRequests();
 
     tgl.reply(makeMessage(repliedId, userIds[0], chatIds[0], false, date - 1, makeTextMessage("source")));

@@ -945,6 +945,79 @@ object_ptr<messagePhoto> makeMessagePhoto(object_ptr<photo> &&photo_, object_ptr
     return result;
 }
 
+object_ptr<file> makeFile(std::int32_t id, std::int64_t size, const std::string &path,
+                          const std::string &uniqueId)
+{
+    bool downloaded = !path.empty();
+    auto local = make_object<localFile>();
+    local->path_                     = path;
+    local->can_be_downloaded_        = true;
+    local->can_be_deleted_           = true;
+    local->is_downloading_completed_ = downloaded;
+    local->downloaded_prefix_size_   = downloaded ? size : 0;
+    local->downloaded_size_          = downloaded ? size : 0;
+    auto remote = make_object<remoteFile>();
+    remote->id_                     = "beh";
+    remote->unique_id_              = uniqueId;
+    remote->is_uploading_completed_ = true;
+    remote->uploaded_size_          = size;
+    auto result = make_object<file>();
+    result->id_            = id;
+    result->size_          = size;
+    result->expected_size_ = size;
+    result->local_         = std::move(local);
+    result->remote_        = std::move(remote);
+    return result;
+}
+
+object_ptr<formattedText> makeFormattedText(const std::string &text)
+{
+    auto result = make_object<formattedText>();
+    result->text_ = text;
+    return result;
+}
+
+object_ptr<photo> makePhotoWithSizes(std::vector<object_ptr<photoSize>> &&sizes)
+{
+    auto result = make_object<photo>();
+    result->sizes_ = std::move(sizes);
+    return result;
+}
+
+object_ptr<messageDocument> makeMessageDocument(const std::string &fileName, const std::string &mimeType,
+                                                object_ptr<file> &&document, const std::string &caption)
+{
+    auto doc = make_object<td::td_api::document>();
+    doc->file_name_ = fileName;
+    doc->mime_type_ = mimeType;
+    doc->document_  = std::move(document);
+    auto result = make_object<messageDocument>();
+    result->document_ = std::move(doc);
+    result->caption_  = makeFormattedText(caption);
+    return result;
+}
+
+object_ptr<updateMessageContent> makeUpdateMessageContent(std::int64_t chatId, std::int64_t messageId,
+                                                          object_ptr<MessageContent> &&content)
+{
+    auto result = make_object<updateMessageContent>();
+    result->chat_id_     = chatId;
+    result->message_id_  = messageId;
+    result->new_content_ = std::move(content);
+    return result;
+}
+
+object_ptr<updateDeleteMessages> makeUpdateDeleteMessages(std::int64_t chatId, std::int64_t messageId,
+                                                          bool isPermanent, bool fromCache)
+{
+    auto result = make_object<updateDeleteMessages>();
+    result->chat_id_      = chatId;
+    result->message_ids_  = {messageId};
+    result->is_permanent_ = isPermanent;
+    result->from_cache_   = fromCache;
+    return result;
+}
+
 static object_ptr<location> makeLocationObject(double latitude, double longitude, double accuracy)
 {
     auto result = make_object<location>();

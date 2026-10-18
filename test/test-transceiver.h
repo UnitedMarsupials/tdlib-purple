@@ -109,6 +109,17 @@ object_ptr<messageVideo> makeMessageVideo(object_ptr<video> &&video_,
                                           object_ptr<photo> &&cover_, std::int32_t start_timestamp_,
                                           object_ptr<formattedText> &&caption_,
                                           bool show_caption_above_media_, bool has_spoiler_, bool is_secret_);
+// A file Telegram has, downloaded here if it has a path
+object_ptr<file> makeFile(std::int32_t id, std::int64_t size, const std::string &path = "",
+                          const std::string &uniqueId = "bleh");
+object_ptr<formattedText> makeFormattedText(const std::string &text);
+object_ptr<photo> makePhotoWithSizes(std::vector<object_ptr<photoSize>> &&sizes);
+object_ptr<messageDocument> makeMessageDocument(const std::string &fileName, const std::string &mimeType,
+                                                object_ptr<file> &&document, const std::string &caption);
+object_ptr<updateMessageContent> makeUpdateMessageContent(std::int64_t chatId, std::int64_t messageId,
+                                                          object_ptr<MessageContent> &&content);
+object_ptr<updateDeleteMessages> makeUpdateDeleteMessages(std::int64_t chatId, std::int64_t messageId,
+                                                          bool isPermanent, bool fromCache);
 // A location, live if livePeriod is not 0; TDLib 1.8.65 made live locations a type of their own
 object_ptr<MessageContent> makeMessageLocation(double latitude, double longitude, double accuracy,
                                                std::int32_t livePeriod = 0, std::int32_t expiresIn = 0);

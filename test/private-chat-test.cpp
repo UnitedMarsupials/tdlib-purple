@@ -387,17 +387,7 @@ TEST_F(PrivateChatTest, Document_NotPidgin)
         chatIds[0],
         false,
         date,
-        make_object<messageDocument>(
-            make_object<document>(
-                "doc.file.name", "mime/type", nullptr, nullptr,
-                make_object<file>(
-                    fileId, 10000, 10000,
-                    make_object<localFile>("/path", true, true, false, true, 0, 10000, 10000),
-                    make_object<remoteFile>("beh", "bleh", false, true, 10000)
-                )
-            ),
-            make_object<formattedText>("document", std::vector<object_ptr<textEntity>>())
-        )
+        makeMessageDocument("doc.file.name", "mime/type", makeFile(fileId, 10000, "/path"), "document")
     )));
     prpl.verifyEvents(ServGotImEvent(
         connection, purpleUserName(0),
