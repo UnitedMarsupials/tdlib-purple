@@ -84,4 +84,8 @@ protected:
     virtual void callback(PurpleTdClient *tdClient) = 0;
 };
 
+// A function of the front-end's, or of a library it has loaded and the plugin does not link; null
+// where there is none such. GModule looks in every module loaded, on Windows as elsewhere.
+void *findFrontEndSymbol(const char *name);
+
 #endif

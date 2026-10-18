@@ -1,9 +1,9 @@
 #include "sticker.h"
 #include "buildopt.h"
+#include "client-utils.h"
 #include "config.h"
 #include "format.h"
 #include "receiving.h"
-#include <dlfcn.h>
 #include <set>
 #include <string.h>
 
@@ -226,7 +226,7 @@ using GetFileInfo = void *(*)(const gchar *filename, gint *width, gint *height);
 
 static GetFileInfo findGetFileInfo()
 {
-    return reinterpret_cast<GetFileInfo>(dlsym(RTLD_DEFAULT, gdkPixbufGetFileInfoName));
+    return reinterpret_cast<GetFileInfo>(findFrontEndSymbol(gdkPixbufGetFileInfoName));
 }
 
 bool canShowImages()

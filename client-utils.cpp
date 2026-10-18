@@ -5,6 +5,7 @@
 #include "format.h"
 #include "receiving.h"
 #include "file-transfer.h"
+#include <gmodule.h>
 #include <string.h>
 #include <stdlib.h>
 #include <algorithm>
@@ -1037,4 +1038,16 @@ gboolean AccountThread::mainThreadCallback(gpointer data)
         self->callback(tdClient);
 
     return FALSE; // this idle callback will not be called again
+}
+
+void *findFrontEndSymbol(const char *name)
+{
+    gpointer symbol = NULL;
+    GModule *program = g_module_open(NULL, (GModuleFlags)0);
+    if (program) {
+        if (!g_module_symbol(program, name, &symbol))
+            symbol = NULL;
+        g_module_close(program);
+    }
+    return symbol;
 }
