@@ -1306,6 +1306,50 @@ int getLastImgstoreId()
     return imageStore.size();
 }
 
+// GdkPixbuf as the plugin finds it at run time, telling formats apart by their first bytes
+
+static std::vector<std::string> g_imageLoaders;
+
+// Declared in C++, being called from it only, while all about here is C
+extern "C++" void setImageLoaders(std::initializer_list<std::string> formats)
+{
+    g_imageLoaders = formats;
+}
+
+static bool isImageFormat(const std::string &data, const std::string &format)
+{
+    if (format == "webp")
+        return (data.size() >= 12) && !data.compare(0, 4, "RIFF") && !data.compare(8, 4, "WEBP");
+    if (format == "webm")
+        return !data.compare(0, 4, "\x1A\x45\xDF\xA3");
+    if (format == "tgs")
+        return !data.compare(0, 2, "\x1F\x8B");
+    return false;
+}
+
+extern "C" {
+
+// Returns a GdkPixbufFormat, which the plugin does not look into, if a loader takes the file
+void *gdk_pixbuf_get_file_info(const gchar *filename, gint *width, gint *height)
+{
+    static int format;
+    gchar     *data = NULL;
+    gsize      size = 0;
+    if (!g_file_get_contents(filename, &data, &size, NULL))
+        return NULL;
+    std::string contents(data, size);
+    g_free(data);
+
+    for (const std::string &loader: g_imageLoaders)
+        if (isImageFormat(contents, loader)) {
+            *width = *height = 100;
+            return &format;
+        }
+    return NULL;
+}
+
+}
+
 PurpleStoredImage *purple_imgstore_find_by_id(int id)
 {
     if ((id >= 1) && ((unsigned)id <= imageStore.size()))

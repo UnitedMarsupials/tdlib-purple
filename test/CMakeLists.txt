@@ -18,6 +18,7 @@ add_executable(tests EXCLUDE_FROM_ALL
     message-history-test.cpp
     message-edit-test.cpp
     location-test.cpp
+    reaction-test.cpp
     test-transceiver.cpp
     libpurple-mock.cpp
     printout.cpp
@@ -48,16 +49,15 @@ target_include_directories(tests PRIVATE ${CMAKE_SOURCE_DIR} ${fmt_INCLUDE_DIRS}
 find_package(ZLIB REQUIRED)
 find_package(Threads REQUIRED)
 target_link_libraries(tests PRIVATE gtest ${fmt_LIBRARIES} Td::TdStatic ${GLIB_LIBRARIES}
-                      ${rlottie_LIBRARIES} ZLIB::ZLIB Threads::Threads)
+                      ${rlottie_LIBRARIES} ZLIB::ZLIB Threads::Threads ${GModule_LIBRARIES})
+# The mock GdkPixbuf has to be found among the program's symbols, as Pidgin's would be
+set_property(TARGET tests PROPERTY ENABLE_EXPORTS ON)
 
 if (DEFINED GTEST_PATH)
     target_include_directories(tests PRIVATE ${GTEST_PATH}/include)
     link_directories(${GTEST_PATH}/lib)
 endif (DEFINED GTEST_PATH)
 
-if (NOT NoWebp)
-    target_link_libraries(tests PRIVATE ${libwebp_LIBRARIES} ${libpng_LIBRARIES})
-endif (NOT NoWebp)
 
 if (NOT NoLottie)
     target_compile_definitions(tests PRIVATE LOT_BUILD)

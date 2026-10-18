@@ -144,6 +144,7 @@ struct TgMessageInfo {
     MessageId   repliedMessageId;
     td::td_api::object_ptr<td::td_api::message> repliedMessage;
     std::string forwardedFrom;
+    std::string altText; // to show instead of the picture, where it cannot be shown
 
     void assign(const TgMessageInfo &other)
     {
@@ -156,6 +157,7 @@ struct TgMessageInfo {
         repliedMessageId = other.repliedMessageId;
         repliedMessage = nullptr;
         forwardedFrom = other.forwardedFrom;
+        altText = other.altText;
     }
 };
 
@@ -315,8 +317,13 @@ struct ReadReceipt {
 struct ShownMessage {
     std::string file;      // the file the message carries, if any
     std::string content;   // what is shown of it besides: its text, caption or description
+    bool        quotable = false; // content is the text or caption, as written
+    std::string kind;      // what the message is, to name it by where there is no text to quote
     time_t      timestamp;
+    // Who gave which reaction, as far as anyone has been named, and whether it was us
+    std::map<std::string, bool> reactions;
 
+    // As far as an edit changes it
     bool operator==(const ShownMessage &other) const
     {
         return (file == other.file) && (content == other.content) && (timestamp == other.timestamp);

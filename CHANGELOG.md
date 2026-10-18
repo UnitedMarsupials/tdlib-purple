@@ -7,17 +7,23 @@
 - **Edits and deletions of messages already shown are reported in the conversation.**
 - **Locations, venues and live locations are shown as `geo:` links.**
 - **An account option shows messages from channels and groups you have not joined.**
+- **Reactions are shown, custom emoji among them, as messages from whoever reacted.**
 
 ### Fixes
 
 - **TDLib's log goes to the debug window instead of stderr.**
 - **File links work in front-ends other than Pidgin.**
 - **Channels you are not a member of no longer open conversations.**
+- **Front-ends that show no pictures, such as BitlBee, get links to photos and stickers instead.**
 - **Temporary files of images sent and of downloads are no longer left behind.**
 
 ### Translations
 
 - **Czech, German, Polish and Albanian are complete again.**
+
+### Build
+
+- **libwebp and libpng are no longer needed: stickers are decoded by the front-end's GdkPixbuf.**
 
 ## 0.9.2 (2026-10-11)
 

@@ -357,6 +357,11 @@ static void compare(const getMessage &actual, const getMessage &expected)
     COMPARE(message_id_);
 }
 
+static void compare(const getCustomEmojiStickers &actual, const getCustomEmojiStickers &expected)
+{
+    COMPARE(custom_emoji_ids_);
+}
+
 static void compare(const sendChatAction &actual, const sendChatAction &expected)
 {
     COMPARE(chat_id_);
@@ -576,6 +581,7 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(checkAuthenticationCode)
         C(registerUser)
         C(getMessage)
+        C(getCustomEmojiStickers)
         C(sendChatAction)
         C(addProxy)
         case disableProxy::ID: break; // no data fields
@@ -1034,6 +1040,58 @@ object_ptr<updateDeleteMessages> makeUpdateDeleteMessages(std::int64_t chatId, s
     result->message_ids_  = {messageId};
     result->is_permanent_ = isPermanent;
     result->from_cache_   = fromCache;
+    return result;
+}
+
+object_ptr<messageReaction> makeMessageReaction(object_ptr<ReactionType> &&type, std::int32_t totalCount,
+                                                bool isChosen, object_ptr<MessageSender> &&usedSender,
+                                                std::vector<object_ptr<MessageSender>> &&recentSenders)
+{
+    auto result = make_object<messageReaction>();
+    result->type_              = std::move(type);
+    result->total_count_       = totalCount;
+    result->is_chosen_         = isChosen;
+    result->used_sender_id_    = std::move(usedSender);
+    result->recent_sender_ids_ = std::move(recentSenders);
+    return result;
+}
+
+object_ptr<messageInteractionInfo> makeInteractionInfo(std::vector<object_ptr<messageReaction>> &&reactions)
+{
+    auto list = make_object<messageReactions>();
+    list->reactions_ = std::move(reactions);
+    auto result = make_object<messageInteractionInfo>();
+    result->reactions_ = std::move(list);
+    return result;
+}
+
+object_ptr<updateMessageInteractionInfo> makeUpdateReactions(std::int64_t chatId, std::int64_t messageId,
+                                                             std::vector<object_ptr<messageReaction>> &&reactions)
+{
+    auto result = make_object<updateMessageInteractionInfo>();
+    result->chat_id_          = chatId;
+    result->message_id_       = messageId;
+    result->interaction_info_ = makeInteractionInfo(std::move(reactions));
+    return result;
+}
+
+object_ptr<unreadReaction> makeUnreadReaction(object_ptr<ReactionType> &&type, object_ptr<MessageSender> &&sender)
+{
+    auto result = make_object<unreadReaction>();
+    result->type_      = std::move(type);
+    result->sender_id_ = std::move(sender);
+    return result;
+}
+
+object_ptr<updateMessageUnreadReactions> makeUpdateUnreadReactions(std::int64_t chatId, std::int64_t messageId,
+                                                                   std::vector<object_ptr<unreadReaction>> &&reactions,
+                                                                   std::int32_t unreadCount)
+{
+    auto result = make_object<updateMessageUnreadReactions>();
+    result->chat_id_               = chatId;
+    result->message_id_            = messageId;
+    result->unread_reactions_      = std::move(reactions);
+    result->unread_reaction_count_ = unreadCount;
     return result;
 }
 

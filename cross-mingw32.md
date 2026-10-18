@@ -53,26 +53,17 @@ make -fMakefile.mingw install
 
 Additional dependencies under `../deps/win32-dev/`:
 
-* libpng
-
-* libwebp
-
 * opus
 
 * webrtc-audio-processing
 
 * libtgvoip from https://github.com/ars3niy/libtgvoip
 
-Build first three using
-```
-./configure --host i686-w64-mingw32 --target i686-w64-mingw32
-make
-make install DESTDIR=$PWD/install
-```
-
-For opus:
+Build opus using
 ```
 CFLAGS=-D_FORTIFY_SOURCE=0 ./configure --host i686-w64-mingw32 --target i686-w64-mingw32
+make
+make install DESTDIR=$PWD/install
 ```
 
 Building webrtc library:
@@ -142,10 +133,7 @@ cmake -DCMAKE_SYSTEM_NAME=Windows \
     -DNoPkgConfig=True \
     -DPurple_INCLUDE_DIRS="$PWD/../../deps/pidgin-2.13.0/libpurple;$PWD/../../deps/win32-dev/gtk_2_0-2.14/include/glib-2.0;$PWD/../../deps/win32-dev/gtk_2_0-2.14/lib/glib-2.0/include" \
     -DPurple_LIBRARIES="$PWD/../../deps/pidgin-2.13.0/libpurple/libpurple.dll.a;$PWD/../../deps/win32-dev/gtk_2_0-2.14/lib/libglib-2.0.dll.a;$PWD/../../deps/win32-dev/gtk_2_0-2.14/lib/libgthread-2.0.dll.a" \
-    -Dlibpng_INCLUDE_DIRS=$PWD/../../deps/win32-dev/libpng-1.6.37/install/usr/local/include \
-    -Dlibpng_LIBRARIES=$PWD/../../deps/win32-dev/libpng-1.6.37/install/usr/local/lib/libpng16.a \
-    -Dlibwebp_INCLUDE_DIRS=$PWD/../../deps/win32-dev/libwebp-1.1.0/install/usr/local/include \
-    -Dlibwebp_LIBRARIES=$PWD/../../deps/win32-dev/libwebp-1.1.0/install/usr/local/lib/libwebp.a \
+    -DGModule_LIBRARIES=$PWD/../../deps/win32-dev/gtk_2_0-2.14/lib/libgmodule-2.0.dll.a \
     -DPURPLE_PLUGIN_DIR=/ \
     -DIntl_INCLUDE_DIR=$PWD/../../deps/win32-dev/gtk_2_0-2.14/include \
     -DIntl_LIBRARY=$PWD/../../deps/win32-dev/gtk_2_0-2.14/lib/libintl.dll.a \

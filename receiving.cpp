@@ -186,15 +186,20 @@ static void getShownContent(const td::td_api::MessageContent &content, ShownMess
 
     result.file.clear();
     result.content.clear();
+    result.quotable = false;
+    // TRANSLATOR: What a message is, as in "reacted with 👍 to message from 12:00", where it has no text to quote. Also for "photo", "sticker" and the like.
+    result.kind = _("message");
     switch (content.get_id()) {
         case td::td_api::messageText::ID: {
             const auto &text = static_cast<const td::td_api::messageText &>(content);
             if (text.text_)
                 result.content = text.text_->text_;
+            result.quotable = true;
             break;
         }
         case td::td_api::messagePhoto::ID: {
             const auto &photo = static_cast<const td::td_api::messagePhoto &>(content);
+            result.kind = _("photo");
             if (photo.photo_)
                 for (const auto &size: photo.photo_->sizes_)
                     if (size && size->photo_) {
@@ -206,6 +211,8 @@ static void getShownContent(const td::td_api::MessageContent &content, ShownMess
         }
         case td::td_api::messageDocument::ID: {
             const auto &document = static_cast<const td::td_api::messageDocument &>(content);
+            // TRANSLATOR: What a message is, as in "reacted with 👍 to document from 12:00".
+            result.kind = _("document");
             if (document.document_)
                 result.file = getFileKey(document.document_->document_.get());
             caption = document.caption_.get();
@@ -213,6 +220,8 @@ static void getShownContent(const td::td_api::MessageContent &content, ShownMess
         }
         case td::td_api::messageVideo::ID: {
             const auto &video = static_cast<const td::td_api::messageVideo &>(content);
+            // TRANSLATOR: What a message is, as in "reacted with 👍 to video from 12:00".
+            result.kind = _("video");
             if (video.video_)
                 result.file = getFileKey(video.video_->video_.get());
             caption = video.caption_.get();
@@ -220,6 +229,8 @@ static void getShownContent(const td::td_api::MessageContent &content, ShownMess
         }
         case td::td_api::messageAnimation::ID: {
             const auto &animation = static_cast<const td::td_api::messageAnimation &>(content);
+            // TRANSLATOR: What a message is, as in "reacted with 👍 to animation from 12:00".
+            result.kind = _("animation");
             if (animation.animation_)
                 result.file = getFileKey(animation.animation_->animation_.get());
             caption = animation.caption_.get();
@@ -227,6 +238,8 @@ static void getShownContent(const td::td_api::MessageContent &content, ShownMess
         }
         case td::td_api::messageAudio::ID: {
             const auto &audio = static_cast<const td::td_api::messageAudio &>(content);
+            // TRANSLATOR: What a message is, as in "reacted with 👍 to audio from 12:00".
+            result.kind = _("audio");
             if (audio.audio_)
                 result.file = getFileKey(audio.audio_->audio_.get());
             caption = audio.caption_.get();
@@ -234,6 +247,8 @@ static void getShownContent(const td::td_api::MessageContent &content, ShownMess
         }
         case td::td_api::messageVoiceNote::ID: {
             const auto &voiceNote = static_cast<const td::td_api::messageVoiceNote &>(content);
+            // TRANSLATOR: What a message is, as in "reacted with 👍 to voice message from 12:00".
+            result.kind = _("voice message");
             if (voiceNote.voice_note_)
                 result.file = getFileKey(voiceNote.voice_note_->voice_.get());
             caption = voiceNote.caption_.get();
@@ -241,18 +256,22 @@ static void getShownContent(const td::td_api::MessageContent &content, ShownMess
         }
         case td::td_api::messageVideoNote::ID: {
             const auto &videoNote = static_cast<const td::td_api::messageVideoNote &>(content);
+            // TRANSLATOR: What a message is, as in "reacted with 👍 to video message from 12:00".
+            result.kind = _("video message");
             if (videoNote.video_note_)
                 result.file = getFileKey(videoNote.video_note_->video_.get());
             break;
         }
         case td::td_api::messageSticker::ID: {
             const auto &sticker = static_cast<const td::td_api::messageSticker &>(content);
+            result.kind = _("sticker");
             if (sticker.sticker_)
                 result.file = getFileKey(sticker.sticker_->sticker_.get());
             break;
         }
         case td::td_api::messageAnimatedEmoji::ID:
             result.content = static_cast<const td::td_api::messageAnimatedEmoji &>(content).emoji_;
+            result.quotable = true;
             break;
         case td::td_api::messageChatChangeTitle::ID:
             result.content = static_cast<const td::td_api::messageChatChangeTitle &>(content).title_;
@@ -265,12 +284,15 @@ static void getShownContent(const td::td_api::MessageContent &content, ShownMess
             break;
         }
         case td::td_api::messageLocation::ID:
+        case td::td_api::messageVenue::ID:
 #if TDLIB_API_LIVE_LOCATION
         case td::td_api::messageLiveLocation::ID:
 #endif
         {
             // A live location moves all the time, which is no edit; that it no longer does is shown
             ShownLocation location;
+            // TRANSLATOR: What a message is, as in "reacted with 👍 to location from 12:00".
+            result.kind = _("location");
             if (getShownLocation(content, location)) {
                 if (location.livePeriod == 0)
                     result.content = makeLocationText(location);
@@ -284,8 +306,10 @@ static void getShownContent(const td::td_api::MessageContent &content, ShownMess
             result.content = std::to_string(content.get_id());
     }
 
-    if (caption)
-        result.content = caption->text_;
+    if (caption) {
+        result.content  = caption->text_;
+        result.quotable = true;
+    }
 }
 
 std::string makeNoticeWithSender(const td::td_api::chat &chat, const TgMessageInfo &message,
@@ -601,6 +625,13 @@ static void showDownloadedImage(const td::td_api::chat &chat, TgMessageInfo &mes
     gchar       *data   = NULL;
     size_t       len    = 0;
 
+    // A front-end that shows no pictures gets the link to the file
+    if (!canShowImages()) {
+        // TRANSLATOR: File-type, used to describe what is being downloaded, in sentences like "Downloading photo" or "Ignoring photo download".
+        showGenericFileInline(chat, message, filePath, caption, _("photo"), std::string(), account);
+        return;
+    }
+
     if (g_file_get_contents (filePath.c_str(), &data, &len, NULL)) {
         int id = purple_imgstore_add_with_id (data, len, NULL);
         text = makeInlineImageText(id);
@@ -625,7 +656,8 @@ bool isStickerAnimated(const std::string &filePath)
 bool shouldConvertAnimatedSticker(const TgMessageInfo &message, const PurpleAccount *purpleAccount)
 {
 #ifndef NoLottie
-    return !message.outgoing &&
+    // Not for a front-end that shows no pictures anyway
+    return !message.outgoing && canShowImages() &&
            purple_account_get_bool(purpleAccount, AccountOptions::AnimatedStickers,
                                    AccountOptions::AnimatedStickersDefault);
 #else
@@ -662,7 +694,7 @@ static void showDownloadedSticker(const td::td_api::chat &chat, TgMessageInfo &m
             showGenericFileInline(chat, message, filePath, NULL, fileDescription, std::string(), account);
         }
     } else {
-        showWebpSticker(chat, message, filePath, fileDescription, account);
+        showStickerFile(chat, message, filePath, fileDescription, account);
     }
 }
 
@@ -1272,6 +1304,9 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
         } else if (message->content_->get_id() == td::td_api::messageSticker::ID) {
             messageInfo.type = TgMessageInfo::Type::Sticker;
             td::td_api::messageSticker &sticker = static_cast<td::td_api::messageSticker &>(*message->content_);
+            // Shown where the sticker cannot be; set before anything copies the message's info
+            if (sticker.sticker_)
+                messageInfo.altText = sticker.sticker_->emoji_;
             if (sticker.sticker_ && sticker.sticker_->thumbnail_) {
                 fullMessage.thumbnail = std::move(sticker.sticker_->thumbnail_->file_);
             }
@@ -1589,6 +1624,299 @@ static void queueMessage(TdAccountData &account, const td::td_api::chat &chat,
     }
 }
 
+// A reaction to a message, from someone who is named
+struct GivenReaction {
+    std::string                     key;  // who gave which, as getReactionKey has it
+    const td::td_api::ReactionType *type;
+    bool                            self;
+};
+
+static std::string getSenderKey(const td::td_api::MessageSender &sender)
+{
+    if (sender.get_id() == td::td_api::messageSenderUser::ID)
+        return "u" + std::to_string(static_cast<const td::td_api::messageSenderUser &>(sender).user_id_);
+    else if (sender.get_id() == td::td_api::messageSenderChat::ID)
+        return "c" + std::to_string(static_cast<const td::td_api::messageSenderChat &>(sender).chat_id_);
+    return "";
+}
+
+static std::string getReactionTypeKey(const td::td_api::ReactionType &type)
+{
+    switch (type.get_id()) {
+    case td::td_api::reactionTypeEmoji::ID:
+        return "e" + static_cast<const td::td_api::reactionTypeEmoji &>(type).emoji_;
+    case td::td_api::reactionTypeCustomEmoji::ID:
+        return "x" + std::to_string(static_cast<const td::td_api::reactionTypeCustomEmoji &>(type).custom_emoji_id_);
+    default:
+        return "p";
+    }
+}
+
+// Who gave which: the sender's key and the reaction's, in that order, with a space between
+static std::string getReactionKey(const std::string &senderKey, const td::td_api::ReactionType &type)
+{
+    return senderKey + ' ' + getReactionTypeKey(type);
+}
+
+// The reactions to a message whose givers are named, our own first so that it is known as such.
+// Channels and big groups name nobody, and smaller ones only the latest few; reactions whose
+// givers are not all named go into incompleteTypes.
+static void getGivenReactions(const td::td_api::messageInteractionInfo *info, std::vector<GivenReaction> &given,
+                              std::set<std::string> *incompleteTypes)
+{
+    // Tags in Saved Messages are reactions too, as far as TDLib is concerned
+    if (!info || !info->reactions_ || info->reactions_->are_tags_)
+        return;
+    for (const auto &reaction: info->reactions_->reactions_) {
+        if (!reaction || !reaction->type_)
+            continue;
+        std::set<std::string> senders;
+        auto add = [&](const td::td_api::MessageSender &sender, bool self) {
+            std::string senderKey = getSenderKey(sender);
+            if (senders.insert(senderKey).second)
+                given.push_back({getReactionKey(senderKey, *reaction->type_), reaction->type_.get(), self});
+        };
+        if (reaction->is_chosen_ && reaction->used_sender_id_)
+            add(*reaction->used_sender_id_, true);
+        for (const auto &sender: reaction->recent_sender_ids_)
+            if (sender)
+                add(*sender, false);
+        if (incompleteTypes && (reaction->total_count_ > (int32_t)senders.size()))
+            incompleteTypes->insert(getReactionTypeKey(*reaction->type_));
+    }
+}
+
+
+static std::string getReactionSenderName(TdAccountData &account, const std::string &reactionKey)
+{
+    std::string senderKey = reactionKey.substr(0, reactionKey.find(' '));
+    if ((senderKey.size() > 1) && (senderKey[0] == 'u'))
+        return account.getDisplayName(UserId::fromString(senderKey.c_str() + 1));
+    if ((senderKey.size() > 1) && (senderKey[0] == 'c')) {
+        const td::td_api::chat *chat = account.getChat(ChatId::fromString(senderKey.c_str() + 1));
+        if (chat)
+            return chat->title_;
+    }
+    return "";
+}
+
+// Shown as a message from whoever reacted, as purple-gowhatsapp has it, which names the message by
+// the beginning of its text, or failing that, by what it is and when it was sent. The reaction is
+// markup, a picture perhaps; without one, it is one taken back.
+static void showReactionText(TdAccountData &account, const td::td_api::chat &chat,
+                             const ShownMessage &shownMessage, const std::string &reactionKey, bool self,
+                             const std::string *reaction, bool image)
+{
+    enum { MAX_QUOTE_LENGTH = 50 };
+    std::string quote;
+    if (shownMessage.quotable && !shownMessage.content.empty()) {
+        quote = shownMessage.content;
+        std::replace(quote.begin(), quote.end(), '\n', ' ');
+        if (g_utf8_validate(quote.c_str(), quote.size(), NULL) &&
+            (g_utf8_strlen(quote.c_str(), -1) > MAX_QUOTE_LENGTH))
+        {
+            quote.erase(g_utf8_offset_to_pointer(quote.c_str(), MAX_QUOTE_LENGTH) - quote.c_str());
+            quote += "…";
+        }
+        quote = escapeForDisplay(quote);
+    }
+    std::string kind   = escapeForDisplay(shownMessage.kind);
+    std::string sentAt = formatMessageTime(shownMessage.timestamp);
+
+    std::string text;
+    if (reaction) {
+        const std::string &emoji = *reaction;
+        if (!quote.empty())
+            // TRANSLATOR: In-chat message, shown as sent by whoever reacted. Arguments are a reaction (an emoji, mostly) and the beginning of the message's text. Use the quotation marks of your language.
+            text = formatMessage(_("reacted with {0} to message „{1}“."), {emoji, quote});
+        else
+            // TRANSLATOR: In-chat message, shown as sent by whoever reacted. Arguments are a reaction (an emoji, mostly), what the message is ("photo", "sticker" and the like), and the time (or date and time) it was sent at, as the conversation window shows it.
+            text = formatMessage(_("reacted with {0} to {1} from {2}."), {emoji, kind, sentAt});
+    } else {
+        if (!quote.empty())
+            // TRANSLATOR: In-chat message, shown as sent by whoever reacted. Argument is the beginning of the message's text. Use the quotation marks of your language.
+            text = formatMessage(_("removed their reaction to message „{0}“."), quote);
+        else
+            // TRANSLATOR: In-chat message, shown as sent by whoever reacted. Arguments are what the message is ("photo", "sticker" and the like), and the time (or date and time) it was sent at, as the conversation window shows it.
+            text = formatMessage(_("removed their reaction to {0} from {1}."), {kind, sentAt});
+    }
+
+    TgMessageInfo messageInfo;
+    messageInfo.type                    = TgMessageInfo::Type::Other;
+    messageInfo.timestamp               = time(NULL);
+    messageInfo.outgoing                = self;
+    messageInfo.incomingGroupchatSender = getReactionSenderName(account, reactionKey);
+    showMessageText(account, chat, messageInfo, text.c_str(), NULL, image ? PURPLE_MESSAGE_IMAGES : 0);
+}
+
+// Given the reaction as markup: the emoji, or the picture of a custom one
+using CustomEmojiShown = std::function<void(TdAccountData &account, const std::string &reaction, bool image)>;
+
+static bool canConvertAnimatedSticker(PurpleAccount *purpleAccount)
+{
+#ifndef NoLottie
+    return canShowImages() && purple_account_get_bool(purpleAccount, AccountOptions::AnimatedStickers,
+                                   AccountOptions::AnimatedStickersDefault);
+#else
+    return false;
+#endif
+}
+
+// In the line, unlike a sticker, which has one of its own
+static std::string makeReactionImageText(int imageId)
+{
+    return "<img id=\"" + std::to_string(imageId) + "\">";
+}
+
+// Given to the front-end as it is, if it can show it; TGS, which nothing can, is converted, as it is
+// for stickers. Failing that, the emoji the custom one stands for will do.
+static void showCustomEmojiFile(TdAccountData &account, const std::string &path, int32_t format,
+                                const std::string &fallback, CustomEmojiShown shown)
+{
+    // Custom emoji are 100 pixels square
+    enum { CUSTOM_EMOJI_SIZE = 100 };
+    // Whatever it is shown as, it leads to the file
+    std::string linkStart = "<a href=\"" + escapeForDisplay(makeFileLinkTarget(path)) + "\">";
+    std::string linkEnd   = "</a>";
+
+    if (format == td::td_api::stickerFormatTgs::ID) {
+        if (!canConvertAnimatedSticker(account.purpleAccount)) {
+            shown(account, linkStart + fallback + linkEnd, false);
+            return;
+        }
+        ReactionStickerThread *thread = new ReactionStickerThread(account.purpleAccount, path,
+            [fallback, shown, linkStart, linkEnd](TdAccountData &account, int imageId) {
+                if (imageId)
+                    shown(account, linkStart + makeReactionImageText(imageId) + linkEnd, true);
+                else
+                    shown(account, linkStart + fallback + linkEnd, false);
+            });
+        thread->setSize(CUSTOM_EMOJI_SIZE);
+        thread->startThread();
+        return;
+    }
+
+    gchar       *data    = NULL;
+    gsize        size    = 0;
+    ImageSupport support = probeImageFile(path);
+    if ((support == ImageSupport::Supported) && g_file_get_contents(path.c_str(), &data, &size, NULL)) {
+        // The imgstore takes the data
+        int imageId = purple_imgstore_add_with_id(data, size, NULL);
+        shown(account, linkStart + makeReactionImageText(imageId) + linkEnd, true);
+        return;
+    }
+
+    purple_debug_misc(config::pluginId, "Cannot show custom emoji %s\n", path.c_str());
+    if (support == ImageSupport::Unrecognized)
+        warnMissingImageLoader(path);
+    shown(account, linkStart + fallback + linkEnd, false);
+}
+
+static void customEmojiResponse(TdAccountData &account, td::td_api::object_ptr<td::td_api::Object> object,
+                                CustomEmojiShown shown)
+{
+    const td::td_api::sticker *sticker = nullptr;
+    if (object && (object->get_id() == td::td_api::stickers::ID)) {
+        const auto &stickers = static_cast<const td::td_api::stickers &>(*object);
+        if (!stickers.stickers_.empty())
+            sticker = stickers.stickers_.front().get();
+    }
+
+    // The emoji it stands for will do, where the picture will not
+    std::string fallback;
+    if (sticker && !sticker->emoji_.empty())
+        fallback = escapeForDisplay(sticker->emoji_);
+    else
+        // TRANSLATOR: In-chat reaction, in place of one that is a picture of its own rather than an emoji, where it cannot be shown, as in "reacted with [custom emoji] to message ...".
+        fallback = escapeForDisplay(_("[custom emoji]"));
+    if (!sticker || !sticker->sticker_ || !sticker->format_ ||
+        purple_account_get_bool(account.purpleAccount, AccountOptions::FoldCustomEmoji,
+                                AccountOptions::FoldCustomEmojiDefault))
+    {
+        shown(account, fallback, false);
+        return;
+    }
+
+    // Those who would rather not see stickers move, would not like reactions to either
+    int32_t format = sticker->format_->get_id();
+    if ((format != td::td_api::stickerFormatWebp::ID) &&
+        !purple_account_get_bool(account.purpleAccount, AccountOptions::AnimatedStickers,
+                                 AccountOptions::AnimatedStickersDefault))
+    {
+        shown(account, fallback, false);
+        return;
+    }
+
+    const td::td_api::file &file = *sticker->sticker_;
+    if (file.local_ && file.local_->is_downloading_completed_) {
+        showCustomEmojiFile(account, file.local_->path_, format, fallback, shown);
+        return;
+    }
+
+    auto downloadReq = td::td_api::make_object<td::td_api::downloadFile>();
+    downloadReq->file_id_     = file.id_;
+    downloadReq->priority_    = 1;
+    downloadReq->offset_      = 0;
+    downloadReq->limit_       = 0;
+    downloadReq->synchronous_ = true;
+    account.transceiver.sendQuery(std::move(downloadReq),
+        [&account, format, fallback, shown](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
+            const td::td_api::file *file = nullptr;
+            if (object && (object->get_id() == td::td_api::file::ID))
+                file = static_cast<const td::td_api::file *>(object.get());
+            if (file && file->local_ && file->local_->is_downloading_completed_)
+                showCustomEmojiFile(account, file->local_->path_, format, fallback, shown);
+            else
+                shown(account, fallback, false);
+        });
+}
+
+static void showReaction(TdAccountData &account, const td::td_api::chat &chat, const ShownMessage &shownMessage,
+                         const std::string &reactionKey, bool self, const td::td_api::ReactionType *reaction)
+{
+    if (!reaction) {
+        showReactionText(account, chat, shownMessage, reactionKey, self, nullptr, false);
+        return;
+    }
+
+    switch (reaction->get_id()) {
+    case td::td_api::reactionTypeEmoji::ID: {
+        std::string emoji = escapeForDisplay(static_cast<const td::td_api::reactionTypeEmoji &>(*reaction).emoji_);
+        showReactionText(account, chat, shownMessage, reactionKey, self, &emoji, false);
+        break;
+    }
+    case td::td_api::reactionTypeCustomEmoji::ID: {
+        // A sticker of its own, to be looked up first; the message may be forgotten meanwhile
+        int64_t customEmojiId = static_cast<const td::td_api::reactionTypeCustomEmoji &>(*reaction).custom_emoji_id_;
+        purple_debug_misc(config::pluginId, "Fetching custom emoji %" G_GINT64_FORMAT "\n", customEmojiId);
+        ChatId       chatId = getId(chat);
+        ShownMessage message;
+        message.content   = shownMessage.content;
+        message.quotable  = shownMessage.quotable;
+        message.kind      = shownMessage.kind;
+        message.timestamp = shownMessage.timestamp;
+        CustomEmojiShown shown = [chatId, message, reactionKey, self](TdAccountData &account,
+                                                                     const std::string &reaction, bool image) {
+            const td::td_api::chat *chat = account.getChat(chatId);
+            if (chat)
+                showReactionText(account, *chat, message, reactionKey, self, &reaction, image);
+        };
+        auto request = td::td_api::make_object<td::td_api::getCustomEmojiStickers>();
+        request->custom_emoji_ids_.push_back(customEmojiId);
+        account.transceiver.sendQuery(std::move(request),
+            [&account, shown](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
+                customEmojiResponse(account, std::move(object), shown);
+            });
+        break;
+    }
+    default: {
+        // Paid in Telegram Stars
+        std::string star = "\u2B50";
+        showReactionText(account, chat, shownMessage, reactionKey, self, &star, false);
+    }
+    }
+}
+
 void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
     td::td_api::object_ptr<td::td_api::message> message,
     PendingMessageQueue::MessageAction action)
@@ -1603,6 +1931,11 @@ void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
         ShownMessage shownMessage;
         getShownContent(*message->content_, shownMessage);
         shownMessage.timestamp = message->date_;
+        // Reactions it came with are no news
+        std::vector<GivenReaction> reactions;
+        getGivenReactions(message->interaction_info_.get(), reactions, nullptr);
+        for (const GivenReaction &reaction: reactions)
+            shownMessage.reactions.emplace(reaction.key, reaction.self);
         account.addShownMessage(chatId, getId(*message), std::move(shownMessage));
     }
 
@@ -1623,8 +1956,12 @@ static void editedMessageResponse(TdAccountData &account, const PendingEdit &edi
         // Not shown, so the same change coming again is still news, unless a later edit has
         // taken this one's place
         ShownMessage *shownMessage = account.findShownMessage(edit.chatId, edit.messageId);
-        if (shownMessage && (*shownMessage == edit.installed))
-            *shownMessage = edit.previous;
+        if (shownMessage && (*shownMessage == edit.installed)) {
+            // Reactions are not the edit's to take back
+            std::map<std::string, bool> reactions = std::move(shownMessage->reactions);
+            *shownMessage           = edit.previous;
+            shownMessage->reactions = std::move(reactions);
+        }
         return;
     }
 
@@ -1699,6 +2036,8 @@ void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messa
     edit.captionOnly = !editedMessage.file.empty() && (editedMessage.file == shownMessage->file);
     edit.previous    = *shownMessage;
     editedMessage.timestamp = shownMessage->timestamp;
+    // Edits leave reactions be
+    editedMessage.reactions = shownMessage->reactions;
     edit.installed   = editedMessage;
     *shownMessage = std::move(editedMessage);
 
@@ -1836,4 +2175,131 @@ void fetchHistory(TdAccountData &account, ChatId chatId, MessageId fetchFrom, Me
 
     account.pendingMessages.setChatNotReady(chatId);
     fetchHistoryRequest(account, chatId, 0, fetchFrom, stopAt);
+}
+
+// While a message waits to be shown, its reactions would come before it, and are part of what it
+// is once shown; but one waiting to be shown again, as edited, is in the conversation already
+static bool isMessageInConversation(TdAccountData &account, ChatId chatId, MessageId messageId)
+{
+    const IncomingMessage *pendingMessage = account.pendingMessages.findPendingMessage(chatId, messageId);
+    return !pendingMessage || pendingMessage->editedMessageTime;
+}
+
+void updateMessageReactions(TdAccountData &account, ChatId chatId, MessageId messageId,
+                            const td::td_api::messageInteractionInfo *info)
+{
+    // Telling of reactions to a message nobody has seen would only puzzle
+    ShownMessage *shownMessage = account.findShownMessage(chatId, messageId);
+    if (!shownMessage)
+        return;
+    const td::td_api::chat *chat = account.getChat(chatId);
+    bool show = chat && isMessageInConversation(account, chatId, messageId);
+
+    std::vector<GivenReaction> reactions;
+    std::set<std::string>      incompleteTypes;
+    std::set<std::string>      present;
+    std::set<std::string>      changedBy;
+    getGivenReactions(info, reactions, &incompleteTypes);
+    for (const GivenReaction &reaction: reactions) {
+        present.insert(reaction.key);
+        if (shownMessage->reactions.emplace(reaction.key, reaction.self).second) {
+            changedBy.insert(reaction.key.substr(0, reaction.key.find(' ')));
+            if (show)
+                showReaction(account, *chat, *shownMessage, reaction.key, reaction.self, reaction.type);
+        }
+    }
+
+    // Gone, as far as can be told: where everyone who gave that reaction is named, and they are not
+    // among them any more. Exchanging one reaction for another is not taking it back.
+    for (auto it = shownMessage->reactions.begin(); it != shownMessage->reactions.end(); ) {
+        size_t      space   = it->first.find(' ');
+        std::string typeKey = it->first.substr(space + 1);
+        if (present.count(it->first) || incompleteTypes.count(typeKey)) {
+            ++it;
+            continue;
+        }
+        if (show && !changedBy.count(it->first.substr(0, space)))
+            showReaction(account, *chat, *shownMessage, it->first, it->second, nullptr);
+        it = shownMessage->reactions.erase(it);
+    }
+}
+
+using UnreadReactions = std::vector<td::td_api::object_ptr<td::td_api::unreadReaction>>;
+
+static void showUnreadReactions(TdAccountData &account, ChatId chatId, MessageId messageId,
+                                const UnreadReactions &reactions)
+{
+    ShownMessage *shownMessage = account.findShownMessage(chatId, messageId);
+    const td::td_api::chat *chat = account.getChat(chatId);
+    if (!shownMessage || !chat)
+        return;
+    bool show = isMessageInConversation(account, chatId, messageId);
+
+    // Unread ones are to our own messages, from others
+    for (const auto &reaction: reactions)
+        if (reaction && reaction->type_ && reaction->sender_id_) {
+            std::string key = getReactionKey(getSenderKey(*reaction->sender_id_), *reaction->type_);
+            if (shownMessage->reactions.emplace(key, false).second && show)
+                showReaction(account, *chat, *shownMessage, key, false, reaction->type_.get());
+        }
+}
+
+static void unreadReactionsMessageResponse(TdAccountData &account, ChatId chatId, MessageId messageId,
+                                           const UnreadReactions &reactions,
+                                           td::td_api::object_ptr<td::td_api::Object> object)
+{
+    if (!object || (object->get_id() != td::td_api::message::ID)) {
+        purple_debug_warning(config::pluginId, "Failed to fetch message %" G_GINT64_FORMAT " reacted to\n",
+                             messageId.value());
+        return;
+    }
+
+    // Unless shown meanwhile, the message now is, as far as its reactions are concerned
+    if (!account.findShownMessage(chatId, messageId)) {
+        const td::td_api::message &message = static_cast<const td::td_api::message &>(*object);
+        if (!message.content_)
+            return;
+        ShownMessage shownMessage;
+        getShownContent(*message.content_, shownMessage);
+        shownMessage.timestamp = message.date_;
+
+        // Reactions other than the unread ones are no news
+        std::set<std::string> unreadKeys;
+        for (const auto &reaction: reactions)
+            if (reaction && reaction->type_ && reaction->sender_id_)
+                unreadKeys.insert(getReactionKey(getSenderKey(*reaction->sender_id_), *reaction->type_));
+        std::vector<GivenReaction> given;
+        getGivenReactions(message.interaction_info_.get(), given, nullptr);
+        for (const GivenReaction &reaction: given)
+            if (!unreadKeys.count(reaction.key))
+                shownMessage.reactions.emplace(reaction.key, reaction.self);
+        account.addShownMessage(chatId, messageId, std::move(shownMessage));
+    }
+
+    showUnreadReactions(account, chatId, messageId, reactions);
+}
+
+void updateUnreadReactions(TdAccountData &account, td::td_api::updateMessageUnreadReactions &update)
+{
+    ChatId    chatId    = getChatId(update);
+    MessageId messageId = getMessageId(update);
+    // Empty once they have been read elsewhere
+    if (update.unread_reactions_.empty())
+        return;
+
+    if (account.findShownMessage(chatId, messageId)) {
+        showUnreadReactions(account, chatId, messageId, update.unread_reactions_);
+        return;
+    }
+
+    // One of our messages from before this session: fetch it, to say which
+    purple_debug_misc(config::pluginId, "Fetching message %" G_GINT64_FORMAT " reacted to\n", messageId.value());
+    auto reactions = std::make_shared<UnreadReactions>(std::move(update.unread_reactions_));
+    auto request   = td::td_api::make_object<td::td_api::getMessage>();
+    request->chat_id_    = chatId.value();
+    request->message_id_ = messageId.value();
+    account.transceiver.sendQuery(std::move(request),
+        [&account, chatId, messageId, reactions](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
+            unreadReactionsMessageResponse(account, chatId, messageId, *reactions, std::move(object));
+        });
 }

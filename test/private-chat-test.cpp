@@ -1,4 +1,5 @@
 #include "fixture.h"
+#include "sticker.h"
 #include "libpurple-mock.h"
 #include "purple-info.h"
 #include <fmt/format.h>
@@ -617,6 +618,45 @@ TEST_F(PrivateChatTest, AlreadyDownloadedPhoto)
             "<img src=\"file:///path\">\n"
             "photo",
             (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES),
+            date
+        )
+    );
+
+    tgl.reply(make_object<ok>()); // reply to viewMessages
+}
+
+TEST_F(PrivateChatTest, AlreadyDownloadedPhoto_NoGdkPixbuf)
+{
+    const int32_t date   = 10001;
+    const int32_t fileId = 1234;
+    // Like BitlBee, which shows no pictures
+    gdkPixbufGetFileInfoName = "no_such_function";
+    loginWithOneContact();
+
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(makeFile(fileId, 10000, "/path"), 640, 480));
+    tgl.update(make_object<updateNewMessage>(makeMessage(
+        1,
+        userIds[0],
+        chatIds[0],
+        false,
+        date,
+        makeMessagePhoto(
+            makePhotoWithSizes(std::move(sizes)),
+            makeFormattedText("caption"),
+            false, false, false
+        )
+    )));
+    tgl.verifyRequest(
+        viewMessages(chatIds[0], std::vector<int64_t>(1, 1), nullptr, true)
+    );
+    prpl.verifyEvents(
+        ServGotImEvent(
+            connection,
+            purpleUserName(0),
+            "<a href=\"file://file:///path\">photo</a>\n"
+            "caption",
+            PURPLE_MESSAGE_RECV,
             date
         )
     );
