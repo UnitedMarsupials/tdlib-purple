@@ -992,3 +992,66 @@ void TdAccountData::extractPendingReadReceipts(ChatId chatId, std::vector<ReadRe
     } else
         receipts.clear();
 }
+
+void TdAccountData::addShownMessage(ChatId chatId, MessageId messageId, ShownMessage &&message)
+{
+    // Enough to cover any conversation window that is still open, hopefully
+    enum { MAX_SHOWN_MESSAGES = 10000 };
+
+    ShownMessageKey key(chatId, messageId);
+    m_shownMessages[key] = std::move(message);
+    m_shownMessageOrder.push_back(key);
+    while (m_shownMessageOrder.size() > MAX_SHOWN_MESSAGES) {
+        // A message forgotten or renamed meanwhile has left its key behind, which is harmless
+        m_shownMessages.erase(m_shownMessageOrder.front());
+        m_shownMessageOrder.pop_front();
+    }
+}
+
+ShownMessage *TdAccountData::findShownMessage(ChatId chatId, MessageId messageId)
+{
+    auto it = m_shownMessages.find(ShownMessageKey(chatId, messageId));
+    return (it != m_shownMessages.end()) ? &it->second : nullptr;
+}
+
+void TdAccountData::removeShownMessage(ChatId chatId, MessageId messageId)
+{
+    m_shownMessages.erase(ShownMessageKey(chatId, messageId));
+}
+
+void TdAccountData::renameShownMessage(ChatId chatId, MessageId oldId, MessageId newId)
+{
+    auto it = m_shownMessages.find(ShownMessageKey(chatId, oldId));
+    if (it != m_shownMessages.end()) {
+        ShownMessage message = std::move(it->second);
+        m_shownMessages.erase(it);
+        addShownMessage(chatId, newId, std::move(message));
+    }
+}
+
+void TdAccountData::addPendingEdit(const PendingEdit &edit)
+{
+    auto it = std::find_if(m_pendingEdits.begin(), m_pendingEdits.end(), [&edit](const PendingEdit &other) {
+        return (other.chatId == edit.chatId) && (other.messageId == edit.messageId);
+    });
+    if (it == m_pendingEdits.end())
+        m_pendingEdits.push_back(edit);
+    else {
+        // One showing will do for both, and the file is new if either brought one. Should it fail,
+        // what was shown before the first comes back, but only over what the last put in place
+        it->captionOnly = it->captionOnly && edit.captionOnly;
+        it->installed   = edit.installed;
+    }
+}
+
+bool TdAccountData::extractPendingEdit(ChatId chatId, MessageId messageId, PendingEdit &edit)
+{
+    auto it = std::find_if(m_pendingEdits.begin(), m_pendingEdits.end(), [chatId, messageId](const PendingEdit &other) {
+        return (other.chatId == chatId) && (other.messageId == messageId);
+    });
+    if (it == m_pendingEdits.end())
+        return false;
+    edit = *it;
+    m_pendingEdits.erase(it);
+    return true;
+}

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.9.3 (unreleased)
+
+### Features
+
+- **Edits and deletions of messages already shown are reported in the conversation.**
+- **Locations, venues and live locations are shown as `geo:` links.**
+
+### Fixes
+
+- **TDLib's log goes to the debug window instead of stderr.**
+- **File links work in front-ends other than Pidgin.**
+
+### Translations
+
+- **Czech, German, Polish and Albanian are complete again.**
+
 ## 0.9.2 (2026-10-11)
 
 ### Behaviour

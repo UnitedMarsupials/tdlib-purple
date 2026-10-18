@@ -6,6 +6,7 @@
 #include "transceiver.h"
 #include <td/telegram/td_api.h>
 
+#include <deque>
 #include <map>
 #include <mutex>
 #include <set>
@@ -246,6 +247,13 @@ struct IncomingMessage {
     bool     animatedStickerConverted;
     bool     animatedStickerConvertSuccess;
     int      animatedStickerImageId;
+
+    // For a message shown again because it was edited: when it was first sent, and whether
+    // its caption is all that changed, and so all there is to show
+    time_t   editedMessageTime = 0;
+    bool     captionOnly       = false;
+    // Deleted while waiting to be shown, which it then never is
+    bool     deleted           = false;
 };
 
 class PendingMessageQueue {
@@ -288,6 +296,29 @@ private:
 struct ReadReceipt {
     ChatId    chatId;
     MessageId messageId;
+};
+
+// What the conversation shows of a message received in this session, so that an edit or a
+// deletion of it can be reported later
+struct ShownMessage {
+    std::string file;      // the file the message carries, if any
+    std::string content;   // what is shown of it besides: its text, caption or description
+    time_t      timestamp;
+
+    bool operator==(const ShownMessage &other) const
+    {
+        return (file == other.file) && (content == other.content) && (timestamp == other.timestamp);
+    }
+};
+
+// An edit to a message that was still waiting to be shown at the time
+struct PendingEdit {
+    ChatId       chatId;
+    MessageId    messageId;
+    time_t       messageTime;
+    bool         captionOnly;
+    ShownMessage previous;    // as shown before, to go back to if the edit cannot be fetched...
+    ShownMessage installed;   // ...unless a later edit has replaced this one's since
 };
 
 class TdAccountData {
@@ -410,6 +441,13 @@ public:
 
     void                       addPendingReadReceipt(ChatId chatId, MessageId messageId);
     void                       extractPendingReadReceipts(ChatId chatId, std::vector<ReadReceipt> &receipts);
+
+    void                       addShownMessage(ChatId chatId, MessageId messageId, ShownMessage &&message);
+    ShownMessage *             findShownMessage(ChatId chatId, MessageId messageId);
+    void                       removeShownMessage(ChatId chatId, MessageId messageId);
+    void                       renameShownMessage(ChatId chatId, MessageId oldId, MessageId newId);
+    void                       addPendingEdit(const PendingEdit &edit);
+    bool                       extractPendingEdit(ChatId chatId, MessageId messageId, PendingEdit &edit);
 private:
     TdAccountData(const TdAccountData &other) = delete;
     TdAccountData &operator=(const TdAccountData &other) = delete;
@@ -486,6 +524,13 @@ private:
 
     // Read receipts not sent immediately due to away status (grouped per chat)
     std::vector<std::vector<ReadReceipt>> m_pendingReadReceipts;
+
+    // Messages received in this session, and the order they came in, oldest first, so that
+    // only so many are kept
+    using ShownMessageKey = std::pair<ChatId, MessageId>;
+    std::map<ShownMessageKey, ShownMessage> m_shownMessages;
+    std::deque<ShownMessageKey>             m_shownMessageOrder;
+    std::vector<PendingEdit>                m_pendingEdits;
 };
 
 #endif

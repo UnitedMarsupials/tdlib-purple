@@ -60,9 +60,13 @@ void PurpleTdClient::setLogLevel(int level)
     td::Client::execute({0, td::td_api::make_object<td::td_api::setLogVerbosityLevel>(level)});
 }
 
-void PurpleTdClient::setTdlibFatalErrorCallback(td::Log::FatalErrorCallbackPtr callback)
+void PurpleTdClient::setTdlibLogCallback(td::ClientManager::LogMessageCallbackPtr callback)
 {
-    td::Log::set_fatal_error_callback(callback);
+    // The verbosity level set above decides what gets logged; the callback takes all of it, and
+    // TDLib's own log stream, which writes UTF-8 to stderr whatever the locale, gets none
+    td::ClientManager::set_log_message_callback(1024, callback);
+    td::Client::execute({0, td::td_api::make_object<td::td_api::setLogStream>(
+        td::td_api::make_object<td::td_api::logStreamEmpty>())});
 }
 
 void PurpleTdClient::processUpdate(td::td_api::Object &update)
@@ -152,6 +156,26 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         purple_debug_misc(config::pluginId, "Incoming update: message %" G_GINT64_FORMAT " send succeeded\n",
                           sendSucceeded.old_message_id_);
         removeTempFile(sendSucceeded.old_message_id_);
+        if (sendSucceeded.message_)
+            m_data.renameShownMessage(getChatId(*sendSucceeded.message_), getOldMessageId(sendSucceeded),
+                                      getId(*sendSucceeded.message_));
+        break;
+    }
+
+    case td::td_api::updateMessageContent::ID: {
+        auto &contentUpdate = static_cast<td::td_api::updateMessageContent &>(update);
+        purple_debug_misc(config::pluginId, "Incoming update: content of message %" G_GINT64_FORMAT " changed\n",
+                          contentUpdate.message_id_);
+        updateMessageContent(m_data, getChatId(contentUpdate), getMessageId(contentUpdate),
+                             std::move(contentUpdate.new_content_));
+        break;
+    }
+
+    case td::td_api::updateDeleteMessages::ID: {
+        auto &deleteUpdate = static_cast<const td::td_api::updateDeleteMessages &>(update);
+        purple_debug_misc(config::pluginId, "Incoming update: %zu messages deleted\n",
+                          deleteUpdate.message_ids_.size());
+        deleteMessages(m_data, deleteUpdate);
         break;
     }
 

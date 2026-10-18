@@ -91,6 +91,14 @@ void purple_debug_warning(const char *category, const char *format, ...)
     va_end(va);
 }
 
+void purple_debug_error(const char *category, const char *format, ...)
+{
+    va_list va;
+    va_start(va, format);
+    printDebug("Error: ", category, format, va);
+    va_end(va);
+}
+
 const char *purple_account_get_username(const PurpleAccount *account)
 {
     return account->username;
@@ -647,6 +655,20 @@ void purple_conv_chat_set_topic(PurpleConvChat *chat, const char *who,
 							  const char *topic)
 {
     EVENT(ChatSetTopicEvent, chat->conv->name, topic ? topic : "", who ? who : "");
+}
+
+const char *purple_time_format(const struct tm *tm)
+{
+    static char buf[80];
+    strftime(buf, sizeof(buf), "%X", tm);
+    return buf;
+}
+
+const char *purple_date_format_long(const struct tm *tm)
+{
+    static char buf[80];
+    strftime(buf, sizeof(buf), "%x %X", tm);
+    return buf;
 }
 
 gboolean purple_debug_is_enabled(void)

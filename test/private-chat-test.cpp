@@ -371,6 +371,32 @@ TEST_F(PrivateChatTest, Document)
     tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
 }
 
+TEST_F(PrivateChatTest, Document_NotPidgin)
+{
+    const int64_t messageId = 1;
+    const int32_t date      = 10001;
+    const int32_t fileId    = 1234;
+    loginWithOneContact();
+    // Only Pidgin needs the scheme written twice
+    setUiName("BitlBee");
+    purple_account_set_string(account, "download-behaviour", "hyperlink");
+
+    tgl.update(make_object<updateNewMessage>(makeMessage(
+        messageId,
+        userIds[0],
+        chatIds[0],
+        false,
+        date,
+        makeMessageDocument("doc.file.name", "mime/type", makeFile(fileId, 10000, "/path"), "document")
+    )));
+    prpl.verifyEvents(ServGotImEvent(
+        connection, purpleUserName(0),
+        "<a href=\"file:///path\">doc.file.name [mime/type]</a>\ndocument",
+        PURPLE_MESSAGE_RECV, date
+    ));
+    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
+}
+
 TEST_F(PrivateChatTest, Video)
 {
     const int64_t messageId = 1;

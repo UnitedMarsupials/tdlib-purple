@@ -945,6 +945,131 @@ object_ptr<messagePhoto> makeMessagePhoto(object_ptr<photo> &&photo_, object_ptr
     return result;
 }
 
+object_ptr<error> makeError(std::int32_t code, const std::string &message)
+{
+    auto result = make_object<error>();
+    result->code_    = code;
+    result->message_ = message;
+    return result;
+}
+
+object_ptr<file> makeFile(std::int32_t id, std::int64_t size, const std::string &path,
+                          const std::string &uniqueId)
+{
+    bool downloaded = !path.empty();
+    auto local = make_object<localFile>();
+    local->path_                     = path;
+    local->can_be_downloaded_        = true;
+    local->can_be_deleted_           = true;
+    local->is_downloading_completed_ = downloaded;
+    local->downloaded_prefix_size_   = downloaded ? size : 0;
+    local->downloaded_size_          = downloaded ? size : 0;
+    auto remote = make_object<remoteFile>();
+    remote->id_                     = "beh";
+    remote->unique_id_              = uniqueId;
+    remote->is_uploading_completed_ = true;
+    remote->uploaded_size_          = size;
+    auto result = make_object<file>();
+    result->id_            = id;
+    result->size_          = size;
+    result->expected_size_ = size;
+    result->local_         = std::move(local);
+    result->remote_        = std::move(remote);
+    return result;
+}
+
+object_ptr<formattedText> makeFormattedText(const std::string &text)
+{
+    auto result = make_object<formattedText>();
+    result->text_ = text;
+    return result;
+}
+
+object_ptr<photo> makePhotoWithSizes(std::vector<object_ptr<photoSize>> &&sizes)
+{
+    auto result = make_object<photo>();
+    result->sizes_ = std::move(sizes);
+    return result;
+}
+
+object_ptr<messageDocument> makeMessageDocument(const std::string &fileName, const std::string &mimeType,
+                                                object_ptr<file> &&document, const std::string &caption)
+{
+    auto doc = make_object<td::td_api::document>();
+    doc->file_name_ = fileName;
+    doc->mime_type_ = mimeType;
+    doc->document_  = std::move(document);
+    auto result = make_object<messageDocument>();
+    result->document_ = std::move(doc);
+    result->caption_  = makeFormattedText(caption);
+    return result;
+}
+
+object_ptr<updateMessageContent> makeUpdateMessageContent(std::int64_t chatId, std::int64_t messageId,
+                                                          object_ptr<MessageContent> &&content)
+{
+    auto result = make_object<updateMessageContent>();
+    result->chat_id_     = chatId;
+    result->message_id_  = messageId;
+    result->new_content_ = std::move(content);
+    return result;
+}
+
+object_ptr<updateDeleteMessages> makeUpdateDeleteMessages(std::int64_t chatId, std::int64_t messageId,
+                                                          bool isPermanent, bool fromCache)
+{
+    auto result = make_object<updateDeleteMessages>();
+    result->chat_id_      = chatId;
+    result->message_ids_  = {messageId};
+    result->is_permanent_ = isPermanent;
+    result->from_cache_   = fromCache;
+    return result;
+}
+
+static object_ptr<location> makeLocationObject(double latitude, double longitude, double accuracy)
+{
+    auto result = make_object<location>();
+    result->latitude_            = latitude;
+    result->longitude_           = longitude;
+    result->horizontal_accuracy_ = accuracy;
+    return result;
+}
+
+object_ptr<MessageContent> makeMessageLocation(double latitude, double longitude, double accuracy,
+                                               std::int32_t livePeriod, std::int32_t expiresIn)
+{
+#if TDLIB_API_LIVE_LOCATION
+    if (livePeriod) {
+        auto live = make_object<liveLocation>();
+        live->location_    = makeLocationObject(latitude, longitude, accuracy);
+        live->live_period_ = livePeriod;
+        auto result = make_object<messageLiveLocation>();
+        result->location_   = std::move(live);
+        result->expires_in_ = expiresIn;
+        return result;
+    }
+#endif
+    auto result = make_object<messageLocation>();
+    result->location_ = makeLocationObject(latitude, longitude, accuracy);
+#if !TDLIB_API_LIVE_LOCATION
+    result->live_period_ = livePeriod;
+    result->expires_in_  = expiresIn;
+#endif
+    return result;
+}
+
+object_ptr<messageVenue> makeMessageVenue(double latitude, double longitude, const std::string &title,
+                                          const std::string &address)
+{
+    auto place = make_object<venue>();
+    place->location_ = makeLocationObject(latitude, longitude, 0);
+    place->title_    = title;
+    place->address_  = address;
+    auto result = make_object<messageVenue>();
+    result->venue_ = std::move(place);
+    return result;
+}
+
 object_ptr<messageVideo> makeMessageVideo(object_ptr<video> &&video_,
                                           std::vector<object_ptr<alternativeVideo>> &&alternative_videos_,
                                           object_ptr<photo> &&cover_, std::int32_t start_timestamp_,

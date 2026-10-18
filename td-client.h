@@ -4,7 +4,7 @@
 #include "account-data.h"
 #include "buildopt.h"
 #include "client-utils.h"
-#include <td/telegram/Log.h>
+#include <td/telegram/Client.h>
 #include <purple.h>
 
 enum class BasicGroupMembership: uint8_t {
@@ -19,7 +19,7 @@ public:
     ~PurpleTdClient();
 
     static void setLogLevel(int level);
-    static void setTdlibFatalErrorCallback(td::Log::FatalErrorCallbackPtr callback);
+    static void setTdlibLogCallback(td::ClientManager::LogMessageCallbackPtr callback);
     static std::string getBaseDatabasePath();
     int  sendMessage(const char *buddyName, const char *message);
     void sendTyping(const char *buddyName, bool isTyping);

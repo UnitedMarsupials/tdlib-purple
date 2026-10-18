@@ -7,6 +7,7 @@
 #include "config.h"
 #include "call.h"
 #include <algorithm>
+#include <fmt/format.h>
 
 enum {
     HISTORY_MESSAGES_ABSOLUTE_LIMIT = 80
@@ -26,7 +27,7 @@ static std::string makeFileUri(const std::string &filePath)
     return result;
 }
 
-// ...and then the scheme has to be written twice, which deserves an explanation.
+// ...and then, for Pidgin, the scheme has to be written twice, which deserves an explanation.
 //
 // Pidgin does not treat the target of a "file://" link as a URI at all. Its handler
 // strips the scheme and passes the remainder to purple_notify_uri() as if it were a plain
@@ -40,9 +41,20 @@ static std::string makeFileUri(const std::string &filePath)
 // correctly encoded URI. purple_uri_escape_for_open() permits "%" and "/" and passes such
 // a URI through untouched, and every opener it may invoke - xdg-open, gnome-open,
 // kfmclient - accepts a URI as readily as a path.
+//
+// The same handler is the only way Pidgin opens a URI of a scheme it does not know, such as
+// "geo:": it follows a link only if it has registered the scheme, and does nothing at all
+// otherwise. Other front-ends take a link as it is written, and get it so.
+static std::string makeLinkTarget(const std::string &uri)
+{
+    if (!strcasecmp(getUiName(), "pidgin"))
+        return "file://" + uri;
+    return uri;
+}
+
 static std::string makeFileLinkTarget(const std::string &filePath)
 {
-    return "file://" + makeFileUri(filePath);
+    return makeLinkTarget(makeFileUri(filePath));
 }
 
 // Anything chosen by a remote party - a file name, a contact's display name, a group
@@ -55,6 +67,225 @@ static std::string escapeForDisplay(const std::string &text)
     std::string result(escaped);
     g_free(escaped);
     return result;
+}
+
+// Names a message by when it was sent, which is what the conversation window shows of it:
+// the time, and the date as well unless that is today
+static std::string formatMessageTime(time_t timestamp)
+{
+    time_t    now = time(NULL);
+    struct tm today, sent;
+    localtime_r(&now, &today);
+    localtime_r(&timestamp, &sent);
+
+    if ((sent.tm_year == today.tm_year) && (sent.tm_yday == today.tm_yday))
+        return purple_time_format(&sent);
+    else
+        return purple_date_format_long(&sent);
+}
+
+static std::string getFileKey(const td::td_api::file *file)
+{
+    if (!file)
+        return "";
+    // The same file keeps its remote identifier, while its local one may differ between sessions
+    if (file->remote_ && !file->remote_->unique_id_.empty())
+        return file->remote_->unique_id_;
+    return std::to_string(file->id_);
+}
+
+// A location a message holds: where, and in the case of a venue, what is there. A live one has a
+// period it was shared for, and the time left of it; TDLib 1.8.65 gave it a type of its own.
+struct ShownLocation {
+    const td::td_api::location *location   = nullptr;
+    const td::td_api::venue    *venue      = nullptr;
+    int32_t                     livePeriod = 0; // 0 if not live, 0x7FFFFFFF if without end
+    int32_t                     expiresIn  = 0;
+};
+
+static bool getShownLocation(const td::td_api::MessageContent &content, ShownLocation &result)
+{
+    switch (content.get_id()) {
+        case td::td_api::messageVenue::ID: {
+            const auto &venue = static_cast<const td::td_api::messageVenue &>(content);
+            result.venue = venue.venue_.get();
+            if (result.venue)
+                result.location = result.venue->location_.get();
+            break;
+        }
+        case td::td_api::messageLocation::ID: {
+            const auto &location = static_cast<const td::td_api::messageLocation &>(content);
+            result.location = location.location_.get();
+#if !TDLIB_API_LIVE_LOCATION
+            result.livePeriod = location.live_period_;
+            result.expiresIn  = location.expires_in_;
+#endif
+            break;
+        }
+#if TDLIB_API_LIVE_LOCATION
+        case td::td_api::messageLiveLocation::ID: {
+            const auto &location = static_cast<const td::td_api::messageLiveLocation &>(content);
+            if (location.location_) {
+                result.location   = location.location_->location_.get();
+                result.livePeriod = location.location_->live_period_;
+            }
+            result.expiresIn = location.expires_in_;
+            break;
+        }
+#endif
+    }
+
+    return (result.location != nullptr);
+}
+
+static bool isStoppedLiveLocation(const ShownLocation &location)
+{
+    return (location.livePeriod != 0) && (location.expiresIn == 0);
+}
+
+// A link to the place as a geo: URI (RFC 5870), which leaves the choice of map to whatever opens
+// it. The coordinates are written the same in every locale, with a decimal point.
+static std::string makeLocationLink(const td::td_api::location &location)
+{
+    std::string coordinates = fmt::format("{:.6f}, {:.6f}", location.latitude_, location.longitude_);
+    std::string uri         = fmt::format("geo:{:.6f},{:.6f}", location.latitude_, location.longitude_);
+    if (location.horizontal_accuracy_ > 0)
+        uri += fmt::format(";u={:.0f}", location.horizontal_accuracy_);
+    return "<a href=\"" + escapeForDisplay(makeLinkTarget(uri)) + "\">" + coordinates + "</a>";
+}
+
+static std::string makeLocationText(const ShownLocation &shown)
+{
+    std::string link = makeLocationLink(*shown.location);
+    std::string text;
+    if (shown.venue) {
+        text = "<b>" + escapeForDisplay(shown.venue->title_) + "</b>\n";
+        if (!shown.venue->address_.empty())
+            text += escapeForDisplay(shown.venue->address_) + "\n";
+    }
+
+    if ((shown.livePeriod == 0) || isStoppedLiveLocation(shown))
+        // TRANSLATOR: In-chat message. Argument is a hyperlink, showing map coordinates.
+        text += formatMessage(_("Location: {}"), link);
+    else if (shown.livePeriod == 0x7FFFFFFF)
+        // TRANSLATOR: In-chat message, for a location shared live with no end set. Argument is a hyperlink, showing map coordinates.
+        text += formatMessage(_("Live location: {}"), link);
+    else
+        // TRANSLATOR: In-chat message. Arguments are the time (or date and time) the live location will cease to be shared at, and a hyperlink, showing map coordinates.
+        text += formatMessage(_("Live location until {0}: {1}"),
+                              {formatMessageTime(time(NULL) + shown.expiresIn), link});
+    return text;
+}
+
+// What the conversation shows of a message's content, as far as its sender can change it.
+// A change to anything else - a poll's tally, a live location's position, a link preview -
+// either shows nowhere or is no edit, and is not reported.
+static void getShownContent(const td::td_api::MessageContent &content, ShownMessage &result)
+{
+    const td::td_api::formattedText *caption = nullptr;
+
+    result.file.clear();
+    result.content.clear();
+    switch (content.get_id()) {
+        case td::td_api::messageText::ID: {
+            const auto &text = static_cast<const td::td_api::messageText &>(content);
+            if (text.text_)
+                result.content = text.text_->text_;
+            break;
+        }
+        case td::td_api::messagePhoto::ID: {
+            const auto &photo = static_cast<const td::td_api::messagePhoto &>(content);
+            if (photo.photo_)
+                for (const auto &size: photo.photo_->sizes_)
+                    if (size && size->photo_) {
+                        result.file = getFileKey(size->photo_.get());
+                        break;
+                    }
+            caption = photo.caption_.get();
+            break;
+        }
+        case td::td_api::messageDocument::ID: {
+            const auto &document = static_cast<const td::td_api::messageDocument &>(content);
+            if (document.document_)
+                result.file = getFileKey(document.document_->document_.get());
+            caption = document.caption_.get();
+            break;
+        }
+        case td::td_api::messageVideo::ID: {
+            const auto &video = static_cast<const td::td_api::messageVideo &>(content);
+            if (video.video_)
+                result.file = getFileKey(video.video_->video_.get());
+            caption = video.caption_.get();
+            break;
+        }
+        case td::td_api::messageAnimation::ID: {
+            const auto &animation = static_cast<const td::td_api::messageAnimation &>(content);
+            if (animation.animation_)
+                result.file = getFileKey(animation.animation_->animation_.get());
+            caption = animation.caption_.get();
+            break;
+        }
+        case td::td_api::messageAudio::ID: {
+            const auto &audio = static_cast<const td::td_api::messageAudio &>(content);
+            if (audio.audio_)
+                result.file = getFileKey(audio.audio_->audio_.get());
+            caption = audio.caption_.get();
+            break;
+        }
+        case td::td_api::messageVoiceNote::ID: {
+            const auto &voiceNote = static_cast<const td::td_api::messageVoiceNote &>(content);
+            if (voiceNote.voice_note_)
+                result.file = getFileKey(voiceNote.voice_note_->voice_.get());
+            caption = voiceNote.caption_.get();
+            break;
+        }
+        case td::td_api::messageVideoNote::ID: {
+            const auto &videoNote = static_cast<const td::td_api::messageVideoNote &>(content);
+            if (videoNote.video_note_)
+                result.file = getFileKey(videoNote.video_note_->video_.get());
+            break;
+        }
+        case td::td_api::messageSticker::ID: {
+            const auto &sticker = static_cast<const td::td_api::messageSticker &>(content);
+            if (sticker.sticker_)
+                result.file = getFileKey(sticker.sticker_->sticker_.get());
+            break;
+        }
+        case td::td_api::messageAnimatedEmoji::ID:
+            result.content = static_cast<const td::td_api::messageAnimatedEmoji &>(content).emoji_;
+            break;
+        case td::td_api::messageChatChangeTitle::ID:
+            result.content = static_cast<const td::td_api::messageChatChangeTitle &>(content).title_;
+            break;
+        case td::td_api::messagePoll::ID: {
+            // Its question and options stay as they are; the votes are no edit, but closing it is
+            const auto &poll = static_cast<const td::td_api::messagePoll &>(content);
+            if (poll.poll_ && poll.poll_->is_closed_)
+                result.content = "closed";
+            break;
+        }
+        case td::td_api::messageLocation::ID:
+#if TDLIB_API_LIVE_LOCATION
+        case td::td_api::messageLiveLocation::ID:
+#endif
+        {
+            // A live location moves all the time, which is no edit; that it no longer does is shown
+            ShownLocation location;
+            if (getShownLocation(content, location)) {
+                if (location.livePeriod == 0)
+                    result.content = makeLocationText(location);
+                else if (isStoppedLiveLocation(location))
+                    result.content = "stopped";
+            }
+            break;
+        }
+        default:
+            // Its type only: Telegram updates some on its own, as a dice once it has been rolled
+            result.content = std::to_string(content.get_id());
+    }
+
+    if (caption)
+        result.content = caption->text_;
 }
 
 std::string makeNoticeWithSender(const td::td_api::chat &chat, const TgMessageInfo &message,
@@ -269,6 +500,19 @@ static std::string quoteMessage(const td::td_api::message *message, TdAccountDat
             const td::td_api::messageAnimatedEmoji &animatedEmoji =
                 static_cast<const td::td_api::messageAnimatedEmoji &>(*message->content_);
             text = animatedEmoji.emoji_;
+            break;
+        }
+        case td::td_api::messageLocation::ID:
+#if TDLIB_API_LIVE_LOCATION
+        case td::td_api::messageLiveLocation::ID:
+#endif
+        case td::td_api::messageVenue::ID: {
+            ShownLocation location;
+            getShownLocation(*message->content_, location);
+            // TRANSLATOR: In-line placeholder when a location is being replied to.
+            text = _("[location]");
+            if (location.venue)
+                text += " " + location.venue->title_;
             break;
         }
         default:
@@ -715,6 +959,66 @@ static void showStickerMessage(const td::td_api::chat &chat, IncomingMessage &fu
                        transceiver, account);
 }
 
+static void showPendingEdit(TdAccountData &account, ChatId chatId, MessageId messageId);
+
+static void showUnsupportedMessage(const td::td_api::chat &chat, const TgMessageInfo &messageInfo,
+                                   const td::td_api::MessageContent &content, TdAccountData &account)
+{
+    // TRANSLATOR: In-chat error message, argument will be a Telegram type.
+    std::string notice = getUnsupportedMessageDescription(content);
+    notice = makeNoticeWithSender(chat, messageInfo, notice.c_str(), account.purpleAccount);
+    showMessageText(account, chat, messageInfo, NULL, notice.c_str());
+
+    // Show what the message holds anyway, in TDLib's own words. Escaping is what keeps any
+    // markup in it inert; the font merely lines up the indentation.
+    std::string text = "\n<font face=\"monospace\">" +
+                       escapeForDisplay(describeUnsupportedContent(content)) + "</font>";
+    showMessageText(account, chat, messageInfo, text.c_str(), NULL);
+}
+
+
+// Shows a message again because it was edited: a line saying so, as of the edit, which names the
+// message by the time it was sent and holds the new text, where text is all there is to show.
+// Returns false if the message is to follow in full, as it does when it brings a new file.
+static bool showEditNotice(const td::td_api::chat &chat, IncomingMessage &fullMessage,
+                           TdAccountData &account)
+{
+    const TgMessageInfo &messageInfo = fullMessage.messageInfo;
+    const td::td_api::MessageContent &content = *fullMessage.message->content_;
+    std::string          sender      = escapeForDisplay(getSenderDisplayName(chat, messageInfo,
+                                                                            account.purpleAccount));
+    std::string          sentAt      = formatMessageTime(fullMessage.editedMessageTime);
+    FileInfo             fileInfo;
+    getFileFromMessage(fullMessage, fileInfo);
+
+    ShownLocation location;
+    std::string   notice;
+    bool          complete = true;
+    if (getShownLocation(content, location) && isStoppedLiveLocation(location))
+        // TRANSLATOR: In-chat notification. Arguments are a username, the time (or date and time) the message was sent at, as the conversation window shows it, and a hyperlink, showing the map coordinates last shared.
+        notice = formatMessage(_("{0} stopped sharing the live location from {1}: {2}"),
+                               {sender, sentAt, makeLocationLink(*location.location)});
+    else if (fullMessage.captionOnly && fileInfo.caption.empty())
+        // TRANSLATOR: In-chat notification. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
+        notice = formatMessage(_("{0} removed the caption of the message from {1}"), {sender, sentAt});
+    else if (fullMessage.captionOnly || (content.get_id() == td::td_api::messageText::ID)) {
+        const td::td_api::messageText *text = nullptr;
+        if (content.get_id() == td::td_api::messageText::ID)
+            text = static_cast<const td::td_api::messageText *>(&content);
+        std::string newText = fullMessage.captionOnly ? fileInfo.caption :
+                              (text && text->text_) ? getMessageText(*text->text_) : std::string();
+        // TRANSLATOR: In-chat notification. Arguments are a username, the time (or date and time) the message was sent at, as the conversation window shows it, and the message's new text.
+        notice = formatMessage(_("{0} edited the message from {1}: {2}"), {sender, sentAt, newText});
+    } else {
+        // TRANSLATOR: In-chat notification, followed by the message as edited. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
+        notice = formatMessage(_("{0} edited the message from {1}:"), {sender, sentAt});
+        complete = false;
+    }
+    showMessageText(account, chat, messageInfo, NULL, notice.c_str());
+
+    return complete;
+}
+
 void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
                 TdTransceiver &transceiver, TdAccountData &account)
 {
@@ -723,10 +1027,20 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
 
     if (!message.content_)
         return;
+    if (fullMessage.deleted) {
+        // Nobody saw it, so nobody needs telling
+        purple_debug_misc(config::pluginId, "Not displaying deleted message %" G_GINT64_FORMAT "\n", message.id_);
+        return;
+    }
     purple_debug_misc(config::pluginId, "Displaying message %" G_GINT64_FORMAT "\n", message.id_);
 
     TgMessageInfo &messageInfo = fullMessage.messageInfo;
     messageInfo.repliedMessage = std::move(fullMessage.repliedMessage);
+
+    if (fullMessage.editedMessageTime && showEditNotice(chat, fullMessage, account)) {
+        showPendingEdit(account, getChatId(message), getId(message));
+        return;
+    }
 
     // ttl_ field was removed in newer tdlib versions
     // if (message.ttl_ != 0) {
@@ -805,22 +1119,28 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
             showMessageText(account, chat, messageInfo, animatedEmoji.emoji_.c_str(), NULL);
             break;
         }
-        default: {
-            // TRANSLATOR: In-chat error message, argument will be a Telegram type.
-            std::string notice = getUnsupportedMessageDescription(*message.content_);
-            notice = makeNoticeWithSender(chat, messageInfo, notice.c_str(), account.purpleAccount);
-            showMessageText(account, chat, messageInfo, NULL, notice.c_str());
-
-            // Show what the message holds anyway, in TDLib's own words. Escaping is what keeps any
-            // markup in it inert; the font merely lines up the indentation.
-            std::string text = "\n<font face=\"monospace\">" +
-                               escapeForDisplay(describeUnsupportedContent(*message.content_)) + "</font>";
-            showMessageText(account, chat, messageInfo, text.c_str(), NULL);
+        case td::td_api::messageLocation::ID:
+#if TDLIB_API_LIVE_LOCATION
+        case td::td_api::messageLiveLocation::ID:
+#endif
+        case td::td_api::messageVenue::ID: {
+            ShownLocation location;
+            if (getShownLocation(*message.content_, location)) {
+                std::string text = makeLocationText(location);
+                showMessageText(account, chat, messageInfo, text.c_str(), NULL);
+            } else
+                // Not supposed to be possible, but just in case
+                showUnsupportedMessage(chat, messageInfo, *message.content_, account);
+            break;
         }
+        default:
+            showUnsupportedMessage(chat, messageInfo, *message.content_, account);
     }
 
     // Put it back - may be needed if long download is in progress
     fullMessage.repliedMessage = std::move(messageInfo.repliedMessage);
+
+    showPendingEdit(account, getChatId(message), getId(message));
 }
 
 void showMessages(std::vector<IncomingMessage>& messages, TdAccountData &account)
@@ -1248,20 +1568,13 @@ static void findMessageResponse(TdAccountData &account, ChatId chatId, MessageId
     checkMessageReady(pendingMessage, account.transceiver, account);
 }
 
-void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
-    td::td_api::object_ptr<td::td_api::message> message,
-    PendingMessageQueue::MessageAction action)
+static void queueMessage(TdAccountData &account, const td::td_api::chat &chat,
+                         IncomingMessage &&fullMessage, PendingMessageQueue::MessageAction action)
 {
-    if (!message) return;
     ChatId chatId = getId(chat);
 
-    if (isReadReceiptsEnabled(account.purpleAccount))
-        account.addPendingReadReceipt(chatId, getId(*message));
-
-    IncomingMessage fullMessage;
-    makeFullMessage(chat, std::move(message), fullMessage, account);
-
-    if (isMessageReady(fullMessage, account)) {
+    // Where only the caption changed, the file is not shown again, and so nothing is awaited
+    if (fullMessage.captionOnly || isMessageReady(fullMessage, account)) {
         IncomingMessage readyMessage = account.pendingMessages.addReadyMessage(std::move(fullMessage), action);
         if (readyMessage.message)
             showMessage(chat, readyMessage, account.transceiver, account);
@@ -1273,6 +1586,169 @@ void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
                 findMessageResponse(account, chatId, messageId, std::move(object));
             }
         );
+    }
+}
+
+void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
+    td::td_api::object_ptr<td::td_api::message> message,
+    PendingMessageQueue::MessageAction action)
+{
+    if (!message) return;
+    ChatId chatId = getId(chat);
+
+    if (isReadReceiptsEnabled(account.purpleAccount))
+        account.addPendingReadReceipt(chatId, getId(*message));
+
+    if (message->content_) {
+        ShownMessage shownMessage;
+        getShownContent(*message->content_, shownMessage);
+        shownMessage.timestamp = message->date_;
+        account.addShownMessage(chatId, getId(*message), std::move(shownMessage));
+    }
+
+    IncomingMessage fullMessage;
+    makeFullMessage(chat, std::move(message), fullMessage, account);
+    queueMessage(account, chat, std::move(fullMessage), action);
+}
+
+static void requestEditedMessage(TdAccountData &account, const PendingEdit &edit);
+
+static void editedMessageResponse(TdAccountData &account, const PendingEdit &edit,
+                                  td::td_api::object_ptr<td::td_api::Object> object)
+{
+    const td::td_api::chat *chat = account.getChat(edit.chatId);
+    if (!chat || !object || (object->get_id() != td::td_api::message::ID)) {
+        purple_debug_warning(config::pluginId, "Failed to fetch edited message %" G_GINT64_FORMAT "\n",
+                             edit.messageId.value());
+        // Not shown, so the same change coming again is still news, unless a later edit has
+        // taken this one's place
+        ShownMessage *shownMessage = account.findShownMessage(edit.chatId, edit.messageId);
+        if (shownMessage && (*shownMessage == edit.installed))
+            *shownMessage = edit.previous;
+        return;
+    }
+
+    // Deleted meanwhile, which has been reported already
+    if (!account.findShownMessage(edit.chatId, edit.messageId)) {
+        purple_debug_misc(config::pluginId, "Edited message %" G_GINT64_FORMAT " is gone\n",
+                          edit.messageId.value());
+        return;
+    }
+
+    // The message, or an earlier edit of it, may have gone into the queue meanwhile
+    if (account.pendingMessages.findPendingMessage(edit.chatId, edit.messageId)) {
+        account.addPendingEdit(edit);
+        return;
+    }
+
+    td::td_api::object_ptr<td::td_api::message> message = td::move_tl_object_as<td::td_api::message>(object);
+    time_t editDate = message->edit_date_ ? message->edit_date_ : time(NULL);
+    // Without the reply or forward header, which the original had already
+    message->reply_to_     = nullptr;
+    message->forward_info_ = nullptr;
+
+    IncomingMessage fullMessage;
+    makeFullMessage(*chat, std::move(message), fullMessage, account);
+    fullMessage.editedMessageTime     = edit.messageTime;
+    fullMessage.captionOnly           = edit.captionOnly;
+    fullMessage.messageInfo.timestamp = editDate;
+    queueMessage(account, *chat, std::move(fullMessage), PendingMessageQueue::Append);
+}
+
+static void requestEditedMessage(TdAccountData &account, const PendingEdit &edit)
+{
+    purple_debug_misc(config::pluginId, "Fetching edited message %" G_GINT64_FORMAT "\n",
+                      edit.messageId.value());
+    auto request = td::td_api::make_object<td::td_api::getMessage>();
+    request->chat_id_    = edit.chatId.value();
+    request->message_id_ = edit.messageId.value();
+    account.transceiver.sendQuery(std::move(request),
+        [&account, edit](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
+            editedMessageResponse(account, edit, std::move(object));
+        });
+}
+
+// Shows an edit that came while the message was waiting to be shown, now that it has been
+static void showPendingEdit(TdAccountData &account, ChatId chatId, MessageId messageId)
+{
+    PendingEdit edit;
+    if (account.extractPendingEdit(chatId, messageId, edit))
+        requestEditedMessage(account, edit);
+}
+
+void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messageId,
+                          td::td_api::object_ptr<td::td_api::MessageContent> content)
+{
+    // A message not shown in this session is in no conversation window to be corrected
+    ShownMessage *shownMessage = account.findShownMessage(chatId, messageId);
+    if (!shownMessage || !content)
+        return;
+
+    ShownMessage editedMessage;
+    getShownContent(*content, editedMessage);
+    if ((editedMessage.file == shownMessage->file) && (editedMessage.content == shownMessage->content)) {
+        purple_debug_misc(config::pluginId, "Message %" G_GINT64_FORMAT " changed out of sight\n",
+                          messageId.value());
+        return;
+    }
+
+    PendingEdit edit;
+    edit.chatId      = chatId;
+    edit.messageId   = messageId;
+    edit.messageTime = shownMessage->timestamp;
+    edit.captionOnly = !editedMessage.file.empty() && (editedMessage.file == shownMessage->file);
+    edit.previous    = *shownMessage;
+    editedMessage.timestamp = shownMessage->timestamp;
+    edit.installed   = editedMessage;
+    *shownMessage = std::move(editedMessage);
+
+    IncomingMessage *pendingMessage = account.pendingMessages.findPendingMessage(chatId, messageId);
+    if (pendingMessage) {
+        td::td_api::message *message = pendingMessage->message.get();
+        if (message && message->content_ &&
+            (message->content_->get_id() == td::td_api::messageText::ID) &&
+            (content->get_id() == td::td_api::messageText::ID))
+        {
+            // Text needs nothing fetched for it, so the new can simply take the old one's place
+            message->content_ = std::move(content);
+        } else
+            // Requests made for the message are still under way, and would mistake the edit for it
+            account.addPendingEdit(edit);
+    } else
+        requestEditedMessage(account, edit);
+}
+
+void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessages &update)
+{
+    // Messages dropped from TDLib's cache are not deleted at all
+    if (!update.is_permanent_ || update.from_cache_)
+        return;
+
+    ChatId                  chatId = getChatId(update);
+    const td::td_api::chat *chat   = account.getChat(chatId);
+
+    for (unsigned i = 0; i < update.message_ids_.size(); i++) {
+        MessageId     messageId    = getMessageId(update, i);
+        ShownMessage *shownMessage = account.findShownMessage(chatId, messageId);
+        if (!shownMessage)
+            continue;
+        time_t messageTime = shownMessage->timestamp;
+        account.removeShownMessage(chatId, messageId);
+
+        PendingEdit edit;
+        account.extractPendingEdit(chatId, messageId, edit);
+        // A message still waiting to be shown is simply not shown; but one waiting to be shown again,
+        // as edited, is in the conversation already
+        IncomingMessage *pendingMessage = account.pendingMessages.findPendingMessage(chatId, messageId);
+        if (pendingMessage)
+            pendingMessage->deleted = true;
+        if ((!pendingMessage || pendingMessage->editedMessageTime) && chat) {
+            // Telegram does not say who deleted it, so the notice cannot either.
+            std::string notice = formatMessage(
+                // TRANSLATOR: In-chat notification. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
+                _("Message from {} has been deleted"), formatMessageTime(messageTime));
+            showChatNotification(account, *chat, notice.c_str());
+        }
     }
 }
 

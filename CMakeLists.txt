@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 # the oldest CMake 4 accepts without a deprecation warning
 
-set(VERSION 0.9.2)
+set(VERSION 0.9.3)
 project(tdlib-purple VERSION ${VERSION} LANGUAGES CXX)
 
 set(NoPkgConfig FALSE CACHE BOOL "Do not use pkg-config")
