@@ -2276,10 +2276,11 @@ void PurpleTdClient::tempFileCheckResponse(uint64_t requestId, td::td_api::objec
         (static_cast<const td::td_api::message &>(*object).sending_state_->get_id() ==
          td::td_api::messageSendingStatePending::ID))
         return;
-    // No answer that says the message is gone: the file is kept, to be asked about at the next login
+    // No answer that says the message is gone: the file is kept, to be asked about at the next login.
+    // TDLib documents getMessage as returning 404 when the message does not exist, and nothing more:
+    // any other error, 400 included, may be passing, and a file deleted too early cannot be sent.
     if (!object || ((object->get_id() == td::td_api::error::ID) &&
-                    (static_cast<const td::td_api::error &>(*object).code_ != 404) &&
-                    (static_cast<const td::td_api::error &>(*object).code_ != 400)))
+                    (static_cast<const td::td_api::error &>(*object).code_ != 404)))
     {
         purple_debug_misc(config::pluginId, "Cannot tell whether message %" G_GINT64_FORMAT " is still sent\n",
                           request->messageId);
