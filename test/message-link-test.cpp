@@ -163,16 +163,12 @@ protected:
     object_ptr<file>    makeVideoFile(int32_t id, int64_t size, const std::string &path = "");
     object_ptr<message> makeVideoMessage();
     std::string         sizeLinks();
+    void                verifyVideoMessage();
 };
 
 object_ptr<file> VideoSizesTest::makeVideoFile(int32_t id, int64_t size, const std::string &path)
 {
-    bool downloaded = !path.empty();
-    return make_object<file>(
-        id, size, size,
-        make_object<localFile>(path, true, true, false, downloaded, 0, downloaded ? size : 0, downloaded ? size : 0),
-        make_object<remoteFile>("beh", "bleh", false, true, size)
-    );
+    return ::makeFile(id, size, path);
 }
 
 object_ptr<message> VideoSizesTest::makeVideoMessage()
@@ -184,11 +180,11 @@ object_ptr<message> VideoSizesTest::makeVideoMessage()
     video->mime_type_ = "video/mp4";
     video->video_     = makeVideoFile(mainId, 45 << 20);
     std::vector<object_ptr<alternativeVideo>> alternatives;
-    alternatives.push_back(make_object<alternativeVideo>(11, 1280, 720, "h265", nullptr, makeVideoFile(largerId, 12 << 20)));
-    alternatives.push_back(make_object<alternativeVideo>(12, 854, 480, "", nullptr, makeVideoFile(smallId, 6 << 20)));
+    alternatives.push_back(makeAlternativeVideo(11, 1280, 720, "h265", makeVideoFile(largerId, 12 << 20)));
+    alternatives.push_back(makeAlternativeVideo(12, 854, 480, "", makeVideoFile(smallId, 6 << 20)));
     return makeMessage(messageId, userIds[0], chatIds[0], false, date, makeMessageVideo(
         std::move(video), std::move(alternatives), nullptr, 0,
-        make_object<formattedText>("caption", std::vector<object_ptr<textEntity>>()), false, false, false
+        makeFormattedText("caption"), false, false, false
     ));
 }
 
@@ -198,6 +194,15 @@ std::string VideoSizesTest::sizeLinks()
     return "<a href=\"" + link() + "/a12\">854×480, purple_str_size_to_units</a> · "
            "<a href=\"" + link() + "/a11\">1280×720 (h265), purple_str_size_to_units</a> · "
            "<a href=\"" + link() + "/v\">1920×1080, purple_str_size_to_units</a>";
+}
+
+void VideoSizesTest::verifyVideoMessage()
+{
+    prpl.verifyEvents(ServGotImEvent(
+        connection, purpleUserName(0),
+        "<a href=\"" + link() + "\">video.mp4 [video/mp4]</a>\n" + sizeLinks() + "\ncaption",
+        PURPLE_MESSAGE_RECV, date
+    ));
 }
 
 TEST_F(VideoSizesTest, LargestWithinLimit)
@@ -230,7 +235,15 @@ TEST_F(VideoSizesTest, UnknownSize)
         make_object<viewMessages>(chatIds[0], std::vector<int64_t>(1, messageId), nullptr, true),
         make_object<downloadFile>(smallId, 1, 0, 0, false)
     });
-    prpl.discardEvents();
+    // ...whose link says no size
+    prpl.verifyEvents(ServGotImEvent(
+        connection, purpleUserName(0),
+        "<a href=\"" + link() + "\">video.mp4 [video/mp4]</a>\n"
+        "<a href=\"" + link() + "/a12\">854×480, purple_str_size_to_units</a> · "
+        "<a href=\"" + link() + "/a11\">1280×720 (h265)</a> · "
+        "<a href=\"" + link() + "/v\">1920×1080, purple_str_size_to_units</a>\ncaption",
+        PURPLE_MESSAGE_RECV, date
+    ));
 }
 
 TEST_F(VideoSizesTest, Smallest)
@@ -243,7 +256,32 @@ TEST_F(VideoSizesTest, Smallest)
         make_object<viewMessages>(chatIds[0], std::vector<int64_t>(1, messageId), nullptr, true),
         make_object<downloadFile>(smallId, 1, 0, 0, false)
     });
-    prpl.discardEvents();
+    verifyVideoMessage();
+}
+
+TEST_F(VideoSizesTest, SmallestUnknownSize)
+{
+    purple_account_set_string(account, "prefetch-videos", "smallest");
+    loginWithOneContact();
+
+    // The smallest of those known to be within the limit
+    object_ptr<message> msg = makeVideoMessage();
+    auto &video = static_cast<messageVideo &>(*msg->content_);
+    video.alternative_videos_[1]->video_->size_          = 0;
+    video.alternative_videos_[1]->video_->expected_size_ = 0;
+    tgl.update(make_object<updateNewMessage>(std::move(msg)));
+    tgl.verifyRequests({
+        make_object<viewMessages>(chatIds[0], std::vector<int64_t>(1, messageId), nullptr, true),
+        make_object<downloadFile>(largerId, 1, 0, 0, false)
+    });
+    prpl.verifyEvents(ServGotImEvent(
+        connection, purpleUserName(0),
+        "<a href=\"" + link() + "\">video.mp4 [video/mp4]</a>\n"
+        "<a href=\"" + link() + "/a12\">854×480</a> · "
+        "<a href=\"" + link() + "/a11\">1280×720 (h265), purple_str_size_to_units</a> · "
+        "<a href=\"" + link() + "/v\">1920×1080, purple_str_size_to_units</a>\ncaption",
+        PURPLE_MESSAGE_RECV, date
+    ));
 }
 
 TEST_F(VideoSizesTest, LargestOnly)
@@ -254,7 +292,7 @@ TEST_F(VideoSizesTest, LargestOnly)
 
     tgl.update(make_object<updateNewMessage>(makeVideoMessage()));
     tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
-    prpl.discardEvents();
+    verifyVideoMessage();
 }
 
 TEST_F(VideoSizesTest, None)
@@ -264,7 +302,7 @@ TEST_F(VideoSizesTest, None)
 
     tgl.update(make_object<updateNewMessage>(makeVideoMessage()));
     tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
-    prpl.discardEvents();
+    verifyVideoMessage();
 }
 
 TEST_F(VideoSizesTest, OpenSize)
@@ -273,7 +311,7 @@ TEST_F(VideoSizesTest, OpenSize)
     loginWithOneContact();
     tgl.update(make_object<updateNewMessage>(makeVideoMessage()));
     tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
-    prpl.discardEvents();
+    verifyVideoMessage();
 
     tgprpl_open_message_link((link() + "/a11").c_str());
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
@@ -290,6 +328,15 @@ TEST_F(VideoSizesTest, OpenSize)
     // Another size is another file, not a second click on this one
     tgprpl_open_message_link((link() + "/a12").c_str());
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    prpl.verifyNoEvents();
+    tgl.reply(makeVideoMessage());
+    tgl.verifyRequest(downloadFile(smallId, 32, 0, 0, true));
+    prpl.verifyEvents(ConversationWriteEvent(
+        purpleUserName(0), purpleUserName(0), "Downloading 854×480, purple_str_size_to_units",
+        PURPLE_MESSAGE_SYSTEM, 0
+    ));
+    tgl.reply(makeVideoFile(smallId, 6 << 20, "/path/video-480.mp4"));
+    prpl.verifyEvents(NotifyUriEvent("file:///path/video-480.mp4"));
 }
 
 TEST_F(MessageLinkTest, PhotoSizes)
@@ -300,17 +347,11 @@ TEST_F(MessageLinkTest, PhotoSizes)
     sizes.push_back(makePhotoSize(makeFile(1000, "/path", true), 320, 240));
     sizes.back()->type_ = "m";
     // Shown is the larger, downloaded here already, so as not to wait for it
-    sizes.push_back(makePhotoSize(make_object<file>(
-            fileId + 1, 50000, 50000,
-            make_object<localFile>("/path", true, true, false, true, 0, 50000, 50000),
-            make_object<remoteFile>("beh", "bleh", false, true, 50000)
-        ), 1280, 960));
+    sizes.push_back(makePhotoSize(::makeFile(fileId + 1, 50000, "/path"), 1280, 960));
     sizes.back()->type_ = "y";
     tgl.update(make_object<updateNewMessage>(makeMessage(
         messageId, userIds[0], chatIds[0], false, date,
-        makeMessagePhoto(make_object<photo>(false, nullptr, std::move(sizes)),
-                         make_object<formattedText>("caption", std::vector<object_ptr<textEntity>>()),
-                         false, false, false)
+        makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText("caption"), false, false, false)
     )));
     tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
     prpl.verifyEvents(ServGotImEvent(
@@ -336,9 +377,7 @@ TEST_F(MessageLinkTest, PhotoSizesIgnored)
     sizes.back()->type_ = "y";
     tgl.update(make_object<updateNewMessage>(makeMessage(
         messageId, userIds[0], chatIds[0], false, date,
-        makeMessagePhoto(make_object<photo>(false, nullptr, std::move(sizes)),
-                         make_object<formattedText>("caption", std::vector<object_ptr<textEntity>>()),
-                         false, false, false)
+        makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText("caption"), false, false, false)
     )));
     tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
     prpl.verifyEvents(

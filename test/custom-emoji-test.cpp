@@ -31,8 +31,8 @@ object_ptr<message> CustomEmojiTest::makeEmojiMessage(int64_t id, const std::str
 {
     object_ptr<messageText> content = makeTextMessage(text);
     // The cat is two UTF-16 code units long
-    content->text_->entities_.push_back(make_object<textEntity>(
-        offset, 2, make_object<textEntityTypeCustomEmoji>(customEmojiId)));
+    content->text_->entities_.push_back(makeTextEntity(offset, 2,
+                                                       make_object<textEntityTypeCustomEmoji>(customEmojiId)));
     return makeMessage(id, userIds[0], chatIds[0], false, date, std::move(content));
 }
 
@@ -40,19 +40,18 @@ object_ptr<sticker> CustomEmojiTest::makeEmojiSticker(object_ptr<StickerFormat> 
                                                       const std::string &thumbnailPath)
 {
     object_ptr<thumbnail> thumb;
-    if (!thumbnailPath.empty())
-        thumb = make_object<thumbnail>(make_object<thumbnailFormatWebp>(), 100, 100, make_object<file>(
-            thumbnailId, 1000, 1000,
-            make_object<localFile>(thumbnailPath, true, true, false, true, 0, 1000, 1000),
-            make_object<remoteFile>("beh", "bleh", false, true, 1000)
-        ));
-    object_ptr<sticker> result = makeSticker(100, 100, emoji, make_object<file>(
-        fileId, 10000, 10000,
-        make_object<localFile>(path, true, true, false, true, 0, 10000, 10000),
-        make_object<remoteFile>("beh", "bleh", false, true, 10000)
-    ), std::move(thumb));
+    if (!thumbnailPath.empty()) {
+        thumb = make_object<thumbnail>();
+        thumb->format_ = make_object<thumbnailFormatWebp>();
+        thumb->width_  = 100;
+        thumb->height_ = 100;
+        thumb->file_   = makeFile(thumbnailId, 1000, thumbnailPath);
+    }
+    object_ptr<sticker> result = makeSticker(100, 100, emoji, makeFile(fileId, 10000, path), std::move(thumb));
+    auto fullType = make_object<stickerFullTypeCustomEmoji>();
+    fullType->custom_emoji_id_ = customEmojiId;
     result->format_    = std::move(format);
-    result->full_type_ = make_object<stickerFullTypeCustomEmoji>(customEmojiId, false);
+    result->full_type_ = std::move(fullType);
     return result;
 }
 
@@ -144,7 +143,11 @@ TEST_F(CustomEmojiTest, WebmFallsBackOnThumbnail)
         make_object<getCustomEmojiStickers>(std::vector<int64_t>{customEmojiId}),
         make_object<viewMessages>(chatIds[0], std::vector<int64_t>(1, messageId), nullptr, true)
     });
-    prpl.discardEvents();
+    prpl.verifyEvents(
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+        CustomSmileyAddEvent(purpleUserName(0), code),
+        ServGotImEvent(connection, purpleUserName(0), code, PURPLE_MESSAGE_RECV, date)
+    );
 
     tgl.reply(makeStickers(makeEmojiSticker(make_object<stickerFormatWebm>(), webm, TEST_SOURCE_DIR "/test.webp")));
     prpl.verifyEvents(
@@ -160,17 +163,14 @@ TEST_F(CustomEmojiTest, Reaction)
     tgl.update(make_object<updateNewMessage>(makeMessage(
         messageId, userIds[0], chatIds[0], false, date, makeTextMessage("hi"))));
     tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
-    prpl.discardEvents();
+    prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0), "hi", PURPLE_MESSAGE_RECV, date));
 
     std::vector<object_ptr<messageReaction>> list;
     std::vector<object_ptr<MessageSender>>   senders;
     senders.push_back(make_object<messageSenderUser>(userIds[0]));
-    list.push_back(make_object<messageReaction>(make_object<reactionTypeCustomEmoji>(customEmojiId), 1,
-                                                false, nullptr, std::move(senders)));
-    tgl.update(make_object<updateMessageInteractionInfo>(chatIds[0], messageId,
-        make_object<messageInteractionInfo>(0, 0, nullptr, make_object<messageReactions>(
-            std::move(list), false, std::vector<object_ptr<paidReactor>>(), false
-        ))));
+    list.push_back(makeMessageReaction(make_object<reactionTypeCustomEmoji>(customEmojiId), 1,
+                                       false, nullptr, std::move(senders)));
+    tgl.update(makeUpdateReactions(chatIds[0], messageId, std::move(list)));
     tgl.verifyRequest(getCustomEmojiStickers({customEmojiId}));
 
     // The picture already here goes to the conversation before the reaction that shows it

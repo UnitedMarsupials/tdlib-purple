@@ -978,6 +978,27 @@ object_ptr<messagePhoto> makeMessagePhoto(object_ptr<photo> &&photo_, object_ptr
     return result;
 }
 
+object_ptr<textEntity> makeTextEntity(std::int32_t offset, std::int32_t length, object_ptr<TextEntityType> &&type)
+{
+    auto result = make_object<textEntity>();
+    result->offset_ = offset;
+    result->length_ = length;
+    result->type_   = std::move(type);
+    return result;
+}
+
+object_ptr<alternativeVideo> makeAlternativeVideo(std::int64_t id, std::int32_t width, std::int32_t height,
+                                                  const std::string &codec, object_ptr<file> &&video)
+{
+    auto result = make_object<alternativeVideo>();
+    result->id_     = id;
+    result->width_  = width;
+    result->height_ = height;
+    result->codec_  = codec;
+    result->video_  = std::move(video);
+    return result;
+}
+
 object_ptr<messages> makeMessages(std::vector<object_ptr<message>> &&list)
 {
     auto result = make_object<messages>();

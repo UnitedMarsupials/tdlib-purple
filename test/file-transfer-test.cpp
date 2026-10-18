@@ -1487,19 +1487,10 @@ TEST_F(FileTransferTest, PhotoSizeWithinLimit)
 
     // Listed with one above the limit first
     std::vector<object_ptr<photoSize>> sizes;
-    sizes.push_back(makePhotoSize(make_object<file>(
-            1, 700 * 1024, 700 * 1024,
-            make_object<localFile>("", true, true, false, false, 0, 0, 0),
-            make_object<remoteFile>("beh", "big", false, true, 700 * 1024)
-        ), 1280, 960));
-    sizes.push_back(makePhotoSize(make_object<file>(
-            2, 100 * 1024, 100 * 1024,
-            make_object<localFile>("", true, true, false, false, 0, 0, 0),
-            make_object<remoteFile>("beh", "small", false, true, 100 * 1024)
-        ), 320, 240));
-    object_ptr<messagePhoto> content = makeMessagePhoto(
-        make_object<photo>(false, nullptr, std::move(sizes)),
-        make_object<formattedText>("", std::vector<object_ptr<textEntity>>()), false, false, false);
+    sizes.push_back(makePhotoSize(makeFile(1, 700 * 1024, "", "big"), 1280, 960));
+    sizes.push_back(makePhotoSize(makeFile(2, 100 * 1024, "", "small"), 320, 240));
+    object_ptr<messagePhoto> content = makeMessagePhoto(makePhotoWithSizes(std::move(sizes)),
+                                                        makeFormattedText(""), false, false, false);
 
     const file *selected = selectPhotoSize(account, *content);
     ASSERT_NE(nullptr, selected);
