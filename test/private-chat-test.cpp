@@ -929,7 +929,9 @@ TEST_F(PrivateChatTest, SendImageFromEarlierSession)
     msg->sending_state_ = nullptr;
     tgl.reply(std::move(msg));
     tgl.reply(makeError(404, "Not Found"));
-    tgl.reply(makeError(500, "Internal Server Error"));
+    tgl.reply(makeError(400, "Bad Request"));
+    tgl.verifyNoRequests();
+    prpl.verifyNoEvents();
 
     ASSERT_TRUE(g_file_test(paths[0].c_str(), G_FILE_TEST_EXISTS));
     ASSERT_FALSE(g_file_test(paths[1].c_str(), G_FILE_TEST_EXISTS));
