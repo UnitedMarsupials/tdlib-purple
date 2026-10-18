@@ -24,6 +24,7 @@
 - **A quote of a channel's post names the channel, not "Unknown user".**
 - **"Show invite link" shows a public chat's t.me address.**
 - **A photo is shown in a size within the auto-download limit, where it has one, rather than asked about.**
+- **A video's file link gives its picture size, and the original among its sizes is marked as such.**
 - **Temporary files of images sent and of downloads are no longer left behind.**
 
 ### Translations

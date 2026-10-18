@@ -3,6 +3,7 @@
 #include "config.h"
 #include "purple-info.h"
 #include "receiving.h"
+#include "translate.h"
 #include <algorithm>
 
 static int64_t getFileSize(const td::td_api::file *file)
@@ -24,9 +25,13 @@ void getMediaVariants(const td::td_api::MessageContent &content, std::vector<Med
                                                     size->photo_.get()});
     } else if (content.get_id() == td::td_api::messageVideo::ID) {
         const auto &video = static_cast<const td::td_api::messageVideo &>(content);
+        // The video as sent, whose codec TDLib does not tell, unlike those of the versions Telegram
+        // made of it
         if (video.video_ && video.video_->video_)
             variants.push_back(MediaVariant{"v", video.video_->width_, video.video_->height_,
-                                            getFileSize(video.video_->video_.get()), std::string(),
+                                            getFileSize(video.video_->video_.get()),
+                                            // TRANSLATOR: Of a video in several sizes, the one as it was sent, in place of a codec, as in "720×576 (original), 14 MiB".
+                                            video.alternative_videos_.empty() ? std::string() : std::string(_("original")),
                                             video.video_->video_.get()});
         for (const auto &alternative: video.alternative_videos_)
             if (alternative && alternative->video_)

@@ -193,14 +193,14 @@ std::string VideoSizesTest::sizeLinks()
 {
     return "<a href=\"" + link() + "/a12\">854×480, purple_str_size_to_units</a> · "
            "<a href=\"" + link() + "/a11\">1280×720 (h265), purple_str_size_to_units</a> · "
-           "<a href=\"" + link() + "/v\">1920×1080, purple_str_size_to_units</a>";
+           "<a href=\"" + link() + "/v\">1920×1080 (original), purple_str_size_to_units</a>";
 }
 
 void VideoSizesTest::verifyVideoMessage()
 {
     prpl.verifyEvents(ServGotImEvent(
         connection, purpleUserName(0),
-        "<a href=\"" + link() + "\">video.mp4 [video/mp4]</a>\n" + sizeLinks() + "\ncaption",
+        "<a href=\"" + link() + "\">video.mp4 [video/mp4, 1920×1080]</a>\n" + sizeLinks() + "\ncaption",
         PURPLE_MESSAGE_RECV, date
     ));
 }
@@ -216,7 +216,7 @@ TEST_F(VideoSizesTest, LargestWithinLimit)
     });
     prpl.verifyEvents(ServGotImEvent(
         connection, purpleUserName(0),
-        "<a href=\"" + link() + "\">video.mp4 [video/mp4]</a>\n" + sizeLinks() + "\ncaption",
+        "<a href=\"" + link() + "\">video.mp4 [video/mp4, 1920×1080]</a>\n" + sizeLinks() + "\ncaption",
         PURPLE_MESSAGE_RECV, date
     ));
 }
@@ -238,10 +238,10 @@ TEST_F(VideoSizesTest, UnknownSize)
     // ...whose link says no size
     prpl.verifyEvents(ServGotImEvent(
         connection, purpleUserName(0),
-        "<a href=\"" + link() + "\">video.mp4 [video/mp4]</a>\n"
+        "<a href=\"" + link() + "\">video.mp4 [video/mp4, 1920×1080]</a>\n"
         "<a href=\"" + link() + "/a12\">854×480, purple_str_size_to_units</a> · "
         "<a href=\"" + link() + "/a11\">1280×720 (h265)</a> · "
-        "<a href=\"" + link() + "/v\">1920×1080, purple_str_size_to_units</a>\ncaption",
+        "<a href=\"" + link() + "/v\">1920×1080 (original), purple_str_size_to_units</a>\ncaption",
         PURPLE_MESSAGE_RECV, date
     ));
 }
@@ -276,10 +276,10 @@ TEST_F(VideoSizesTest, SmallestUnknownSize)
     });
     prpl.verifyEvents(ServGotImEvent(
         connection, purpleUserName(0),
-        "<a href=\"" + link() + "\">video.mp4 [video/mp4]</a>\n"
+        "<a href=\"" + link() + "\">video.mp4 [video/mp4, 1920×1080]</a>\n"
         "<a href=\"" + link() + "/a12\">854×480</a> · "
         "<a href=\"" + link() + "/a11\">1280×720 (h265), purple_str_size_to_units</a> · "
-        "<a href=\"" + link() + "/v\">1920×1080, purple_str_size_to_units</a>\ncaption",
+        "<a href=\"" + link() + "/v\">1920×1080 (original), purple_str_size_to_units</a>\ncaption",
         PURPLE_MESSAGE_RECV, date
     ));
 }
