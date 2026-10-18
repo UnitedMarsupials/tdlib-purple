@@ -9,6 +9,8 @@
 - **An account option shows messages from channels and groups you have not joined.**
 - **Reactions are shown, custom emoji among them, as messages from whoever reacted.**
 - **In Pidgin, a file is linked to its message and fetched when clicked, so the message is shown whole at once.**
+- **Custom emoji are shown as pictures in Pidgin, in messages as in reactions.**
+- **In Pidgin, each size of a photo or video has a link of its own, and an account option chooses which video to prefetch.**
 
 ### Fixes
 
@@ -21,6 +23,7 @@
 - **Photos and quotes in messages fetched to catch up with a chat no longer arrive out of order.**
 - **A quote of a channel's post names the channel, not "Unknown user".**
 - **"Show invite link" shows a public chat's t.me address.**
+- **A photo is shown in a size within the auto-download limit, where it has one, rather than asked about.**
 - **Temporary files of images sent and of downloads are no longer left behind.**
 
 ### Translations

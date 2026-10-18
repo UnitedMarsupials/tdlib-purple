@@ -6,6 +6,7 @@
 #include <stdarg.h>
 #include <algorithm>
 #include <vector>
+#include <map>
 #include <gtest/gtest.h>
 
 struct AccountInfo {
@@ -757,6 +758,56 @@ void *purple_notify_message(void *handle, PurpleNotifyMsgType type,
 {
     // TODO event
     return NULL;
+}
+
+// Custom smileys, as Pidgin has them; other front-ends turn them down
+static bool g_customSmileys = false;
+
+extern "C++" void setCustomSmileys(bool supported)
+{
+    g_customSmileys = supported;
+}
+
+gboolean purple_conv_custom_smiley_add(PurpleConversation *conv, const char *smile,
+                                       const char *cksum_type, const char *chksum, gboolean remote)
+{
+    if (!g_customSmileys)
+        return FALSE;
+    EVENT(CustomSmileyAddEvent, conv->name, smile);
+    return TRUE;
+}
+
+void purple_conv_custom_smiley_write(PurpleConversation *conv, const char *smile,
+                                     const guchar *data, gsize size)
+{
+    EVENT(CustomSmileyWriteEvent, conv->name, smile, size);
+}
+
+void purple_conv_custom_smiley_close(PurpleConversation *conv, const char *smile)
+{
+    EVENT(CustomSmileyCloseEvent, conv->name, smile);
+}
+
+static std::map<std::pair<PurpleConversation *, std::string>, gpointer> g_conversationData;
+
+extern "C++" void clearConversationData()
+{
+    g_conversationData.clear();
+}
+
+void purple_conversation_set_data(PurpleConversation *conv, const char *key, gpointer data)
+{
+    g_conversationData[std::make_pair(conv, std::string(key))] = data;
+}
+
+gpointer purple_conversation_get_data(PurpleConversation *conv, const char *key)
+{
+    auto it = g_conversationData.find(std::make_pair(conv, std::string(key)));
+    return (it != g_conversationData.end()) ? it->second : NULL;
+}
+
+void purple_imgstore_unref_by_id(int id)
+{
 }
 
 void *purple_notify_uri(void *handle, const char *uri)

@@ -115,6 +115,9 @@ object_ptr<messageVideo> makeMessageVideo(object_ptr<video> &&video_,
                                           object_ptr<photo> &&cover_, std::int32_t start_timestamp_,
                                           object_ptr<formattedText> &&caption_,
                                           bool show_caption_above_media_, bool has_spoiler_, bool is_secret_);
+object_ptr<textEntity> makeTextEntity(std::int32_t offset, std::int32_t length, object_ptr<TextEntityType> &&type);
+object_ptr<alternativeVideo> makeAlternativeVideo(std::int64_t id, std::int32_t width, std::int32_t height,
+                                                  const std::string &codec, object_ptr<file> &&video);
 object_ptr<messages> makeMessages(std::vector<object_ptr<message>> &&list);
 object_ptr<updateChatTitle> makeUpdateChatTitle(std::int64_t chatId, const std::string &title);
 object_ptr<error> makeError(std::int32_t code, const std::string &message);

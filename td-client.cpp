@@ -7,6 +7,7 @@
 #include "call.h"
 #include "secret-chat.h"
 #include "sticker.h"
+#include "media-variants.h"
 #include "receiving.h"
 #include <unistd.h>
 #include <stdlib.h>
@@ -918,11 +919,16 @@ void PurpleTdClient::onChatListReady()
 // may well be starting still
 enum { OPEN_FILE_GRACE_SECONDS = 5 };
 
-void PurpleTdClient::openMessageFile(ChatId chatId, MessageId messageId)
+static std::string makeOpenedFileKey(ChatId chatId, MessageId messageId, const std::string &variant)
 {
-    auto   key = std::make_pair(chatId, messageId);
-    auto   it  = m_openedFiles.find(key);
-    time_t now = time(NULL);
+    return std::to_string(chatId.value()) + '/' + std::to_string(messageId.value()) + '/' + variant;
+}
+
+void PurpleTdClient::openMessageFile(ChatId chatId, MessageId messageId, const std::string &variant)
+{
+    std::string key = makeOpenedFileKey(chatId, messageId, variant);
+    auto        it  = m_openedFiles.find(key);
+    time_t      now = time(NULL);
     if ((it != m_openedFiles.end()) &&
         (it->second.inProgress || (now - it->second.openedAt < OPEN_FILE_GRACE_SECONDS)))
     {
@@ -937,16 +943,18 @@ void PurpleTdClient::openMessageFile(ChatId chatId, MessageId messageId)
     request->chat_id_    = chatId.value();
     request->message_id_ = messageId.value();
     m_transceiver.sendQuery(std::move(request),
-        [this, chatId, messageId](uint64_t, TdObjectPtr object) {
-            openMessageFileResponse(chatId, messageId, std::move(object));
+        [this, chatId, messageId, variant](uint64_t, TdObjectPtr object) {
+            openMessageFileResponse(chatId, messageId, variant, std::move(object));
         });
 }
 
-void PurpleTdClient::openMessageFileResponse(ChatId chatId, MessageId messageId, TdObjectPtr object)
+void PurpleTdClient::openMessageFileResponse(ChatId chatId, MessageId messageId, const std::string &variant,
+                                             TdObjectPtr object)
 {
+    std::string key = makeOpenedFileKey(chatId, messageId, variant);
     const td::td_api::chat *chat = m_data.getChat(chatId);
     if (!chat || !object || (object->get_id() != td::td_api::message::ID)) {
-        finishOpeningFile(chatId, messageId, std::string(), std::string(), getDisplayedError(object));
+        finishOpeningFile(chatId, key, std::string(), std::string(), getDisplayedError(object));
         return;
     }
 
@@ -954,15 +962,20 @@ void PurpleTdClient::openMessageFileResponse(ChatId chatId, MessageId messageId,
     makeFullMessage(*chat, td::move_tl_object_as<td::td_api::message>(object), fullMessage, m_data);
     FileInfo fileInfo;
     getFileFromMessage(fullMessage, fileInfo);
+    // One of the sizes of a photo or video, where the link names one
+    if (!variant.empty()) {
+        fileInfo.file = fullMessage.message->content_ ?
+                        findMediaVariant(*fullMessage.message->content_, variant, fileInfo.description) : nullptr;
+    }
     if (!fileInfo.file) {
         // Unlikely error message not worth translating
         // TRANSLATOR: In-chat error message, the reason in "Could not open {0}: {1}".
-        finishOpeningFile(chatId, messageId, fileInfo.description, std::string(), _("no file in the message"));
+        finishOpeningFile(chatId, key, fileInfo.description, std::string(), _("no file in the message"));
         return;
     }
 
     if (fileInfo.file->local_ && fileInfo.file->local_->is_downloading_completed_) {
-        finishOpeningFile(chatId, messageId, fileInfo.description, fileInfo.file->local_->path_, std::string());
+        finishOpeningFile(chatId, key, fileInfo.description, fileInfo.file->local_->path_, std::string());
         return;
     }
 
@@ -978,39 +991,38 @@ void PurpleTdClient::openMessageFileResponse(ChatId chatId, MessageId messageId,
     downloadReq->limit_       = 0;
     downloadReq->synchronous_ = true;
     m_transceiver.sendQuery(std::move(downloadReq),
-        [this, chatId, messageId, description](uint64_t, TdObjectPtr object) {
-            openDownloadedFile(chatId, messageId, description, std::move(object));
+        [this, chatId, key, description](uint64_t, TdObjectPtr object) {
+            openDownloadedFile(chatId, key, description, std::move(object));
         });
 }
 
-void PurpleTdClient::openDownloadedFile(ChatId chatId, MessageId messageId, const std::string &description,
+void PurpleTdClient::openDownloadedFile(ChatId chatId, const std::string &key, const std::string &description,
                                         TdObjectPtr object)
 {
     const td::td_api::file *file = nullptr;
     if (object && (object->get_id() == td::td_api::file::ID))
         file = static_cast<const td::td_api::file *>(object.get());
     if (file && file->local_ && file->local_->is_downloading_completed_)
-        finishOpeningFile(chatId, messageId, description, file->local_->path_, std::string());
+        finishOpeningFile(chatId, key, description, file->local_->path_, std::string());
     else
-        finishOpeningFile(chatId, messageId, description, std::string(), getDisplayedError(object));
+        finishOpeningFile(chatId, key, description, std::string(), getDisplayedError(object));
 }
 
-void PurpleTdClient::finishOpeningFile(ChatId chatId, MessageId messageId, const std::string &description,
+void PurpleTdClient::finishOpeningFile(ChatId chatId, const std::string &key, const std::string &description,
                                        const std::string &path, const std::string &error)
 {
     if (!path.empty()) {
         // From now on, the grace period runs
-        m_openedFiles[std::make_pair(chatId, messageId)] = OpenedFile{false, time(NULL)};
+        m_openedFiles[key] = OpenedFile{false, time(NULL)};
         std::string uri = makeFileUri(path);
         purple_debug_misc(config::pluginId, "Opening %s\n", uri.c_str());
         purple_notify_uri(purple_account_get_connection(m_account), uri.c_str());
         return;
     }
 
-    purple_debug_warning(config::pluginId, "Cannot open file of message %" G_GINT64_FORMAT ": %s\n",
-                         messageId.value(), error.c_str());
+    purple_debug_warning(config::pluginId, "Cannot open file of %s: %s\n", key.c_str(), error.c_str());
     // Nothing was opened, so another click may try again at once
-    m_openedFiles.erase(std::make_pair(chatId, messageId));
+    m_openedFiles.erase(key);
     const td::td_api::chat *chat = m_data.getChat(chatId);
     if (chat) {
         // TRANSLATOR: In-chat error message. Arguments are a file *type* or name, and the reason.

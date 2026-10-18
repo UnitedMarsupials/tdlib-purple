@@ -1,6 +1,7 @@
 #include "fixture.h"
 #include "libpurple-mock.h"
 #include "buildopt.h"
+#include "receiving.h"
 
 class FileTransferTest: public CommTest {};
 
@@ -1477,4 +1478,21 @@ TEST_F(FileTransferTest, ActiveDownloadAtLogout_StuckAtStart)
     pluginInfo().close(connection);
     prpl.verifyEvents(XferLocalCancelEvent(tempFileName));
     ASSERT_FALSE(g_file_test(tempFileName.c_str(), G_FILE_TEST_EXISTS));
+}
+
+TEST_F(FileTransferTest, PhotoSizeWithinLimit)
+{
+    purple_account_set_string(account, "media-size-threshold", "0.5");
+    login();
+
+    // Listed with one above the limit first
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(makeFile(1, 700 * 1024, "", "big"), 1280, 960));
+    sizes.push_back(makePhotoSize(makeFile(2, 100 * 1024, "", "small"), 320, 240));
+    object_ptr<messagePhoto> content = makeMessagePhoto(makePhotoWithSizes(std::move(sizes)),
+                                                        makeFormattedText(""), false, false, false);
+
+    const file *selected = selectPhotoSize(account, *content);
+    ASSERT_NE(nullptr, selected);
+    ASSERT_EQ(2, selected->id_);
 }

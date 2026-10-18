@@ -4,9 +4,12 @@
 #include "purple-info.h"
 #include "file-transfer.h"
 #include "sticker.h"
+#include "custom-emoji.h"
+#include "media-variants.h"
 #include "config.h"
 #include "call.h"
 #include <algorithm>
+#include <tuple>
 #include <fmt/format.h>
 
 enum {
@@ -324,11 +327,32 @@ std::string makeNoticeWithSender(const td::td_api::chat &chat, const TgMessageIn
     return prefix + noticeText;
 }
 
-std::string getMessageText(const td::td_api::formattedText &text)
+std::string getMessageText(const td::td_api::formattedText &text,
+                           const std::map<int64_t, std::string> *smileys)
 {
-    char *newText = purple_markup_escape_text(text.text_.c_str(), text.text_.size());
-    std::string result(newText);
-    g_free(newText);
+    // The stretches of text that custom emoji cover, and what goes there instead
+    std::vector<std::tuple<size_t, size_t, std::string>> replaced;
+    if (smileys)
+        for (const auto &entity: text.entities_)
+            if (entity && entity->type_ && (entity->type_->get_id() == td::td_api::textEntityTypeCustomEmoji::ID)) {
+                auto it = smileys->find(static_cast<const td::td_api::textEntityTypeCustomEmoji &>(*entity->type_).custom_emoji_id_);
+                if (it != smileys->end())
+                    replaced.emplace_back(utf16OffsetToBytes(text.text_, entity->offset_),
+                                          utf16OffsetToBytes(text.text_, entity->offset_ + entity->length_),
+                                          it->second);
+            }
+    std::sort(replaced.begin(), replaced.end());
+
+    std::string result;
+    size_t      position = 0;
+    for (const auto &item: replaced) {
+        if (std::get<0>(item) < position)
+            continue;
+        result  += escapeForDisplay(text.text_.substr(position, std::get<0>(item) - position));
+        result  += escapeForDisplay(std::get<2>(item));
+        position = std::get<1>(item);
+    }
+    result += escapeForDisplay(text.text_.substr(position));
     return result;
 }
 
@@ -574,6 +598,35 @@ static std::string quoteMessage(const td::td_api::message *message, TdAccountDat
                          {escapeForDisplay(originalName), escapeForDisplay(text)});
 }
 
+// The name a private chat's conversation goes by
+static std::string getPrivateChatPurpleName(TdAccountData &account, const td::td_api::user &user)
+{
+    std::string userName = getPurpleBuddyName(user);
+
+    // If there is no buddy in the buddy list, libpurple won't be able to translate buddy name
+    // to alias, so use display name instead of idXXXXXXXXX
+    if (!purple_find_buddy(account.purpleAccount, userName.c_str()))
+        userName = account.getDisplayName(user);
+    return userName;
+}
+
+PurpleConversation *getMessageConversation(TdAccountData &account, const td::td_api::chat &chat)
+{
+    const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
+    if (privateUser)
+        return getImConversation(account.purpleAccount, getPrivateChatPurpleName(account, *privateUser).c_str());
+
+    SecretChatId secretChatId = getSecretChatId(chat);
+    if (secretChatId.valid())
+        return getImConversation(account.purpleAccount, getSecretChatBuddyName(secretChatId).c_str());
+
+    if (getBasicGroupId(chat).valid() || getSupergroupId(chat).valid()) {
+        PurpleConvChat *conv = getChatConversation(account, chat, account.getPurpleChatId(getId(chat)));
+        return conv ? purple_conv_chat_get_conversation(conv) : NULL;
+    }
+    return NULL;
+}
+
 void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const TgMessageInfo &message,
                      const char *text, const char *notification, uint32_t extraFlags)
 {
@@ -602,12 +655,7 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
 
     const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
     if (privateUser) {
-        std::string userName = getPurpleBuddyName(*privateUser);
-
-        // If there is no buddy in the buddy list, libpurple won't be able to translate buddy name
-        // to alias, so use display name instead of idXXXXXXXXX
-        if (!purple_find_buddy(account.purpleAccount, userName.c_str()))
-            userName = account.getDisplayName(*privateUser);
+        std::string userName = getPrivateChatPurpleName(account, *privateUser);
         showMessageTextIm(account, userName.c_str(), text, notification, message.timestamp, flags);
     }
 
@@ -659,6 +707,8 @@ static void showDownloadedImage(const td::td_api::chat &chat, TgMessageInfo &mes
         text = makeInlineImageText(id);
     } else
         text = "<img src=\"" + escapeForDisplay(makeFileUri(filePath)) + "\">";
+    if (!message.mediaVariantLinks.empty())
+        text += "\n" + message.mediaVariantLinks;
 
     if (caption && *caption) {
         if (!text.empty())
@@ -749,6 +799,8 @@ static void showFileLink(const td::td_api::chat &chat, const TgMessageInfo &mess
     if (!preview.empty())
         text += preview + "\n";
     text += escapeForDisplay(fileDescription) + "</a>";
+    if (!message.mediaVariantLinks.empty())
+        text += "\n" + message.mediaVariantLinks;
     if (caption && *caption) {
         text += "\n";
         text += caption;
@@ -785,7 +837,13 @@ static void showTextMessage(const td::td_api::chat &chat, const TgMessageInfo &m
                             const td::td_api::messageText &text, TdAccountData &account)
 {
     if (text.text_) {
-        std::string displayText = getMessageText(*text.text_);
+        // Its custom emoji, as smileys of the conversation, which has to be there for them first
+        std::vector<CustomEmoji>       emoji;
+        std::map<int64_t, std::string> smileys;
+        getCustomEmoji(*text.text_, emoji);
+        if (!emoji.empty())
+            smileys = addCustomEmojiSmileys(account, getMessageConversation(account, chat), emoji);
+        std::string displayText = getMessageText(*text.text_, &smileys);
         showMessageText(account, chat, message, displayText.c_str(), NULL);
     }
 }
@@ -888,14 +946,22 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
         showFileLink(chat, fullMessage.messageInfo,
                      makeMessageLink(account.purpleAccount, getId(chat), fullMessage.messageInfo.id),
                      caption, fileDesc, preview, account);
-        // Fetched beforehand, within the limit, so that a click opens it at once
-        if (!(file.local_ && file.local_->is_downloading_completed_) &&
-            isSizeWithinLimit(fileSize, fullMessage.inlineFileSizeLimit))
+        // Fetched beforehand, within the limit, so that a click opens it at once; of a video in
+        // several sizes, the one the account asks for
+        const td::td_api::file *prefetch = &file;
+        if (fullMessage.message && fullMessage.message->content_ &&
+            (fullMessage.message->content_->get_id() == td::td_api::messageVideo::ID))
         {
+            std::vector<MediaVariant> variants;
+            getMediaVariants(*fullMessage.message->content_, variants);
+            prefetch = choosePrefetchVariant(account.purpleAccount, variants, fullMessage.inlineFileSizeLimit);
+        } else if (!isSizeWithinLimit(fileSize, fullMessage.inlineFileSizeLimit))
+            prefetch = nullptr;
+        if (prefetch && !(prefetch->local_ && prefetch->local_->is_downloading_completed_)) {
             purple_debug_misc(config::pluginId, "Fetching %s (file id %d) in the background\n",
-                              fileDesc.c_str(), (int)file.id_);
+                              fileDesc.c_str(), (int)prefetch->id_);
             auto request = td::td_api::make_object<td::td_api::downloadFile>();
-            request->file_id_     = file.id_;
+            request->file_id_     = prefetch->id_;
             request->priority_    = BACKGROUND_DOWNLOAD_PRIORITY;
             request->offset_      = 0;
             request->limit_       = 0;
@@ -934,19 +1000,23 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
         notice = makeNoticeWithSender(chat, fullMessage.messageInfo, notice.c_str(),
                                       account.purpleAccount);
 
-    // Notice means file isn't downloaded yet or is ignored. Either way, show caption as well.
-    // A thumbnail then starts the message, so it gets a line of its own, as a photo does.
+    // Notice means file isn't downloaded yet or is ignored. Either way, show caption as well, and
+    // the links to other sizes, which may be within reach. A thumbnail then starts the message, so
+    // it gets a line of its own, as a photo does.
     if (!notice.empty()) {
-        if (preview.empty())
+        const std::string &links = fullMessage.messageInfo.mediaVariantLinks;
+        if (preview.empty() && links.empty())
             showMessageText(account, chat, fullMessage.messageInfo, caption, notice.c_str());
         else {
-            std::string text = "\n" + preview;
+            std::string text = preview.empty() ? links : ("\n" + preview);
+            if (!preview.empty() && !links.empty())
+                text += "\n" + links;
             if (caption) {
                 text += "\n";
                 text += caption;
             }
             showMessageText(account, chat, fullMessage.messageInfo, text.c_str(), notice.c_str(),
-                            PURPLE_MESSAGE_IMAGES);
+                            preview.empty() ? 0 : PURPLE_MESSAGE_IMAGES);
         }
     }
 
@@ -1274,7 +1344,7 @@ const td::td_api::file *selectPhotoSize(PurpleAccount *account, const td::td_api
 {
     unsigned                     sizeLimit        = getAutoDownloadLimitKb(account);
     const td::td_api::photoSize *selectedSize     = nullptr;
-    bool                         selectedFileSize = 0;
+    unsigned                     selectedFileSize = 0;
     if (photo.photo_)
         for (const auto &newSize: photo.photo_->sizes_)
             if (newSize && newSize->photo_) {
@@ -1372,6 +1442,14 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
     messageInfo.type             = TgMessageInfo::Type::Other;
     messageInfo.incomingGroupchatSender = getIncomingGroupchatSenderPurpleName(chat, *message, account);
     messageInfo.anonymousChannelPost    = isAnonymousChannelPost(chat, *message);
+    // In Pidgin, links to each size a photo or video comes in, below it; here already, as a download
+    // may start, and finish, before the message is shown
+    if (messageLinksEnabled() && message->content_) {
+        std::vector<MediaVariant> variants;
+        getMediaVariants(*message->content_, variants);
+        messageInfo.mediaVariantLinks = makeMediaVariantLinks(account.purpleAccount, getId(chat), getId(*message),
+                                                              variants);
+    }
     messageInfo.timestamp        = message->date_;
     messageInfo.outgoing         = message->is_outgoing_;
     messageInfo.sentLocally      = (message->sending_state_ != nullptr);
@@ -1842,7 +1920,7 @@ static void showReactionText(TdAccountData &account, const td::td_api::chat &cha
 // Given the reaction as markup: the emoji, or the picture of a custom one
 using CustomEmojiShown = std::function<void(TdAccountData &account, const std::string &reaction, bool image)>;
 
-static bool canConvertAnimatedSticker(PurpleAccount *purpleAccount)
+bool canConvertAnimatedSticker(PurpleAccount *purpleAccount)
 {
 #ifndef NoLottie
     return canShowImages() && purple_account_get_bool(purpleAccount, AccountOptions::AnimatedStickers,
@@ -1902,14 +1980,24 @@ static void showCustomEmojiFile(TdAccountData &account, const std::string &path,
     shown(account, linkStart + fallback + linkEnd, false);
 }
 
-static void customEmojiResponse(TdAccountData &account, td::td_api::object_ptr<td::td_api::Object> object,
-                                CustomEmojiShown shown)
+static void customEmojiResponse(TdAccountData &account, ChatId chatId,
+                                td::td_api::object_ptr<td::td_api::Object> object, CustomEmojiShown shown)
 {
     const td::td_api::sticker *sticker = nullptr;
     if (object && (object->get_id() == td::td_api::stickers::ID)) {
         const auto &stickers = static_cast<const td::td_api::stickers &>(*object);
         if (!stickers.stickers_.empty())
             sticker = stickers.stickers_.front().get();
+    }
+
+    // A smiley of the conversation, where it can be one: shown at once, its picture following
+    const td::td_api::chat *chat = account.getChat(chatId);
+    if (sticker && chat) {
+        std::string code = addCustomEmojiSmiley(account, getMessageConversation(account, *chat), *sticker);
+        if (!code.empty()) {
+            shown(account, escapeForDisplay(code), false);
+            return;
+        }
     }
 
     // The emoji it stands for will do, where the picture will not
@@ -1994,8 +2082,8 @@ static void showReaction(TdAccountData &account, const td::td_api::chat &chat, c
         auto request = td::td_api::make_object<td::td_api::getCustomEmojiStickers>();
         request->custom_emoji_ids_.push_back(customEmojiId);
         account.transceiver.sendQuery(std::move(request),
-            [&account, shown](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
-                customEmojiResponse(account, std::move(object), shown);
+            [&account, chatId, shown](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
+                customEmojiResponse(account, chatId, std::move(object), shown);
             });
         break;
     }
