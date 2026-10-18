@@ -8,6 +8,7 @@
 - **Locations, venues and live locations are shown as `geo:` links.**
 - **An account option shows messages from channels and groups you have not joined.**
 - **Reactions are shown, custom emoji among them, as messages from whoever reacted.**
+- **In Pidgin, a file is linked to its message and fetched when clicked, so the message is shown whole at once.**
 
 ### Fixes
 
@@ -15,6 +16,11 @@
 - **File links work in front-ends other than Pidgin.**
 - **Channels you are not a member of no longer open conversations.**
 - **Front-ends that show no pictures, such as BitlBee, get links to photos and stickers instead.**
+- **Notices in channels no longer name "Channel post" as though it were someone.**
+- **The tab of a channel you have not joined keeps its title.**
+- **Photos and quotes in messages fetched to catch up with a chat no longer arrive out of order.**
+- **A quote of a channel's post names the channel, not "Unknown user".**
+- **"Show invite link" shows a public chat's t.me address.**
 - **Temporary files of images sent and of downloads are no longer left behind.**
 
 ### Translations

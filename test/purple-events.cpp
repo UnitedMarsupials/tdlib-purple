@@ -39,7 +39,9 @@ static void compare(const AddChatEvent &actual, const AddChatEvent &expected)
     COMPARE(name);
     COMPARE(alias);
     COMPARE(account);
-    COMPARE(group);
+    // By name, so that a group yet to be made can be expected
+    ASSERT_EQ(std::string(expected.group ? expected.group->name : ""),
+              std::string(actual.group ? actual.group->name : ""));
     COMPARE(node);
 }
 
@@ -113,6 +115,11 @@ static void compare(const ConvSetTitleEvent &actual, const ConvSetTitleEvent &ex
 {
     COMPARE(name);
     COMPARE(newTitle);
+}
+
+static void compare(const NotifyUriEvent &actual, const NotifyUriEvent &expected)
+{
+    COMPARE(uri);
 }
 
 static void compare(const NotifyMessageEvent &actual, const NotifyMessageEvent &expected)
@@ -337,6 +344,7 @@ static void compareEvents(const PurpleEvent &actual, const PurpleEvent &expected
         C(ConversationWrite)
         C(ConvSetTitle)
         C(NotifyMessage)
+        C(NotifyUri)
         C(UserStatus)
         C(RequestInput)
         C(RequestAction)
@@ -484,6 +492,7 @@ std::string PurpleEvent::toString() const
     C(ConversationWrite)
     C(ConvSetTitle)
     C(NotifyMessage)
+    C(NotifyUri)
     C(UserStatus)
     C(RequestInput)
     C(RequestAction)

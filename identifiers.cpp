@@ -145,6 +145,11 @@ ChatId getChatId(const td::td_api::updateMessageUnreadReactions &update)
     return ChatId(update.chat_id_);
 }
 
+ChatId getChatId(const td::td_api::messageSenderChat &sender)
+{
+    return ChatId(sender.chat_id_);
+}
+
 BasicGroupId getBasicGroupId(const td::td_api::updateBasicGroupFullInfo &update)
 {
     return BasicGroupId(update.basic_group_id_);

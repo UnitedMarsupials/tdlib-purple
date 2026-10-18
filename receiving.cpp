@@ -16,7 +16,7 @@ enum {
 // The name is chosen by whoever sent the file and routinely contains spaces and other
 // characters a URI cannot carry literally, so the path has to be percent-encoded before
 // it is handed to a viewer.
-static std::string makeFileUri(const std::string &filePath)
+std::string makeFileUri(const std::string &filePath)
 {
     gchar *uri = g_filename_to_uri(filePath.c_str(), NULL, NULL);
     if (uri == NULL)
@@ -61,7 +61,7 @@ static std::string makeFileLinkTarget(const std::string &filePath)
 // title - reaches the conversation window, which libpurple renders as HTML. Escape it at
 // the point it enters that markup, or a value containing markup characters is mangled or
 // swallowed outright. Not for text going to purple_request_*, which Pidgin escapes itself.
-static std::string escapeForDisplay(const std::string &text)
+std::string escapeForDisplay(const std::string &text)
 {
     gchar *escaped = purple_markup_escape_text(text.c_str(), text.size());
     std::string result(escaped);
@@ -315,6 +315,9 @@ static void getShownContent(const td::td_api::MessageContent &content, ShownMess
 std::string makeNoticeWithSender(const td::td_api::chat &chat, const TgMessageInfo &message,
                                  const char *noticeText, PurpleAccount *account)
 {
+    // In a channel, "Channel post" says nothing a notice there does not
+    if (message.anonymousChannelPost)
+        return noticeText;
     std::string prefix = escapeForDisplay(getSenderDisplayName(chat, message, account));
     if (!prefix.empty())
         prefix += ": ";
@@ -327,6 +330,12 @@ std::string getMessageText(const td::td_api::formattedText &text)
     std::string result(newText);
     g_free(newText);
     return result;
+}
+
+unsigned getMessageWaitSeconds(const TgMessageInfo &message)
+{
+    enum { MESSAGE_WAIT_SECONDS = 1, HISTORY_WAIT_SECONDS = 5 };
+    return message.fromHistory ? HISTORY_WAIT_SECONDS : MESSAGE_WAIT_SECONDS;
 }
 
 std::string makeInlineImageText(int imgstoreId)
@@ -462,7 +471,20 @@ static std::string quoteMessage(const td::td_api::message *message, TdAccountDat
     std::string originalName;
     if (originalAuthor)
         originalName = account.getDisplayName(*originalAuthor);
-    else {
+    else if (message && message->sender_id_ &&
+             (message->sender_id_->get_id() == td::td_api::messageSenderChat::ID))
+    {
+        // Posted by a channel, or by a group in its own name: signed by its author, or else by the
+        // chat itself
+        const td::td_api::chat *senderChat = account.getChat(
+            getChatId(static_cast<const td::td_api::messageSenderChat &>(*message->sender_id_)));
+        if (!message->author_signature_.empty())
+            originalName = message->author_signature_;
+        else if (senderChat)
+            originalName = senderChat->title_;
+        else
+            originalName = _("Channel post");
+    } else {
         // message == NULL means it could not be fetched, or took too long to fetch
         // TRANSLATOR: In-line placeholder if the original author of a quote is unknown. Is at the beginning of the line if and only if you make it so, see "<b>&bt {} wrote:"...
         originalName = _("Unknown user");
@@ -698,10 +720,23 @@ static void showDownloadedSticker(const td::td_api::chat &chat, TgMessageInfo &m
     }
 }
 
+static void showFileLink(const td::td_api::chat &chat, const TgMessageInfo &message,
+                         const std::string &linkTarget, const char *caption,
+                         const std::string &fileDescription, const std::string &preview,
+                         TdAccountData &account);
+
 void showGenericFileInline(const td::td_api::chat &chat, const TgMessageInfo &message,
                            const std::string &filePath, const char *caption,
                            const std::string &fileDescription, const std::string &preview,
                            TdAccountData &account)
+{
+    showFileLink(chat, message, makeFileLinkTarget(filePath), caption, fileDescription, preview, account);
+}
+
+static void showFileLink(const td::td_api::chat &chat, const TgMessageInfo &message,
+                         const std::string &linkTarget, const char *caption,
+                         const std::string &fileDescription, const std::string &preview,
+                         TdAccountData &account)
 {
     // A video's thumbnail leads, so that the link to the video sits directly beneath the picture.
     // The picture is part of the link, although Pidgin 2.14 will only ever activate one from its
@@ -710,7 +745,7 @@ void showGenericFileInline(const td::td_api::chat &chat, const TgMessageInfo &me
     // picture belongs to the link costs nothing meanwhile, and is what a conversation widget
     // would have to be told in order to make it clickable.
     std::string text = preview.empty() ? "" : "\n";
-    text += "<a href=\"" + escapeForDisplay(makeFileLinkTarget(filePath)) + "\">";
+    text += "<a href=\"" + escapeForDisplay(linkTarget) + "\">";
     if (!preview.empty())
         text += preview + "\n";
     text += escapeForDisplay(fileDescription) + "</a>";
@@ -810,6 +845,13 @@ static void requestInlineDownload(const char *sender, const td::td_api::file &fi
                           _("_No"), ignoreInlineDownload);
 }
 
+// A file shown as a link to its message, rather than to the file, which the plugin opens when the
+// link is clicked; pictures, which are shown as they are, still need the file before they can be
+static bool linksToMessage(const IncomingMessage &fullMessage)
+{
+    return messageLinksEnabled() && (fullMessage.messageInfo.type == TgMessageInfo::Type::Other);
+}
+
 // The thumbnail fetched for a video, as markup for the conversation window; empty if there is none
 static std::string makePreviewImageText(const IncomingMessage &fullMessage)
 {
@@ -840,6 +882,28 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
     // A video's thumbnail goes inside the hyperlink where there is one (see showGenericFileInline);
     // where there is only a notice, it goes above the caption. Either way it precedes the caption.
     std::string preview = makePreviewImageText(fullMessage);
+
+    // Fetched and opened only when clicked, if it is not here by then, so it is no reason to wait
+    if (linksToMessage(fullMessage)) {
+        showFileLink(chat, fullMessage.messageInfo,
+                     makeMessageLink(account.purpleAccount, getId(chat), fullMessage.messageInfo.id),
+                     caption, fileDesc, preview, account);
+        // Fetched beforehand, within the limit, so that a click opens it at once
+        if (!(file.local_ && file.local_->is_downloading_completed_) &&
+            isSizeWithinLimit(fileSize, fullMessage.inlineFileSizeLimit))
+        {
+            purple_debug_misc(config::pluginId, "Fetching %s (file id %d) in the background\n",
+                              fileDesc.c_str(), (int)file.id_);
+            auto request = td::td_api::make_object<td::td_api::downloadFile>();
+            request->file_id_     = file.id_;
+            request->priority_    = BACKGROUND_DOWNLOAD_PRIORITY;
+            request->offset_      = 0;
+            request->limit_       = 0;
+            request->synchronous_ = false;
+            transceiver.sendQuery(std::move(request), nullptr);
+        }
+        return;
+    }
 
     if (file.local_ && file.local_->is_downloading_completed_) {
         autoDownload = true;
@@ -1023,27 +1087,48 @@ static bool showEditNotice(const td::td_api::chat &chat, IncomingMessage &fullMe
     FileInfo             fileInfo;
     getFileFromMessage(fullMessage, fileInfo);
 
+    // A channel's post signed by nobody has no sender to name, "Channel post" being no one who
+    // could edit it, so the notice says what was done, not who did it
+    bool anonymous = messageInfo.anonymousChannelPost;
+
     ShownLocation location;
     std::string   notice;
     bool          complete = true;
-    if (getShownLocation(content, location) && isStoppedLiveLocation(location))
-        // TRANSLATOR: In-chat notification. Arguments are a username, the time (or date and time) the message was sent at, as the conversation window shows it, and a hyperlink, showing the map coordinates last shared.
-        notice = formatMessage(_("{0} stopped sharing the live location from {1}: {2}"),
-                               {sender, sentAt, makeLocationLink(*location.location)});
-    else if (fullMessage.captionOnly && fileInfo.caption.empty())
-        // TRANSLATOR: In-chat notification. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
-        notice = formatMessage(_("{0} removed the caption of the message from {1}"), {sender, sentAt});
-    else if (fullMessage.captionOnly || (content.get_id() == td::td_api::messageText::ID)) {
+    if (getShownLocation(content, location) && isStoppedLiveLocation(location)) {
+        std::string link = makeLocationLink(*location.location);
+        if (anonymous)
+            // TRANSLATOR: In-chat notification in a channel. Arguments are the time (or date and time) the message was sent at, as the conversation window shows it, and a hyperlink, showing the map coordinates last shared.
+            notice = formatMessage(_("The live location from {0} is no longer shared: {1}"), {sentAt, link});
+        else
+            // TRANSLATOR: In-chat notification. Arguments are a username, the time (or date and time) the message was sent at, as the conversation window shows it, and a hyperlink, showing the map coordinates last shared.
+            notice = formatMessage(_("{0} stopped sharing the live location from {1}: {2}"),
+                                   {sender, sentAt, link});
+    } else if (fullMessage.captionOnly && fileInfo.caption.empty()) {
+        if (anonymous)
+            // TRANSLATOR: In-chat notification in a channel. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
+            notice = formatMessage(_("The caption of the message from {0} was removed"), sentAt);
+        else
+            // TRANSLATOR: In-chat notification. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
+            notice = formatMessage(_("{0} removed the caption of the message from {1}"), {sender, sentAt});
+    } else if (fullMessage.captionOnly || (content.get_id() == td::td_api::messageText::ID)) {
         const td::td_api::messageText *text = nullptr;
         if (content.get_id() == td::td_api::messageText::ID)
             text = static_cast<const td::td_api::messageText *>(&content);
         std::string newText = fullMessage.captionOnly ? fileInfo.caption :
                               (text && text->text_) ? getMessageText(*text->text_) : std::string();
-        // TRANSLATOR: In-chat notification. Arguments are a username, the time (or date and time) the message was sent at, as the conversation window shows it, and the message's new text.
-        notice = formatMessage(_("{0} edited the message from {1}: {2}"), {sender, sentAt, newText});
+        if (anonymous)
+            // TRANSLATOR: In-chat notification in a channel. Arguments are the time (or date and time) the message was sent at, as the conversation window shows it, and the message's new text.
+            notice = formatMessage(_("The message from {0} was edited: {1}"), {sentAt, newText});
+        else
+            // TRANSLATOR: In-chat notification. Arguments are a username, the time (or date and time) the message was sent at, as the conversation window shows it, and the message's new text.
+            notice = formatMessage(_("{0} edited the message from {1}: {2}"), {sender, sentAt, newText});
     } else {
-        // TRANSLATOR: In-chat notification, followed by the message as edited. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
-        notice = formatMessage(_("{0} edited the message from {1}:"), {sender, sentAt});
+        if (anonymous)
+            // TRANSLATOR: In-chat notification in a channel, followed by the message as edited. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
+            notice = formatMessage(_("The message from {0} was edited:"), sentAt);
+        else
+            // TRANSLATOR: In-chat notification, followed by the message as edited. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
+            notice = formatMessage(_("{0} edited the message from {1}:"), {sender, sentAt});
         complete = false;
     }
     showMessageText(account, chat, messageInfo, NULL, notice.c_str());
@@ -1286,6 +1371,7 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
     messageInfo.id               = getId(*message);
     messageInfo.type             = TgMessageInfo::Type::Other;
     messageInfo.incomingGroupchatSender = getIncomingGroupchatSenderPurpleName(chat, *message, account);
+    messageInfo.anonymousChannelPost    = isAnonymousChannelPost(chat, *message);
     messageInfo.timestamp        = message->date_;
     messageInfo.outgoing         = message->is_outgoing_;
     messageInfo.sentLocally      = (message->sending_state_ != nullptr);
@@ -1363,6 +1449,9 @@ static bool isFileMessageReady(const IncomingMessage &fullMessage, ChatId chatId
     const td::td_api::chat *chat = account.getChat(chatId);
 
     if (chat && isInlineDownload(fullMessage, content, *chat)) {
+        // A link to the message needs nothing but the message
+        if (linksToMessage(fullMessage))
+            return true;
         // File will be shown inline
         // Animated stickers are not ready until converted
         if (fullMessage.inlineDownloadComplete)
@@ -1529,7 +1618,8 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
         auto getMessageReq = td::td_api::make_object<td::td_api::getMessage>();
         getMessageReq->chat_id_    = chatId.value();
         getMessageReq->message_id_ = replyMessageId.value();
-        transceiver.sendQueryWithTimeout(std::move(getMessageReq), onFetchReply, 1);
+        transceiver.sendQueryWithTimeout(std::move(getMessageReq), onFetchReply,
+                                         getMessageWaitSeconds(fullMessage.messageInfo));
     }
 
     if (fullMessage.previewFileId && !fullMessage.previewFetchDone) {
@@ -1545,7 +1635,7 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
         transceiver.sendQueryWithTimeout(std::move(downloadReq),
             [&account, chatId, messageId](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
                 previewDownloadResponse(account, chatId, messageId, std::move(object));
-            }, 1);
+            }, getMessageWaitSeconds(fullMessage.messageInfo));
     }
 
     FileInfo fileInfo;
@@ -1562,7 +1652,7 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
                 thread->startThread();
             }
             // TODO: if animated stickers are disabled, fetch thumbnail instead
-        } else if (inlineDownloadNeedAutoDl(fullMessage, *fileInfo.file)) {
+        } else if (inlineDownloadNeedAutoDl(fullMessage, *fileInfo.file) && !linksToMessage(fullMessage)) {
             // TgMessageInfo on fullMessage has replyMessage=NULL which will be copied onto DownloadRequest.
             // If message leaves PendingMessageQueue while download is still active, there's probably
             // a replyMessage on IncomingMessage by then, and it needs to be moved over to DownloadRequest.
@@ -1941,6 +2031,7 @@ void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
 
     IncomingMessage fullMessage;
     makeFullMessage(chat, std::move(message), fullMessage, account);
+    fullMessage.messageInfo.fromHistory = (action == PendingMessageQueue::Prepend);
     queueMessage(account, chat, std::move(fullMessage), action);
 }
 

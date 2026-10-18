@@ -3,8 +3,12 @@
 
 #include "account-data.h"
 
+// TDLib's priorities run from 1, the lowest, to 32
 enum {
     FILE_DOWNLOAD_PRIORITY       = 1,
+    BACKGROUND_DOWNLOAD_PRIORITY = 1,
+    // Someone is waiting for it, having clicked on its link
+    OPEN_DOWNLOAD_PRIORITY       = 32,
 };
 
 bool saveImage(int id, char **fileName);

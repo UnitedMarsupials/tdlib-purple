@@ -11,6 +11,8 @@ public:
     guint addTimeout(guint interval, GSourceFunc function, gpointer data) override;
     void  cancelTimer(guint id) override;
     void  runTimeouts();
+    // Of the timers set and not yet run, in the order set
+    std::vector<guint> getTimeoutIntervals();
 
     // Check that given requests, and no others, have been received, and clear the queue
     uint64_t verifyRequest(const td::td_api::Function &request);
@@ -30,6 +32,7 @@ public:
 private:
     struct TimerInfo {
         guint       id;
+        guint       interval;
         GSourceFunc function;
         gpointer    data;
     };
@@ -73,6 +76,8 @@ object_ptr<photoSize> makePhotoSize(object_ptr<file> &&photo, unsigned width, un
 object_ptr<sticker> makeSticker(std::int32_t width_, std::int32_t height_,
                                 const std::string &emoji_, object_ptr<file> &&sticker_,
                                 object_ptr<thumbnail> &&thumbnail_ = nullptr);
+// The owner's status; its constructor differs between TDLib versions
+object_ptr<chatMemberStatusCreator> makeCreatorStatus();
 object_ptr<supergroup> makeSupergroup(std::int64_t id_, object_ptr<ChatMemberStatus> &&status_,
                                       std::int32_t member_count_);
 object_ptr<Object> getChatsNoChatsResponse();
@@ -110,6 +115,8 @@ object_ptr<messageVideo> makeMessageVideo(object_ptr<video> &&video_,
                                           object_ptr<photo> &&cover_, std::int32_t start_timestamp_,
                                           object_ptr<formattedText> &&caption_,
                                           bool show_caption_above_media_, bool has_spoiler_, bool is_secret_);
+object_ptr<messages> makeMessages(std::vector<object_ptr<message>> &&list);
+object_ptr<updateChatTitle> makeUpdateChatTitle(std::int64_t chatId, const std::string &title);
 object_ptr<error> makeError(std::int32_t code, const std::string &message);
 // A file Telegram has, downloaded here if it has a path
 object_ptr<file> makeFile(std::int32_t id, std::int64_t size, const std::string &path = "",

@@ -58,6 +58,7 @@ guint TestTransceiver::addTimeout(guint interval, GSourceFunc function, gpointer
 {
     m_timers.emplace_back();
     m_timers.back().id = m_nextTimerId;
+    m_timers.back().interval = interval;
     m_timers.back().function = function;
     m_timers.back().data = data;
 
@@ -69,6 +70,14 @@ void TestTransceiver::cancelTimer(guint id)
     m_timers.erase(std::remove_if(m_timers.begin(), m_timers.end(),
                                  [id](const TimerInfo &timer) { return (timer.id == id); }),
                    m_timers.end());
+}
+
+std::vector<guint> TestTransceiver::getTimeoutIntervals()
+{
+    std::vector<guint> result;
+    for (const TimerInfo &timer: m_timers)
+        result.push_back(timer.interval);
+    return result;
 }
 
 void TestTransceiver::runTimeouts()
@@ -744,6 +753,13 @@ object_ptr<sticker> makeSticker(std::int32_t width_, std::int32_t height_,
 
 // supergroup's username became a usernames object, and it has gained boost_level_ and a dozen
 // flags besides; only what the tests assert on is set here.
+object_ptr<chatMemberStatusCreator> makeCreatorStatus()
+{
+    auto result = make_object<chatMemberStatusCreator>();
+    result->is_member_ = true;
+    return result;
+}
+
 object_ptr<supergroup> makeSupergroup(std::int64_t id_, object_ptr<ChatMemberStatus> &&status_,
                                       std::int32_t member_count_)
 {
@@ -959,6 +975,22 @@ object_ptr<messagePhoto> makeMessagePhoto(object_ptr<photo> &&photo_, object_ptr
     result->show_caption_above_media_ = show_caption_above_media_;
     result->has_spoiler_              = has_spoiler_;
     result->is_secret_                = is_secret_;
+    return result;
+}
+
+object_ptr<messages> makeMessages(std::vector<object_ptr<message>> &&list)
+{
+    auto result = make_object<messages>();
+    result->total_count_ = list.size();
+    result->messages_    = std::move(list);
+    return result;
+}
+
+object_ptr<updateChatTitle> makeUpdateChatTitle(std::int64_t chatId, const std::string &title)
+{
+    auto result = make_object<updateChatTitle>();
+    result->chat_id_ = chatId;
+    result->title_   = title;
     return result;
 }
 
