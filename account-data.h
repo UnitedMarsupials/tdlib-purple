@@ -136,10 +136,10 @@ struct TgMessageInfo {
         Other
     };
     MessageId   id;
-    Type        type;
+    Type        type = Type::Other;
     std::string incomingGroupchatSender;
-    time_t      timestamp;
-    bool        outgoing;
+    time_t      timestamp = 0;
+    bool        outgoing = false;
     bool        sentLocally = false; // For outgoing messages, whether sent by this very client
     MessageId   repliedMessageId;
     td::td_api::object_ptr<td::td_api::message> repliedMessage;

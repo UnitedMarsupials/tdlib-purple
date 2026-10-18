@@ -40,6 +40,9 @@ env:
   WARNINGS: >-
     -Wall -Wextra -Wformat=2 -Wformat-signedness
     -Wno-unused-parameter -Wno-parentheses
+  SANITIZERS: >-
+    -fsanitize=address,undefined -fno-sanitize=vptr,function
+    -fno-sanitize-recover=undefined -fno-omit-frame-pointer
 
 jobs:
   lint:
@@ -66,6 +69,8 @@ jobs:
           BUILD: n/a
           TEST: ${{ steps.lint.outcome }}
           INSTALL: n/a
+          VALGRIND: n/a
+          SANITIZE: n/a
         run: sh .github/record.sh
 
       - uses: actions/upload-artifact@v7
@@ -94,6 +99,8 @@ jobs:
             compiler: ''
             options: ''
             experimental: false
+            sanitize: true
+            valgrind: true
           - name: Alpine x86_64 (clang++)
             runner: ubuntu-24.04
             platform: linux/amd64
@@ -101,6 +108,8 @@ jobs:
             compiler: clang
             options: ''
             experimental: false
+            sanitize: false
+            valgrind: true
           - name: Alpine x86_64 (g++, NoTranslations)
             runner: ubuntu-24.04
             platform: linux/amd64
@@ -108,6 +117,8 @@ jobs:
             compiler: ''
             options: -DNoTranslations=1
             experimental: false
+            sanitize: false
+            valgrind: true
           - name: Alpine x86 (g++)
             runner: ubuntu-24.04
             platform: linux/386
@@ -115,6 +126,8 @@ jobs:
             compiler: ''
             options: ''
             experimental: false
+            sanitize: false
+            valgrind: true
           - name: Alpine aarch64 (g++)
             runner: ubuntu-24.04-arm
             platform: linux/arm64
@@ -122,6 +135,8 @@ jobs:
             compiler: ''
             options: ''
             experimental: false
+            sanitize: true
+            valgrind: true
           # Under QEMU, unless the arm64 runner's CPU runs 32-bit code itself.
           - name: Alpine armv7 (g++, experimental)
             runner: ubuntu-24.04-arm
@@ -130,6 +145,8 @@ jobs:
             compiler: ''
             options: ''
             experimental: true
+            sanitize: false
+            valgrind: false
     defaults:
       run:
         shell: docker exec alpine sh -e {0}
@@ -158,7 +175,8 @@ jobs:
           sh .github/annotate.sh Setup apk add --no-cache \
               cmake samurai pkgconf gettext gettext-dev g++ ${{ matrix.compiler }} \
               pidgin-dev telegram-tdlib-dev telegram-tdlib-static openssl-dev zlib-dev \
-              fmt-dev rlottie-dev gtest-dev
+              fmt-dev rlottie-dev gtest-dev ${{ matrix.valgrind && 'valgrind' || '' }} \
+              ${{ matrix.sanitize && 'clang compiler-rt' || '' }}
           apk info -v telegram-tdlib-dev
 
       - name: Configure
@@ -179,6 +197,39 @@ jobs:
         id: test
         run: sh .github/annotate.sh Test cmake --build build --target run-tests
 
+      # The same tests again, under Valgrind: it finds reads of uninitialised
+      # memory, use after free and invalid accesses, as well as definite leaks,
+      # none of which the tests notice.  Slow, hence a step of its own (and
+      # none under QEMU).
+      - name: Valgrind
+        id: valgrind
+        if: matrix.valgrind
+        run: >-
+          sh .github/annotate.sh Valgrind
+          cmake -E chdir build/test
+          valgrind --error-exitcode=1 --leak-check=full
+          --suppressions=$PWD/.github/valgrind.supp
+          --errors-for-leak-kinds=definite ./tests
+
+      # And once more built with AddressSanitizer and UndefinedBehaviorSanitizer,
+      # which see what Valgrind cannot (out-of-range array indexes on the
+      # stack, signed overflow, a bool holding neither value).  gcc on Alpine
+      # has no sanitizer runtime, clang has (compiler-rt).  `vptr` is off
+      # because TDLib is built without RTTI, and `function` because libpurple's
+      # callbacks are called through a cast pointer type by design.  Leak
+      # detection is off because it cannot run in a container (Valgrind has
+      # looked for leaks).  Alpine has no sanitizer runtime for 32-bit x86.
+      - name: Sanitizers
+        id: sanitize
+        if: matrix.sanitize
+        run: |
+          sh .github/annotate.sh Sanitizers env CXX=clang++ \
+              cmake -G Ninja -S . -B build-san -DNoVoip=1 ${{ matrix.options }} \
+              -DCMAKE_CXX_FLAGS="${{ env.WARNINGS }} ${{ env.SANITIZERS }}"
+          sh .github/annotate.sh Sanitizers cmake --build build-san --target tests
+          sh .github/annotate.sh Sanitizers cmake -E chdir build-san/test \
+              env ASAN_OPTIONS=detect_leaks=0 ./tests
+
       - name: Install
         id: destdir
         run: >-
@@ -198,6 +249,8 @@ jobs:
           BUILD: ${{ steps.build.outcome }}
           TEST: ${{ steps.test.outcome }}
           INSTALL: ${{ steps.destdir.outcome }}
+          VALGRIND: ${{ steps.valgrind.outcome }}
+          SANITIZE: ${{ steps.sanitize.outcome }}
         run: sh .github/record.sh
 
       - uses: actions/upload-artifact@v7
@@ -218,25 +271,31 @@ jobs:
             os: freebsd
             version: '15.1'
             experimental: false
+            valgrind: true
+            sanitize: true
             prefix: /usr/local
             options: ''
             install: >-
               sudo pkg install -y cmake ninja pkgconf gettext-tools
-              libpurple tdlib libfmt rlottie googletest
+              libpurple tdlib libfmt rlottie googletest valgrind
           - name: FreeBSD 14.4
             os: freebsd
             version: '14.4'
             experimental: false
+            valgrind: true
+            sanitize: true
             prefix: /usr/local
             options: ''
             install: >-
               sudo pkg install -y cmake ninja pkgconf gettext-tools
-              libpurple tdlib libfmt rlottie googletest
+              libpurple tdlib libfmt rlottie googletest valgrind
           # No rlottie package, so no animated stickers.
           - name: OpenBSD 7.9 (experimental, NoLottie)
             os: openbsd
             version: '7.9'
             experimental: true
+            valgrind: false
+            sanitize: false
             prefix: /usr/local
             options: -DNoLottie=1
             install: >-
@@ -292,6 +351,36 @@ jobs:
           env LD_LIBRARY_PATH=${{ matrix.prefix }}/lib
           cmake --build build --target run-tests
 
+      # Valgrind and the sanitizers, as in the Linux jobs; clang is the base
+      # system's compiler here, and comes with the sanitizer runtimes.
+      - name: Valgrind
+        id: valgrind
+        if: matrix.valgrind
+        run: >-
+          sh .github/annotate.sh Valgrind
+          env LD_LIBRARY_PATH=${{ matrix.prefix }}/lib
+          cmake -E chdir build/test
+          valgrind --error-exitcode=1 --leak-check=full
+          --suppressions=$PWD/.github/valgrind.supp
+          --errors-for-leak-kinds=definite ./tests
+
+      - name: Sanitizers
+        id: sanitize
+        if: matrix.sanitize
+        run: |
+          sh .github/annotate.sh Sanitizers \
+              env CPATH=${{ matrix.prefix }}/include LIBRARY_PATH=${{ matrix.prefix }}/lib \
+              PKG_CONFIG_PATH=${{ matrix.prefix }}/lib/pkgconfig:${{ matrix.prefix }}/libdata/pkgconfig \
+              cmake -G Ninja -S . -B build-san -DNoVoip=1 ${{ matrix.options }} \
+              -DCMAKE_PREFIX_PATH=${{ matrix.prefix }} \
+              -DCMAKE_CXX_FLAGS="${{ env.WARNINGS }} ${{ env.SANITIZERS }}"
+          sh .github/annotate.sh Sanitizers \
+              env CPATH=${{ matrix.prefix }}/include LIBRARY_PATH=${{ matrix.prefix }}/lib \
+              cmake --build build-san --target tests
+          sh .github/annotate.sh Sanitizers \
+              cmake -E chdir build-san/test \
+              env LD_LIBRARY_PATH=${{ matrix.prefix }}/lib ASAN_OPTIONS=detect_leaks=0 ./tests
+
       - name: Install
         id: destdir
         run: >-
@@ -311,6 +400,8 @@ jobs:
           BUILD: ${{ steps.build.outcome }}
           TEST: ${{ steps.test.outcome }}
           INSTALL: ${{ steps.destdir.outcome }}
+          VALGRIND: ${{ steps.valgrind.outcome }}
+          SANITIZE: ${{ steps.sanitize.outcome }}
         run: sh .github/record.sh
 
       - uses: actions/upload-artifact@v7
