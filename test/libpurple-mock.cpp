@@ -610,9 +610,11 @@ const char *purple_conversation_get_title(const PurpleConversation *conv)
 
 void purple_conversation_set_title(PurpleConversation *conv, const char *title)
 {
+    // Duplicated first: the caller may pass the title it is replacing
+    char *replacement = strdup(title);
     free(conv->title);
-    conv->title = strdup(title);
-    EVENT(ConvSetTitleEvent, conv->name, title);
+    conv->title = replacement;
+    EVENT(ConvSetTitleEvent, conv->name, conv->title);
 }
 
 void purple_conversation_write(PurpleConversation *conv, const char *who,
