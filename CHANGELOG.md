@@ -25,6 +25,9 @@
 - **"Show invite link" shows a public chat's t.me address.**
 - **A photo is shown in a size within the auto-download limit, where it has one, rather than asked about.**
 - **Temporary files of images sent and of downloads are no longer left behind.**
+- **Animated stickers no longer write one element past the end of a palette array, and the
+  colours of a part of the picture that has no pixels are no longer left unset.**
+- **A download of a standard file no longer copies unset message fields.**
 
 ### Translations
 
@@ -33,6 +36,12 @@
 ### Build
 
 - **libwebp and libpng are no longer needed: stickers are decoded by the front-end's GdkPixbuf.**
+
+### Tests
+
+- **CI runs the tests under Valgrind** (Alpine x86_64, x86 and aarch64; FreeBSD), **and built with
+  AddressSanitizer and UBSan** (Alpine x86_64 and aarch64, and FreeBSD; Alpine has no sanitizer
+  runtime for 32-bit x86).
 
 ## 0.9.2 (2026-10-11)
 
@@ -75,9 +84,6 @@
 
 - **The test suite compiles and passes again**, against TDLib 1.8 — 128 tests, all green.
   It had not built since 1.7.9, and the two fixes above are bugs it found as soon as it ran.
-- **CI runs the tests under Valgrind** (Alpine x86_64, x86 and aarch64; FreeBSD), **and built with
-  AddressSanitizer and UBSan** (Alpine x86_64 and aarch64, and FreeBSD; Alpine has no sanitizer
-  runtime for 32-bit x86).
 
 ## 0.9.0 (2026-09-27)
 

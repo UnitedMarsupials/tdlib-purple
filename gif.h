@@ -791,7 +791,9 @@ static bool GifWriteFrame( GifWriter* writer, const uint8_t* image, uint32_t wid
     const uint8_t* oldImage = writer->firstFrame? NULL : writer->oldImage.get();
     writer->firstFrame = false;
 
-    GifPalette pal;
+    // Zeroed, because a part of the colour space that holds no pixels leaves its
+    // entries unset, and they are read when matching pixels and written out.
+    GifPalette pal = {};
     GifMakePalette((dither? NULL : oldImage), image, width, height, bitDepth, transparent, dither, &pal);
 
     if(dither) {

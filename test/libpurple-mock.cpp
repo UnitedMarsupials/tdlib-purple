@@ -610,6 +610,7 @@ const char *purple_conversation_get_title(const PurpleConversation *conv)
 
 void purple_conversation_set_title(PurpleConversation *conv, const char *title)
 {
+    free(conv->title);
     conv->title = strdup(title);
     EVENT(ConvSetTitleEvent, conv->name, title);
 }
@@ -1360,6 +1361,11 @@ void purple_blist_add_group(PurpleGroup *group, PurpleBlistNode *node)
 // Groups last for the run of the test case, like the rest of the buddy list
 void clearGroups()
 {
+    for (PurpleGroup *group: g_groups) {
+        g_hash_table_destroy(group->node.settings);
+        free(group->name);
+        delete group;
+    }
     g_groups.clear();
 }
 
