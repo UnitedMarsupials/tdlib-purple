@@ -77,8 +77,9 @@ std::string escapeForDisplay(const std::string &text)
 static std::string formatMessageTime(time_t timestamp)
 {
     time_t    now = time(NULL);
-    struct tm today = *localtime(&now);
-    struct tm sent  = *localtime(&timestamp);
+    struct tm today, sent;
+    localtime_r(&now, &today);
+    localtime_r(&timestamp, &sent);
 
     if ((sent.tm_year == today.tm_year) && (sent.tm_yday == today.tm_yday))
         return purple_time_format(&sent);
