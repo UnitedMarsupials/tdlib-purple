@@ -4,6 +4,7 @@
 #include "config.h"
 #include "format.h"
 #include "receiving.h"
+#include <algorithm>
 #include <set>
 #include <string.h>
 
@@ -113,13 +114,24 @@ public:
 
         for (uint32_t i = 0; i < totalBytes; i += 4) {
            unsigned char a = buffer[i+3];
+           // A GIF pixel is transparent or not at all: those more than half transparent become wholly so
+           if (transparent && (a < 0x80)) {
+               buffer[i+3] = 0;
+               continue;
+           }
            // compute only if alpha is non zero
            if (a) {
                unsigned char r = buffer[i+2];
                unsigned char g = buffer[i+1];
                unsigned char b = buffer[i];
 
-               if (!transparent && (a != 255)) { //un premultiply
+               if (transparent && (a != 255)) {
+                   // The rest are wholly opaque, in their own colour, which rlottie gives premultiplied
+                   buffer[i]   = (unsigned char) std::min(255, r * 255 / a);
+                   buffer[i+1] = (unsigned char) std::min(255, g * 255 / a);
+                   buffer[i+2] = (unsigned char) std::min(255, b * 255 / a);
+                   buffer[i+3] = 255;
+               } else if (!transparent && (a != 255)) { //un premultiply
                    unsigned char r2 = (unsigned char) ((float) bgColorR * ((float) (255 - a) / 255));
                    unsigned char g2 = (unsigned char) ((float) bgColorG * ((float) (255 - a) / 255));
                    unsigned char b2 = (unsigned char) ((float) bgColorB * ((float) (255 - a) / 255));
@@ -187,7 +199,8 @@ void StickerConversionThread::run()
     auto buffer = std::unique_ptr<uint32_t[]>(new uint32_t[w * h]);
     size_t frameCount = player->totalFrame();
 
-    GifBuilder builder(fd, w, h, UINT32_MAX);
+    // Transparent where the animation is, so that it shows on whatever background the conversation has
+    GifBuilder builder(fd, w, h, 0);
     for (size_t i = 0; i < frameCount ; i++) {
         rlottie::Surface surface(buffer.get(), w, h, w * 4);
         player->renderSync(i, surface);

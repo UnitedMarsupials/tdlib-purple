@@ -379,6 +379,16 @@ TEST_F(CustomEmojiReactionTest, Animated)
     // No GdkPixbuf loader for Lottie is known, so the plugin converts it, as it does stickers
 #ifndef NoLottie
     verifyReaction(linked(TEST_SOURCE_DIR "/test.tgs", lastImage()), true);
+    // ...as a GIF whose frames are transparent where the animation is, not on a white background:
+    // each one, so that it does not show through the next, is cleared to the background, which
+    // the transparent colour is
+    PurpleStoredImage *image = purple_imgstore_find_by_id(getLastImgstoreId());
+    ASSERT_NE(nullptr, image);
+    std::string gif(static_cast<const char *>(purple_imgstore_get_data(image)), purple_imgstore_get_size(image));
+    ASSERT_EQ("GIF89a", gif.substr(0, 6));
+    size_t control = gif.find("\x21\xF9\x04");
+    ASSERT_NE(std::string::npos, control);
+    ASSERT_EQ(0x09, (unsigned char)gif[control + 3]);
 #else
     verifyReaction(linked(TEST_SOURCE_DIR "/test.tgs", "\U0001F63A"), false);
 #endif
