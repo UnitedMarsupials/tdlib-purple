@@ -66,6 +66,7 @@ jobs:
           BUILD: n/a
           TEST: ${{ steps.lint.outcome }}
           INSTALL: n/a
+          VALGRIND: n/a
         run: sh .github/record.sh
 
       - uses: actions/upload-artifact@v7
@@ -94,6 +95,7 @@ jobs:
             compiler: ''
             options: ''
             experimental: false
+            valgrind: true
           - name: Alpine x86_64 (clang++)
             runner: ubuntu-24.04
             platform: linux/amd64
@@ -101,6 +103,7 @@ jobs:
             compiler: clang
             options: ''
             experimental: false
+            valgrind: true
           - name: Alpine x86_64 (g++, NoTranslations)
             runner: ubuntu-24.04
             platform: linux/amd64
@@ -108,6 +111,7 @@ jobs:
             compiler: ''
             options: -DNoTranslations=1
             experimental: false
+            valgrind: true
           - name: Alpine x86 (g++)
             runner: ubuntu-24.04
             platform: linux/386
@@ -115,6 +119,7 @@ jobs:
             compiler: ''
             options: ''
             experimental: false
+            valgrind: true
           - name: Alpine aarch64 (g++)
             runner: ubuntu-24.04-arm
             platform: linux/arm64
@@ -122,6 +127,7 @@ jobs:
             compiler: ''
             options: ''
             experimental: false
+            valgrind: true
           # Under QEMU, unless the arm64 runner's CPU runs 32-bit code itself.
           - name: Alpine armv7 (g++, experimental)
             runner: ubuntu-24.04-arm
@@ -130,6 +136,7 @@ jobs:
             compiler: ''
             options: ''
             experimental: true
+            valgrind: false
     defaults:
       run:
         shell: docker exec alpine sh -e {0}
@@ -158,7 +165,7 @@ jobs:
           sh .github/annotate.sh Setup apk add --no-cache \
               cmake samurai pkgconf gettext gettext-dev g++ ${{ matrix.compiler }} \
               pidgin-dev telegram-tdlib-dev telegram-tdlib-static openssl-dev zlib-dev \
-              fmt-dev rlottie-dev libwebp-dev libpng-dev gtest-dev
+              fmt-dev rlottie-dev libwebp-dev libpng-dev gtest-dev ${{ matrix.valgrind && 'valgrind' || '' }}
           apk info -v telegram-tdlib-dev
 
       - name: Configure
@@ -179,6 +186,18 @@ jobs:
         id: test
         run: sh .github/annotate.sh Test cmake --build build --target run-tests
 
+      # The same tests again, under Valgrind: it finds reads of uninitialised
+      # memory, use after free and invalid accesses, as well as definite leaks,
+      # none of which the tests notice.  Slow, hence a step of its own (and
+      # none under QEMU).
+      - name: Valgrind
+        id: valgrind
+        if: matrix.valgrind
+        run: >-
+          sh .github/annotate.sh Valgrind
+          valgrind --error-exitcode=1 --leak-check=full
+          --errors-for-leak-kinds=definite build/test/tests
+
       - name: Install
         id: destdir
         run: >-
@@ -198,6 +217,7 @@ jobs:
           BUILD: ${{ steps.build.outcome }}
           TEST: ${{ steps.test.outcome }}
           INSTALL: ${{ steps.destdir.outcome }}
+          VALGRIND: ${{ steps.valgrind.outcome }}
         run: sh .github/record.sh
 
       - uses: actions/upload-artifact@v7
@@ -311,6 +331,7 @@ jobs:
           BUILD: ${{ steps.build.outcome }}
           TEST: ${{ steps.test.outcome }}
           INSTALL: ${{ steps.destdir.outcome }}
+          VALGRIND: n/a
         run: sh .github/record.sh
 
       - uses: actions/upload-artifact@v7

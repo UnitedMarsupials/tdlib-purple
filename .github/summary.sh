@@ -18,24 +18,25 @@ mark() {
 
 echo '## Build and test'
 echo
-echo '| Job | Setup | Configure | Build | Test | Install |'
-echo '| --- | --- | --- | --- | --- | --- |'
+echo '| Job | Setup | Configure | Build | Test | Valgrind | Install |'
+echo '| --- | --- | --- | --- | --- | --- | --- |'
 
 for f in "$dir"/*/outcome.tsv; do
 	[ -f "$f" ] && cat "$f"
-done | sort | while IFS='	' read -r order name setup configure build test install; do
-	printf '| %s | %s | %s | %s | %s | %s |\n' "$name" \
+done | sort | while IFS='	' read -r order name setup configure build test install valgrind; do
+	printf '| %s | %s | %s | %s | %s | %s | %s |\n' "$name" \
 	    "$(mark "$setup")" "$(mark "$configure")" "$(mark "$build")" \
-	    "$(mark "$test")" "$(mark "$install")"
+	    "$(mark "$test")" "$(mark "$valgrind")" "$(mark "$install")"
 done
 
 if ! ls "$dir"/*/outcome.tsv >/dev/null 2>&1; then
-	echo '| (no job recorded an outcome) | | | | | |'
+	echo '| (no job recorded an outcome) | | | | | | |'
 fi
 
 echo
 echo 'Setup is booting the VM and installing packages; Configure is' \
     '`cmake`; Build is `ninja` for the plugin and for the test binary; Test' \
     'is `ninja run-tests` (for the translations, `po/lint_accelerators.py`);' \
+    'Valgrind is the same tests again under Valgrind, where it is available;' \
     'Install is `ninja install` into a scratch `DESTDIR`.  Jobs marked' \
     '*experimental* do not fail the run.'

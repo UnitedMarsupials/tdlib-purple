@@ -41,6 +41,7 @@
 
 - **The test suite compiles and passes again**, against TDLib 1.8 — 128 tests, all green.
   It had not built since 1.7.9, and the two fixes above are bugs it found as soon as it ran.
+- **CI runs the tests under Valgrind** on Alpine x86_64, x86 and aarch64.
 
 ## 0.9.0 (2026-09-27)
 
