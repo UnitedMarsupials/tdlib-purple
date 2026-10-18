@@ -287,6 +287,7 @@ static void getShownContent(const td::td_api::MessageContent &content, ShownMess
             break;
         }
         case td::td_api::messageLocation::ID:
+        case td::td_api::messageVenue::ID:
 #if TDLIB_API_LIVE_LOCATION
         case td::td_api::messageLiveLocation::ID:
 #endif

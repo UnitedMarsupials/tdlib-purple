@@ -145,6 +145,22 @@ TEST_F(ReactionTest, NoText)
                                      PURPLE_MESSAGE_RECV, 0));
 }
 
+TEST_F(ReactionTest, Venue)
+{
+    loginWithOneContact();
+    receive(make_object<messageVenue>(make_object<venue>(
+                make_object<td::td_api::location>(50.4501, 30.5234, 0),
+                "Mriya", "Khreshchatyk 1", "foursquare", "id", "food"
+            )),
+            "<b>Mriya</b>\nKhreshchatyk 1\n"
+            "Location: <a href=\"file://geo:50.450100,30.523400\">50.450100, 30.523400</a>");
+
+    react({{"\U0001F44D", 1, false, {userIds[0]}}});
+    prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0),
+                                     "reacted with \U0001F44D to location from " + messageTime(date) + ".",
+                                     PURPLE_MESSAGE_RECV, 0));
+}
+
 TEST_F(ReactionTest, NotAllNamed)
 {
     loginWithOneContact();
