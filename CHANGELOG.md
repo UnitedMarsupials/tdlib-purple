@@ -25,6 +25,7 @@
 - **"Show invite link" shows a public chat's t.me address.**
 - **A photo is shown in a size within the auto-download limit, where it has one, rather than asked about.**
 - **A video's file link gives its picture size, and the original among its sizes is marked as such.**
+- **A video's preview is the cover its sender chose, where there is one, rather than its first frame.**
 - **Temporary files of images sent and of downloads are no longer left behind.**
 
 ### Translations

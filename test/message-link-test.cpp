@@ -2,6 +2,7 @@
 #include "libpurple-mock.h"
 #include "tdlib-purple.h"
 #include "client-utils.h"
+#include "buildopt.h"
 
 // Files linked to by their messages, which the plugin fetches and opens when clicked, as it does
 // where the front-end lets it handle a scheme of its own: in Pidgin
@@ -303,6 +304,43 @@ TEST_F(VideoSizesTest, None)
     tgl.update(make_object<updateNewMessage>(makeVideoMessage()));
     tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
     verifyVideoMessage();
+}
+
+TEST_F(VideoSizesTest, CoverPreview)
+{
+    const int32_t thumbnailId = 1310;
+    const int32_t coverIds[3] = {1311, 1312, 1313};
+    purple_account_set_string(account, "prefetch-videos", "none");
+    loginWithOneContact();
+
+    // The thumbnail is the first frame, often a title card; the sender's chosen cover is shown instead,
+    // in the size nearest a thumbnail's
+    object_ptr<message> msg = makeVideoMessage();
+    auto &video = static_cast<messageVideo &>(*msg->content_);
+    auto thumb = make_object<thumbnail>();
+    thumb->format_ = make_object<thumbnailFormatJpeg>();
+    thumb->width_  = 320;
+    thumb->height_ = 180;
+    thumb->file_   = ::makeFile(thumbnailId, 2000, "/thumbnail.jpg");
+    video.video_->thumbnail_ = std::move(thumb);
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(::makeFile(coverIds[0], 1000), 90, 50));
+    sizes.push_back(makePhotoSize(::makeFile(coverIds[1], 20000), 320, 180));
+    sizes.push_back(makePhotoSize(::makeFile(coverIds[2], 200000), 1280, 720));
+    video.cover_ = makePhotoWithSizes(std::move(sizes));
+    tgl.update(make_object<updateNewMessage>(std::move(msg)));
+    tgl.verifyRequest(downloadFile(coverIds[1], 1, 0, 0, true));
+    prpl.verifyNoEvents();
+
+    tgl.reply(::makeFile(coverIds[1], 20000, TEST_SOURCE_DIR "/test.webp"));
+    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
+    prpl.verifyEvents(ServGotImEvent(
+        connection, purpleUserName(0),
+        "\n<a href=\"" + link() + "\"><img id=\"" + std::to_string(getLastImgstoreId()) + "\">\n"
+        "video.mp4 [video/mp4, 1920×1080]</a>\n" + sizeLinks() + "\ncaption",
+        (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES), date
+    ));
+    tgl.verifyNoRequests();
 }
 
 TEST_F(VideoSizesTest, OpenSize)
