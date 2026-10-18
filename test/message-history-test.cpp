@@ -161,7 +161,7 @@ TEST_F(MessageHistoryTest, CatchingUpWaitsLonger)
     object_ptr<message> reply = makeMessage(3, userIds[0], groupChatId, false, 3, makeTextMessage("3"));
     reply->reply_to_ = makeReplyTo(2);
     history.push_back(std::move(reply));
-    tgl.reply(make_object<messages>(history.size(), std::move(history)));
+    tgl.reply(makeMessages(std::move(history)));
     std::vector<uint64_t> requestIds = tgl.verifyRequests({
         make_object<getMessage>(groupChatId, 2),
         make_object<getChatHistory>(groupChatId, 3, 0, 30, false)
@@ -169,7 +169,10 @@ TEST_F(MessageHistoryTest, CatchingUpWaitsLonger)
     // Catching up, it can wait longer than a message just sent would
     ASSERT_EQ(std::vector<guint>{5}, tgl.getTimeoutIntervals());
 
-    tgl.reply(requestIds[1], make_object<messages>(0, std::vector<object_ptr<message>>()));
+    // The end of the backlog, which still waits for the quote
+    tgl.reply(requestIds[1], makeMessages({}));
+    prpl.verifyNoEvents();
+    tgl.verifyNoRequests();
     tgl.reply(requestIds[0], makeMessage(2, userIds[0], groupChatId, false, 2, makeTextMessage("2")));
     prpl.verifyEvents(
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),

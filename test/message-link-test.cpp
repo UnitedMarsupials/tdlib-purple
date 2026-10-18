@@ -30,21 +30,14 @@ protected:
 
 object_ptr<file> MessageLinkTest::makeFile(int32_t size, const std::string &path, bool downloaded)
 {
-    return make_object<file>(
-        fileId, size, size,
-        make_object<localFile>(path, true, true, false, downloaded, 0, downloaded ? size : 0, downloaded ? size : 0),
-        make_object<remoteFile>("beh", "bleh", false, true, size)
-    );
+    return ::makeFile(fileId, size, downloaded ? path : "");
 }
 
 object_ptr<message> MessageLinkTest::makeDocumentMessage(int32_t size, const std::string &path, bool downloaded)
 {
     return makeMessage(
         messageId, userIds[0], chatIds[0], false, date,
-        make_object<messageDocument>(
-            make_object<document>("video.mp4", "video/mp4", nullptr, nullptr, makeFile(size, path, downloaded)),
-            make_object<formattedText>("caption", std::vector<object_ptr<textEntity>>())
-        )
+        makeMessageDocument("video.mp4", "video/mp4", makeFile(size, path, downloaded), "caption")
     );
 }
 
@@ -85,7 +78,11 @@ TEST_F(MessageLinkTest, OpenDownloaded)
     loginWithOneContact();
     tgl.update(make_object<updateNewMessage>(makeDocumentMessage(10000, "/path/video.mp4", true)));
     tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
-    prpl.discardEvents();
+    prpl.verifyEvents(ServGotImEvent(
+        connection, purpleUserName(0),
+        "<a href=\"" + link() + "\">video.mp4 [video/mp4]</a>\ncaption",
+        PURPLE_MESSAGE_RECV, date
+    ));
 
     tgprpl_open_message_link(link().c_str());
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
@@ -104,7 +101,11 @@ TEST_F(MessageLinkTest, OpenNotDownloaded)
     loginWithOneContact();
     tgl.update(make_object<updateNewMessage>(makeDocumentMessage(655360, "", false)));
     tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
-    prpl.discardEvents();
+    prpl.verifyEvents(ServGotImEvent(
+        connection, purpleUserName(0),
+        "<a href=\"" + link() + "\">video.mp4 [video/mp4]</a>\ncaption",
+        PURPLE_MESSAGE_RECV, date
+    ));
 
     tgprpl_open_message_link(link().c_str());
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
@@ -118,6 +119,7 @@ TEST_F(MessageLinkTest, OpenNotDownloaded)
     // Clicked again while it downloads
     tgprpl_open_message_link(link().c_str());
     tgl.verifyNoRequests();
+    prpl.verifyNoEvents();
 
     tgl.reply(makeFile(655360, "/path/video.mp4", true));
     prpl.verifyEvents(NotifyUriEvent("file:///path/video.mp4"));
@@ -129,13 +131,17 @@ TEST_F(MessageLinkTest, MessageGone)
 
     tgprpl_open_message_link(link().c_str());
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
-    tgl.reply(make_object<error>(404, "Not Found"));
+    tgl.reply(makeError(404, "Not Found"));
     prpl.verifyEvents(
         NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
         ConversationWriteEvent(
         purpleUserName(0), purpleUserName(0), "Could not open the file: code 404 (Not Found)",
         PURPLE_MESSAGE_SYSTEM, 0
     ));
+
+    // Nothing was opened, so clicking again tries again
+    tgprpl_open_message_link(link().c_str());
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
 }
 
 TEST_F(MessageLinkTest, NotALink)

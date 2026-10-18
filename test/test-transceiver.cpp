@@ -978,6 +978,22 @@ object_ptr<messagePhoto> makeMessagePhoto(object_ptr<photo> &&photo_, object_ptr
     return result;
 }
 
+object_ptr<messages> makeMessages(std::vector<object_ptr<message>> &&list)
+{
+    auto result = make_object<messages>();
+    result->total_count_ = list.size();
+    result->messages_    = std::move(list);
+    return result;
+}
+
+object_ptr<updateChatTitle> makeUpdateChatTitle(std::int64_t chatId, const std::string &title)
+{
+    auto result = make_object<updateChatTitle>();
+    result->chat_id_ = chatId;
+    result->title_   = title;
+    return result;
+}
+
 object_ptr<error> makeError(std::int32_t code, const std::string &message)
 {
     auto result = make_object<error>();

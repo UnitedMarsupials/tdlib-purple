@@ -390,7 +390,7 @@ TEST_F(SupergroupTest, GetInviteLink)
     loginWithSupergroup();
     // Only those allowed to invite can make an invitation
     tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, makeCreatorStatus(), 2)));
-    prpl.discardEvents();
+    prpl.verifyNoEvents();
 
     PurpleChat *chat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
     ASSERT_NE(nullptr, chat);
@@ -440,7 +440,7 @@ TEST_F(SupergroupTest, GetInviteLink_Public)
     group->usernames_ = make_object<usernames>();
     group->usernames_->active_usernames_.push_back("somechannel");
     tgl.update(make_object<updateSupergroup>(std::move(group)));
-    prpl.discardEvents();
+    prpl.verifyNoEvents();
 
     PurpleChat *chat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
     ASSERT_NE(nullptr, chat);
@@ -690,15 +690,9 @@ TEST_F(SupergroupTest, ChannelPostNotice)
     loginWithSupergroup();
 
     std::vector<object_ptr<photoSize>> sizes;
-    sizes.push_back(makePhotoSize(make_object<file>(
-            fileId, 655360, 655360,
-            make_object<localFile>("", true, true, false, false, 0, 0, 0),
-            make_object<remoteFile>("beh", "bleh", false, true, 655360)
-        ), 640, 480));
+    sizes.push_back(makePhotoSize(makeFile(fileId, 655360), 640, 480));
     auto message = makeMessage(messageId, 0, groupChatId, false, date, makeMessagePhoto(
-        make_object<photo>(false, nullptr, std::move(sizes)),
-        make_object<formattedText>("caption", std::vector<object_ptr<textEntity>>()),
-        false, false, false
+        makePhotoWithSizes(std::move(sizes)), makeFormattedText("caption"), false, false, false
     ));
     message->is_channel_post_ = true;
     tgl.update(make_object<updateNewMessage>(std::move(message)));
@@ -735,7 +729,7 @@ TEST_F(SupergroupTest, ChannelPostEdited)
         ServGotChatEvent(connection, purpleChatId, "Channel post", "old", PURPLE_MESSAGE_RECV, date)
     );
 
-    tgl.update(make_object<updateMessageContent>(groupChatId, messageId, makeTextMessage("new")));
+    tgl.update(makeUpdateMessageContent(groupChatId, messageId, makeTextMessage("new")));
     tgl.verifyRequest(getMessage(groupChatId, messageId));
     auto edited = makeMessage(messageId, 0, groupChatId, false, date, makeTextMessage("new"));
     edited->is_channel_post_ = true;
@@ -876,13 +870,15 @@ TEST_F(SupergroupTest, UnjoinedChannelShownOnRequest)
     purple_conversation_autoset_title(conv);
     prpl.verifyEvents(ConvSetTitleEvent(groupChatPurpleName, groupChatTitle));
 
-    // Telegram's news of the chat, such as its title, leave the entry be
-    tgl.update(make_object<updateChatTitle>(groupChatId, groupChatTitle));
+    // Telegram's news of the chat leave the entry be, but for a new title, which it takes
+    const std::string newTitle = "Renamed channel";
+    tgl.update(makeUpdateChatTitle(groupChatId, newTitle));
     ASSERT_EQ(purpleChat, purple_blist_find_chat(account, groupChatPurpleName.c_str()));
-    prpl.verifyNoEvents();
+    prpl.verifyEvents(AliasChatEvent(groupChatPurpleName, newTitle));
+    tgl.verifyNoRequests();
 
     // Joined, it is ours to keep, and moves to where joined chats are
     tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusMember>(), 2)));
     ASSERT_FALSE(purple_blist_node_get_flags(&purpleChat->node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
-    prpl.verifyEvents(AddChatEvent(groupChatPurpleName, groupChatTitle, account, NULL, NULL));
+    prpl.verifyEvents(AddChatEvent(groupChatPurpleName, newTitle, account, NULL, NULL));
 }
