@@ -641,7 +641,7 @@ TEST_F(SupergroupTest, ForeignChannel)
         groupChatId, make_object<chatTypeSupergroup>(groupId, true), groupChatTitle,
         nullptr, 0, 0, 0
     )));
-    prpl.discardEvents();
+    prpl.verifyNoEvents();
 
     auto message = makeMessage(messageId, 0, groupChatId, false, date, makeTextMessage("Hello"));
     message->is_channel_post_ = true;
@@ -652,7 +652,7 @@ TEST_F(SupergroupTest, ForeignChannel)
     // ...until we join it
     tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusMember>(), 2)));
     tgl.update(makeUpdateChatListMain(groupChatId));
-    prpl.discardEvents();
+    prpl.verifyEvents(AddChatEvent(groupChatPurpleName, groupChatTitle, account, NULL, NULL));
     tgl.verifyRequests({
         make_object<getSupergroupFullInfo>(groupId),
         make_object<getSupergroupMembers>(groupId, make_object<supergroupMembersFilterRecent>(), 0, 200),
@@ -669,7 +669,7 @@ TEST_F(SupergroupTest, ForeignChannel)
 
     // ...and once we leave it, its posts are none of ours again
     tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusLeft>(), 2)));
-    prpl.discardEvents();
+    prpl.verifyNoEvents();
     message = makeMessage(messageId + 2, 0, groupChatId, false, date, makeTextMessage("Still here"));
     message->is_channel_post_ = true;
     tgl.update(make_object<updateNewMessage>(std::move(message)));
@@ -690,7 +690,7 @@ TEST_F(SupergroupTest, UnjoinedChannelShownOnRequest)
         groupChatId, make_object<chatTypeSupergroup>(groupId, true), groupChatTitle,
         nullptr, 0, 0, 0
     )));
-    prpl.discardEvents();
+    prpl.verifyNoEvents();
 
     auto message = makeMessage(messageId, 0, groupChatId, false, date, makeTextMessage("Hello"));
     message->is_channel_post_ = true;
@@ -701,4 +701,5 @@ TEST_F(SupergroupTest, UnjoinedChannelShownOnRequest)
         ConvSetTitleEvent(groupChatPurpleName, groupChatTitle),
         ServGotChatEvent(connection, purpleChatId, "Channel post", "Hello", PURPLE_MESSAGE_RECV, date)
     );
+    tgl.verifyNoRequests();
 }
