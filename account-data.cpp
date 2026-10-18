@@ -850,11 +850,12 @@ void TdAccountData::addTempFileUpload(ChatId chatId, int64_t messageId, const st
     saveTempFileUploads();
 }
 
-std::string TdAccountData::extractTempFileUpload(int64_t messageId)
+std::string TdAccountData::extractTempFileUpload(ChatId chatId, int64_t messageId)
 {
+    // A message id is only unique within its chat
     auto it = std::find_if(m_sentMessages.begin(), m_sentMessages.end(),
-                           [messageId](const SendMessageInfo &item) {
-                               return (item.messageId == messageId);
+                           [chatId, messageId](const SendMessageInfo &item) {
+                               return (item.chatId == chatId) && (item.messageId == messageId);
                            });
 
     std::string result;

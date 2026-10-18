@@ -157,10 +157,11 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         auto &sendSucceeded = static_cast<const td::td_api::updateMessageSendSucceeded &>(update);
         purple_debug_misc(config::pluginId, "Incoming update: message %" G_GINT64_FORMAT " send succeeded\n",
                           sendSucceeded.old_message_id_);
-        removeTempFile(sendSucceeded.old_message_id_);
-        if (sendSucceeded.message_)
+        if (sendSucceeded.message_) {
+            removeTempFile(getChatId(*sendSucceeded.message_), sendSucceeded.old_message_id_);
             m_data.renameShownMessage(getChatId(*sendSucceeded.message_), getOldMessageId(sendSucceeded),
                                       getId(*sendSucceeded.message_));
+        }
         break;
     }
 
@@ -180,7 +181,7 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         // Deleting a message that is still being sent cancels the sending, without another update
         if (deleteUpdate.is_permanent_ && !deleteUpdate.from_cache_)
             for (int64_t messageId: deleteUpdate.message_ids_)
-                removeTempFile(messageId);
+                removeTempFile(getChatId(deleteUpdate), messageId);
         deleteMessages(m_data, deleteUpdate);
         break;
     }
@@ -189,7 +190,8 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         auto &sendFailed = static_cast<const td::td_api::updateMessageSendFailed &>(update);
         purple_debug_misc(config::pluginId, "Incoming update: message %" G_GINT64_FORMAT " send failed\n",
                           sendFailed.old_message_id_);
-        removeTempFile(sendFailed.old_message_id_);
+        if (sendFailed.message_)
+            removeTempFile(getChatId(*sendFailed.message_), sendFailed.old_message_id_);
         notifySendFailed(sendFailed, m_data);
         // TODO notify in chat
         break;
@@ -2080,7 +2082,7 @@ void PurpleTdClient::checkTempFileUploads()
         getMessageReq->message_id_ = message.second;
         uint64_t requestId = m_transceiver.sendQuery(std::move(getMessageReq),
                                                      &PurpleTdClient::tempFileCheckResponse);
-        m_data.addPendingRequest<TempFileCheckRequest>(requestId, message.second);
+        m_data.addPendingRequest<TempFileCheckRequest>(requestId, message.first, message.second);
     }
 }
 
@@ -2106,12 +2108,12 @@ void PurpleTdClient::tempFileCheckResponse(uint64_t requestId, td::td_api::objec
         return;
     }
     // Gone, sent, or failed for good: nothing will read the file any more
-    removeTempFile(request->messageId);
+    removeTempFile(request->chatId, request->messageId);
 }
 
-void PurpleTdClient::removeTempFile(int64_t messageId)
+void PurpleTdClient::removeTempFile(ChatId chatId, int64_t messageId)
 {
-    std::string path = m_data.extractTempFileUpload(messageId);
+    std::string path = m_data.extractTempFileUpload(chatId, messageId);
     if (!path.empty()) {
         purple_debug_misc(config::pluginId, "Removing temporary file %s\n", path.c_str());
         remove(path.c_str());

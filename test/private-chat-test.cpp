@@ -847,6 +847,10 @@ TEST_F(PrivateChatTest, SendImageCancelled)
     ASSERT_EQ(std::to_string(chatIds[0]) + " " + std::to_string(messageId) + " " + tgl.getInputPhotoPath(0) + "\n",
               std::string(purple_account_get_string(account, "temp-image-uploads", "")));
 
+    // The same message id in another chat is another message
+    tgl.update(make_object<updateDeleteMessages>(chatIds[1], std::vector<int64_t>{messageId}, true, false));
+    ASSERT_TRUE(g_file_test(tgl.getInputPhotoPath(0).c_str(), G_FILE_TEST_EXISTS));
+
     // Deleted before the upload finished, which is the end of it as far as TDLib is concerned
     tgl.update(make_object<updateDeleteMessages>(chatIds[0], std::vector<int64_t>{messageId}, true, false));
     ASSERT_FALSE(g_file_test(tgl.getInputPhotoPath(0).c_str(), G_FILE_TEST_EXISTS));

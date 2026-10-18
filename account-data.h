@@ -113,10 +113,11 @@ public:
 // Checking whether TDLib still needs an image file sent in an earlier session
 class TempFileCheckRequest: public PendingRequest {
 public:
+    ChatId  chatId;
     int64_t messageId;
 
-    TempFileCheckRequest(uint64_t requestId, int64_t messageId)
-    : PendingRequest(requestId), messageId(messageId) {}
+    TempFileCheckRequest(uint64_t requestId, ChatId chatId, int64_t messageId)
+    : PendingRequest(requestId), chatId(chatId), messageId(messageId) {}
 };
 
 class UploadRequest: public PendingRequest {
@@ -426,7 +427,7 @@ public:
 
     const ContactRequest *     findContactRequest(UserId userId);
     void                       addTempFileUpload(ChatId chatId, int64_t messageId, const std::string &path);
-    std::string                extractTempFileUpload(int64_t messageId);
+    std::string                extractTempFileUpload(ChatId chatId, int64_t messageId);
     void                       loadTempFileUploads();
     void                       getTempFileUploads(std::vector<std::pair<ChatId, int64_t>> &messages);
     DownloadRequest *          findDownloadRequest(int32_t fileId);
