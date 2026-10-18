@@ -1,0 +1,12 @@
+# GLib's g_strerror() keeps the messages it has converted to UTF-8 in a
+# cache for the life of the process.  Valgrind on FreeBSD does not see a
+# pointer to one of them and calls it lost; the tests reach it through the
+# error path of g_file_get_contents() on a file that is not there.
+{
+   glib-g_strerror-cache
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   ...
+   fun:g_strerror
+}

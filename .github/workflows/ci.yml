@@ -41,7 +41,7 @@ env:
     -Wall -Wextra -Wformat=2 -Wformat-signedness
     -Wno-unused-parameter -Wno-parentheses
   SANITIZERS: >-
-    -fsanitize=address,undefined -fno-sanitize=vptr
+    -fsanitize=address,undefined -fno-sanitize=vptr,function
     -fno-sanitize-recover=undefined -fno-omit-frame-pointer
 
 jobs:
@@ -126,7 +126,7 @@ jobs:
             compiler: ''
             options: ''
             experimental: false
-            sanitize: true
+            sanitize: false
             valgrind: true
           - name: Alpine aarch64 (g++)
             runner: ubuntu-24.04-arm
@@ -208,14 +208,17 @@ jobs:
           sh .github/annotate.sh Valgrind
           cmake -E chdir build/test
           valgrind --error-exitcode=1 --leak-check=full
+          --suppressions=$PWD/.github/valgrind.supp
           --errors-for-leak-kinds=definite ./tests
 
       # And once more built with AddressSanitizer and UndefinedBehaviorSanitizer,
       # which see what Valgrind cannot (out-of-range array indexes on the
       # stack, signed overflow, a bool holding neither value).  gcc on Alpine
       # has no sanitizer runtime, clang has (compiler-rt).  `vptr` is off
-      # because TDLib is built without RTTI; leak detection is off because
-      # it cannot run in a container (Valgrind has looked for leaks).
+      # because TDLib is built without RTTI, and `function` because libpurple's
+      # callbacks are called through a cast pointer type by design.  Leak
+      # detection is off because it cannot run in a container (Valgrind has
+      # looked for leaks).  Alpine has no sanitizer runtime for 32-bit x86.
       - name: Sanitizers
         id: sanitize
         if: matrix.sanitize
@@ -358,6 +361,7 @@ jobs:
           env LD_LIBRARY_PATH=${{ matrix.prefix }}/lib
           cmake -E chdir build/test
           valgrind --error-exitcode=1 --leak-check=full
+          --suppressions=$PWD/.github/valgrind.supp
           --errors-for-leak-kinds=definite ./tests
 
       - name: Sanitizers

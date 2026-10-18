@@ -42,7 +42,8 @@
 - **The test suite compiles and passes again**, against TDLib 1.8 — 128 tests, all green.
   It had not built since 1.7.9, and the two fixes above are bugs it found as soon as it ran.
 - **CI runs the tests under Valgrind** (Alpine x86_64, x86 and aarch64; FreeBSD), **and built with
-  AddressSanitizer and UBSan** (the same, except for the clang++ and NoTranslations variants).
+  AddressSanitizer and UBSan** (Alpine x86_64 and aarch64, and FreeBSD; Alpine has no sanitizer
+  runtime for 32-bit x86).
 
 ## 0.9.0 (2026-09-27)
 
