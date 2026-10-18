@@ -337,7 +337,7 @@ void downloadFileInline(int32_t fileId, ChatId chatId, TgMessageInfo &message,
     transceiver.setQueryTimer(requestId,
                               [&transceiver, &account](uint64_t reqId, td::td_api::object_ptr<td::td_api::Object>) {
                                   handleLongInlineDownload(reqId, transceiver, account);
-                              }, 1, false);
+                              }, getMessageWaitSeconds(message), false);
 }
 
 static void updateDownloadProgress(const td::td_api::file &file, PurpleXfer *xfer, TdAccountData &account)

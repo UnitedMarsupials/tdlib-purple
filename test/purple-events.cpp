@@ -39,7 +39,9 @@ static void compare(const AddChatEvent &actual, const AddChatEvent &expected)
     COMPARE(name);
     COMPARE(alias);
     COMPARE(account);
-    COMPARE(group);
+    // By name, so that a group yet to be made can be expected
+    ASSERT_EQ(std::string(expected.group ? expected.group->name : ""),
+              std::string(actual.group ? actual.group->name : ""));
     COMPARE(node);
 }
 
@@ -115,6 +117,30 @@ static void compare(const ConvSetTitleEvent &actual, const ConvSetTitleEvent &ex
     COMPARE(newTitle);
 }
 
+static void compare(const CustomSmileyAddEvent &actual, const CustomSmileyAddEvent &expected)
+{
+    COMPARE(conversation);
+    COMPARE(code);
+}
+
+static void compare(const CustomSmileyWriteEvent &actual, const CustomSmileyWriteEvent &expected)
+{
+    COMPARE(conversation);
+    COMPARE(code);
+    COMPARE(size);
+}
+
+static void compare(const CustomSmileyCloseEvent &actual, const CustomSmileyCloseEvent &expected)
+{
+    COMPARE(conversation);
+    COMPARE(code);
+}
+
+static void compare(const NotifyUriEvent &actual, const NotifyUriEvent &expected)
+{
+    COMPARE(uri);
+}
+
 static void compare(const NotifyMessageEvent &actual, const NotifyMessageEvent &expected)
 {
     COMPARE(handle);
@@ -169,7 +195,10 @@ static void compare(const ServGotImEvent &actual, const ServGotImEvent &expected
     COMPARE(username);
     COMPARE(message);
     COMPARE(flags);
-    COMPARE(mtime);
+    // Of something that happened just now, rather than of a message
+    if (expected.mtime) {
+        COMPARE(mtime);
+    }
 }
 
 static void compare(const ServGotJoinedChatEvent &actual, const ServGotJoinedChatEvent &expected)
@@ -334,6 +363,10 @@ static void compareEvents(const PurpleEvent &actual, const PurpleEvent &expected
         C(ConversationWrite)
         C(ConvSetTitle)
         C(NotifyMessage)
+        C(NotifyUri)
+        C(CustomSmileyAdd)
+        C(CustomSmileyWrite)
+        C(CustomSmileyClose)
         C(UserStatus)
         C(RequestInput)
         C(RequestAction)
@@ -481,6 +514,10 @@ std::string PurpleEvent::toString() const
     C(ConversationWrite)
     C(ConvSetTitle)
     C(NotifyMessage)
+    C(NotifyUri)
+    C(CustomSmileyAdd)
+    C(CustomSmileyWrite)
+    C(CustomSmileyClose)
     C(UserStatus)
     C(RequestInput)
     C(RequestAction)

@@ -3,9 +3,11 @@
 account-data.cpp
 call.cpp
 client-utils.cpp
+custom-emoji.cpp
 file-transfer.cpp
 format.cpp
 identifiers.cpp
+media-variants.cpp
 purple-info.cpp
 receiving.cpp
 secret-chat.cpp

@@ -11,6 +11,8 @@ public:
     guint addTimeout(guint interval, GSourceFunc function, gpointer data) override;
     void  cancelTimer(guint id) override;
     void  runTimeouts();
+    // Of the timers set and not yet run, in the order set
+    std::vector<guint> getTimeoutIntervals();
 
     // Check that given requests, and no others, have been received, and clear the queue
     uint64_t verifyRequest(const td::td_api::Function &request);
@@ -26,9 +28,11 @@ public:
     void reply(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
 
     const std::string &getInputPhotoPath(unsigned index) { return m_inputPhotoPaths.at(index); }
+    void removeTempFiles();
 private:
     struct TimerInfo {
         guint       id;
+        guint       interval;
         GSourceFunc function;
         gpointer    data;
     };
@@ -72,6 +76,8 @@ object_ptr<photoSize> makePhotoSize(object_ptr<file> &&photo, unsigned width, un
 object_ptr<sticker> makeSticker(std::int32_t width_, std::int32_t height_,
                                 const std::string &emoji_, object_ptr<file> &&sticker_,
                                 object_ptr<thumbnail> &&thumbnail_ = nullptr);
+// The owner's status; its constructor differs between TDLib versions
+object_ptr<chatMemberStatusCreator> makeCreatorStatus();
 object_ptr<supergroup> makeSupergroup(std::int64_t id_, object_ptr<ChatMemberStatus> &&status_,
                                       std::int32_t member_count_);
 object_ptr<Object> getChatsNoChatsResponse();
@@ -109,6 +115,38 @@ object_ptr<messageVideo> makeMessageVideo(object_ptr<video> &&video_,
                                           object_ptr<photo> &&cover_, std::int32_t start_timestamp_,
                                           object_ptr<formattedText> &&caption_,
                                           bool show_caption_above_media_, bool has_spoiler_, bool is_secret_);
+object_ptr<textEntity> makeTextEntity(std::int32_t offset, std::int32_t length, object_ptr<TextEntityType> &&type);
+object_ptr<alternativeVideo> makeAlternativeVideo(std::int64_t id, std::int32_t width, std::int32_t height,
+                                                  const std::string &codec, object_ptr<file> &&video);
+object_ptr<messages> makeMessages(std::vector<object_ptr<message>> &&list);
+object_ptr<updateChatTitle> makeUpdateChatTitle(std::int64_t chatId, const std::string &title);
+object_ptr<error> makeError(std::int32_t code, const std::string &message);
+// A file Telegram has, downloaded here if it has a path
+object_ptr<file> makeFile(std::int32_t id, std::int64_t size, const std::string &path = "",
+                          const std::string &uniqueId = "bleh");
+object_ptr<formattedText> makeFormattedText(const std::string &text);
+object_ptr<photo> makePhotoWithSizes(std::vector<object_ptr<photoSize>> &&sizes);
+object_ptr<messageDocument> makeMessageDocument(const std::string &fileName, const std::string &mimeType,
+                                                object_ptr<file> &&document, const std::string &caption);
+object_ptr<updateMessageContent> makeUpdateMessageContent(std::int64_t chatId, std::int64_t messageId,
+                                                          object_ptr<MessageContent> &&content);
+object_ptr<updateDeleteMessages> makeUpdateDeleteMessages(std::int64_t chatId, std::int64_t messageId,
+                                                          bool isPermanent, bool fromCache);
+object_ptr<messageReaction> makeMessageReaction(object_ptr<ReactionType> &&type, std::int32_t totalCount,
+                                                bool isChosen, object_ptr<MessageSender> &&usedSender,
+                                                std::vector<object_ptr<MessageSender>> &&recentSenders);
+object_ptr<messageInteractionInfo> makeInteractionInfo(std::vector<object_ptr<messageReaction>> &&reactions);
+object_ptr<updateMessageInteractionInfo> makeUpdateReactions(std::int64_t chatId, std::int64_t messageId,
+                                                             std::vector<object_ptr<messageReaction>> &&reactions);
+object_ptr<unreadReaction> makeUnreadReaction(object_ptr<ReactionType> &&type, object_ptr<MessageSender> &&sender);
+object_ptr<updateMessageUnreadReactions> makeUpdateUnreadReactions(std::int64_t chatId, std::int64_t messageId,
+                                                                   std::vector<object_ptr<unreadReaction>> &&reactions,
+                                                                   std::int32_t unreadCount);
+// A location, live if livePeriod is not 0; TDLib 1.8.65 made live locations a type of their own
+object_ptr<MessageContent> makeMessageLocation(double latitude, double longitude, double accuracy,
+                                               std::int32_t livePeriod = 0, std::int32_t expiresIn = 0);
+object_ptr<messageVenue> makeMessageVenue(double latitude, double longitude, const std::string &title,
+                                          const std::string &address);
 object_ptr<messageCall> makeMessageCall(bool is_video_, object_ptr<CallDiscardReason> &&discard_reason_,
                                         std::int32_t duration_);
 object_ptr<chatMemberStatusCreator> makeChatMemberStatusCreator(std::string const &custom_title_,

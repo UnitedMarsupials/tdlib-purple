@@ -1,4 +1,6 @@
 #include "fixture.h"
+#include "sticker.h"
+#include "client-utils.h"
 #include "tdlib-purple.h"
 #include "libpurple-mock.h"
 #include "printout.h"
@@ -13,6 +15,11 @@ CommTest::CommTest()
 
 void CommTest::SetUp()
 {
+    setImageLoaders({"webp"});
+    setCustomSmileys(false);
+    clearConversationData();
+    gdkPixbufGetFileInfoName = "gdk_pixbuf_get_file_info";
+    setMessageLinksEnabled(false);
     account = purple_account_new(("+" + selfPhoneNumber).c_str(), NULL);
     connection = new PurpleConnection;
     connection->state = PURPLE_DISCONNECTED;
@@ -29,6 +36,7 @@ void CommTest::TearDown()
         pluginInfo().close(connection);
     tgl.verifyNoRequests();
     prpl.verifyNoEvents();
+    tgl.removeTempFiles();
 
     delete connection;
     account->gc = NULL;
@@ -36,6 +44,7 @@ void CommTest::TearDown()
     purple_account_destroy(account);
     account = NULL;
     clearFakeFiles();
+    clearGroups();
 }
 
 // Is this a request the plugin sent, or something TDLib sent back? This used to be decided by
@@ -104,6 +113,12 @@ void CommTest::login(std::initializer_list<object_ptr<Object>> extraUpdates, obj
         selfPhoneNumber, // Phone number here without + to make it more interesting
         make_object<userStatusOffline>()
     )));
+    auto myId = make_object<td::td_api::updateOption>();
+    myId->name_ = "my_id";
+    auto myIdValue = make_object<optionValueInteger>();
+    myIdValue->value_ = selfId;
+    myId->value_ = std::move(myIdValue);
+    tgl.update(std::move(myId));
     for (const object_ptr<Object> &update: extraUpdates)
         tgl.update(std::move(const_cast<object_ptr<Object> &>(update))); // Take that!
     prpl.verifyEvents2(std::move(postUpdateEvents));
@@ -211,4 +226,12 @@ void checkFile(const char *filename, void *content, unsigned size)
     ASSERT_EQ(actualSize, size) << "Wrong file size for " << filename;
     ASSERT_EQ(0, memcmp(content, actualContent, size)) << "Wrong content for " << filename;
     g_free(actualContent);
+}
+
+PurpleGroup *CommTest::notJoinedGroup()
+{
+    static char        name[] = "Telegram: not joined";
+    static PurpleGroup group  = {};
+    group.name = name;
+    return &group;
 }

@@ -85,6 +85,10 @@ enum class PurpleEventType: uint8_t {
     ConversationWrite,
     ConvSetTitle,
     NotifyMessage,
+    NotifyUri,
+    CustomSmileyAdd,
+    CustomSmileyWrite,
+    CustomSmileyClose,
     UserStatus,
     RequestInput,
     RequestAction,
@@ -264,6 +268,39 @@ struct NotifyMessageEvent: PurpleEvent {
     std::string          title;
     std::string          primary;
     std::string          secondary;
+};
+
+struct NotifyUriEvent: PurpleEvent {
+    std::string uri;
+
+    NotifyUriEvent(const std::string &uri)
+    : PurpleEvent(PurpleEventType::NotifyUri), uri(uri) {}
+};
+
+struct CustomSmileyAddEvent: PurpleEvent {
+    std::string conversation;
+    std::string code;
+
+    CustomSmileyAddEvent(const std::string &conversation, const std::string &code)
+    : PurpleEvent(PurpleEventType::CustomSmileyAdd), conversation(conversation), code(code) {}
+};
+
+// With the size of the picture, which is all a test can tell of it
+struct CustomSmileyWriteEvent: PurpleEvent {
+    std::string conversation;
+    std::string code;
+    size_t      size;
+
+    CustomSmileyWriteEvent(const std::string &conversation, const std::string &code, size_t size)
+    : PurpleEvent(PurpleEventType::CustomSmileyWrite), conversation(conversation), code(code), size(size) {}
+};
+
+struct CustomSmileyCloseEvent: PurpleEvent {
+    std::string conversation;
+    std::string code;
+
+    CustomSmileyCloseEvent(const std::string &conversation, const std::string &code)
+    : PurpleEvent(PurpleEventType::CustomSmileyClose), conversation(conversation), code(code) {}
 };
 
 struct UserStatusEvent: PurpleEvent {

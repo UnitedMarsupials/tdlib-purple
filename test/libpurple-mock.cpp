@@ -6,6 +6,7 @@
 #include <stdarg.h>
 #include <algorithm>
 #include <vector>
+#include <map>
 #include <gtest/gtest.h>
 
 struct AccountInfo {
@@ -88,6 +89,14 @@ void purple_debug_warning(const char *category, const char *format, ...)
     va_list va;
     va_start(va, format);
     printDebug("Warning: ", category, format, va);
+    va_end(va);
+}
+
+void purple_debug_error(const char *category, const char *format, ...)
+{
+    va_list va;
+    va_start(va, format);
+    printDebug("Error: ", category, format, va);
     va_end(va);
 }
 
@@ -334,6 +343,7 @@ static void newNode(PurpleBlistNode &node, PurpleBlistNodeType type)
     node.parent = NULL;
     node.prev = NULL;
     node.type = type;
+    node.flags = (PurpleBlistNodeFlags)0;
     node.settings = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
 }
 
@@ -393,6 +403,13 @@ void purple_blist_add_chat(PurpleChat *chat, PurpleGroup *group, PurpleBlistNode
     auto pAccount = std::find_if(g_accounts.begin(), g_accounts.end(),
                                  [chat](const AccountInfo &info) { return (info.account == chat->account); });
     ASSERT_FALSE(pAccount == g_accounts.end()) << "Adding chat with unknown account";
+
+    // One in the buddy list already is moved, as real libpurple does
+    if (std::find(pAccount->chats.begin(), pAccount->chats.end(), chat) != pAccount->chats.end()) {
+        chat->node.parent = group ? &group->node : NULL;
+        EVENT(AddChatEvent, name, chat->alias, chat->account, group, node);
+        return;
+    }
 
     ASSERT_TRUE(std::find_if(pAccount->chats.begin(), pAccount->chats.end(), 
                              [name](const PurpleChat *existing) {
@@ -649,6 +666,20 @@ void purple_conv_chat_set_topic(PurpleConvChat *chat, const char *who,
     EVENT(ChatSetTopicEvent, chat->conv->name, topic ? topic : "", who ? who : "");
 }
 
+const char *purple_time_format(const struct tm *tm)
+{
+    static char buf[80];
+    strftime(buf, sizeof(buf), "%X", tm);
+    return buf;
+}
+
+const char *purple_date_format_long(const struct tm *tm)
+{
+    static char buf[80];
+    strftime(buf, sizeof(buf), "%x %X", tm);
+    return buf;
+}
+
 gboolean purple_debug_is_enabled(void)
 {
     return true;
@@ -726,6 +757,62 @@ void *purple_notify_message(void *handle, PurpleNotifyMsgType type,
 						  gpointer user_data)
 {
     // TODO event
+    return NULL;
+}
+
+// Custom smileys, as Pidgin has them; other front-ends turn them down
+static bool g_customSmileys = false;
+
+extern "C++" void setCustomSmileys(bool supported)
+{
+    g_customSmileys = supported;
+}
+
+gboolean purple_conv_custom_smiley_add(PurpleConversation *conv, const char *smile,
+                                       const char *cksum_type, const char *chksum, gboolean remote)
+{
+    if (!g_customSmileys)
+        return FALSE;
+    EVENT(CustomSmileyAddEvent, conv->name, smile);
+    return TRUE;
+}
+
+void purple_conv_custom_smiley_write(PurpleConversation *conv, const char *smile,
+                                     const guchar *data, gsize size)
+{
+    EVENT(CustomSmileyWriteEvent, conv->name, smile, size);
+}
+
+void purple_conv_custom_smiley_close(PurpleConversation *conv, const char *smile)
+{
+    EVENT(CustomSmileyCloseEvent, conv->name, smile);
+}
+
+static std::map<std::pair<PurpleConversation *, std::string>, gpointer> g_conversationData;
+
+extern "C++" void clearConversationData()
+{
+    g_conversationData.clear();
+}
+
+void purple_conversation_set_data(PurpleConversation *conv, const char *key, gpointer data)
+{
+    g_conversationData[std::make_pair(conv, std::string(key))] = data;
+}
+
+gpointer purple_conversation_get_data(PurpleConversation *conv, const char *key)
+{
+    auto it = g_conversationData.find(std::make_pair(conv, std::string(key)));
+    return (it != g_conversationData.end()) ? it->second : NULL;
+}
+
+void purple_imgstore_unref_by_id(int id)
+{
+}
+
+void *purple_notify_uri(void *handle, const char *uri)
+{
+    EVENT(NotifyUriEvent, uri);
     return NULL;
 }
 
@@ -1245,11 +1332,45 @@ PurpleGroup standardPurpleGroup = {
 	.online = 0
 };
 
+static std::vector<PurpleGroup *> g_groups;
+
 PurpleGroup *purple_find_group(const char *name)
 {
     if (!strcmp(name, standardPurpleGroup.name))
         return &standardPurpleGroup;
+    for (PurpleGroup *group: g_groups)
+        if (!strcmp(name, group->name))
+            return group;
     return NULL;
+}
+
+PurpleGroup *purple_group_new(const char *name)
+{
+    PurpleGroup *group = new PurpleGroup();
+    newNode(group->node, PURPLE_BLIST_GROUP_NODE);
+    group->name = strdup(name);
+    return group;
+}
+
+void purple_blist_add_group(PurpleGroup *group, PurpleBlistNode *node)
+{
+    g_groups.push_back(group);
+}
+
+// Groups last for the run of the test case, like the rest of the buddy list
+void clearGroups()
+{
+    g_groups.clear();
+}
+
+void purple_blist_node_set_flags(PurpleBlistNode *node, PurpleBlistNodeFlags flags)
+{
+    node->flags = flags;
+}
+
+PurpleBlistNodeFlags purple_blist_node_get_flags(PurpleBlistNode *node)
+{
+    return node->flags;
 }
 
 const char *purple_group_get_name(PurpleGroup *group)
@@ -1282,6 +1403,50 @@ int purple_imgstore_add_with_id(gpointer data, size_t size, const char *filename
 int getLastImgstoreId()
 {
     return imageStore.size();
+}
+
+// GdkPixbuf as the plugin finds it at run time, telling formats apart by their first bytes
+
+static std::vector<std::string> g_imageLoaders;
+
+// Declared in C++, being called from it only, while all about here is C
+extern "C++" void setImageLoaders(std::initializer_list<std::string> formats)
+{
+    g_imageLoaders = formats;
+}
+
+static bool isImageFormat(const std::string &data, const std::string &format)
+{
+    if (format == "webp")
+        return (data.size() >= 12) && !data.compare(0, 4, "RIFF") && !data.compare(8, 4, "WEBP");
+    if (format == "webm")
+        return !data.compare(0, 4, "\x1A\x45\xDF\xA3");
+    if (format == "tgs")
+        return !data.compare(0, 2, "\x1F\x8B");
+    return false;
+}
+
+extern "C" {
+
+// Returns a GdkPixbufFormat, which the plugin does not look into, if a loader takes the file
+void *gdk_pixbuf_get_file_info(const gchar *filename, gint *width, gint *height)
+{
+    static int format;
+    gchar     *data = NULL;
+    gsize      size = 0;
+    if (!g_file_get_contents(filename, &data, &size, NULL))
+        return NULL;
+    std::string contents(data, size);
+    g_free(data);
+
+    for (const std::string &loader: g_imageLoaders)
+        if (isImageFormat(contents, loader)) {
+            *width = *height = 100;
+            return &format;
+        }
+    return NULL;
+}
+
 }
 
 PurpleStoredImage *purple_imgstore_find_by_id(int id)
@@ -1590,6 +1755,18 @@ gulong purple_signal_connect(void *instance, const char *signal,
 	void *handle, PurpleCallback func, void *data)
 {
     return 0;
+}
+
+// As libpurple's, which Pidgin calls whenever it updates a tab
+void purple_conversation_autoset_title(PurpleConversation *conv)
+{
+    const char *text = NULL;
+    if (conv->type == PURPLE_CONV_TYPE_CHAT) {
+        PurpleChat *chat = purple_blist_find_chat(conv->account, conv->name);
+        if (chat)
+            text = purple_chat_get_name(chat);
+    }
+    purple_conversation_set_title(conv, text ? text : conv->name);
 }
 
 };

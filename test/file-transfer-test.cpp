@@ -1,6 +1,7 @@
 #include "fixture.h"
 #include "libpurple-mock.h"
 #include "buildopt.h"
+#include "receiving.h"
 
 class FileTransferTest: public CommTest {};
 
@@ -334,11 +335,7 @@ TEST_F(FileTransferTest, SendFile_UnknownUser)
     );
 }
 
-#ifndef NoWebp
-TEST_F(FileTransferTest, WebpStickerDecode)
-#else
-TEST_F(FileTransferTest, DISABLED_WebpStickerDecode)
-#endif
+TEST_F(FileTransferTest, WebpSticker)
 {
     const int32_t date      = 10001;
     const int32_t fileId    = 1234;
@@ -351,11 +348,7 @@ TEST_F(FileTransferTest, DISABLED_WebpStickerDecode)
         false,
         date,
         make_object<messageSticker>(makeSticker(320, 200, "",
-            make_object<file>(
-                fileId, 10000, 10000,
-                make_object<localFile>(TEST_SOURCE_DIR "/test.webp", true, true, false, true, 0, 10000, 10000),
-                make_object<remoteFile>("beh", "bleh", false, true, 10000)
-            )), false)
+            makeFile(fileId, 10000, TEST_SOURCE_DIR "/test.webp")), false)
     )));
     tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
     prpl.verifyEvents(ServGotImEvent(
@@ -363,6 +356,65 @@ TEST_F(FileTransferTest, DISABLED_WebpStickerDecode)
         purpleUserName(0),
         "\n<img id=\"" + std::to_string(getLastImgstoreId()) + "\">",
         (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES),
+        date
+    ));
+    // As it is, for the front-end's GdkPixbuf to decode
+    gchar *data = NULL;
+    gsize  size = 0;
+    ASSERT_TRUE(g_file_get_contents(TEST_SOURCE_DIR "/test.webp", &data, &size, NULL));
+    g_free(data);
+    ASSERT_EQ(size, purple_imgstore_get_size(purple_imgstore_find_by_id(getLastImgstoreId())));
+}
+
+TEST_F(FileTransferTest, WebpSticker_NoLoader)
+{
+    const int32_t date      = 10001;
+    const int32_t fileId    = 1234;
+    setImageLoaders({});
+    loginWithOneContact();
+
+    tgl.update(make_object<updateNewMessage>(makeMessage(
+        1,
+        userIds[0],
+        chatIds[0],
+        false,
+        date,
+        make_object<messageSticker>(makeSticker(320, 200, "",
+            makeFile(fileId, 10000, TEST_SOURCE_DIR "/test.webp")), false)
+    )));
+    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
+    prpl.verifyEvents(ServGotImEvent(
+        connection,
+        purpleUserName(0),
+        "<a href=\"file://file://" TEST_SOURCE_DIR "/test.webp\">sticker</a>",
+        PURPLE_MESSAGE_RECV,
+        date
+    ));
+}
+
+TEST_F(FileTransferTest, WebpSticker_NoLoader_Emoji)
+{
+    const int32_t date      = 10001;
+    const int32_t fileId    = 1234;
+    setImageLoaders({});
+    loginWithOneContact();
+
+    // Where it cannot be shown, the emoji it goes with stands in for it
+    tgl.update(make_object<updateNewMessage>(makeMessage(
+        1,
+        userIds[0],
+        chatIds[0],
+        false,
+        date,
+        make_object<messageSticker>(makeSticker(320, 200, "\U0001F63A",
+            makeFile(fileId, 10000, TEST_SOURCE_DIR "/test.webp")), false)
+    )));
+    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
+    prpl.verifyEvents(ServGotImEvent(
+        connection,
+        purpleUserName(0),
+        "<a href=\"file://file://" TEST_SOURCE_DIR "/test.webp\">\U0001F63A</a>",
+        PURPLE_MESSAGE_RECV,
         date
     ));
 }
@@ -1422,6 +1474,25 @@ TEST_F(FileTransferTest, ActiveDownloadAtLogout_StuckAtStart)
     );
     tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
 
+    ASSERT_TRUE(g_file_test(tempFileName.c_str(), G_FILE_TEST_EXISTS));
     pluginInfo().close(connection);
     prpl.verifyEvents(XferLocalCancelEvent(tempFileName));
+    ASSERT_FALSE(g_file_test(tempFileName.c_str(), G_FILE_TEST_EXISTS));
+}
+
+TEST_F(FileTransferTest, PhotoSizeWithinLimit)
+{
+    purple_account_set_string(account, "media-size-threshold", "0.5");
+    login();
+
+    // Listed with one above the limit first
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(makeFile(1, 700 * 1024, "", "big"), 1280, 960));
+    sizes.push_back(makePhotoSize(makeFile(2, 100 * 1024, "", "small"), 320, 240));
+    object_ptr<messagePhoto> content = makeMessagePhoto(makePhotoWithSizes(std::move(sizes)),
+                                                        makeFormattedText(""), false, false, false);
+
+    const file *selected = selectPhotoSize(account, *content);
+    ASSERT_NE(nullptr, selected);
+    ASSERT_EQ(2, selected->id_);
 }

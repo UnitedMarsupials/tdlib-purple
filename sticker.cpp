@@ -1,13 +1,11 @@
 #include "sticker.h"
 #include "buildopt.h"
+#include "client-utils.h"
 #include "config.h"
 #include "format.h"
 #include "receiving.h"
-
-#ifndef NoWebp
-#include <png.h>
-#include <webp/decode.h>
-#endif
+#include <set>
+#include <string.h>
 
 #ifndef NoLottie
 #include "gif.h"
@@ -15,158 +13,25 @@
 #include <rlottie.h>
 #endif
 
-constexpr int MAX_W = 256;
-constexpr int MAX_H = 256;
-constexpr unsigned ANIMATED_WIDTH  = 200;
-constexpr unsigned ANIMATED_HEIGHT = 200;
-
-#ifndef NoWebp
-
-static void p2tgl_png_mem_write (png_structp png_ptr, png_bytep data, png_size_t length)
-{
-    GByteArray *png_mem = (GByteArray *) png_get_io_ptr(png_ptr);
-    g_byte_array_append (png_mem, data, length);
-}
-
-static int p2tgl_imgstore_add_with_id_png (const unsigned char *raw_bitmap, unsigned width, unsigned height)
-{
-    GByteArray *png_mem = NULL;
-    png_structp png_ptr = NULL;
-    png_infop info_ptr = NULL;
-    png_bytepp rows = NULL;
-
-    // init png write struct
-    png_ptr = png_create_write_struct (PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    if (png_ptr == NULL) {
-        purple_debug_misc(config::pluginId, "error encoding png (create_write_struct failed)\n");
-        return 0;
-    }
-
-    // init png info struct
-    info_ptr = png_create_info_struct (png_ptr);
-    if (info_ptr == NULL) {
-        png_destroy_write_struct(&png_ptr, NULL);
-        purple_debug_misc(config::pluginId, "error encoding png (create_info_struct failed)\n");
-        return 0;
-    }
-
-    // Set up error handling.
-    if (setjmp(png_jmpbuf(png_ptr))) {
-        png_destroy_write_struct(&png_ptr, &info_ptr);
-        purple_debug_misc(config::pluginId, "error while writing png\n");
-        return 0;
-    }
-
-    // set img attributes
-    png_set_IHDR (png_ptr, info_ptr, width, height,
-                    8, PNG_COLOR_TYPE_RGBA, PNG_INTERLACE_NONE,
-                    PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
-
-    // alloc row pointers
-    rows = g_new0 (png_bytep, height);
-    if (rows == NULL) {
-        png_destroy_write_struct(&png_ptr, &info_ptr);
-        purple_debug_misc(config::pluginId, "error converting to png: malloc failed\n");
-        return 0;
-    }
-
-    unsigned i;
-    for (i = 0; i < height; i++)
-        rows[i] = (png_bytep)(raw_bitmap + i * width * 4);
-
-    // create array and set own png write function
-    png_mem = g_byte_array_new();
-    png_set_write_fn (png_ptr, png_mem, p2tgl_png_mem_write, NULL);
-
-    // write png
-    png_set_rows (png_ptr, info_ptr, rows);
-    png_write_png (png_ptr, info_ptr, PNG_TRANSFORM_IDENTITY, NULL);
-
-    // cleanup
-    g_free(rows);
-    png_destroy_write_struct (&png_ptr, &info_ptr);
-    unsigned png_size = png_mem->len;
-    gpointer png_data = g_byte_array_free (png_mem, FALSE);
-
-    return purple_imgstore_add_with_id (png_data, png_size, NULL);
-}
-
-static int p2tgl_imgstore_add_with_id_webp (const char *filename)
-{
-    const uint8_t *data = NULL;
-    size_t len;
-    GError *err = NULL;
-    g_file_get_contents (filename, (gchar **) &data, &len, &err);
-    if (err) {
-        purple_debug_misc(config::pluginId, "cannot open file %s: %s\n", filename, err->message);
-        g_error_free(err);
-        return 0;
-    }
-
-    // downscale oversized sticker images displayed in chat, otherwise it would harm readabillity
-    WebPDecoderConfig config;
-    WebPInitDecoderConfig (&config);
-    if (WebPGetFeatures(data, len, &config.input) != VP8_STATUS_OK) {
-        purple_debug_misc(config::pluginId, "error reading webp bitstream: %s\n", filename);
-        g_free ((gchar *)data);
-        return 0;
-    }
-
-    config.options.use_scaling = 0;
-    config.options.scaled_width = config.input.width;
-    config.options.scaled_height = config.input.height;
-    if (config.options.scaled_width > MAX_W || config.options.scaled_height > MAX_H) {
-        const float max_scale_width = MAX_W * 1.0f / config.options.scaled_width;
-        const float max_scale_height = MAX_H * 1.0f / config.options.scaled_height;
-        if (max_scale_width < max_scale_height) {
-        // => the width is most limiting
-        config.options.scaled_width = MAX_W;
-        // Can't use ' *= ', because we need to do the multiplication in float
-        // (or double), and only THEN cast back to int.
-        config.options.scaled_height = (int) (config.options.scaled_height * max_scale_width);
-        } else {
-        // => the height is most limiting
-        config.options.scaled_height = MAX_H;
-        // Can't use ' *= ', because we need to do the multiplication in float
-        // (or double), and only THEN cast back to int.
-        config.options.scaled_width = (int) (config.options.scaled_width * max_scale_height);
-        }
-        config.options.use_scaling = 1;
-    }
-    config.output.colorspace = MODE_RGBA;
-    if (WebPDecode(data, len, &config) != VP8_STATUS_OK) {
-        purple_debug_misc(config::pluginId, "error decoding webp: %s\n", filename);
-        g_free ((gchar *)data);
-        return 0;
-    }
-    g_free ((gchar *)data);
-    const uint8_t *decoded = config.output.u.RGBA.rgba;
-
-    // convert and add
-    int imgStoreId = p2tgl_imgstore_add_with_id_png(decoded, config.options.scaled_width, config.options.scaled_height);
-    WebPFreeDecBuffer (&config.output);
-    return imgStoreId;
-}
-
-#else
-
-int p2tgl_imgstore_add_with_id_webp (const char *filename)
-{
-    return 0;
-}
-
-#endif
-
-void showWebpSticker(const td::td_api::chat &chat, const TgMessageInfo &message,
+void showStickerFile(const td::td_api::chat &chat, const TgMessageInfo &message,
                      const std::string &filePath, const std::string &fileDescription,
                      TdAccountData &account)
 {
-    int id = p2tgl_imgstore_add_with_id_webp(filePath.c_str());
-    if (id != 0) {
+    gchar *data = NULL;
+    gsize  size = 0;
+    ImageSupport support = probeImageFile(filePath);
+    if ((support == ImageSupport::Supported) && g_file_get_contents(filePath.c_str(), &data, &size, NULL)) {
+        // The imgstore takes the data
+        int id = purple_imgstore_add_with_id(data, size, NULL);
         std::string text = makeInlineImageText(id);
         showMessageText(account, chat, message, text.c_str(), NULL, PURPLE_MESSAGE_IMAGES);
-    } else
-        showGenericFileInline(chat, message, filePath, NULL, fileDescription, std::string(), account);
+    } else {
+        if (support == ImageSupport::Unrecognized)
+            warnMissingImageLoader(filePath);
+        // The emoji it goes with, where it has one
+        showGenericFileInline(chat, message, filePath, NULL,
+                              message.altText.empty() ? fileDescription : message.altText, std::string(), account);
+    }
 }
 
 #ifndef NoLottie
@@ -317,8 +182,8 @@ void StickerConversionThread::run()
     m_outputFileName = tempFileName;
     g_free(tempFileName);
 
-    unsigned w = ANIMATED_WIDTH;
-    unsigned h = ANIMATED_HEIGHT;
+    unsigned w = m_size;
+    unsigned h = m_size;
     auto buffer = std::unique_ptr<uint32_t[]>(new uint32_t[w * h]);
     size_t frameCount = player->totalFrame();
 
@@ -350,4 +215,57 @@ void StickerConversionThread::callback(PurpleTdClient* tdClient)
 {
     if (g_callback)
         (tdClient->*g_callback)(this);
+}
+
+// The one function of GdkPixbuf the plugin needs; the name is there for tests to pretend it is missing
+const char *gdkPixbufGetFileInfoName = "gdk_pixbuf_get_file_info";
+
+// GdkPixbufFormat *gdk_pixbuf_get_file_info(const gchar *filename, gint *width, gint *height), from the
+// front-end, Pidgin having GdkPixbuf loaded; the plugin does not link it
+using GetFileInfo = void *(*)(const gchar *filename, gint *width, gint *height);
+
+static GetFileInfo findGetFileInfo()
+{
+    return reinterpret_cast<GetFileInfo>(findFrontEndSymbol(gdkPixbufGetFileInfoName));
+}
+
+bool canShowImages()
+{
+    return findGetFileInfo() != nullptr;
+}
+
+ImageSupport probeImageFile(const std::string &path)
+{
+    GetFileInfo getFileInfo = findGetFileInfo();
+    if (!getFileInfo)
+        return ImageSupport::NoLoader;
+
+    // Only as far as the size, which is where loaders tell what they make of a file
+    gint width, height;
+    return getFileInfo(path.c_str(), &width, &height) ? ImageSupport::Supported : ImageSupport::Unrecognized;
+}
+
+void warnMissingImageLoader(const std::string &path)
+{
+    // Named after its extension, which TDLib gives the files it downloads; once for each
+    static std::set<std::string> warned;
+    const char *dot    = strrchr(path.c_str(), '.');
+    std::string format = (dot && !strchr(dot, G_DIR_SEPARATOR)) ? dot + 1 : "unknown";
+    if (warned.insert(format).second)
+        purple_debug_warning(config::pluginId, "Pictures in %s format are shown as text: the front-end has "
+                             "no GdkPixbuf loader for them. Installing one would show them as pictures.\n",
+                             format.c_str());
+}
+
+StickerConversionThread::Callback ReactionStickerThread::g_reactionCallback = nullptr;
+
+void ReactionStickerThread::setCallback(AccountThread::Callback callback)
+{
+    g_reactionCallback = callback;
+}
+
+void ReactionStickerThread::callback(PurpleTdClient* tdClient)
+{
+    if (g_reactionCallback)
+        (tdClient->*g_reactionCallback)(this);
 }

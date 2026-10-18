@@ -4,6 +4,8 @@
 #include "format.h"
 #include <purple.h>
 #include <algorithm>
+#include <stdio.h>
+#include <unistd.h>
 
 static bool isCanonicalPhoneNumber(const char *s)
 {
@@ -793,6 +795,14 @@ const ContactRequest *TdAccountData::findContactRequest(UserId userId)
     return nullptr;
 }
 
+DownloadRequest::~DownloadRequest()
+{
+    if (tempFd >= 0)
+        close(tempFd);
+    if (!tempFileName.empty())
+        remove(tempFileName.c_str());
+}
+
 DownloadRequest* TdAccountData::findDownloadRequest(int32_t fileId)
 {
     auto it = std::find_if(m_requests.begin(), m_requests.end(),
@@ -827,27 +837,75 @@ void TdAccountData::extractFileTransferRequests(std::vector<PurpleXfer *> &trans
     }
 }
 
-void TdAccountData::addTempFileUpload(int64_t messageId, const std::string &path)
+// Images still being sent when the account disconnects are sent by TDLib after the next login, so
+// their files have to outlive this session, and so does the knowledge of when they can go.
+static const char *TempFileUploadsSetting = "temp-image-uploads";
+
+void TdAccountData::addTempFileUpload(ChatId chatId, int64_t messageId, const std::string &path)
 {
     m_sentMessages.emplace_back();
+    m_sentMessages.back().chatId = chatId;
     m_sentMessages.back().messageId = messageId;
     m_sentMessages.back().tempFile = path;
+    saveTempFileUploads();
 }
 
-std::string TdAccountData::extractTempFileUpload(int64_t messageId)
+std::string TdAccountData::extractTempFileUpload(ChatId chatId, int64_t messageId)
 {
+    // A message id is only unique within its chat
     auto it = std::find_if(m_sentMessages.begin(), m_sentMessages.end(),
-                           [messageId](const SendMessageInfo &item) {
-                               return (item.messageId == messageId);
+                           [chatId, messageId](const SendMessageInfo &item) {
+                               return (item.chatId == chatId) && (item.messageId == messageId);
                            });
 
     std::string result;
     if (it != m_sentMessages.end()) {
         result = it->tempFile;
         m_sentMessages.erase(it);
+        saveTempFileUploads();
     }
 
     return result;
+}
+
+void TdAccountData::saveTempFileUploads()
+{
+    // One line per file: chat id, message id and path, separated by spaces
+    std::string value;
+    for (const SendMessageInfo &item: m_sentMessages)
+        value += std::to_string(item.chatId.value()) + ' ' + std::to_string(item.messageId) + ' ' +
+                 item.tempFile + '\n';
+
+    if (value.empty())
+        purple_account_remove_setting(purpleAccount, TempFileUploadsSetting);
+    else
+        purple_account_set_string(purpleAccount, TempFileUploadsSetting, value.c_str());
+}
+
+void TdAccountData::loadTempFileUploads()
+{
+    const char *value = purple_account_get_string(purpleAccount, TempFileUploadsSetting, NULL);
+    if (!value)
+        return;
+
+    gchar **lines = g_strsplit(value, "\n", -1);
+    for (gchar **line = lines; *line; line++) {
+        gchar **fields = g_strsplit(*line, " ", 3);
+        if (fields[0] && fields[1] && fields[2] && *fields[2]) {
+            m_sentMessages.emplace_back();
+            m_sentMessages.back().chatId = ChatId::fromString(fields[0]);
+            m_sentMessages.back().messageId = g_ascii_strtoll(fields[1], NULL, 10);
+            m_sentMessages.back().tempFile = fields[2];
+        }
+        g_strfreev(fields);
+    }
+    g_strfreev(lines);
+}
+
+void TdAccountData::getTempFileUploads(std::vector<std::pair<ChatId, int64_t>> &messages)
+{
+    for (const SendMessageInfo &item: m_sentMessages)
+        messages.emplace_back(item.chatId, item.messageId);
 }
 
 void TdAccountData::addFileTransfer(int32_t fileId, PurpleXfer *xfer, ChatId chatId)
@@ -991,4 +1049,67 @@ void TdAccountData::extractPendingReadReceipts(ChatId chatId, std::vector<ReadRe
         m_pendingReadReceipts.erase(pChatReceipts);
     } else
         receipts.clear();
+}
+
+void TdAccountData::addShownMessage(ChatId chatId, MessageId messageId, ShownMessage &&message)
+{
+    // Enough to cover any conversation window that is still open, hopefully
+    enum { MAX_SHOWN_MESSAGES = 10000 };
+
+    ShownMessageKey key(chatId, messageId);
+    m_shownMessages[key] = std::move(message);
+    m_shownMessageOrder.push_back(key);
+    while (m_shownMessageOrder.size() > MAX_SHOWN_MESSAGES) {
+        // A message forgotten or renamed meanwhile has left its key behind, which is harmless
+        m_shownMessages.erase(m_shownMessageOrder.front());
+        m_shownMessageOrder.pop_front();
+    }
+}
+
+ShownMessage *TdAccountData::findShownMessage(ChatId chatId, MessageId messageId)
+{
+    auto it = m_shownMessages.find(ShownMessageKey(chatId, messageId));
+    return (it != m_shownMessages.end()) ? &it->second : nullptr;
+}
+
+void TdAccountData::removeShownMessage(ChatId chatId, MessageId messageId)
+{
+    m_shownMessages.erase(ShownMessageKey(chatId, messageId));
+}
+
+void TdAccountData::renameShownMessage(ChatId chatId, MessageId oldId, MessageId newId)
+{
+    auto it = m_shownMessages.find(ShownMessageKey(chatId, oldId));
+    if (it != m_shownMessages.end()) {
+        ShownMessage message = std::move(it->second);
+        m_shownMessages.erase(it);
+        addShownMessage(chatId, newId, std::move(message));
+    }
+}
+
+void TdAccountData::addPendingEdit(const PendingEdit &edit)
+{
+    auto it = std::find_if(m_pendingEdits.begin(), m_pendingEdits.end(), [&edit](const PendingEdit &other) {
+        return (other.chatId == edit.chatId) && (other.messageId == edit.messageId);
+    });
+    if (it == m_pendingEdits.end())
+        m_pendingEdits.push_back(edit);
+    else {
+        // One showing will do for both, and the file is new if either brought one. Should it fail,
+        // what was shown before the first comes back, but only over what the last put in place
+        it->captionOnly = it->captionOnly && edit.captionOnly;
+        it->installed   = edit.installed;
+    }
+}
+
+bool TdAccountData::extractPendingEdit(ChatId chatId, MessageId messageId, PendingEdit &edit)
+{
+    auto it = std::find_if(m_pendingEdits.begin(), m_pendingEdits.end(), [chatId, messageId](const PendingEdit &other) {
+        return (other.chatId == chatId) && (other.messageId == messageId);
+    });
+    if (it == m_pendingEdits.end())
+        return false;
+    edit = *it;
+    m_pendingEdits.erase(it);
+    return true;
 }

@@ -630,7 +630,8 @@ TEST_F(GroupChatTest, CreateRemoveBasicGroupInAnotherClient)
     ));
     tgl.verifyRequest(viewMessages(groupChatId, {messageId[0]}, nullptr, true));
     prpl.verifyEvents(
-        ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatPurpleName),
+        AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), NULL),
+        ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
         ConvSetTitleEvent(groupChatPurpleName, groupChatTitle),
         ConversationWriteEvent(groupChatPurpleName, NotificationWho,
                                selfFirstName + " " + selfLastName +
@@ -1202,7 +1203,7 @@ TEST_F(GroupChatTest, GetInviteLink)
     login(
         {
             make_object<updateBasicGroup>(make_object<basicGroup>(
-                groupId, 2, make_object<chatMemberStatusMember>(), true, 0
+                groupId, 2, makeCreatorStatus(), true, 0
             )),
             make_object<updateNewChat>(makeChat(
                 groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0

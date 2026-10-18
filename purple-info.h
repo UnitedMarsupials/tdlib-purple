@@ -42,6 +42,16 @@ namespace AccountOptions {
     constexpr gboolean    AnimatedStickersDefault    = TRUE;
     constexpr const char *ShowSelfDestruct           = "show-self-destruct";
     constexpr gboolean    ShowSelfDestructDefault    = TRUE;
+    constexpr const char *ShowUnjoinedChats          = "show-unjoined-chats";
+    constexpr gboolean    ShowUnjoinedChatsDefault   = FALSE;
+    constexpr const char *FoldCustomEmoji            = "fold-custom-emoji";
+    constexpr const char *PrefetchVideos             = "prefetch-videos";
+    constexpr const char *PrefetchVideosNone         = "none";
+    constexpr const char *PrefetchVideosSmallest     = "smallest";
+    constexpr const char *PrefetchVideosLargestWithinLimit = "largest-within-limit";
+    constexpr const char *PrefetchVideosLargest      = "largest";
+    constexpr const char *PrefetchVideosDefault      = PrefetchVideosLargestWithinLimit;
+    constexpr gboolean    FoldCustomEmojiDefault     = FALSE;
     constexpr const char *DownloadBehaviour          = "download-behaviour";
     constexpr const char *DownloadBehaviourHyperlink = "hyperlink";
     constexpr const char *DownloadBehaviourStandard  = "file-transfer";

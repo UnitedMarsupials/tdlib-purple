@@ -125,6 +125,31 @@ ChatId getChatId(const td::td_api::updateChatLastMessage &update)
     return ChatId(update.chat_id_);
 }
 
+ChatId getChatId(const td::td_api::updateMessageContent &update)
+{
+    return ChatId(update.chat_id_);
+}
+
+ChatId getChatId(const td::td_api::updateDeleteMessages &update)
+{
+    return ChatId(update.chat_id_);
+}
+
+ChatId getChatId(const td::td_api::updateMessageInteractionInfo &update)
+{
+    return ChatId(update.chat_id_);
+}
+
+ChatId getChatId(const td::td_api::updateMessageUnreadReactions &update)
+{
+    return ChatId(update.chat_id_);
+}
+
+ChatId getChatId(const td::td_api::messageSenderChat &sender)
+{
+    return ChatId(sender.chat_id_);
+}
+
 BasicGroupId getBasicGroupId(const td::td_api::updateBasicGroupFullInfo &update)
 {
     return BasicGroupId(update.basic_group_id_);
@@ -157,4 +182,29 @@ MessageId getReplyMessageId(const td::td_api::message &message)
         return MessageId(reply_to.message_id_);
     }
     return MessageId(0);
+}
+
+MessageId getMessageId(const td::td_api::updateMessageContent &update)
+{
+    return MessageId(update.message_id_);
+}
+
+MessageId getMessageId(const td::td_api::updateDeleteMessages &update, unsigned index)
+{
+    return MessageId(update.message_ids_[index]);
+}
+
+MessageId getMessageId(const td::td_api::updateMessageInteractionInfo &update)
+{
+    return MessageId(update.message_id_);
+}
+
+MessageId getMessageId(const td::td_api::updateMessageUnreadReactions &update)
+{
+    return MessageId(update.message_id_);
+}
+
+MessageId getOldMessageId(const td::td_api::updateMessageSendSucceeded &update)
+{
+    return MessageId(update.old_message_id_);
 }

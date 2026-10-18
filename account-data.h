@@ -6,6 +6,7 @@
 #include "transceiver.h"
 #include <td/telegram/td_api.h>
 
+#include <deque>
 #include <map>
 #include <mutex>
 #include <set>
@@ -109,6 +110,16 @@ public:
     : PendingRequest(requestId), chatId(chatId), tempFile(tempFile ? tempFile : "") {}
 };
 
+// Checking whether TDLib still needs an image file sent in an earlier session
+class TempFileCheckRequest: public PendingRequest {
+public:
+    ChatId  chatId;
+    int64_t messageId;
+
+    TempFileCheckRequest(uint64_t requestId, ChatId chatId, int64_t messageId)
+    : PendingRequest(requestId), chatId(chatId), messageId(messageId) {}
+};
+
 class UploadRequest: public PendingRequest {
 public:
     PurpleXfer *xfer;
@@ -133,6 +144,10 @@ struct TgMessageInfo {
     MessageId   repliedMessageId;
     td::td_api::object_ptr<td::td_api::message> repliedMessage;
     std::string forwardedFrom;
+    std::string altText; // to show instead of the picture, where it cannot be shown
+    bool        anonymousChannelPost = false; // incomingGroupchatSender is "Channel post", naming nobody
+    bool        fromHistory = false; // fetched to catch up with a chat, rather than just sent
+    std::string mediaVariantLinks; // markup: links to each size a photo or video comes in
 
     void assign(const TgMessageInfo &other)
     {
@@ -145,6 +160,10 @@ struct TgMessageInfo {
         repliedMessageId = other.repliedMessageId;
         repliedMessage = nullptr;
         forwardedFrom = other.forwardedFrom;
+        altText = other.altText;
+        anonymousChannelPost = other.anonymousChannelPost;
+        fromHistory = other.fromHistory;
+        mediaVariantLinks = other.mediaVariantLinks;
     }
 };
 
@@ -183,6 +202,8 @@ public:
         if (message.repliedMessage)
             this->message.repliedMessage = std::move(message.repliedMessage);
     }
+    // An inline download still in progress, as at logout, leaves its temporary file behind otherwise
+    ~DownloadRequest();
 };
 
 class AvatarDownloadRequest: public PendingRequest {
@@ -246,6 +267,13 @@ struct IncomingMessage {
     bool     animatedStickerConverted;
     bool     animatedStickerConvertSuccess;
     int      animatedStickerImageId;
+
+    // For a message shown again because it was edited: when it was first sent, and whether
+    // its caption is all that changed, and so all there is to show
+    time_t   editedMessageTime = 0;
+    bool     captionOnly       = false;
+    // Deleted while waiting to be shown, which it then never is
+    bool     deleted           = false;
 };
 
 class PendingMessageQueue {
@@ -290,6 +318,34 @@ struct ReadReceipt {
     MessageId messageId;
 };
 
+// What the conversation shows of a message received in this session, so that an edit or a
+// deletion of it can be reported later
+struct ShownMessage {
+    std::string file;      // the file the message carries, if any
+    std::string content;   // what is shown of it besides: its text, caption or description
+    bool        quotable = false; // content is the text or caption, as written
+    std::string kind;      // what the message is, to name it by where there is no text to quote
+    time_t      timestamp;
+    // Who gave which reaction, as far as anyone has been named, and whether it was us
+    std::map<std::string, bool> reactions;
+
+    // As far as an edit changes it
+    bool operator==(const ShownMessage &other) const
+    {
+        return (file == other.file) && (content == other.content) && (timestamp == other.timestamp);
+    }
+};
+
+// An edit to a message that was still waiting to be shown at the time
+struct PendingEdit {
+    ChatId       chatId;
+    MessageId    messageId;
+    time_t       messageTime;
+    bool         captionOnly;
+    ShownMessage previous;    // as shown before, to go back to if the edit cannot be fetched...
+    ShownMessage installed;   // ...unless a later edit has replaced this one's since
+};
+
 class TdAccountData {
 public:
     using TdUserPtr           = td::td_api::object_ptr<td::td_api::user>;
@@ -304,6 +360,7 @@ public:
     struct {
         unsigned maxCaptionLength = 0;
         unsigned maxMessageLength = 0;
+        int64_t  myUserId         = 0;
     } options;
 
     PurpleAccount *const  purpleAccount;
@@ -382,8 +439,10 @@ public:
     }
 
     const ContactRequest *     findContactRequest(UserId userId);
-    void                       addTempFileUpload(int64_t messageId, const std::string &path);
-    std::string                extractTempFileUpload(int64_t messageId);
+    void                       addTempFileUpload(ChatId chatId, int64_t messageId, const std::string &path);
+    std::string                extractTempFileUpload(ChatId chatId, int64_t messageId);
+    void                       loadTempFileUploads();
+    void                       getTempFileUploads(std::vector<std::pair<ChatId, int64_t>> &messages);
     DownloadRequest *          findDownloadRequest(int32_t fileId);
     void                       extractFileTransferRequests(std::vector<PurpleXfer *> &transfers);
 
@@ -410,6 +469,13 @@ public:
 
     void                       addPendingReadReceipt(ChatId chatId, MessageId messageId);
     void                       extractPendingReadReceipts(ChatId chatId, std::vector<ReadReceipt> &receipts);
+
+    void                       addShownMessage(ChatId chatId, MessageId messageId, ShownMessage &&message);
+    ShownMessage *             findShownMessage(ChatId chatId, MessageId messageId);
+    void                       removeShownMessage(ChatId chatId, MessageId messageId);
+    void                       renameShownMessage(ChatId chatId, MessageId oldId, MessageId newId);
+    void                       addPendingEdit(const PendingEdit &edit);
+    bool                       extractPendingEdit(ChatId chatId, MessageId messageId, PendingEdit &edit);
 private:
     TdAccountData(const TdAccountData &other) = delete;
     TdAccountData &operator=(const TdAccountData &other) = delete;
@@ -440,6 +506,7 @@ private:
     };
 
     struct SendMessageInfo {
+        ChatId      chatId;
         int64_t     messageId;
         std::string tempFile;
     };
@@ -482,10 +549,18 @@ private:
     int32_t                                 m_callId;
 
     std::unique_ptr<PendingRequest> getPendingRequestImpl(uint64_t requestId);
+    void                            saveTempFileUploads();
     PendingRequest *                findPendingRequestImpl(uint64_t requestId);
 
     // Read receipts not sent immediately due to away status (grouped per chat)
     std::vector<std::vector<ReadReceipt>> m_pendingReadReceipts;
+
+    // Messages received in this session, and the order they came in, oldest first, so that
+    // only so many are kept
+    using ShownMessageKey = std::pair<ChatId, MessageId>;
+    std::map<ShownMessageKey, ShownMessage> m_shownMessages;
+    std::deque<ShownMessageKey>             m_shownMessageOrder;
+    std::vector<PendingEdit>                m_pendingEdits;
 };
 
 #endif

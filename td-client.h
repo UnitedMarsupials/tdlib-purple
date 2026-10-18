@@ -4,7 +4,7 @@
 #include "account-data.h"
 #include "buildopt.h"
 #include "client-utils.h"
-#include <td/telegram/Log.h>
+#include <td/telegram/Client.h>
 #include <purple.h>
 
 enum class BasicGroupMembership: uint8_t {
@@ -19,7 +19,7 @@ public:
     ~PurpleTdClient();
 
     static void setLogLevel(int level);
-    static void setTdlibFatalErrorCallback(td::Log::FatalErrorCallbackPtr callback);
+    static void setTdlibLogCallback(td::ClientManager::LogMessageCallbackPtr callback);
     static std::string getBaseDatabasePath();
     int  sendMessage(const char *buddyName, const char *message);
     void sendTyping(const char *buddyName, bool isTyping);
@@ -54,6 +54,10 @@ public:
     bool terminateCall(PurpleConversation *conv);
 
     void createSecretChat(const char *buddyName);
+
+    // A link to the message's file was clicked: fetches the file, if need be, and opens it; a variant,
+    // if given, names one of the sizes a photo or video comes in
+    void openMessageFile(ChatId chatId, MessageId messageId, const std::string &variant = std::string());
 private:
     using TdObjectPtr   = td::td_api::object_ptr<td::td_api::Object>;
     using ResponseCb    = void (PurpleTdClient::*)(uint64_t requestId, TdObjectPtr object);
@@ -128,11 +132,14 @@ private:
     void       chatActionResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
 
     void       onAnimatedStickerConverted(AccountThread *arg);
+    void       onReactionStickerConverted(AccountThread *arg);
     void       sendMessageCreatePrivateChatResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void       uploadResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
 
     void       sendMessageResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
-    void       removeTempFile(int64_t messageId);
+    void       removeTempFile(ChatId chatId, int64_t messageId);
+    void       checkTempFileUploads();
+    void       tempFileCheckResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
 
     void        setTwoFactorAuthResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void        requestRecoveryEmailConfirmation(const std::string &emailInfo);
@@ -162,6 +169,22 @@ private:
         MessageId lastMessage;
     };
     std::vector<ChatGap> m_chatGaps;
+
+    // Files being opened, or opened lately, so that clicking a link again while the program for the
+    // file is still starting does not start another
+    struct OpenedFile {
+        bool   inProgress;
+        time_t openedAt;
+    };
+    // By the link clicked: the chat, the message and the variant
+    std::map<std::string, OpenedFile> m_openedFiles;
+
+    void openMessageFileResponse(ChatId chatId, MessageId messageId, const std::string &variant,
+                                 TdObjectPtr object);
+    void openDownloadedFile(ChatId chatId, const std::string &key, const std::string &description,
+                            TdObjectPtr object);
+    void finishOpeningFile(ChatId chatId, const std::string &key, const std::string &description,
+                           const std::string &path, const std::string &error);
 };
 
 #endif

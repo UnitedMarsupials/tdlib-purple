@@ -1,4 +1,5 @@
 #include "fixture.h"
+#include "sticker.h"
 #include "libpurple-mock.h"
 #include "purple-info.h"
 #include <fmt/format.h>
@@ -371,6 +372,32 @@ TEST_F(PrivateChatTest, Document)
     tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
 }
 
+TEST_F(PrivateChatTest, Document_NotPidgin)
+{
+    const int64_t messageId = 1;
+    const int32_t date      = 10001;
+    const int32_t fileId    = 1234;
+    loginWithOneContact();
+    // Only Pidgin needs the scheme written twice
+    setUiName("BitlBee");
+    purple_account_set_string(account, "download-behaviour", "hyperlink");
+
+    tgl.update(make_object<updateNewMessage>(makeMessage(
+        messageId,
+        userIds[0],
+        chatIds[0],
+        false,
+        date,
+        makeMessageDocument("doc.file.name", "mime/type", makeFile(fileId, 10000, "/path"), "document")
+    )));
+    prpl.verifyEvents(ServGotImEvent(
+        connection, purpleUserName(0),
+        "<a href=\"file:///path\">doc.file.name [mime/type]</a>\ndocument",
+        PURPLE_MESSAGE_RECV, date
+    ));
+    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
+}
+
 TEST_F(PrivateChatTest, Video)
 {
     const int64_t messageId = 1;
@@ -598,6 +625,45 @@ TEST_F(PrivateChatTest, AlreadyDownloadedPhoto)
     tgl.reply(make_object<ok>()); // reply to viewMessages
 }
 
+TEST_F(PrivateChatTest, AlreadyDownloadedPhoto_NoGdkPixbuf)
+{
+    const int32_t date   = 10001;
+    const int32_t fileId = 1234;
+    // Like BitlBee, which shows no pictures
+    gdkPixbufGetFileInfoName = "no_such_function";
+    loginWithOneContact();
+
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(makeFile(fileId, 10000, "/path"), 640, 480));
+    tgl.update(make_object<updateNewMessage>(makeMessage(
+        1,
+        userIds[0],
+        chatIds[0],
+        false,
+        date,
+        makeMessagePhoto(
+            makePhotoWithSizes(std::move(sizes)),
+            makeFormattedText("caption"),
+            false, false, false
+        )
+    )));
+    tgl.verifyRequest(
+        viewMessages(chatIds[0], std::vector<int64_t>(1, 1), nullptr, true)
+    );
+    prpl.verifyEvents(
+        ServGotImEvent(
+            connection,
+            purpleUserName(0),
+            "<a href=\"file://file:///path\">photo</a>\n"
+            "caption",
+            PURPLE_MESSAGE_RECV,
+            date
+        )
+    );
+
+    tgl.reply(make_object<ok>()); // reply to viewMessages
+}
+
 TEST_F(PrivateChatTest, IgnoredUpdateUserAndNewPrivateChat)
 {
     loginWithOneContact();
@@ -747,6 +813,143 @@ TEST_F(PrivateChatTest, SendImage)
                                "Failed to send message: code 100 (whatever error)",
                                PURPLE_MESSAGE_SYSTEM, messageFailureDate)
     );
+}
+
+TEST_F(PrivateChatTest, SendImageRejected)
+{
+    loginWithOneContact();
+
+    uint8_t data[] = {1, 2, 3, 4, 5};
+    const int id = purple_imgstore_add_with_id(arrayDup(data, sizeof(data)), sizeof(data), "filename");
+    const std::string messageText = fmt::format("<img id=\"{}\">caption", id);
+
+    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), messageText.c_str(), PURPLE_MESSAGE_SEND));
+    tgl.verifyRequest(*makeSendMessage(
+        chatIds[0],
+        0,
+        nullptr,
+        nullptr,
+        nullptr, makeInputMessagePhoto(
+            make_object<inputFileLocal>(),
+            nullptr, std::vector<std::int32_t>(), 0, 0,
+            makeFormattedText("caption"),
+            false, nullptr, false
+        )
+    ));
+    checkFile(tgl.getInputPhotoPath(0).c_str(), data, sizeof(data));
+
+    // No message is created, so nothing else would ever free the file
+    tgl.reply(makeError(400, "PHOTO_INVALID"));
+    ASSERT_FALSE(g_file_test(tgl.getInputPhotoPath(0).c_str(), G_FILE_TEST_EXISTS));
+    prpl.verifyEvents(
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+        ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                               "Failed to send message: code 400 (PHOTO_INVALID)",
+                               PURPLE_MESSAGE_SYSTEM, 0)
+    );    tgl.verifyNoRequests();
+}
+
+TEST_F(PrivateChatTest, SendImageCancelled)
+{
+    const int64_t messageId = 10;
+    const int32_t fileId    = 101;
+    loginWithOneContact();
+
+    uint8_t data[] = {1, 2, 3, 4, 5};
+    const int id = purple_imgstore_add_with_id(arrayDup(data, sizeof(data)), sizeof(data), "filename");
+    const std::string messageText = fmt::format("<img id=\"{}\">caption", id);
+
+    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), messageText.c_str(), PURPLE_MESSAGE_SEND));
+    tgl.verifyRequest(*makeSendMessage(
+        chatIds[0],
+        0,
+        nullptr,
+        nullptr,
+        nullptr, makeInputMessagePhoto(
+            make_object<inputFileLocal>(),
+            nullptr, std::vector<std::int32_t>(), 0, 0,
+            makeFormattedText("caption"),
+            false, nullptr, false
+        )
+    ));
+    object_ptr<message> msg = makeMessage(
+        messageId, userIds[0], chatIds[0], true, 1,
+        makeMessagePhoto(
+            makePhotoUploading(fileId, sizeof(data), 0, "/path", 0, 0),
+            makeFormattedText("caption"),
+            false, false, false
+        )
+    );
+    msg->sending_state_ = make_object<messageSendingStatePending>();
+    tgl.reply(std::move(msg));
+    checkFile(tgl.getInputPhotoPath(0).c_str(), data, sizeof(data));
+    // Remembered in case the account disconnects meanwhile
+    ASSERT_EQ(std::to_string(chatIds[0]) + " " + std::to_string(messageId) + " " + tgl.getInputPhotoPath(0) + "\n",
+              std::string(purple_account_get_string(account, "temp-image-uploads", "")));
+
+    // The same message id in another chat is another message
+    tgl.update(makeUpdateDeleteMessages(chatIds[1], messageId, true, false));
+    ASSERT_TRUE(g_file_test(tgl.getInputPhotoPath(0).c_str(), G_FILE_TEST_EXISTS));
+
+    // Deleted before the upload finished, which is the end of it as far as TDLib is concerned
+    tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
+    ASSERT_FALSE(g_file_test(tgl.getInputPhotoPath(0).c_str(), G_FILE_TEST_EXISTS));
+    ASSERT_EQ(nullptr, purple_account_get_string(account, "temp-image-uploads", nullptr));
+    prpl.verifyNoEvents();
+    tgl.verifyNoRequests();
+}
+
+TEST_F(PrivateChatTest, SendImageFromEarlierSession)
+{
+    // Still sending, sent while we were away but never reported, forgotten by TDLib, and one TDLib
+    // could not answer for
+    const int64_t messageIds[4] = {10, 11, 12, 13};
+    std::string   paths[4];
+    std::string   setting;
+    for (unsigned i = 0; i < 4; i++) {
+        char *path = NULL;
+        int   fd   = g_file_open_tmp("tdlib_test_XXXXXX", &path, NULL);
+        ASSERT_TRUE(fd >= 0);
+        ::close(fd);
+        paths[i] = path;
+        g_free(path);
+        setting += std::to_string(chatIds[0]) + " " + std::to_string(messageIds[i]) + " " + paths[i] + "\n";
+    }
+    purple_account_set_string(account, "temp-image-uploads", setting.c_str());
+
+    loginWithOneContact();
+    tgl.verifyRequests({
+        make_object<getMessage>(chatIds[0], messageIds[0]),
+        make_object<getMessage>(chatIds[0], messageIds[1]),
+        make_object<getMessage>(chatIds[0], messageIds[2]),
+        make_object<getMessage>(chatIds[0], messageIds[3])
+    });
+    tgl.reply(makeMessage(messageIds[0], userIds[0], chatIds[0], true, 1, makeTextMessage("")));
+    object_ptr<message> msg = makeMessage(messageIds[1], userIds[0], chatIds[0], true, 1, makeTextMessage(""));
+    msg->sending_state_ = nullptr;
+    tgl.reply(std::move(msg));
+    tgl.reply(makeError(404, "Not Found"));
+    tgl.reply(makeError(500, "Internal Server Error"));
+
+    ASSERT_TRUE(g_file_test(paths[0].c_str(), G_FILE_TEST_EXISTS));
+    ASSERT_FALSE(g_file_test(paths[1].c_str(), G_FILE_TEST_EXISTS));
+    ASSERT_FALSE(g_file_test(paths[2].c_str(), G_FILE_TEST_EXISTS));
+    ASSERT_TRUE(g_file_test(paths[3].c_str(), G_FILE_TEST_EXISTS));
+    ASSERT_EQ(std::to_string(chatIds[0]) + " " + std::to_string(messageIds[0]) + " " + paths[0] + "\n" +
+              std::to_string(chatIds[0]) + " " + std::to_string(messageIds[3]) + " " + paths[3] + "\n",
+              std::string(purple_account_get_string(account, "temp-image-uploads", "")));
+
+    // TDLib finishes what it began in the earlier session
+    tgl.update(make_object<updateMessageSendSucceeded>(
+        makeMessage(20, userIds[0], chatIds[0], true, 1, makeTextMessage("")), messageIds[0]
+    ));
+    ASSERT_FALSE(g_file_test(paths[0].c_str(), G_FILE_TEST_EXISTS));
+    // The one unaccounted for waits for the next login
+    ASSERT_EQ(std::to_string(chatIds[0]) + " " + std::to_string(messageIds[3]) + " " + paths[3] + "\n",
+              std::string(purple_account_get_string(account, "temp-image-uploads", "")));
+    remove(paths[3].c_str());
+    prpl.verifyNoEvents();
+    tgl.verifyNoRequests();
 }
 
 TEST_F(PrivateChatTest, ReplyToOldMessage)

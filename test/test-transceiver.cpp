@@ -58,6 +58,7 @@ guint TestTransceiver::addTimeout(guint interval, GSourceFunc function, gpointer
 {
     m_timers.emplace_back();
     m_timers.back().id = m_nextTimerId;
+    m_timers.back().interval = interval;
     m_timers.back().function = function;
     m_timers.back().data = data;
 
@@ -71,6 +72,14 @@ void TestTransceiver::cancelTimer(guint id)
                    m_timers.end());
 }
 
+std::vector<guint> TestTransceiver::getTimeoutIntervals()
+{
+    std::vector<guint> result;
+    for (const TimerInfo &timer: m_timers)
+        result.push_back(timer.interval);
+    return result;
+}
+
 void TestTransceiver::runTimeouts()
 {
     std::cout << "Waiting for all timeouts\n";
@@ -78,6 +87,17 @@ void TestTransceiver::runTimeouts()
         while (timer.function(timer.data)) ;
 
     m_timers.clear();
+}
+
+void TestTransceiver::removeTempFiles()
+{
+    // The plugin removes its image file once TDLib reports on the message, which most test cases
+    // never get as far as. Only its own temporary files, and not the made-up paths tests use.
+    std::string prefix = std::string(g_get_tmp_dir()) + G_DIR_SEPARATOR_S "tdlib_upload_";
+    for (const std::string &path: m_inputPhotoPaths)
+        if (path.compare(0, prefix.size(), prefix) == 0)
+            remove(path.c_str());
+    m_inputPhotoPaths.clear();
 }
 
 #define COMPARE(param) ASSERT_EQ(expected.param, actual.param)
@@ -346,6 +366,11 @@ static void compare(const getMessage &actual, const getMessage &expected)
     COMPARE(message_id_);
 }
 
+static void compare(const getCustomEmojiStickers &actual, const getCustomEmojiStickers &expected)
+{
+    COMPARE(custom_emoji_ids_);
+}
+
 static void compare(const sendChatAction &actual, const sendChatAction &expected)
 {
     COMPARE(chat_id_);
@@ -565,6 +590,7 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(checkAuthenticationCode)
         C(registerUser)
         C(getMessage)
+        C(getCustomEmojiStickers)
         C(sendChatAction)
         C(addProxy)
         case disableProxy::ID: break; // no data fields
@@ -727,6 +753,13 @@ object_ptr<sticker> makeSticker(std::int32_t width_, std::int32_t height_,
 
 // supergroup's username became a usernames object, and it has gained boost_level_ and a dozen
 // flags besides; only what the tests assert on is set here.
+object_ptr<chatMemberStatusCreator> makeCreatorStatus()
+{
+    auto result = make_object<chatMemberStatusCreator>();
+    result->is_member_ = true;
+    return result;
+}
+
 object_ptr<supergroup> makeSupergroup(std::int64_t id_, object_ptr<ChatMemberStatus> &&status_,
                                       std::int32_t member_count_)
 {
@@ -942,6 +975,220 @@ object_ptr<messagePhoto> makeMessagePhoto(object_ptr<photo> &&photo_, object_ptr
     result->show_caption_above_media_ = show_caption_above_media_;
     result->has_spoiler_              = has_spoiler_;
     result->is_secret_                = is_secret_;
+    return result;
+}
+
+object_ptr<textEntity> makeTextEntity(std::int32_t offset, std::int32_t length, object_ptr<TextEntityType> &&type)
+{
+    auto result = make_object<textEntity>();
+    result->offset_ = offset;
+    result->length_ = length;
+    result->type_   = std::move(type);
+    return result;
+}
+
+object_ptr<alternativeVideo> makeAlternativeVideo(std::int64_t id, std::int32_t width, std::int32_t height,
+                                                  const std::string &codec, object_ptr<file> &&video)
+{
+    auto result = make_object<alternativeVideo>();
+    result->id_     = id;
+    result->width_  = width;
+    result->height_ = height;
+    result->codec_  = codec;
+    result->video_  = std::move(video);
+    return result;
+}
+
+object_ptr<messages> makeMessages(std::vector<object_ptr<message>> &&list)
+{
+    auto result = make_object<messages>();
+    result->total_count_ = list.size();
+    result->messages_    = std::move(list);
+    return result;
+}
+
+object_ptr<updateChatTitle> makeUpdateChatTitle(std::int64_t chatId, const std::string &title)
+{
+    auto result = make_object<updateChatTitle>();
+    result->chat_id_ = chatId;
+    result->title_   = title;
+    return result;
+}
+
+object_ptr<error> makeError(std::int32_t code, const std::string &message)
+{
+    auto result = make_object<error>();
+    result->code_    = code;
+    result->message_ = message;
+    return result;
+}
+
+object_ptr<file> makeFile(std::int32_t id, std::int64_t size, const std::string &path,
+                          const std::string &uniqueId)
+{
+    bool downloaded = !path.empty();
+    auto local = make_object<localFile>();
+    local->path_                     = path;
+    local->can_be_downloaded_        = true;
+    local->can_be_deleted_           = true;
+    local->is_downloading_completed_ = downloaded;
+    local->downloaded_prefix_size_   = downloaded ? size : 0;
+    local->downloaded_size_          = downloaded ? size : 0;
+    auto remote = make_object<remoteFile>();
+    remote->id_                     = "beh";
+    remote->unique_id_              = uniqueId;
+    remote->is_uploading_completed_ = true;
+    remote->uploaded_size_          = size;
+    auto result = make_object<file>();
+    result->id_            = id;
+    result->size_          = size;
+    result->expected_size_ = size;
+    result->local_         = std::move(local);
+    result->remote_        = std::move(remote);
+    return result;
+}
+
+object_ptr<formattedText> makeFormattedText(const std::string &text)
+{
+    auto result = make_object<formattedText>();
+    result->text_ = text;
+    return result;
+}
+
+object_ptr<photo> makePhotoWithSizes(std::vector<object_ptr<photoSize>> &&sizes)
+{
+    auto result = make_object<photo>();
+    result->sizes_ = std::move(sizes);
+    return result;
+}
+
+object_ptr<messageDocument> makeMessageDocument(const std::string &fileName, const std::string &mimeType,
+                                                object_ptr<file> &&document, const std::string &caption)
+{
+    auto doc = make_object<td::td_api::document>();
+    doc->file_name_ = fileName;
+    doc->mime_type_ = mimeType;
+    doc->document_  = std::move(document);
+    auto result = make_object<messageDocument>();
+    result->document_ = std::move(doc);
+    result->caption_  = makeFormattedText(caption);
+    return result;
+}
+
+object_ptr<updateMessageContent> makeUpdateMessageContent(std::int64_t chatId, std::int64_t messageId,
+                                                          object_ptr<MessageContent> &&content)
+{
+    auto result = make_object<updateMessageContent>();
+    result->chat_id_     = chatId;
+    result->message_id_  = messageId;
+    result->new_content_ = std::move(content);
+    return result;
+}
+
+object_ptr<updateDeleteMessages> makeUpdateDeleteMessages(std::int64_t chatId, std::int64_t messageId,
+                                                          bool isPermanent, bool fromCache)
+{
+    auto result = make_object<updateDeleteMessages>();
+    result->chat_id_      = chatId;
+    result->message_ids_  = {messageId};
+    result->is_permanent_ = isPermanent;
+    result->from_cache_   = fromCache;
+    return result;
+}
+
+object_ptr<messageReaction> makeMessageReaction(object_ptr<ReactionType> &&type, std::int32_t totalCount,
+                                                bool isChosen, object_ptr<MessageSender> &&usedSender,
+                                                std::vector<object_ptr<MessageSender>> &&recentSenders)
+{
+    auto result = make_object<messageReaction>();
+    result->type_              = std::move(type);
+    result->total_count_       = totalCount;
+    result->is_chosen_         = isChosen;
+    result->used_sender_id_    = std::move(usedSender);
+    result->recent_sender_ids_ = std::move(recentSenders);
+    return result;
+}
+
+object_ptr<messageInteractionInfo> makeInteractionInfo(std::vector<object_ptr<messageReaction>> &&reactions)
+{
+    auto list = make_object<messageReactions>();
+    list->reactions_ = std::move(reactions);
+    auto result = make_object<messageInteractionInfo>();
+    result->reactions_ = std::move(list);
+    return result;
+}
+
+object_ptr<updateMessageInteractionInfo> makeUpdateReactions(std::int64_t chatId, std::int64_t messageId,
+                                                             std::vector<object_ptr<messageReaction>> &&reactions)
+{
+    auto result = make_object<updateMessageInteractionInfo>();
+    result->chat_id_          = chatId;
+    result->message_id_       = messageId;
+    result->interaction_info_ = makeInteractionInfo(std::move(reactions));
+    return result;
+}
+
+object_ptr<unreadReaction> makeUnreadReaction(object_ptr<ReactionType> &&type, object_ptr<MessageSender> &&sender)
+{
+    auto result = make_object<unreadReaction>();
+    result->type_      = std::move(type);
+    result->sender_id_ = std::move(sender);
+    return result;
+}
+
+object_ptr<updateMessageUnreadReactions> makeUpdateUnreadReactions(std::int64_t chatId, std::int64_t messageId,
+                                                                   std::vector<object_ptr<unreadReaction>> &&reactions,
+                                                                   std::int32_t unreadCount)
+{
+    auto result = make_object<updateMessageUnreadReactions>();
+    result->chat_id_               = chatId;
+    result->message_id_            = messageId;
+    result->unread_reactions_      = std::move(reactions);
+    result->unread_reaction_count_ = unreadCount;
+    return result;
+}
+
+static object_ptr<location> makeLocationObject(double latitude, double longitude, double accuracy)
+{
+    auto result = make_object<location>();
+    result->latitude_            = latitude;
+    result->longitude_           = longitude;
+    result->horizontal_accuracy_ = accuracy;
+    return result;
+}
+
+object_ptr<MessageContent> makeMessageLocation(double latitude, double longitude, double accuracy,
+                                               std::int32_t livePeriod, std::int32_t expiresIn)
+{
+#if TDLIB_API_LIVE_LOCATION
+    if (livePeriod) {
+        auto live = make_object<liveLocation>();
+        live->location_    = makeLocationObject(latitude, longitude, accuracy);
+        live->live_period_ = livePeriod;
+        auto result = make_object<messageLiveLocation>();
+        result->location_   = std::move(live);
+        result->expires_in_ = expiresIn;
+        return result;
+    }
+#endif
+    auto result = make_object<messageLocation>();
+    result->location_ = makeLocationObject(latitude, longitude, accuracy);
+#if !TDLIB_API_LIVE_LOCATION
+    result->live_period_ = livePeriod;
+    result->expires_in_  = expiresIn;
+#endif
+    return result;
+}
+
+object_ptr<messageVenue> makeMessageVenue(double latitude, double longitude, const std::string &title,
+                                          const std::string &address)
+{
+    auto place = make_object<venue>();
+    place->location_ = makeLocationObject(latitude, longitude, 0);
+    place->title_    = title;
+    place->address_  = address;
+    auto result = make_object<messageVenue>();
+    result->venue_ = std::move(place);
     return result;
 }
 

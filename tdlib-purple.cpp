@@ -1,6 +1,7 @@
 #include "tdlib-purple.h"
 #include "config.h"
 #include "td-client.h"
+#include "client-utils.h"
 #include "purple-info.h"
 #include "format.h"
 #include "buildopt.h"
@@ -16,6 +17,8 @@
 #include <string>
 #include <vector>
 #include <array>
+#include <deque>
+#include <mutex>
 #include <ctype.h>
 #include <unistd.h>
 
@@ -908,10 +911,87 @@ static bool checkTdlibVersion()
     return true;
 }
 
+void tgprpl_open_message_link(const char *link)
+{
+    std::string accountName;
+    ChatId      chatId;
+    MessageId   messageId;
+    std::string variant;
+    if (!parseMessageLink(link, accountName, chatId, messageId, variant)) {
+        purple_debug_warning(config::pluginId, "Not a link to a message: %s\n", link);
+        return;
+    }
+
+    PurpleAccount    *account = purple_accounts_find(accountName.c_str(), config::pluginId);
+    PurpleConnection *gc      = account ? purple_account_get_connection(account) : NULL;
+    PurpleTdClient   *client  = gc ? static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc)) : NULL;
+    if (!client || !PURPLE_CONNECTION_IS_CONNECTED(gc)) {
+        // TRANSLATOR: Error dialog, secondary content. Argument is the account's name, its phone number.
+        std::string reason = formatMessage(_("Account {} is not connected."), accountName);
+        // TRANSLATOR: Error dialog, primary content, after a file's link in a conversation was clicked.
+        purple_notify_error(NULL, config::pluginName, _("Cannot open the file"), reason.c_str());
+        return;
+    }
+    client->openMessageFile(chatId, messageId, variant);
+}
+
+// Pidgin's conversation window, GtkIMHtml, lets a program handle links of a scheme of its own.
+// Looked up by name, as the plugin does not depend on GTK; front-ends without it get links to
+// files instead. The declarations, from gtkimhtml.h:
+//   gboolean gtk_imhtml_class_register_protocol(const char *name,
+//       gboolean (*activate)(GtkIMHtml *imhtml, GtkIMHtmlLink *link),
+//       gboolean (*context_menu)(GtkIMHtml *imhtml, GtkIMHtmlLink *link, GtkWidget *menu));
+//   const char *gtk_imhtml_link_get_url(GtkIMHtmlLink *link);
+using LinkActivate     = gboolean (*)(void *imhtml, void *link);
+using LinkContextMenu  = gboolean (*)(void *imhtml, void *link, void *menu);
+using RegisterProtocol = gboolean (*)(const char *name, LinkActivate activate, LinkContextMenu contextMenu);
+using LinkGetUrl       = const char *(*)(void *link);
+static RegisterProtocol g_registerProtocol;
+static LinkGetUrl       g_linkGetUrl;
+
+static gboolean messageLinkClicked(void *imhtml, void *link)
+{
+    const char *url = g_linkGetUrl(link);
+    if (url)
+        tgprpl_open_message_link(url);
+    return TRUE;
+}
+
+// Called whenever the link is right-clicked; it adds nothing to the menu
+static gboolean messageLinkContextMenu(void *imhtml, void *link, void *menu)
+{
+    return TRUE;
+}
+
+static void registerMessageLinks()
+{
+    g_registerProtocol = reinterpret_cast<RegisterProtocol>(findFrontEndSymbol("gtk_imhtml_class_register_protocol"));
+    g_linkGetUrl       = reinterpret_cast<LinkGetUrl>(findFrontEndSymbol("gtk_imhtml_link_get_url"));
+    setMessageLinksEnabled(g_registerProtocol && g_linkGetUrl &&
+                           g_registerProtocol(MESSAGE_LINK_SCHEME, messageLinkClicked, messageLinkContextMenu));
+    purple_debug_info(config::pluginId, "Links to messages' files: %s\n",
+                      messageLinksEnabled() ? MESSAGE_LINK_SCHEME : "file://");
+}
+
+static void unregisterMessageLinks()
+{
+    // Registering a scheme without a handler removes it
+    if (messageLinksEnabled())
+        g_registerProtocol(MESSAGE_LINK_SCHEME, NULL, NULL);
+    setMessageLinksEnabled(false);
+}
+
+static gboolean tgprpl_unload (PurplePlugin *plugin)
+{
+    unregisterMessageLinks();
+    return TRUE;
+}
+
 static gboolean tgprpl_load (PurplePlugin *plugin)
 {
     if (!checkTdlibVersion())
         return FALSE;
+    registerMessageLinks();
 
     purple_cmd_register("kick", "s", PURPLE_CMD_P_PLUGIN,
                         (PurpleCmdFlag)(PURPLE_CMD_FLAG_CHAT | PURPLE_CMD_FLAG_PRPL_ONLY),
@@ -973,6 +1053,70 @@ static void tdlibFatalErrorCallback(const char *message)
     while (1) sleep(1000);
 }
 
+struct TdlibLogMessage {
+    int         level;
+    std::string text;
+};
+
+// TDLib's threads can log faster than the main loop goes idle, so the messages wait in a queue of
+// bounded length, which one idle source at a time empties
+enum { TDLIB_LOG_QUEUE_LENGTH = 1000 };
+static std::mutex                  g_tdlibLogMutex;
+static std::deque<TdlibLogMessage> g_tdlibLogQueue;
+static unsigned                    g_tdlibLogDropped   = 0;
+static bool                        g_tdlibLogScheduled = false;
+
+static void showTdlibLogMessage(const TdlibLogMessage &message)
+{
+    // The text ends with a newline already
+    if (message.level <= 1)
+        purple_debug_error("tdlib", "%s", message.text.c_str());
+    else if (message.level == 2)
+        purple_debug_warning("tdlib", "%s", message.text.c_str());
+    else if (message.level == 3)
+        purple_debug_info("tdlib", "%s", message.text.c_str());
+    else
+        purple_debug_misc("tdlib", "%s", message.text.c_str());
+}
+
+static gboolean tdlibLogHandler(void *)
+{
+    std::deque<TdlibLogMessage> messages;
+    unsigned                    dropped;
+    {
+        std::lock_guard<std::mutex> lock(g_tdlibLogMutex);
+        messages.swap(g_tdlibLogQueue);
+        dropped             = g_tdlibLogDropped;
+        g_tdlibLogDropped   = 0;
+        g_tdlibLogScheduled = false;
+    }
+    for (const TdlibLogMessage &message: messages)
+        showTdlibLogMessage(message);
+    if (dropped)
+        purple_debug_warning(config::pluginId, "%u TDLib log messages dropped\n", dropped);
+    return FALSE; // this idle handler will not be called again
+}
+
+static void tdlibLogCallback(int level, const char *message)
+{
+    if (level == 0) {
+        tdlibFatalErrorCallback(message);
+        return;
+    }
+
+    // Called on TDLib's threads, while libpurple's debug output, Pidgin's debug window included,
+    // belongs to the main one
+    std::lock_guard<std::mutex> lock(g_tdlibLogMutex);
+    if (g_tdlibLogQueue.size() >= TDLIB_LOG_QUEUE_LENGTH)
+        g_tdlibLogDropped++;
+    else
+        g_tdlibLogQueue.push_back(TdlibLogMessage{level, message});
+    if (!g_tdlibLogScheduled) {
+        g_tdlibLogScheduled = true;
+        g_idle_add(tdlibLogHandler, NULL);
+    }
+}
+
 static void tgprpl_init (PurplePlugin *plugin)
 {
 #ifndef NoTranslations
@@ -997,7 +1141,7 @@ static void tgprpl_init (PurplePlugin *plugin)
     else
         // Log up to fatal errors and errors
         PurpleTdClient::setLogLevel(1);
-    PurpleTdClient::setTdlibFatalErrorCallback(tdlibFatalErrorCallback);
+    PurpleTdClient::setTdlibLogCallback(tdlibLogCallback);
 
 #ifndef NoLottie
     rlottie::configureModelCacheSize(0);
@@ -1023,6 +1167,22 @@ static void tgprpl_init (PurplePlugin *plugin)
     opt = purple_account_option_string_new (_("Inline auto-download size limit, MB (0 for unlimited)"),
                                             AccountOptions::AutoDownloadLimit,
                                             AccountOptions::AutoDownloadLimitDefault);
+    prpl_info.protocol_options = g_list_append (prpl_info.protocol_options, opt);
+
+    // Telegram may have a video in several sizes, of which one can be downloaded beforehand, to be
+    // played as soon as clicked; the default first
+    choices = NULL;
+    // TRANSLATOR: Account settings, value for "Prefetch videos"; "the auto-download limit" is the option "Inline auto-download size limit".
+    addChoice(choices, _("Highest resolution within the auto-download limit (if one is set)"),
+              AccountOptions::PrefetchVideosLargestWithinLimit);
+    // TRANSLATOR: Account settings, value for "Prefetch videos": the highest resolution, or nothing if that is above the auto-download limit.
+    addChoice(choices, _("Highest resolution only"), AccountOptions::PrefetchVideosLargest);
+    // TRANSLATOR: Account settings, value for "Prefetch videos"
+    addChoice(choices, _("Smallest file"), AccountOptions::PrefetchVideosSmallest);
+    // TRANSLATOR: Account settings, value for "Prefetch videos"
+    addChoice(choices, _("Don't prefetch"), AccountOptions::PrefetchVideosNone);
+    // TRANSLATOR: Account settings, key (choice). Videos are downloaded beforehand, so that they play as soon as clicked.
+    opt = purple_account_option_list_new(_("Prefetch videos"), AccountOptions::PrefetchVideos, choices);
     prpl_info.protocol_options = g_list_append (prpl_info.protocol_options, opt);
 
     static_assert(AccountOptions::BigDownloadHandlingDefault == AccountOptions::BigDownloadHandlingAsk,
@@ -1059,6 +1219,18 @@ static void tgprpl_init (PurplePlugin *plugin)
     // TRANSLATOR: Account settings, key (boolean)
     opt = purple_account_option_bool_new(_("Show self-destructing messages anyway"), AccountOptions::ShowSelfDestruct,
                                          AccountOptions::ShowSelfDestructDefault);
+    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+
+    // TRANSLATOR: Account settings, key (boolean)
+    opt = purple_account_option_bool_new(_("Show messages from channels and groups you have not joined"),
+                                         AccountOptions::ShowUnjoinedChats,
+                                         AccountOptions::ShowUnjoinedChatsDefault);
+    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+
+    // TRANSLATOR: Account settings, key (boolean). Custom emoji are pictures of their own, each standing for an ordinary emoji.
+    opt = purple_account_option_bool_new(_("Show custom emoji in reactions as ordinary emoji"),
+                                         AccountOptions::FoldCustomEmoji,
+                                         AccountOptions::FoldCustomEmojiDefault);
     prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
 
     if (canDisableReadReceipts()) {
@@ -1181,7 +1353,7 @@ static PurplePluginInfo plugin_info = {
     .author            = config::pluginAuthor,
     .homepage          = config::projectUrl,
     .load              = tgprpl_load,
-    .unload            = NULL,
+    .unload            = tgprpl_unload,
     .destroy           = NULL,
     .ui_info           = NULL,
     .extra_info        = &prpl_info,

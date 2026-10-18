@@ -175,7 +175,7 @@ jobs:
           sh .github/annotate.sh Setup apk add --no-cache \
               cmake samurai pkgconf gettext gettext-dev g++ ${{ matrix.compiler }} \
               pidgin-dev telegram-tdlib-dev telegram-tdlib-static openssl-dev zlib-dev \
-              fmt-dev rlottie-dev libwebp-dev libpng-dev gtest-dev ${{ matrix.valgrind && 'valgrind' || '' }} \
+              fmt-dev rlottie-dev gtest-dev ${{ matrix.valgrind && 'valgrind' || '' }} \
               ${{ matrix.sanitize && 'clang compiler-rt' || '' }}
           apk info -v telegram-tdlib-dev
 
@@ -277,7 +277,7 @@ jobs:
             options: ''
             install: >-
               sudo pkg install -y cmake ninja pkgconf gettext-tools
-              libpurple tdlib libfmt rlottie webp png googletest valgrind
+              libpurple tdlib libfmt rlottie googletest valgrind
           - name: FreeBSD 14.4
             os: freebsd
             version: '14.4'
@@ -288,7 +288,7 @@ jobs:
             options: ''
             install: >-
               sudo pkg install -y cmake ninja pkgconf gettext-tools
-              libpurple tdlib libfmt rlottie webp png googletest valgrind
+              libpurple tdlib libfmt rlottie googletest valgrind
           # No rlottie package, so no animated stickers.
           - name: OpenBSD 7.9 (experimental, NoLottie)
             os: openbsd
@@ -300,7 +300,7 @@ jobs:
             options: -DNoLottie=1
             install: >-
               sudo pkg_add -I cmake ninja gettext-tools libpurple tdlib fmt
-              libwebp png gtest
+              gtest
     defaults:
       run:
         shell: cpa.sh {0}
