@@ -434,6 +434,10 @@ public:
     std::string                   getDisplayName(UserId userId) const;
     void                          getUsersByDisplayName(const char *displayName,
                                                         std::vector<const td::td_api::user*> &users);
+    // Resolve a Telegram @username (case-insensitive, optional leading '@') to loaded users, so
+    // that a message addressed to a handle rather than an "id<n>" buddy can find its user.
+    void                          getUsersByUsername(const char *username,
+                                                     std::vector<const td::td_api::user*> &users);
 
     const td::td_api::basicGroup *getBasicGroup(BasicGroupId groupId) const;
     const td::td_api::basicGroupFullInfo *getBasicGroupInfo(BasicGroupId groupId) const;

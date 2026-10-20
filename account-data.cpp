@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <stdio.h>
 #include <unistd.h>
+#include <cctype>
 
 static bool isCanonicalPhoneNumber(const char *s)
 {
@@ -634,6 +635,40 @@ void TdAccountData::getUsersByDisplayName(const char *displayName,
     for (const UserMap::value_type &entry: m_userInfo)
         if (entry.second.displayName == displayName)
             users.push_back(entry.second.user.get());
+}
+
+// Match by Telegram @username. Telegram usernames are case-insensitive; accept an optional leading
+// '@'. Checks the editable username and any active usernames.
+void TdAccountData::getUsersByUsername(const char *username,
+                                       std::vector<const td::td_api::user*> &users)
+{
+    users.clear();
+    if (!username || (*username == '\0'))
+        return;
+    if (*username == '@')
+        username++;
+    std::string want(username);
+    std::transform(want.begin(), want.end(), want.begin(), ::tolower);
+    if (want.empty())
+        return;
+
+    auto equalsIgnoreCase = [&want](const std::string &candidate) {
+        std::string s(candidate);
+        std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+        return s == want;
+    };
+
+    for (const UserMap::value_type &entry: m_userInfo) {
+        const td::td_api::user *u = entry.second.user.get();
+        if (!u || !u->usernames_)
+            continue;
+        bool hit = equalsIgnoreCase(u->usernames_->editable_username_);
+        if (!hit)
+            for (const std::string &active: u->usernames_->active_usernames_)
+                if (equalsIgnoreCase(active)) { hit = true; break; }
+        if (hit)
+            users.push_back(u);
+    }
 }
 
 const td::td_api::basicGroup *TdAccountData::getBasicGroup(BasicGroupId groupId) const
