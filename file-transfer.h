@@ -53,6 +53,7 @@ std::string getFileName(const td::td_api::videoNote *document);
 
 std::string makeDocumentDescription(const td::td_api::voiceNote *document);
 std::string makeDocumentDescription(const td::td_api::videoNote *document);
-std::string makeDocumentDescription(const td::td_api::video *document);
+// Marked as the original where links to the other sizes Telegram has it in go with it
+std::string makeDocumentDescription(const td::td_api::video *document, bool original);
 
 #endif

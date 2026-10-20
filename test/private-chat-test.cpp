@@ -437,7 +437,7 @@ TEST_F(PrivateChatTest, Video)
         ServGotImEvent(
             connection,
             purpleUserName(0),
-            "<a href=\"file://file:///path\">video.avi [video/whatever, 640×480]</a>\nvideo",
+            "<a href=\"file://file:///path\">video.avi [video/whatever, 640×480, purple_str_size_to_units]</a>\nvideo",
             PURPLE_MESSAGE_RECV,
             date
         )

@@ -1611,7 +1611,8 @@ void getFileFromMessage(const IncomingMessage &fullMessage, FileInfo &result)
             result.file = video.video_ ? video.video_->video_.get() : nullptr;
             if (video.caption_) result.caption = getMessageText(*video.caption_);
             result.name = getFileName(video.video_.get());
-            result.description = makeDocumentDescription(video.video_.get());
+            result.description = makeDocumentDescription(video.video_.get(),
+                                                         !fullMessage.messageInfo.mediaVariantLinks.empty());
             result.secret = video.is_secret_;
             break;
         }

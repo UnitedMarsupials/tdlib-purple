@@ -23,7 +23,8 @@ void getMediaVariants(const td::td_api::MessageContent &content, std::vector<Med
 const td::td_api::file *findMediaVariant(const td::td_api::MessageContent &content, const std::string &key,
                                          std::string &description);
 
-// A line of links, one to each variant, for the plugin to open when clicked; empty if there is but one
+// A line of links, one to each variant but a video as sent, for the plugin to open when clicked; empty if
+// there is but one
 std::string makeMediaVariantLinks(PurpleAccount *account, ChatId chatId, MessageId messageId,
                                   const std::vector<MediaVariant> &variants);
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- **A video's file link gives its file size and, where it has other sizes, is marked as the original, which is no longer listed among them.**
+
 ## 0.9.3 (2026-10-19)
 
 ### Features
