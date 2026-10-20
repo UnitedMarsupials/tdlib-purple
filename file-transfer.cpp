@@ -587,15 +587,26 @@ std::string makeDocumentDescription(const td::td_api::videoNote *document)
     return formatMessage(_("video note [{}]"), formatDuration(document->duration_));
 }
 
-std::string makeDocumentDescription(const td::td_api::video *document)
+std::string makeDocumentDescription(const td::td_api::video *document, bool original)
 {
     if (!document)
         // Unlikely error message not worth translating
         return "(faulty file)";
-    // Its picture size too, as the links to its other sizes give theirs
+    // Its picture and file sizes too, as the links to its other sizes give theirs
     std::string result = document->file_name_ + " [" + document->mime_type_;
     if (document->width_ && document->height_)
         result += ", " + std::to_string(document->width_) + "×" + std::to_string(document->height_);
+    if (original)
+        // TRANSLATOR: Of a video in several sizes, the one as it was sent, in place of a codec, as in "720×576 (original), 14 MiB".
+        result += std::string(" (") + _("original") + ")";
+    int64_t size = document->video_ ? (document->video_->size_ ? document->video_->size_ :
+                                                                 document->video_->expected_size_) : 0;
+    if (size > 0) {
+        char *units = purple_str_size_to_units(size);
+        result += ", ";
+        result += units;
+        g_free(units);
+    }
     return result + "]";
 }
 

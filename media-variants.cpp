@@ -81,6 +81,9 @@ std::string makeMediaVariantLinks(PurpleAccount *account, ChatId chatId, Message
 
     std::string result;
     for (const MediaVariant &variant: variants) {
+        // The video as sent has the message's own link, which says all this list would of it
+        if (variant.key == "v")
+            continue;
         if (!result.empty())
             result += " · ";
         result += "<a href=\"" + escapeForDisplay(makeMessageLink(account, chatId, messageId, variant.key)) +
