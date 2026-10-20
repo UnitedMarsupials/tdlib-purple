@@ -746,18 +746,30 @@ void PurpleTdClient::getChatsResponse(uint64_t requestId, td::td_api::object_ptr
     }
 }
 
+// How many createPrivateChat requests to keep in flight at once during login. Serial (1) was the
+// original behaviour and is very slow for large contact lists; a modest window batches the
+// round-trips without risking Telegram flood limits.
+static const int LOGIN_PRIVATE_CHAT_WINDOW = 16;
+
 void PurpleTdClient::requestMissingPrivateChats()
 {
-    if (m_usersForNewPrivateChats.empty()) {
-        purple_debug_misc(config::pluginId, "Login sequence complete\n");
-        onChatListReady();
-    } else {
+    // Fill the in-flight window with new createPrivateChat requests (batching instead of a
+    // strictly serial one-at-a-time chain).
+    while (!m_usersForNewPrivateChats.empty() &&
+           m_privateChatRequestsInFlight < LOGIN_PRIVATE_CHAT_WINDOW)
+    {
         UserId userId = m_usersForNewPrivateChats.back();
         m_usersForNewPrivateChats.pop_back();
+        m_privateChatRequestsInFlight++;
         purpleDebug("Requesting private chat for user id {}", userId.value());
         td::td_api::object_ptr<td::td_api::createPrivateChat> createChat =
             td::td_api::make_object<td::td_api::createPrivateChat>(userId.value(), false);
         m_transceiver.sendQuery(std::move(createChat), &PurpleTdClient::loginCreatePrivateChatResponse);
+    }
+
+    if (m_usersForNewPrivateChats.empty() && (m_privateChatRequestsInFlight == 0)) {
+        purple_debug_misc(config::pluginId, "Login sequence complete\n");
+        onChatListReady();
     }
 }
 
@@ -772,6 +784,9 @@ void PurpleTdClient::loginCreatePrivateChatResponse(uint64_t requestId, td::td_a
         m_data.addChat(std::move(chat));
     } else
         purple_debug_misc(config::pluginId, "Failed to get requested private chat\n");
+    // This request left the window; refill it (and finish login once the queue drains).
+    if (m_privateChatRequestsInFlight > 0)
+        m_privateChatRequestsInFlight--;
     requestMissingPrivateChats();
 }
 
