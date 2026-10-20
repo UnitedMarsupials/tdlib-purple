@@ -516,6 +516,29 @@ static std::string getAuthCodeDesc(const td::td_api::AuthenticationCodeType &cod
     }
 }
 
+// No request UI ops: prompt for the value through a "Telegram" IM conversation instead. The
+// user's reply is captured in sendMessage() (tgprpl_send_im).
+void PurpleTdClient::promptAuthInputViaChat(AuthInput type, const std::string &message)
+{
+    m_authInputPending = type;
+    std::string prompt = message;
+    // TRANSLATOR: appended to the auth prompt shown in the fallback "Telegram" chat.
+    prompt += std::string("\n") + _("Reply to this chat with the value above to continue.");
+
+    // Deliver it the way a real incoming message arrives - serv_got_im - rather than by writing
+    // straight into a conversation. serv_got_im is the whole receive path and not just its last
+    // step: it runs purple_privacy_check, emits receiving-im-msg and received-im-msg so anything
+    // hooked there sees the message, finds or creates the conversation itself, and sets
+    // PURPLE_MESSAGE_RECV on the way.
+    //
+    // PURPLE_MESSAGE_SYSTEM is deliberately NOT passed: the front-end should treat this as an
+    // ordinary received IM from a buddy called "Telegram", which is what the reply in
+    // sendMessage() is waiting for.
+    PurpleConnection *gc = purple_account_get_connection(m_account);
+    if (gc)
+        serv_got_im(gc, "Telegram", prompt.c_str(), PURPLE_MESSAGE_RECV, time(NULL));
+}
+
 void PurpleTdClient::requestAuthCode(const td::td_api::authenticationCodeInfo *codeInfo)
 {
     // TRANSLATOR: Authentication dialog, primary content. Will be followed by instructions and an input box.
@@ -532,7 +555,7 @@ void PurpleTdClient::requestAuthCode(const td::td_api::authenticationCodeInfo *c
         }
     }
 
-    purple_request_input (purple_account_get_connection(m_account),
+    if (!purple_request_input (purple_account_get_connection(m_account),
                                // TRANSLATOR: Authentication dialog, title.
                                _("Login code"),
                                message.c_str(),
@@ -548,7 +571,11 @@ void PurpleTdClient::requestAuthCode(const td::td_api::authenticationCodeInfo *c
                                m_account,
                                NULL, // buddy
                                NULL, // conversation
-                               this);
+                               this))
+    {
+        // Request UI unavailable: ask for the code through the "Telegram" chat.
+        promptAuthInputViaChat(AuthInput::Code, message);
+    }
 }
 
 void PurpleTdClient::requestCodeEntered(PurpleTdClient *self, const gchar *code)
@@ -614,9 +641,11 @@ void PurpleTdClient::requestPassword(const td::td_api::authorizationStateWaitPas
                                NULL, // conversation
                                this))
     {
-        // Only happens with like empathy, not worth translating
-        purple_connection_error(purple_account_get_connection(m_account),
-            "Authentication code is required but this libpurple doesn't support input requests");
+        // Request UI unavailable: ask for the 2FA password through the "Telegram" chat.
+        std::string pwMessage = _("Enter password for two-factor authentication");
+        if (!hints.empty())
+            pwMessage += std::string("\n") + hints;
+        promptAuthInputViaChat(AuthInput::Password, pwMessage);
     }
 }
 
@@ -645,9 +674,9 @@ void PurpleTdClient::registerUser()
                                 NULL, // conversation
                                 this))
         {
-            // Same as when requesting authentication code - not worth translating
-            purple_connection_error(purple_account_get_connection(m_account),
-                "Registration is required but this libpurple doesn't support input requests");
+            // Request UI unavailable: ask for the display name through the "Telegram" chat.
+            promptAuthInputViaChat(AuthInput::DisplayName,
+                _("New account is being created. Please enter your display name."));
         }
     } else
         m_transceiver.sendQuery(td::td_api::make_object<td::td_api::registerUser>(firstName, lastName, false),
@@ -2119,6 +2148,27 @@ void PurpleTdClient::updateChatLastMessage(td::td_api::updateChatLastMessage &la
 
 int PurpleTdClient::sendMessage(const char *buddyName, const char *message)
 {
+    // Auth-input fallback: while waiting for a login code, 2FA password or display name (asked
+    // for through the "Telegram" chat because there is no request UI), take this outgoing message
+    // as that value instead of sending it to anyone.
+    if (m_authInputPending != AuthInput::None) {
+        // OTR/other plugins may inject non-code messages; ignore those.
+        if (message && g_str_has_prefix(message, "?OTR"))
+            return -1;
+        char *stripped = purple_markup_strip_html(message ? message : "");
+        g_strstrip(stripped);
+        AuthInput type = m_authInputPending;
+        m_authInputPending = AuthInput::None;
+        switch (type) {
+            case AuthInput::Code:        requestCodeEntered(this, stripped);  break;
+            case AuthInput::Password:    passwordEntered(this, stripped);     break;
+            case AuthInput::DisplayName: displayNameEntered(this, stripped);  break;
+            default: break;
+        }
+        g_free(stripped);
+        return 1;
+    }
+
     SecretChatId secretChatId           = purpleBuddyNameToSecretChatId(buddyName);
     const td::td_api::user *privateUser = nullptr;
     const td::td_api::chat *chat        = nullptr;
