@@ -71,6 +71,7 @@ object_ptr<updateChatPosition> makeUpdateRemoveFromChatList(int64_t chatId, obje
 object_ptr<loadChats> getChatsRequest();
 object_ptr<setTdlibParameters> makeTdlibParameters(const std::string &databaseDirectory,
                                                    bool useSecretChats);
+object_ptr<setOption> makeStorageOptimizerOption(bool useStorageOptimizer = true);
 object_ptr<MessageReplyTo> makeReplyTo(std::int64_t message_id_);
 object_ptr<photoSize> makePhotoSize(object_ptr<file> &&photo, unsigned width, unsigned height);
 object_ptr<sticker> makeSticker(std::int32_t width_, std::int32_t height_,

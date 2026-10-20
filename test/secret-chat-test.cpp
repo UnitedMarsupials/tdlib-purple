@@ -120,7 +120,8 @@ TEST_F(SecretChatTest, SecretChatsDisabled)
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
             false // this test turns secret chats off
-        )
+        ),
+        makeStorageOptimizerOption()
     });
 }
 

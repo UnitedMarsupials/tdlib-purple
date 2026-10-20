@@ -23,7 +23,8 @@ TEST_F(LoginTest, ConnectionReadyBeforeAuthReady)
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
             true // use secret chats
-        )
+        ),
+        makeStorageOptimizerOption()
     });
     tgl.reply(make_object<ok>());
 
@@ -77,7 +78,8 @@ TEST_F(LoginTest, RegisterNewAccount_WithAlias_ConnectionReadyBeforeAuthReady)
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
             true // use secret chats
-        )
+        ),
+        makeStorageOptimizerOption()
     });
     tgl.reply(make_object<ok>());
 
@@ -159,7 +161,8 @@ TEST_F(LoginTest, RegisterNewAccount_NoAlias)
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
             true // use secret chats
-        )
+        ),
+        makeStorageOptimizerOption()
     });
     tgl.reply(make_object<ok>());
 
@@ -226,7 +229,8 @@ TEST_F(LoginTest, TwoFactorAuthentication)
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
             true // use secret chats
-        )
+        ),
+        makeStorageOptimizerOption()
     });
     tgl.reply(make_object<ok>());
 
@@ -348,7 +352,8 @@ TEST_F(LoginTest, AddedProxyCofiguration)
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
             true // use secret chats
-        )
+        ),
+        makeStorageOptimizerOption()
     });
 
     tgl.reply(make_object<ok>()); // reply to disableProxy
@@ -386,7 +391,8 @@ TEST_F(LoginTest, ChangedProxyCofiguration)
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
             true // use secret chats
-        )
+        ),
+        makeStorageOptimizerOption()
     });
 
     tgl.reply(make_object<ok>()); // reply to disableProxy
@@ -413,7 +419,8 @@ TEST_F(LoginTest, RemovedProxyCofiguration)
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
             true // use secret chats
-        )
+        ),
+        makeStorageOptimizerOption()
     });
 
     tgl.reply(make_object<ok>()); // reply to disableProxy
@@ -439,7 +446,8 @@ TEST_F(LoginTest, getChatsSequence)
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
             true // use secret chats
-        )
+        ),
+        makeStorageOptimizerOption()
     });
     tgl.reply(make_object<ok>());
 
@@ -520,7 +528,8 @@ TEST_F(LoginTest, KeepInlineDownloads)
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
             true // use secret chats
-        )
+        ),
+        makeStorageOptimizerOption(false) // keep-inline-downloads
     });
 }
 
