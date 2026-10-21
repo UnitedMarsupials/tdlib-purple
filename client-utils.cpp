@@ -417,6 +417,8 @@ void markBuddyDeleted(TdAccountData &account, const td::td_api::user &user)
     PurpleGroup *oldGroup = purple_buddy_get_group(buddy);
     const char  *oldAlias = purple_buddy_get_alias_only(buddy);
     std::string  alias    = oldAlias ? oldAlias : purpleUserName;
+    if (oldAlias)
+        purple_blist_node_set_string(PURPLE_BLIST_NODE(buddy), BuddyOptions::AliasBeforeDeletion, oldAlias);
     purple_blist_node_set_string(PURPLE_BLIST_NODE(buddy), BuddyOptions::GroupBeforeDeletion,
                                  oldGroup ? purple_group_get_name(oldGroup) : "");
 
@@ -445,7 +447,9 @@ void restoreDeletedBuddy(TdAccountData &account, const td::td_api::user &user)
     purple_blist_node_remove_setting(PURPLE_BLIST_NODE(buddy), BuddyOptions::GroupBeforeDeletion);
     // TRANSLATOR: In-chat status update, of an account that had been deleted.
     writeBuddyNotice(account, buddy, _("This account has been restored."));
-    std::string alias = makeBasicDisplayName(user);
+    const char *oldAlias = purple_blist_node_get_string(PURPLE_BLIST_NODE(buddy), BuddyOptions::AliasBeforeDeletion);
+    std::string alias    = oldAlias ? oldAlias : makeBasicDisplayName(user);
+    purple_blist_node_remove_setting(PURPLE_BLIST_NODE(buddy), BuddyOptions::AliasBeforeDeletion);
     if (!alias.empty())
         purple_blist_alias_buddy(buddy, alias.c_str());
 }
