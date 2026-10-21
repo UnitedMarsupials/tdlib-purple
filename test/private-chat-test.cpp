@@ -1439,12 +1439,12 @@ TEST_F(PrivateChatTest, DeletedAccount)
     );
 
     // The chat's title follows, empty, and changes nothing
-    tgl.update(make_object<updateChatTitle>(chatIds[0], ""));
+    tgl.update(makeUpdateChatTitle(chatIds[0], ""));
     prpl.verifyNoEvents();
 
     // Should the account come back, so does the buddy
     tgl.update(standardUpdateUser(0));
-    tgl.update(make_object<updateChatTitle>(chatIds[0], name));
+    tgl.update(makeUpdateChatTitle(chatIds[0], name));
     prpl.verifyEvents(
         AddBuddyEvent(purpleUserName(0), name + " (deleted)", account, nullptr, nullptr, nullptr),
         ConversationWriteEvent(purpleUserName(0), "", "This account has been restored.", PURPLE_MESSAGE_SYSTEM, 0),
@@ -1466,7 +1466,7 @@ TEST_F(PrivateChatTest, DeletedAccountsGroupRenamed)
     EXPECT_STREQ("Deleted Accounts (Telegram)", purple_group_get_name(group));
 
     purple_blist_rename_group(group, "Gone for good");
-    tgl.update(make_object<updateChatTitle>(chatIds[0], "x"));
+    tgl.update(makeUpdateChatTitle(chatIds[0], "x"));
     prpl.discardEvents();
     auto deletedUser = makeUser(userIds[0], "", "", "", make_object<userStatusEmpty>());
     deletedUser->type_ = make_object<userTypeDeleted>();
@@ -1513,5 +1513,13 @@ TEST_F(PrivateChatTest, DeletedAccountsFoundAtLogin)
         AddBuddyEvent(purpleUserName(1), userFirstNames[1] + " " + userLastNames[1] + " (deleted)",
                       account, nullptr, group, nullptr),
         UserStatusEvent(account, purpleUserName(1), PURPLE_STATUS_OFFLINE)
+    );
+
+    // Back, though still without a chat
+    tgl.update(standardUpdateUser(1));
+    prpl.verifyEvents(
+        AddBuddyEvent(purpleUserName(1), userFirstNames[1] + " " + userLastNames[1] + " (deleted)",
+                      account, nullptr, nullptr, nullptr),
+        AliasBuddyEvent(purpleUserName(1), userFirstNames[1] + " " + userLastNames[1])
     );
 }

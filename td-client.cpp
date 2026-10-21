@@ -1502,15 +1502,18 @@ void PurpleTdClient::updateChat(const td::td_api::chat *chat)
 
 void PurpleTdClient::updateUserInfo(const td::td_api::user &user, const td::td_api::chat *privateChat)
 {
-    // Whether or not the chat is still listed, the buddy stays, marked
+    // Whether or not there is a chat, the buddy stays, marked
     if (isDeletedUser(user))
         markBuddyDeleted(m_data, user);
-    else if (privateChat) {
-        if (isChatInContactList(*privateChat, &user)) {
-            downloadProfilePhoto(user);
-            updatePrivateChat(m_data, privateChat, user);
-        } else
-            removePrivateChat(m_data, *privateChat);
+    else {
+        restoreDeletedBuddy(m_data, user);
+        if (privateChat) {
+            if (isChatInContactList(*privateChat, &user)) {
+                downloadProfilePhoto(user);
+                updatePrivateChat(m_data, privateChat, user);
+            } else
+                removePrivateChat(m_data, *privateChat);
+        }
     }
 
     // User could have renamed, or they may have become, or ceased being, libpurple buddy.

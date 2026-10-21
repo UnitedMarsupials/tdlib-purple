@@ -429,12 +429,15 @@ void markBuddyDeleted(TdAccountData &account, const td::td_api::user &user)
     writeBuddyNotice(account, buddy, _("This account has been deleted."));
 }
 
-// Should a deleted account ever come back, its buddy goes back where it was
-static bool restoreDeletedBuddy(TdAccountData &account, PurpleBuddy *buddy)
+// Should a deleted account ever come back, its buddy goes back where it was, with its name
+void restoreDeletedBuddy(TdAccountData &account, const td::td_api::user &user)
 {
-    const char *oldGroupName = purple_blist_node_get_string(PURPLE_BLIST_NODE(buddy), BuddyOptions::GroupBeforeDeletion);
+    std::string  purpleUserName = getPurpleBuddyName(user);
+    PurpleBuddy *buddy          = purple_find_buddy(account.purpleAccount, purpleUserName.c_str());
+    const char  *oldGroupName   = buddy ? purple_blist_node_get_string(PURPLE_BLIST_NODE(buddy),
+                                                                       BuddyOptions::GroupBeforeDeletion) : NULL;
     if (!oldGroupName)
-        return false;
+        return;
 
     purple_debug_info(config::pluginId, "Account of buddy %s has been restored\n", purple_buddy_get_name(buddy));
     PurpleGroup *oldGroup = *oldGroupName ? purple_find_group(oldGroupName) : NULL;
@@ -442,7 +445,9 @@ static bool restoreDeletedBuddy(TdAccountData &account, PurpleBuddy *buddy)
     purple_blist_node_remove_setting(PURPLE_BLIST_NODE(buddy), BuddyOptions::GroupBeforeDeletion);
     // TRANSLATOR: In-chat status update, of an account that had been deleted.
     writeBuddyNotice(account, buddy, _("This account has been restored."));
-    return true;
+    std::string alias = makeBasicDisplayName(user);
+    if (!alias.empty())
+        purple_blist_alias_buddy(buddy, alias.c_str());
 }
 
 void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, const td::td_api::user &user)
@@ -482,9 +487,6 @@ void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, con
                                                                account.purpleAccount))
             purple_conversation_set_name(oldConv, purpleUserName.c_str());
     } else {
-        // The chat's title, still "Deleted Account", is updated after the user
-        if (restoreDeletedBuddy(account, buddy))
-            alias = makeBasicDisplayName(user);
         // An empty title, as of a deleted user's chat, would leave the buddy known by its id
         if (!alias.empty())
             purple_blist_alias_buddy(buddy, alias.c_str());
