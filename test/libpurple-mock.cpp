@@ -331,6 +331,12 @@ GSList *purple_find_buddies(PurpleAccount *account, const char *name)
     return result;
 }
 
+// Contacts are not modelled: a buddy is its own contact
+const char *purple_buddy_get_contact_alias(PurpleBuddy *buddy)
+{
+    return buddy->alias ? buddy->alias : buddy->name;
+}
+
 const char *purple_buddy_get_alias_only(PurpleBuddy *buddy)
 {
     return buddy->alias;

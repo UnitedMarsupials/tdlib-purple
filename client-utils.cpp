@@ -416,7 +416,8 @@ void markBuddyDeleted(TdAccountData &account, const td::td_api::user &user)
     purple_debug_info(config::pluginId, "Account of buddy %s has been deleted\n", purpleUserName.c_str());
     PurpleGroup *oldGroup = purple_buddy_get_group(buddy);
     const char  *oldAlias = purple_buddy_get_alias_only(buddy);
-    std::string  alias    = oldAlias ? oldAlias : purpleUserName;
+    // As shown: the contact's name, if the user gave one, else the buddy's, else its id
+    std::string  alias    = purple_buddy_get_contact_alias(buddy);
     if (oldAlias)
         purple_blist_node_set_string(PURPLE_BLIST_NODE(buddy), BuddyOptions::AliasBeforeDeletion, oldAlias);
     purple_blist_node_set_string(PURPLE_BLIST_NODE(buddy), BuddyOptions::GroupBeforeDeletion,
