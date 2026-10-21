@@ -149,11 +149,6 @@ msgstr "Lloj mesazhi i pambuluar {}"
 msgid "Telegram: not joined"
 msgstr "Telegram: pa u bashkuar"
 
-#. TRANSLATOR: In-chat status update
-#: ../client-utils.cpp:379
-msgid "Future messages in this conversation will be shown in a different tab"
-msgstr "Mesazhe të ardhshëm në këtë bisedë do të shfaqen në një skedë tjetër"
-
 #. TRANSLATOR: The "sender" of a message that was posted to a channel. Will be used like a username.
 #: ../client-utils.cpp:596 ../receiving.cpp:507
 msgid "Channel post"

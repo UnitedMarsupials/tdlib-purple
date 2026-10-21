@@ -105,6 +105,11 @@ ChatId getChatId(const td::td_api::updateChatTitle &update)
     return ChatId(update.chat_id_);
 }
 
+ChatId getChatId(const td::td_api::updateChatActionBar &update)
+{
+    return ChatId(update.chat_id_);
+}
+
 ChatId getChatId(const td::td_api::messageOriginChannel &forwardOrigin)
 {
     return ChatId(forwardOrigin.chat_id_);

@@ -73,6 +73,7 @@ DEFINE_ID_CLASS(ChatId, int64_t)
     friend ChatId getId(const td::td_api::chat &chat);
     friend ChatId getChatId(const td::td_api::updateChatPosition &update);
     friend ChatId getChatId(const td::td_api::updateChatTitle &update);
+    friend ChatId getChatId(const td::td_api::updateChatActionBar &update);
     friend ChatId getChatId(const td::td_api::messageOriginChannel &forwardOrigin);
     friend ChatId getChatId(const td::td_api::message &message);
     friend ChatId getChatId(const td::td_api::updateChatAction &update);
@@ -134,6 +135,7 @@ UserId 	     getUserId(const td::td_api::object_ptr<td::td_api::MessageSender>& 
 
 ChatId       getChatId(const td::td_api::updateChatPosition &update);
 ChatId       getChatId(const td::td_api::updateChatTitle &update);
+ChatId       getChatId(const td::td_api::updateChatActionBar &update);
 ChatId       getChatId(const td::td_api::messageOriginChannel &forwardOrigin);
 ChatId       getChatId(const td::td_api::message &message);
 ChatId       getChatId(const td::td_api::updateChatAction &update);

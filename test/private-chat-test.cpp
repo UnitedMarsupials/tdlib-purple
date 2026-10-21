@@ -257,6 +257,54 @@ TEST_F(PrivateChatTest, ContactedByNew)
     )));
 }
 
+TEST_F(PrivateChatTest, ContactedByStranger)
+{
+    login();
+    constexpr int64_t messageId = 10000;
+    constexpr int32_t date      = 123456;
+    const std::string displayName = userFirstNames[0] + " " + userLastNames[0];
+
+    tgl.update(make_object<updateUser>(makeUser(
+        userIds[0],
+        userFirstNames[0],
+        userLastNames[0],
+        "",
+        make_object<userStatusOffline>()
+    )));
+
+    // A stranger messages us: Telegram offers to report the chat as spam, so no buddy yet
+    object_ptr<updateNewChat> chatUpdate = standardPrivateChat(0);
+    chatUpdate->chat_->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
+    chatUpdate->chat_->action_bar_ = make_object<chatActionBarReportSpam>(false);
+    tgl.update(std::move(chatUpdate));
+    prpl.verifyNoEvents();
+
+    tgl.update(make_object<updateNewMessage>(makeMessage(
+        messageId,
+        userIds[0],
+        chatIds[0],
+        false,
+        date,
+        makeTextMessage("text")
+    )));
+    prpl.verifyEvents(ServGotImEvent(
+        connection,
+        displayName,
+        "text",
+        PURPLE_MESSAGE_RECV,
+        date
+    ));
+    // Not marked as read while the conversation goes by the display name
+    tgl.verifyNoRequests();
+
+    // We answer, and the offer is gone: the buddy is added, keeping the conversation's tab
+    tgl.update(make_object<updateChatActionBar>(chatIds[0], nullptr));
+    prpl.verifyEvents(
+        AddBuddyEvent(purpleUserName(0), displayName, account, nullptr, nullptr, nullptr),
+        ConvSetTitleEvent(purpleUserName(0), displayName)
+    );
+}
+
 TEST_F(PrivateChatTest, ContactedByNew_ImmediatePhoneNumber)
 {
     login();

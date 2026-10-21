@@ -1773,8 +1773,20 @@ void purple_conversation_autoset_title(PurpleConversation *conv)
         PurpleChat *chat = purple_blist_find_chat(conv->account, conv->name);
         if (chat)
             text = purple_chat_get_name(chat);
+    } else if (conv->type == PURPLE_CONV_TYPE_IM) {
+        PurpleBuddy *buddy = purple_find_buddy(conv->account, conv->name);
+        if (buddy)
+            text = purple_buddy_get_alias(buddy);
     }
     purple_conversation_set_title(conv, text ? text : conv->name);
+}
+
+// As libpurple's, which takes the new title at once
+void purple_conversation_set_name(PurpleConversation *conv, const char *name)
+{
+    free(conv->name);
+    conv->name = strdup(name);
+    purple_conversation_autoset_title(conv);
 }
 
 };
