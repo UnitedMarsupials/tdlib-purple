@@ -149,11 +149,6 @@ msgstr "Nicht unterstützter Nachrichtentyp {}"
 msgid "Telegram: not joined"
 msgstr "Telegram: nicht beigetreten"
 
-#. TRANSLATOR: In-chat status update
-#: ../client-utils.cpp:379
-msgid "Future messages in this conversation will be shown in a different tab"
-msgstr "Künftige Nachrichten werden in einem anderen Tab angezeigt"
-
 #. TRANSLATOR: The "sender" of a message that was posted to a channel. Will be used like a username.
 #: ../client-utils.cpp:596 ../receiving.cpp:507
 msgid "Channel post"

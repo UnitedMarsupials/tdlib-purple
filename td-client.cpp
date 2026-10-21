@@ -233,6 +233,15 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         break;
     }
 
+    case td::td_api::updateChatActionBar::ID: {
+        auto &actionBarUpdate = static_cast<td::td_api::updateChatActionBar &>(update);
+        purple_debug_misc(config::pluginId, "Incoming update: update chat action bar for chat %" G_GINT64_FORMAT "\n",
+                          actionBarUpdate.chat_id_);
+        m_data.updateChatActionBar(getChatId(actionBarUpdate), std::move(actionBarUpdate.action_bar_));
+        updateChat(m_data.getChat(getChatId(actionBarUpdate)));
+        break;
+    }
+
     case td::td_api::updateChatLastMessage::ID: {
         auto &lastMessage = static_cast<td::td_api::updateChatLastMessage &>(update);
         updateChatLastMessage(lastMessage);

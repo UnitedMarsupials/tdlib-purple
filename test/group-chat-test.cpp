@@ -1020,11 +1020,8 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
             userFirstNames[0] + " " + userLastNames[0],
             account, NULL, NULL, NULL
         ),
-        ConversationWriteEvent(
-            userFirstNames[0] + " " + userLastNames[0], "",
-            "Future messages in this conversation will be shown in a different tab",
-            PURPLE_MESSAGE_SYSTEM, 0
-        ),
+        // The conversation is renamed after the buddy, keeping its tab
+        ConvSetTitleEvent(purpleUserName(0), userFirstNames[0] + " " + userLastNames[0]),
         ChatSetTopicEvent(groupChatPurpleName, "basic group", ""),
         ChatClearUsersEvent(groupChatPurpleName),
         // This group member has become a libpurple buddy, so member username will now be changed
@@ -1073,13 +1070,8 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
     // Both read receipts now - whatever.
     tgl.verifyRequest(viewMessages(chatIds[0], {echoMessageId[0], echoMessageId[1]}, nullptr, true));
     prpl.verifyEvents(
-        NewConversationEvent(
-            PURPLE_CONV_TYPE_IM, account,
-            // Now there is buddy, so use user-id user name
-            purpleUserName(0)
-        ),
         ConversationWriteEvent(
-            // same here
+            // Now there is buddy, so the renamed conversation, by user-id user name
             purpleUserName(0),
             selfFirstName + " " + selfLastName,
             "message2",

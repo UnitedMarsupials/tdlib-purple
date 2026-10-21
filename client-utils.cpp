@@ -369,17 +369,14 @@ void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, con
         // messaged us. Either way, there is no need to for any extra notification about new contact
         // because the user will be aware anyway.
 
-        // Now, in case this buddy resulted from sending a message to group chat member or from
-        // someone new messaging us
+        // Until now, a conversation with this user went by their display name (see
+        // getPrivateChatPurpleName). Rename it, so that it stays the same tab from now on.
         std::string displayName = account.getDisplayName(user);
         PurpleConversation *oldConv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, displayName.c_str(),
                                                                             account.purpleAccount);
-        if (oldConv) {
-            purple_conv_im_write(purple_conversation_get_im_data(oldConv), "",
-                                 // TRANSLATOR: In-chat status update
-                                 _("Future messages in this conversation will be shown in a different tab"),
-                                 PURPLE_MESSAGE_SYSTEM, time(NULL));
-        }
+        if (oldConv && !purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, purpleUserName.c_str(),
+                                                               account.purpleAccount))
+            purple_conversation_set_name(oldConv, purpleUserName.c_str());
     } else {
         purple_blist_alias_buddy(buddy, alias.c_str());
 

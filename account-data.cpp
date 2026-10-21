@@ -70,9 +70,21 @@ UserId getUserIdByPrivateChat(const td::td_api::chat &chat)
     return UserId::invalid;
 }
 
+// A private chat that a stranger started is offered for reporting as spam, even after we answer.
+// It stays out of the buddy list until the offer goes: when we add them to contacts, or dismiss it.
+static bool isUnansweredStranger(const td::td_api::chat &chat)
+{
+    return chat.action_bar_ && ((chat.action_bar_->get_id() == td::td_api::chatActionBarReportSpam::ID) ||
+                                (chat.action_bar_->get_id() == td::td_api::chatActionBarReportAddBlock::ID));
+}
+
 bool isChatInContactList(const td::td_api::chat &chat, const td::td_api::user *privateChatUser)
 {
-    return !chat.positions_.empty() || (privateChatUser && privateChatUser->is_contact_);
+    if (privateChatUser && privateChatUser->is_contact_)
+        return true;
+    if (privateChatUser && isUnansweredStranger(chat))
+        return false;
+    return !chat.positions_.empty();
 }
 
 BasicGroupId getBasicGroupId(const td::td_api::chat &chat)
@@ -482,6 +494,13 @@ void TdAccountData::updateChatTitle(ChatId chatId, const std::string &title)
     auto it = m_chatInfo.find(chatId);
     if (it != m_chatInfo.end())
         it->second.chat->title_ = title;
+}
+
+void TdAccountData::updateChatActionBar(ChatId chatId, td::td_api::object_ptr<td::td_api::ChatActionBar> actionBar)
+{
+    auto it = m_chatInfo.find(chatId);
+    if (it != m_chatInfo.end())
+        it->second.chat->action_bar_ = std::move(actionBar);
 }
 
 void TdAccountData::updateSmallChatPhoto(ChatId chatId, td::td_api::object_ptr<td::td_api::file> photo)

@@ -151,11 +151,6 @@ msgstr "Nieobsługiwany typ wiadomości {}"
 msgid "Telegram: not joined"
 msgstr "Telegram: niedołączone"
 
-#. TRANSLATOR: In-chat status update
-#: ../client-utils.cpp:379
-msgid "Future messages in this conversation will be shown in a different tab"
-msgstr "Przyszłe wiadomości w tej rozmowie będą wyświetlane w innej karcie"
-
 #. TRANSLATOR: The "sender" of a message that was posted to a channel. Will be used like a username.
 #: ../client-utils.cpp:596 ../receiving.cpp:507
 msgid "Channel post"

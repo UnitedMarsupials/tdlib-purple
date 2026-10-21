@@ -7,6 +7,7 @@
 class PrivateChatTest: public CommTest {
 protected:
     void testReadReceipt(bool shouldSend);
+    void contactedByStranger(object_ptr<ChatActionBar> &&actionBar);
 };
 
 TEST_F(PrivateChatTest, AddContactByPhone)
@@ -255,6 +256,70 @@ TEST_F(PrivateChatTest, ContactedByNew)
         "+" + userPhones[0],
         make_object<userStatusOffline>()
     )));
+}
+
+// Either offer to report the chat as spam keeps a stranger out of the buddy list
+void PrivateChatTest::contactedByStranger(object_ptr<ChatActionBar> &&actionBar)
+{
+    login();
+    constexpr int64_t messageId = 10000;
+    constexpr int32_t date      = 123456;
+    const std::string displayName = userFirstNames[0] + " " + userLastNames[0];
+
+    tgl.update(make_object<updateUser>(makeUser(
+        userIds[0],
+        userFirstNames[0],
+        userLastNames[0],
+        "",
+        make_object<userStatusOffline>()
+    )));
+
+    // A stranger messages us: Telegram offers to report the chat as spam, so no buddy yet
+    object_ptr<updateNewChat> chatUpdate = standardPrivateChat(0);
+    auto position = make_object<chatPosition>();
+    position->list_  = make_object<chatListMain>();
+    position->order_ = 1;
+    chatUpdate->chat_->positions_.push_back(std::move(position));
+    chatUpdate->chat_->action_bar_ = std::move(actionBar);
+    tgl.update(std::move(chatUpdate));
+    prpl.verifyNoEvents();
+
+    tgl.update(make_object<updateNewMessage>(makeMessage(
+        messageId,
+        userIds[0],
+        chatIds[0],
+        false,
+        date,
+        makeTextMessage("text")
+    )));
+    prpl.verifyEvents(ServGotImEvent(
+        connection,
+        displayName,
+        "text",
+        PURPLE_MESSAGE_RECV,
+        date
+    ));
+    // Not marked as read while the conversation goes by the display name
+    tgl.verifyNoRequests();
+
+    // We dismiss the offer: the buddy is added, keeping the conversation's tab
+    auto actionBarUpdate = make_object<updateChatActionBar>();
+    actionBarUpdate->chat_id_ = chatIds[0];
+    tgl.update(std::move(actionBarUpdate));
+    prpl.verifyEvents(
+        AddBuddyEvent(purpleUserName(0), displayName, account, nullptr, nullptr, nullptr),
+        ConvSetTitleEvent(purpleUserName(0), displayName)
+    );
+}
+
+TEST_F(PrivateChatTest, ContactedByStranger)
+{
+    contactedByStranger(make_object<chatActionBarReportSpam>());
+}
+
+TEST_F(PrivateChatTest, ContactedByStranger_ReportAddBlock)
+{
+    contactedByStranger(make_object<chatActionBarReportAddBlock>());
 }
 
 TEST_F(PrivateChatTest, ContactedByNew_ImmediatePhoneNumber)
