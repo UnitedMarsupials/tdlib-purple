@@ -346,8 +346,122 @@ bool conversationHasFocus(PurpleConversation *conv)
         return purple_conversation_has_focus(conv);
 }
 
+bool isDeletedUser(const td::td_api::user &user)
+{
+    return user.type_ && (user.type_->get_id() == td::td_api::userTypeDeleted::ID);
+}
+
+static PurpleGroup *findDeletedAccountsGroup(PurpleBlistNode *node)
+{
+    for (; node; node = purple_blist_node_get_sibling_next(node)) {
+        if (purple_blist_node_get_type(node) == PURPLE_BLIST_GROUP_NODE) {
+            if (purple_blist_node_get_string(node, GroupOptions::DeletedAccounts))
+                return reinterpret_cast<PurpleGroup *>(node);
+        } else {
+            PurpleGroup *group = findDeletedAccountsGroup(purple_blist_node_get_first_child(node));
+            if (group)
+                return group;
+        }
+    }
+    return NULL;
+}
+
+// Deleted accounts of every Telegram account go to one group. It is found by the setting we gave
+// it, not by its name, which changes with the translation in use; a name the user chose stays.
+PurpleGroup *getDeletedAccountsGroup(bool create)
+{
+    // TRANSLATOR: Buddy-list group, holding buddies whose Telegram accounts were deleted.
+    const char  *name  = _("Deleted Accounts (Telegram)");
+    PurpleGroup *group = findDeletedAccountsGroup(purple_blist_get_root());
+
+    if (group) {
+        const char *givenName = purple_blist_node_get_string(PURPLE_BLIST_NODE(group), GroupOptions::DeletedAccounts);
+        if (givenName && !strcmp(purple_group_get_name(group), givenName) && strcmp(givenName, name) &&
+            !purple_find_group(name))
+        {
+            purple_debug_info(config::pluginId, "Renaming group %s to %s\n", givenName, name);
+            purple_blist_rename_group(group, name);
+            purple_blist_node_set_string(PURPLE_BLIST_NODE(group), GroupOptions::DeletedAccounts, name);
+        }
+    } else if (create) {
+        group = purple_find_group(name);
+        if (!group) {
+            group = purple_group_new(name);
+            purple_blist_add_group(group, NULL);
+        }
+        purple_blist_node_set_string(PURPLE_BLIST_NODE(group), GroupOptions::DeletedAccounts, name);
+    }
+
+    return group;
+}
+
+static void writeBuddyNotice(TdAccountData &account, PurpleBuddy *buddy, const char *notice)
+{
+    PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM,
+                                                                      purple_buddy_get_name(buddy),
+                                                                      account.purpleAccount);
+    if (conv)
+        purple_conv_im_write(purple_conversation_get_im_data(conv), "", notice,
+                             PURPLE_MESSAGE_SYSTEM, time(NULL));
+}
+
+// The buddy is kept, with the name it had, for its conversations' log
+void markBuddyDeleted(TdAccountData &account, const td::td_api::user &user)
+{
+    std::string  purpleUserName = getPurpleBuddyName(user);
+    PurpleBuddy *buddy          = purple_find_buddy(account.purpleAccount, purpleUserName.c_str());
+    if (!buddy || purple_blist_node_get_string(PURPLE_BLIST_NODE(buddy), BuddyOptions::GroupBeforeDeletion))
+        return;
+
+    purple_debug_info(config::pluginId, "Account of buddy %s has been deleted\n", purpleUserName.c_str());
+    PurpleGroup *oldGroup = purple_buddy_get_group(buddy);
+    const char  *oldAlias = purple_buddy_get_alias_only(buddy);
+    // As shown: the contact's name, if the user gave one, else the buddy's, else its id
+    std::string  alias    = purple_buddy_get_contact_alias(buddy);
+    if (oldAlias)
+        purple_blist_node_set_string(PURPLE_BLIST_NODE(buddy), BuddyOptions::AliasBeforeDeletion, oldAlias);
+    purple_blist_node_set_string(PURPLE_BLIST_NODE(buddy), BuddyOptions::GroupBeforeDeletion,
+                                 oldGroup ? purple_group_get_name(oldGroup) : "");
+
+    // TRANSLATOR: Buddy's name, of an account that was deleted. The argument is the name it had.
+    purple_blist_alias_buddy(buddy, formatMessage(_("{} (deleted)"), alias).c_str());
+    purple_blist_add_buddy(buddy, NULL, getDeletedAccountsGroup(true), NULL);
+    purple_prpl_got_user_status(account.purpleAccount, purpleUserName.c_str(),
+                                purple_primitive_get_id_from_type(PURPLE_STATUS_OFFLINE), NULL);
+    // TRANSLATOR: In-chat status update. The owner may have deleted it, or Telegram.
+    writeBuddyNotice(account, buddy, _("This account has been deleted."));
+}
+
+// Should a deleted account ever come back, its buddy goes back where it was, with its name
+void restoreDeletedBuddy(TdAccountData &account, const td::td_api::user &user)
+{
+    std::string  purpleUserName = getPurpleBuddyName(user);
+    PurpleBuddy *buddy          = purple_find_buddy(account.purpleAccount, purpleUserName.c_str());
+    const char  *oldGroupName   = buddy ? purple_blist_node_get_string(PURPLE_BLIST_NODE(buddy),
+                                                                       BuddyOptions::GroupBeforeDeletion) : NULL;
+    if (!oldGroupName)
+        return;
+
+    purple_debug_info(config::pluginId, "Account of buddy %s has been restored\n", purple_buddy_get_name(buddy));
+    PurpleGroup *oldGroup = *oldGroupName ? purple_find_group(oldGroupName) : NULL;
+    purple_blist_add_buddy(buddy, NULL, oldGroup, NULL);
+    purple_blist_node_remove_setting(PURPLE_BLIST_NODE(buddy), BuddyOptions::GroupBeforeDeletion);
+    // TRANSLATOR: In-chat status update, of an account that had been deleted.
+    writeBuddyNotice(account, buddy, _("This account has been restored."));
+    const char *oldAlias = purple_blist_node_get_string(PURPLE_BLIST_NODE(buddy), BuddyOptions::AliasBeforeDeletion);
+    std::string alias    = oldAlias ? oldAlias : makeBasicDisplayName(user);
+    purple_blist_node_remove_setting(PURPLE_BLIST_NODE(buddy), BuddyOptions::AliasBeforeDeletion);
+    if (!alias.empty())
+        purple_blist_alias_buddy(buddy, alias.c_str());
+}
+
 void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, const td::td_api::user &user)
 {
+    if (isDeletedUser(user)) {
+        markBuddyDeleted(account, user);
+        return;
+    }
+
     std::string purpleUserName = getPurpleBuddyName(user);
     std::string alias          = chat ? chat->title_ : makeBasicDisplayName(user);
 
@@ -378,7 +492,9 @@ void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, con
                                                                account.purpleAccount))
             purple_conversation_set_name(oldConv, purpleUserName.c_str());
     } else {
-        purple_blist_alias_buddy(buddy, alias.c_str());
+        // An empty title, as of a deleted user's chat, would leave the buddy known by its id
+        if (!alias.empty())
+            purple_blist_alias_buddy(buddy, alias.c_str());
 
         const char *oldPhotoIdStr = purple_blist_node_get_string(PURPLE_BLIST_NODE(buddy), BuddyOptions::ProfilePhotoId);
         int64_t     oldPhotoId    = 0;

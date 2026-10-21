@@ -64,6 +64,14 @@ namespace AccountOptions {
 
 namespace BuddyOptions {
     constexpr const char *ProfilePhotoId = "tdlib-profile-photo-id";
+    // Of a deleted account: the group it was in, and its name
+    constexpr const char *GroupBeforeDeletion = "tdlib-group-before-deletion";
+    constexpr const char *AliasBeforeDeletion = "tdlib-alias-before-deletion";
+};
+
+namespace GroupOptions {
+    // Marks the group of deleted accounts, holding the name we gave it
+    constexpr const char *DeletedAccounts = "tdlib-deleted-accounts";
 };
 
 unsigned getAutoDownloadLimitKb(PurpleAccount *account);

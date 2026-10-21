@@ -23,6 +23,10 @@ PurpleConvChat *    getChatConversation(TdAccountData &account, const td::td_api
 PurpleConvChat *    findChatConversation(PurpleAccount *account, const td::td_api::chat &chat);
 bool                conversationHasFocus(PurpleConversation *conv);
 
+bool                isDeletedUser(const td::td_api::user &user);
+PurpleGroup        *getDeletedAccountsGroup(bool create);
+void                markBuddyDeleted(TdAccountData &account, const td::td_api::user &user);
+void                restoreDeletedBuddy(TdAccountData &account, const td::td_api::user &user);
 void                updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, const td::td_api::user &user);
 void                updateBasicGroupChat(TdAccountData &account, BasicGroupId groupId);
 void                updateSupergroupChat(TdAccountData &account, SupergroupId groupId);

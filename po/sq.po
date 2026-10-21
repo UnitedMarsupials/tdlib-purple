@@ -1234,3 +1234,24 @@ msgstr "Formësoni mirëfilltësim dyfaktorësh…"
 #: ../media-variants.cpp:34
 msgid "original"
 msgstr "origjinal"
+
+#. TRANSLATOR: Buddy-list group, holding buddies whose Telegram accounts were deleted.
+#: ../client-utils.cpp:374
+msgid "Deleted Accounts (Telegram)"
+msgstr "Llogari të fshira (Telegram)"
+
+#. TRANSLATOR: Buddy's name, of an account that was deleted. The argument is the name it had.
+#: ../client-utils.cpp:424
+#, c++-format
+msgid "{} (deleted)"
+msgstr "{} (e fshirë)"
+
+#. TRANSLATOR: In-chat status update. The owner may have deleted it, or Telegram.
+#: ../client-utils.cpp:429
+msgid "This account has been deleted."
+msgstr "Kjo llogari është fshirë."
+
+#. TRANSLATOR: In-chat status update, of an account that had been deleted.
+#: ../client-utils.cpp:444
+msgid "This account has been restored."
+msgstr "Kjo llogari është rikthyer."

@@ -360,6 +360,11 @@ static void compare(const registerUser &actual, const registerUser &expected)
     COMPARE(last_name_);
 }
 
+static void compare(const getUser &actual, const getUser &expected)
+{
+    COMPARE(user_id_);
+}
+
 static void compare(const getMessage &actual, const getMessage &expected)
 {
     COMPARE(chat_id_);
@@ -590,6 +595,7 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(checkAuthenticationCode)
         C(registerUser)
         C(getMessage)
+        C(getUser)
         C(getCustomEmojiStickers)
         C(sendChatAction)
         C(addProxy)

@@ -887,16 +887,53 @@ void PurpleTdClient::updateSupergroupFull(SupergroupId groupId, td::td_api::obje
     m_data.updateSupergroupInfo(groupId, std::move(groupInfo));
 }
 
+// TDLib tells of users in the chats it lists; a buddy whose chat is gone, or was never loaded, is
+// asked about, so that a deletion from before is found too.
+void PurpleTdClient::checkBuddiesDeleted()
+{
+    GSList *buddies = purple_find_buddies(m_account, NULL);
+    for (GSList *item = buddies; item; item = item->next) {
+        PurpleBuddy *buddy  = static_cast<PurpleBuddy *>(item->data);
+        UserId       userId = purpleBuddyNameToUserId(purple_buddy_get_name(buddy));
+        if (!userId.valid())
+            continue;
+        const td::td_api::user *user = m_data.getUser(userId);
+        if (user) {
+            if (isDeletedUser(*user))
+                markBuddyDeleted(m_data, *user);
+        } else {
+            auto request = td::td_api::make_object<td::td_api::getUser>();
+            request->user_id_ = userId.value();
+            m_transceiver.sendQuery(std::move(request), [this](uint64_t, TdObjectPtr object) {
+                checkBuddyDeletedResponse(std::move(object));
+            });
+        }
+    }
+    g_slist_free(buddies);
+}
+
+void PurpleTdClient::checkBuddyDeletedResponse(TdObjectPtr object)
+{
+    if (!object || (object->get_id() != td::td_api::user::ID))
+        return;
+    auto user = td::move_tl_object_as<td::td_api::user>(object);
+    if (isDeletedUser(*user))
+        markBuddyDeleted(m_data, *user);
+}
+
 void PurpleTdClient::onChatListReady()
 {
     m_chatListReady = true;
     checkTempFileUploads();
+    // Follows a change of translation
+    getDeletedAccountsGroup(false);
+    checkBuddiesDeleted();
     std::vector<const td::td_api::chat *> chats;
     m_data.getChats(chats);
 
     for (const td::td_api::chat *chat: chats) {
         const td::td_api::user *user = m_data.getUserByPrivateChat(*chat);
-        if (user && isChatInContactList(*chat, user)) {
+        if (user && isChatInContactList(*chat, user) && !isDeletedUser(*user)) {
             std::string userName = getPurpleBuddyName(*user);
             purple_prpl_got_user_status(m_account, userName.c_str(),
                                         getPurpleStatusId(*user->status_), NULL);
@@ -1296,7 +1333,7 @@ void PurpleTdClient::sendTyping(const char *buddyName, bool isTyping)
 void PurpleTdClient::updateUserStatus(UserId userId, td::td_api::object_ptr<td::td_api::UserStatus> status)
 {
     const td::td_api::user *user = m_data.getUser(userId);
-    if (user) {
+    if (user && !isDeletedUser(*user)) {
         std::string userName = getPurpleBuddyName(*user);
         purple_prpl_got_user_status(m_account, userName.c_str(), getPurpleStatusId(*status), NULL);
         m_data.setUserStatus(userId, std::move(status));
@@ -1465,12 +1502,18 @@ void PurpleTdClient::updateChat(const td::td_api::chat *chat)
 
 void PurpleTdClient::updateUserInfo(const td::td_api::user &user, const td::td_api::chat *privateChat)
 {
-    if (privateChat) {
-        if (isChatInContactList(*privateChat, &user)) {
-            downloadProfilePhoto(user);
-            updatePrivateChat(m_data, privateChat, user);
-        } else
-            removePrivateChat(m_data, *privateChat);
+    // Whether or not there is a chat, the buddy stays, marked
+    if (isDeletedUser(user))
+        markBuddyDeleted(m_data, user);
+    else {
+        restoreDeletedBuddy(m_data, user);
+        if (privateChat) {
+            if (isChatInContactList(*privateChat, &user)) {
+                downloadProfilePhoto(user);
+                updatePrivateChat(m_data, privateChat, user);
+            } else
+                removePrivateChat(m_data, *privateChat);
+        }
     }
 
     // User could have renamed, or they may have become, or ceased being, libpurple buddy.

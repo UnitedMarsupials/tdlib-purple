@@ -173,7 +173,9 @@ void purple_account_destroy(PurpleAccount *account)
     g_accounts.erase(it);
 
     delete account;
-    ASSERT_EQ(nullptr, root.child) << "Blist nodes remain";
+    // Groups last for the test case (see clearGroups)
+    for (PurpleBlistNode *node = root.child; node; node = node->next)
+        ASSERT_EQ(PURPLE_BLIST_GROUP_NODE, node->type) << "Blist nodes remain";
 }
 
 const char *purple_account_get_protocol_id(const PurpleAccount *account)
@@ -227,6 +229,13 @@ void purple_blist_add_buddy(PurpleBuddy *buddy, PurpleContact *contact, PurpleGr
     auto pAccount = std::find_if(g_accounts.begin(), g_accounts.end(),
                                  [buddy](const AccountInfo &info) { return (info.account == buddy->account); });
     ASSERT_FALSE(pAccount == g_accounts.end()) << "Adding buddy with unknown account";
+
+    // As in libpurple, adding a buddy already in the list moves it to the group
+    if (std::find(pAccount->buddies.begin(), pAccount->buddies.end(), buddy) != pAccount->buddies.end()) {
+        buddy->node.parent = group ? &group->node : NULL;
+        EVENT(AddBuddyEvent, buddy->name, buddy->alias, buddy->account, contact, group, node);
+        return;
+    }
 
     ASSERT_TRUE(std::find_if(pAccount->buddies.begin(), pAccount->buddies.end(), 
                              [buddy](const PurpleBuddy *existing) {
@@ -309,6 +318,23 @@ void purple_blist_remove_chat(PurpleChat *chat)
     removeNode(chat->node);
     g_hash_table_destroy(chat->node.settings);
     delete chat;
+}
+
+GSList *purple_find_buddies(PurpleAccount *account, const char *name)
+{
+    GSList *result = NULL;
+    for (const AccountInfo &info: g_accounts)
+        if (info.account == account)
+            for (PurpleBuddy *buddy: info.buddies)
+                if (!name || !strcmp(buddy->name, name))
+                    result = g_slist_prepend(result, buddy);
+    return result;
+}
+
+// Contacts are not modelled: a buddy is its own contact
+const char *purple_buddy_get_contact_alias(PurpleBuddy *buddy)
+{
+    return buddy->alias ? buddy->alias : buddy->name;
 }
 
 const char *purple_buddy_get_alias_only(PurpleBuddy *buddy)
@@ -1357,13 +1383,21 @@ PurpleGroup *purple_group_new(const char *name)
 
 void purple_blist_add_group(PurpleGroup *group, PurpleBlistNode *node)
 {
+    addNode(group->node);
     g_groups.push_back(group);
+}
+
+void purple_blist_rename_group(PurpleGroup *group, const char *name)
+{
+    free(group->name);
+    group->name = strdup(name);
 }
 
 // Groups last for the run of the test case, like the rest of the buddy list
 void clearGroups()
 {
     for (PurpleGroup *group: g_groups) {
+        removeNode(group->node);
         g_hash_table_destroy(group->node.settings);
         free(group->name);
         delete group;
