@@ -92,6 +92,8 @@ private:
     // List of chats is requested after connection is ready, and when response is received,
     // then we report to libpurple that we are connected
     void       onChatListReady();
+    void       checkBuddiesDeleted();
+    void       checkBuddyDeletedResponse(TdObjectPtr object);
     // Login sequence end
 
     void       onIncomingMessage(td::td_api::object_ptr<td::td_api::message> message);

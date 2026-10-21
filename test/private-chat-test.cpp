@@ -1401,3 +1401,102 @@ TEST(PurpleInfoTest, UiNameWithoutUiInfo)
     g_log_remove_handler("GLib", handler);
     EXPECT_EQ(0, criticals);
 }
+
+TEST_F(PrivateChatTest, DeletedAccount)
+{
+    const std::string name = userFirstNames[0] + " " + userLastNames[0];
+    loginWithOneContact();
+    purple_conversation_new(PURPLE_CONV_TYPE_IM, account, purpleUserName(0).c_str());
+    prpl.discardEvents();
+
+    // TDLib empties a deleted user's names; the buddy keeps its own, marked, in a group of its own
+    auto deletedUser = makeUser(userIds[0], "", "", "", make_object<userStatusEmpty>());
+    deletedUser->type_ = make_object<userTypeDeleted>();
+    tgl.update(make_object<updateUser>(std::move(deletedUser)));
+
+    PurpleGroup *group = purple_find_group("Deleted Accounts (Telegram)");
+    ASSERT_NE(nullptr, group);
+    prpl.verifyEvents(
+        AliasBuddyEvent(purpleUserName(0), name + " (deleted)"),
+        AddBuddyEvent(purpleUserName(0), name + " (deleted)", account, nullptr, group, nullptr),
+        UserStatusEvent(account, purpleUserName(0), PURPLE_STATUS_OFFLINE),
+        ConversationWriteEvent(purpleUserName(0), "", "This account has been deleted.", PURPLE_MESSAGE_SYSTEM, 0)
+    );
+
+    // The chat's title follows, empty, and changes nothing
+    tgl.update(make_object<updateChatTitle>(chatIds[0], ""));
+    prpl.verifyNoEvents();
+
+    // Should the account come back, so does the buddy
+    tgl.update(standardUpdateUser(0));
+    tgl.update(make_object<updateChatTitle>(chatIds[0], name));
+    prpl.verifyEvents(
+        AddBuddyEvent(purpleUserName(0), name + " (deleted)", account, nullptr, nullptr, nullptr),
+        ConversationWriteEvent(purpleUserName(0), "", "This account has been restored.", PURPLE_MESSAGE_SYSTEM, 0),
+        AliasBuddyEvent(purpleUserName(0), name)
+    );
+}
+
+TEST_F(PrivateChatTest, DeletedAccountsGroupRenamed)
+{
+    // Made under another translation, so renamed after this one
+    PurpleGroup *group = purple_group_new("Gelöschte Konten (Telegram)");
+    purple_blist_add_group(group, NULL);
+    purple_blist_node_set_string(PURPLE_BLIST_NODE(group), "tdlib-deleted-accounts", "Gelöschte Konten (Telegram)");
+    // Named by the user, so left alone
+    PurpleGroup *ownGroup = purple_group_new("Gone");
+    purple_blist_add_group(ownGroup, NULL);
+
+    loginWithOneContact();
+    EXPECT_STREQ("Deleted Accounts (Telegram)", purple_group_get_name(group));
+
+    purple_blist_rename_group(group, "Gone for good");
+    tgl.update(make_object<updateChatTitle>(chatIds[0], "x"));
+    prpl.discardEvents();
+    auto deletedUser = makeUser(userIds[0], "", "", "", make_object<userStatusEmpty>());
+    deletedUser->type_ = make_object<userTypeDeleted>();
+    tgl.update(make_object<updateUser>(std::move(deletedUser)));
+    // Found by its setting, whatever its name
+    EXPECT_EQ(group, purple_buddy_get_group(purple_find_buddy(account, purpleUserName(0).c_str())));
+    EXPECT_STREQ("Gone for good", purple_group_get_name(group));
+    prpl.discardEvents();
+}
+
+TEST_F(PrivateChatTest, DeletedAccountsFoundAtLogin)
+{
+    // Buddies from an earlier session: one deleted meanwhile, the other no longer in any chat
+    for (unsigned i: {0, 1}) {
+        PurpleBuddy *buddy = purple_buddy_new(account, purpleUserName(i).c_str(),
+                                              (userFirstNames[i] + " " + userLastNames[i]).c_str());
+        purple_blist_add_buddy(buddy, NULL, NULL, NULL);
+    }
+    PurpleGroup *group = purple_group_new("Deleted Accounts (Telegram)");
+    purple_blist_add_group(group, NULL);
+    purple_blist_node_set_string(PURPLE_BLIST_NODE(group), "tdlib-deleted-accounts", "Deleted Accounts (Telegram)");
+    prpl.discardEvents();
+
+    auto deletedUser = makeUser(userIds[0], "", "", "", make_object<userStatusEmpty>());
+    deletedUser->type_ = make_object<userTypeDeleted>();
+    login({make_object<updateUser>(std::move(deletedUser))}, make_object<users>(), getChatsNoChatsResponse(),
+          {
+              std::make_unique<AliasBuddyEvent>(purpleUserName(0), userFirstNames[0] + " " + userLastNames[0] + " (deleted)"),
+              std::make_unique<AddBuddyEvent>(purpleUserName(0), userFirstNames[0] + " " + userLastNames[0] + " (deleted)",
+                                              account, nullptr, group, nullptr),
+              std::make_unique<UserStatusEvent>(account, purpleUserName(0), PURPLE_STATUS_OFFLINE)
+          }, {}, {
+              std::make_unique<AccountSetAliasEvent>(account, selfFirstName + " " + selfLastName),
+              std::make_unique<ShowAccountEvent>(account)
+          });
+
+    // TDLib is asked about the other
+    tgl.verifyRequest(getUser(userIds[1]));
+    deletedUser = makeUser(userIds[1], "", "", "", make_object<userStatusEmpty>());
+    deletedUser->type_ = make_object<userTypeDeleted>();
+    tgl.reply(std::move(deletedUser));
+    prpl.verifyEvents(
+        AliasBuddyEvent(purpleUserName(1), userFirstNames[1] + " " + userLastNames[1] + " (deleted)"),
+        AddBuddyEvent(purpleUserName(1), userFirstNames[1] + " " + userLastNames[1] + " (deleted)",
+                      account, nullptr, group, nullptr),
+        UserStatusEvent(account, purpleUserName(1), PURPLE_STATUS_OFFLINE)
+    );
+}
