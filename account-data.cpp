@@ -70,8 +70,8 @@ UserId getUserIdByPrivateChat(const td::td_api::chat &chat)
     return UserId::invalid;
 }
 
-// A private chat that a stranger started, and we have not answered, is offered for reporting as
-// spam; it stays out of the buddy list until we answer, which removes the offer.
+// A private chat that a stranger started is offered for reporting as spam, even after we answer.
+// It stays out of the buddy list until the offer goes: when we add them to contacts, or dismiss it.
 static bool isUnansweredStranger(const td::td_api::chat &chat)
 {
     return chat.action_bar_ && ((chat.action_bar_->get_id() == td::td_api::chatActionBarReportSpam::ID) ||

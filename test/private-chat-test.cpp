@@ -297,7 +297,7 @@ TEST_F(PrivateChatTest, ContactedByStranger)
     // Not marked as read while the conversation goes by the display name
     tgl.verifyNoRequests();
 
-    // We answer, and the offer is gone: the buddy is added, keeping the conversation's tab
+    // We dismiss the offer: the buddy is added, keeping the conversation's tab
     tgl.update(make_object<updateChatActionBar>(chatIds[0], nullptr));
     prpl.verifyEvents(
         AddBuddyEvent(purpleUserName(0), displayName, account, nullptr, nullptr, nullptr),
