@@ -275,7 +275,7 @@ TEST_F(PrivateChatTest, ContactedByStranger)
     // A stranger messages us: Telegram offers to report the chat as spam, so no buddy yet
     object_ptr<updateNewChat> chatUpdate = standardPrivateChat(0);
     chatUpdate->chat_->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
-    chatUpdate->chat_->action_bar_ = make_object<chatActionBarReportSpam>(false);
+    chatUpdate->chat_->action_bar_ = make_object<chatActionBarReportSpam>();
     tgl.update(std::move(chatUpdate));
     prpl.verifyNoEvents();
 
@@ -298,7 +298,9 @@ TEST_F(PrivateChatTest, ContactedByStranger)
     tgl.verifyNoRequests();
 
     // We dismiss the offer: the buddy is added, keeping the conversation's tab
-    tgl.update(make_object<updateChatActionBar>(chatIds[0], nullptr));
+    auto actionBarUpdate = make_object<updateChatActionBar>();
+    actionBarUpdate->chat_id_ = chatIds[0];
+    tgl.update(std::move(actionBarUpdate));
     prpl.verifyEvents(
         AddBuddyEvent(purpleUserName(0), displayName, account, nullptr, nullptr, nullptr),
         ConvSetTitleEvent(purpleUserName(0), displayName)
