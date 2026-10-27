@@ -58,6 +58,23 @@ struct MessageMarks {
     PidginTextMark *end   = nullptr;
 };
 
+// A message edited in a conversation's input field, in Pidgin: its text takes the place of what the
+// field held, which comes back once the edit is sent or given up, and the field is tinted meanwhile.
+// False where that cannot be done.
+struct EntryEdit {
+    ChatId      chatId;
+    MessageId   messageId;
+    bool        isCaption = false;
+    std::string original; // sent unchanged, it is no edit
+};
+// Esc in the field gives the edit up as well, calling back after.
+bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::string &text,
+                    std::function<void()> cancelled);
+// Ends the edit in progress, if any, telling which it was
+bool endEntryEdit(PurpleConversation *conv, EntryEdit *edit);
+// Whether that message is being edited in the conversation's input field
+bool isEntryEditing(PurpleConversation *conv, MessageId messageId);
+
 // Whether Pidgin shows the conversation, so that it can be emptied and filled anew
 bool canRedrawConversation(PurpleConversation *conv);
 

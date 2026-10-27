@@ -65,6 +65,8 @@ public:
     // What the dialogs of a message's menu do, once answered
     void editMessage(ChatId chatId, MessageId messageId, const char *text, bool isCaption);
     void deleteMessage(ChatId chatId, MessageId messageId, bool forAll);
+    void cancelEntryEdit(ChatId chatId);
+    void showEditCancelled(ChatId chatId);
 
     // The client of an account by its name, if it is connected
     static PurpleTdClient *findConnected(const char *accountName);
@@ -209,12 +211,13 @@ private:
         bool                       canEdit          = false;
         bool                       isCaption        = false;
         std::string                text;
+        time_t                     date             = 0;
         bool                       canDeleteForSelf = false;
         bool                       canDeleteForAll  = false;
     };
     void showMessageMenuResponse(ChatId chatId, MessageId messageId, const MessageMenu &menu,
                                  TdObjectPtr object);
-    void askEditMessage(ChatId chatId, MessageId messageId, const std::string &text, bool isCaption);
+    void askEditMessage(ChatId chatId, MessageId messageId, const std::string &text, bool isCaption, time_t date);
     void askDeleteMessage(ChatId chatId, MessageId messageId, bool forAll);
     void openDownloadedFile(ChatId chatId, const std::string &key, const std::string &description,
                             TdObjectPtr object);

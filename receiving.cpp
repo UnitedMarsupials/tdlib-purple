@@ -75,7 +75,7 @@ std::string escapeForDisplay(const std::string &text)
 
 // Names a message by when it was sent, which is what the conversation window shows of it:
 // the time, and the date as well unless that is today
-static std::string formatMessageTime(time_t timestamp)
+std::string formatMessageTime(time_t timestamp)
 {
     time_t    now = time(NULL);
     struct tm today, sent;
@@ -615,7 +615,7 @@ static std::string getPrivateChatPurpleName(TdAccountData &account, const td::td
 }
 
 // The chat's conversation, if it is open; none is opened
-static PurpleConversation *findMessageConversation(TdAccountData &account, const td::td_api::chat &chat)
+PurpleConversation *findMessageConversation(TdAccountData &account, const td::td_api::chat &chat)
 {
     const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
     if (privateUser)

@@ -1068,6 +1068,7 @@ void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId)
             menu.text = text->text_;
         else
             menu.isCaption = false;
+        menu.date = message.date_;
 
         auto properties = td::td_api::make_object<td::td_api::getMessageProperties>(chatId.value(), messageId.value());
         m_transceiver.sendQuery(std::move(properties), [this, chatId, messageId, menu, hasText = (text != nullptr)](uint64_t, TdObjectPtr object) mutable {
@@ -1186,14 +1187,27 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
     reactionItem.submenu = std::move(shown);
     std::vector<MenuItem> items{std::move(reactionItem)};
 
-    if (menu.canEdit) {
+    const td::td_api::chat *chat = m_data.getChat(chatId);
+    PurpleConversation     *conv = chat ? findMessageConversation(m_data, *chat) : nullptr;
+    if (isEntryEditing(conv, messageId)) {
+        MenuItem item;
+        // TRANSLATOR: Item of a message's menu, while the message is being edited in the input field.
+        item.label  = _("Cancel editing");
+        item.action = [accountName, chatId]() {
+            PurpleTdClient *client = findConnected(accountName.c_str());
+            if (client)
+                client->cancelEntryEdit(chatId);
+        };
+        items.push_back(std::move(item));
+    } else if (menu.canEdit) {
         MenuItem item;
         // TRANSLATOR: Item of a message's menu; it opens a dialog.
         item.label  = _("Edit…");
-        item.action = [accountName, chatId, messageId, text = menu.text, isCaption = menu.isCaption]() {
+        item.action = [accountName, chatId, messageId, text = menu.text, isCaption = menu.isCaption,
+                       date = menu.date]() {
             PurpleTdClient *client = findConnected(accountName.c_str());
             if (client)
-                client->askEditMessage(chatId, messageId, text, isCaption);
+                client->askEditMessage(chatId, messageId, text, isCaption, date);
         };
         items.push_back(std::move(item));
     }
@@ -1333,8 +1347,26 @@ struct MessageRequest {
 };
 }
 
-void PurpleTdClient::askEditMessage(ChatId chatId, MessageId messageId, const std::string &text, bool isCaption)
+void PurpleTdClient::askEditMessage(ChatId chatId, MessageId messageId, const std::string &text, bool isCaption,
+                                    time_t date)
 {
+    // In Pidgin, in the conversation's input field, the next message sent being the edit
+    const td::td_api::chat *chat = m_data.getChat(chatId);
+    PurpleConversation     *conv = chat ? getMessageConversation(m_data, *chat) : nullptr;
+    std::string accountName = purple_account_get_username(m_data.purpleAccount);
+    auto        editCancelled = [accountName, chatId]() {
+        PurpleTdClient *client = findConnected(accountName.c_str());
+        if (client)
+            client->showEditCancelled(chatId);
+    };
+    if (conv && beginEntryEdit(conv, {chatId, messageId, isCaption, text}, text, editCancelled)) {
+        // TRANSLATOR: In-chat notification, not logged. Argument is the time (or date and time) the message was sent at, as the conversation window shows it. "/cancel" must remain verbatim!
+        std::string notice = formatMessage(_("Editing the message from {}: send it to save the change; Esc or /cancel leaves it as it was."),
+                                           linkToMessage(m_data.purpleAccount, chatId, messageId, formatMessageTime(date)));
+        showChatNotification(m_data, *chat, notice.c_str(), PURPLE_MESSAGE_NO_LOG);
+        return;
+    }
+
     // Not tied to the connection: the account is found again once the user answers
     auto *request = new MessageRequest{purple_account_get_username(m_data.purpleAccount), chatId, messageId, isCaption};
     auto  edited  = [](void *data, const char *text) {
@@ -1363,6 +1395,22 @@ void PurpleTdClient::askEditMessage(ChatId chatId, MessageId messageId, const st
                          NULL, // buddy
                          NULL, // conversation
                          request);
+}
+
+void PurpleTdClient::cancelEntryEdit(ChatId chatId)
+{
+    const td::td_api::chat *chat = m_data.getChat(chatId);
+    PurpleConversation     *conv = chat ? findMessageConversation(m_data, *chat) : nullptr;
+    if (conv && endEntryEdit(conv, nullptr))
+        showEditCancelled(chatId);
+}
+
+void PurpleTdClient::showEditCancelled(ChatId chatId)
+{
+    const td::td_api::chat *chat = m_data.getChat(chatId);
+    if (chat)
+        // TRANSLATOR: In-chat notification, not logged, once editing a message was given up.
+        showChatNotification(m_data, *chat, _("The message is left as it was."), PURPLE_MESSAGE_NO_LOG);
 }
 
 void PurpleTdClient::editMessage(ChatId chatId, MessageId messageId, const char *text, bool isCaption)

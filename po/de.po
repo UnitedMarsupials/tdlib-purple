@@ -1397,6 +1397,36 @@ msgstr "Die Nachricht kann nicht gelöscht werden"
 msgid "edited"
 msgstr "bearbeitet"
 
+#. TRANSLATOR: Item of a message's menu, while the message is being edited in the input field.
+#: ../td-client.cpp:1195
+msgid "Cancel editing"
+msgstr "Bearbeiten abbrechen"
+
+#. TRANSLATOR: In-chat notification, not logged, once editing a message was given up.
+#. TRANSLATOR: In-chat notification, not logged, after a message being edited was sent unchanged.
+#. TRANSLATOR: In-chat notification, not logged, after the /cancel command.
+#: ../td-client.cpp:1413 ../tdlib-purple.cpp:359 ../tdlib-purple.cpp:818
+msgid "The message is left as it was."
+msgstr "Die Nachricht bleibt unverändert."
+
+#. TRANSLATOR: Error after the /cancel command.
+#: ../tdlib-purple.cpp:814
+msgid "No message is being edited."
+msgstr "Es wird keine Nachricht bearbeitet."
+
+#. TRANSLATOR: Command description, the initial "cancel" must remain verbatim!
+#: ../tdlib-purple.cpp:1094
+msgid "cancel: Leave the message being edited as it was"
+msgstr "cancel: Die bearbeitete Nachricht unverändert lassen"
+
+#. TRANSLATOR: In-chat notification, not logged. Argument is the time (or date and time) the message was sent at, as the conversation window shows it. "/cancel" must remain verbatim!
+#: ../td-client.cpp:1364
+#, c++-format
+msgid ""
+"Editing the message from {}: send it to save the change; Esc or /cancel "
+"leaves it as it was."
+msgstr "Die Nachricht von {} wird bearbeitet: Senden speichert die Änderung; Esc oder /cancel lässt sie unverändert."
+
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091
 msgid "Needs Telegram Premium"

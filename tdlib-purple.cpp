@@ -345,10 +345,34 @@ static void tgprpl_close (PurpleConnection *gc)
     purple_connection_set_protocol_data(gc, NULL);
 }
 
+// What is sent while a message is being edited in the conversation's input field is the edit
+static bool sendEdit(PurpleTdClient *tdClient, PurpleConversation *conv, const char *message)
+{
+    EntryEdit edit;
+    if (!endEntryEdit(conv, &edit))
+        return false;
+    // Plain text, as messages are sent
+    char *stripped = purple_markup_strip_html(message);
+    char *text     = purple_unescape_html(stripped);
+    if (edit.original == text)
+        // TRANSLATOR: In-chat notification, not logged, after a message being edited was sent unchanged.
+        purple_conversation_write(conv, NULL, _("The message is left as it was."),
+                                  (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), time(NULL));
+    else
+        tdClient->editMessage(edit.chatId, edit.messageId, text, edit.isCaption);
+    g_free(text);
+    g_free(stripped);
+    return true;
+}
+
 static int tgprpl_send_im (PurpleConnection *gc, const char *who, const char *message, PurpleMessageFlags flags)
 {
     PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
     purple_debug_misc(config::pluginId, "tgprpl_send_im to '%s' flags=0x%x\n", who, (unsigned)flags);
+    PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, who,
+                                                                     purple_connection_get_account(gc));
+    if (sendEdit(tdClient, conv, message))
+        return 0;
     return tdClient->sendMessage(who, message);
 }
 
@@ -598,6 +622,8 @@ static int tgprpl_send_chat (PurpleConnection *gc, int id, const char *message, 
     purple_debug_misc(config::pluginId, "Sending group chat message: purple chat id %d, flags=0x%x\n",
                       id, (unsigned)flags);
     PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    if (sendEdit(tdClient, purple_find_chat(gc, id), message))
+        return 0;
     return tdClient->sendGroupMessage(id, message);
 }
 
@@ -778,6 +804,20 @@ gboolean initiateMedia(PurpleAccount *account, const char *who, PurpleMediaSessi
 #else
     return FALSE;
 #endif
+}
+
+static PurpleCmdRet cancelEditCommand(PurpleConversation *conv, const gchar *cmd, gchar **args, gchar **error,
+                                      void *data)
+{
+    if (!endEntryEdit(conv, nullptr)) {
+        // TRANSLATOR: Error after the /cancel command.
+        *error = g_strdup(_("No message is being edited."));
+        return PURPLE_CMD_RET_FAILED;
+    }
+    // TRANSLATOR: In-chat notification, not logged, after the /cancel command.
+    purple_conversation_write(conv, NULL, _("The message is left as it was."),
+                              (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), time(NULL));
+    return PURPLE_CMD_RET_OK;
 }
 
 static PurpleCmdRet hangupCommand(PurpleConversation *conv, const gchar *cmd, gchar **args, gchar **error, void *data)
@@ -1046,6 +1086,12 @@ static gboolean tgprpl_load (PurplePlugin *plugin)
                         config::pluginId, hangupCommand,
                         // TRANSLATOR: Command description, the initial "hangup" must remain verbatim!
                         _("hangup: Terminate any active call (with any user)"), NULL);
+
+    purple_cmd_register("cancel", "", PURPLE_CMD_P_PLUGIN,
+                        (PurpleCmdFlag)(PURPLE_CMD_FLAG_IM | PURPLE_CMD_FLAG_CHAT | PURPLE_CMD_FLAG_PRPL_ONLY),
+                        config::pluginId, cancelEditCommand,
+                        // TRANSLATOR: Command description, the initial "cancel" must remain verbatim!
+                        _("cancel: Leave the message being edited as it was"), NULL);
 
     return TRUE;
 }

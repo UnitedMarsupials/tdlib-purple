@@ -5,6 +5,7 @@
 
 #ifndef NoPidgin
 #include <gtkconv.h>
+#include <gdk/gdkkeysyms.h>
 
 // Pidgin's and GTK's functions, looked up by name: their types are those the headers declare
 #define FRONT_END_FUNCTION(name) static decltype(&name) p_##name
@@ -38,7 +39,12 @@ FRONT_END_FUNCTION(gtk_label_set_markup);
 FRONT_END_FUNCTION(gtk_widget_show_all);
 FRONT_END_FUNCTION(gtk_widget_destroy);
 FRONT_END_FUNCTION(g_signal_connect_data);
+FRONT_END_FUNCTION(gtk_imhtml_get_markup);
 FRONT_END_FUNCTION(gtk_imhtml_delete);
+FRONT_END_FUNCTION(gtk_imhtml_append_text_with_images);
+FRONT_END_FUNCTION(gtk_widget_modify_base);
+FRONT_END_FUNCTION(gtk_widget_grab_focus);
+FRONT_END_FUNCTION(g_signal_handler_disconnect);
 FRONT_END_FUNCTION(gtk_text_buffer_apply_tag_by_name);
 FRONT_END_FUNCTION(gtk_text_iter_forward_search);
 FRONT_END_FUNCTION(gtk_text_iter_compare);
@@ -309,9 +315,12 @@ void pidginUiLoad(PurplePlugin *plugin)
                  LOOK_UP(gtk_bin_get_child) && LOOK_UP(gtk_label_set_markup) &&
                  LOOK_UP(gtk_widget_show_all) &&
                  LOOK_UP(gtk_widget_destroy) && LOOK_UP(g_signal_connect_data) &&
-                 LOOK_UP(gtk_imhtml_delete) && LOOK_UP(gtk_text_buffer_apply_tag_by_name) &&
+                 LOOK_UP(gtk_text_buffer_apply_tag_by_name) &&
                  LOOK_UP(gtk_text_iter_forward_search) &&
-                 LOOK_UP(gtk_text_iter_compare);
+                 LOOK_UP(gtk_text_iter_compare) && LOOK_UP(gtk_imhtml_get_markup) &&
+                 LOOK_UP(gtk_imhtml_delete) && LOOK_UP(gtk_imhtml_append_text_with_images) &&
+                 LOOK_UP(gtk_widget_modify_base) && LOOK_UP(gtk_widget_grab_focus) &&
+                 LOOK_UP(g_signal_handler_disconnect);
     purple_debug_info(config::pluginId, "Pidgin's conversation window: %s\n",
                       g_pidginUi ? "found" : "not found");
     if (!g_pidginUi)
@@ -393,6 +402,129 @@ void showMessageReactions(PurpleConversation *conv, MessageId messageId, const s
 bool canRedrawConversation(PurpleConversation *conv)
 {
     return getIMHtml(conv) != nullptr;
+}
+
+// The edit in progress in a conversation's input field, and what the field held before
+struct EntryEditState {
+    EntryEdit             edit;
+    std::string           draft;
+    gulong                keyHandler = 0;
+    std::function<void()> cancelled;
+};
+static const char ENTRY_EDIT_KEY[] = "tdlib-purple-entry-edit";
+
+static GtkWidget *getEntry(PurpleConversation *conv)
+{
+    return getIMHtml(conv) ? PIDGIN_CONVERSATION(conv)->entry : nullptr;
+}
+
+static void setEntryText(GtkWidget *entry, const char *html)
+{
+    p_gtk_imhtml_delete(reinterpret_cast<GtkIMHtml *>(entry), NULL, NULL);
+    if (html && *html)
+        p_gtk_imhtml_append_text_with_images(reinterpret_cast<GtkIMHtml *>(entry), html, GtkIMHtmlOptions(0), NULL);
+}
+
+// A quarter of the way to amber from the theme's own background, light or dark
+static void tintEntry(GtkWidget *entry, bool tint)
+{
+    if (!tint) {
+        p_gtk_widget_modify_base(entry, GTK_STATE_NORMAL, NULL);
+        return;
+    }
+    GdkColor base   = entry->style->base[GTK_STATE_NORMAL];
+    GdkColor tinted = {0, guint16(base.red / 4 * 3 + 0xFFFF / 4), guint16(base.green / 4 * 3 + 0xC0C0 / 4),
+                       guint16(base.blue / 4 * 3)};
+    p_gtk_widget_modify_base(entry, GTK_STATE_NORMAL, &tinted);
+}
+
+static gboolean entryKeyPressed(GtkWidget *entry, GdkEventKey *event, gpointer conv)
+{
+    auto *state = static_cast<EntryEditState *>(purple_conversation_get_data(static_cast<PurpleConversation *>(conv),
+                                                                            ENTRY_EDIT_KEY));
+    if (!state || (event->keyval != GDK_Escape))
+        return FALSE;
+    std::function<void()> cancelled = std::move(state->cancelled);
+    endEntryEdit(static_cast<PurpleConversation *>(conv), nullptr);
+    if (cancelled)
+        cancelled();
+    return TRUE;
+}
+
+bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::string &text,
+                    std::function<void()> cancelled)
+{
+    GtkWidget *entry = getEntry(conv);
+    if (!entry)
+        return false;
+    auto *state = static_cast<EntryEditState *>(purple_conversation_get_data(conv, ENTRY_EDIT_KEY));
+    // Another edit begun meanwhile keeps the draft from before the first
+    if (!state) {
+        state = new EntryEditState;
+        gchar *draft = p_gtk_imhtml_get_markup(reinterpret_cast<GtkIMHtml *>(entry));
+        state->draft = draft ? draft : "";
+        g_free(draft);
+        state->keyHandler = p_g_signal_connect_data(entry, "key-press-event", G_CALLBACK(entryKeyPressed), conv,
+                                                    NULL, GConnectFlags(0));
+        purple_conversation_set_data(conv, ENTRY_EDIT_KEY, state);
+    }
+    state->edit      = edit;
+    state->cancelled = std::move(cancelled);
+
+    gchar      *escaped = g_markup_escape_text(text.c_str(), -1);
+    std::string html;
+    for (const char *c = escaped; *c; c++)
+        if (*c == '\n')
+            html += "<br>";
+        else
+            html += *c;
+    g_free(escaped);
+    setEntryText(entry, html.c_str());
+    tintEntry(entry, true);
+    p_gtk_widget_grab_focus(entry);
+    return true;
+}
+
+namespace {
+struct DraftToRestore {
+    PurpleConversation *conv;
+    std::string         draft;
+};
+}
+
+// Once Pidgin has emptied the field after sending, or after a command
+static gboolean restoreDraft(gpointer data)
+{
+    std::unique_ptr<DraftToRestore> restore(static_cast<DraftToRestore *>(data));
+    GtkWidget *entry = g_list_find(purple_get_conversations(), restore->conv) ? getEntry(restore->conv) : nullptr;
+    // Emptied too, if there was none, after Esc
+    if (entry)
+        setEntryText(entry, restore->draft.c_str());
+    return FALSE;
+}
+
+bool isEntryEditing(PurpleConversation *conv, MessageId messageId)
+{
+    auto *state = conv ? static_cast<EntryEditState *>(purple_conversation_get_data(conv, ENTRY_EDIT_KEY)) : nullptr;
+    return state && (state->edit.messageId == messageId);
+}
+
+bool endEntryEdit(PurpleConversation *conv, EntryEdit *edit)
+{
+    auto *state = conv ? static_cast<EntryEditState *>(purple_conversation_get_data(conv, ENTRY_EDIT_KEY)) : nullptr;
+    if (!state)
+        return false;
+    if (edit)
+        *edit = state->edit;
+    purple_conversation_set_data(conv, ENTRY_EDIT_KEY, NULL);
+    GtkWidget *entry = getEntry(conv);
+    if (entry) {
+        p_g_signal_handler_disconnect(entry, state->keyHandler);
+        tintEntry(entry, false);
+        g_idle_add(restoreDraft, new DraftToRestore{conv, std::move(state->draft)});
+    }
+    delete state;
+    return true;
 }
 
 bool canReplaceMessage(PurpleConversation *conv, MessageId messageId)
@@ -572,6 +704,22 @@ MessageMarkScope::~MessageMarkScope()
 
 void showMessageReactions(PurpleConversation *conv, MessageId messageId, const std::string &html)
 {
+}
+
+bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::string &text,
+                    std::function<void()> cancelled)
+{
+    return false;
+}
+
+bool endEntryEdit(PurpleConversation *conv, EntryEdit *edit)
+{
+    return false;
+}
+
+bool isEntryEditing(PurpleConversation *conv, MessageId messageId)
+{
+    return false;
 }
 
 bool canRedrawConversation(PurpleConversation *conv)

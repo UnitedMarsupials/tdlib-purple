@@ -70,6 +70,10 @@ void checkMessageReady(const IncomingMessage *message, TdTransceiver &transceive
 void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
                            td::td_api::object_ptr<td::td_api::message> message,
                            PendingMessageQueue::MessageAction action, bool redrawn = false);
+// The chat's conversation, if it is open; none is opened
+PurpleConversation *findMessageConversation(TdAccountData &account, const td::td_api::chat &chat);
+// Names a message by when it was sent, as the conversation window shows it
+std::string formatMessageTime(time_t timestamp);
 void fetchHistory(TdAccountData &account, ChatId chatId, MessageId fetchFrom, MessageId stopAt);
 // Fills the chat's tab anew, in Pidgin, from the given message to the latest, if the tab can hold
 // that many; to show a message it does not, such as one just reacted to
