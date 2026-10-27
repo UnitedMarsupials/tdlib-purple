@@ -277,7 +277,7 @@ jobs:
             options: ''
             install: >-
               sudo pkg install -y cmake ninja pkgconf gettext-tools
-              libpurple tdlib libfmt rlottie googletest valgrind
+              libpurple pidgin tdlib libfmt rlottie googletest valgrind
           - name: FreeBSD 14.4
             os: freebsd
             version: '14.4'
@@ -288,16 +288,17 @@ jobs:
             options: ''
             install: >-
               sudo pkg install -y cmake ninja pkgconf gettext-tools
-              libpurple tdlib libfmt rlottie googletest valgrind
-          # No rlottie package, so no animated stickers.
-          - name: OpenBSD 7.9 (experimental, NoLottie)
+              libpurple pidgin tdlib libfmt rlottie googletest valgrind
+          # No rlottie package, so no animated stickers; built without Pidgin's
+          # headers, so that the build without them is tried somewhere.
+          - name: OpenBSD 7.9 (experimental, NoLottie, NoPidgin)
             os: openbsd
             version: '7.9'
             experimental: true
             valgrind: false
             sanitize: false
             prefix: /usr/local
-            options: -DNoLottie=1
+            options: -DNoLottie=1 -DNoPidgin=1
             install: >-
               sudo pkg_add -I cmake ninja gettext-tools libpurple tdlib fmt
               gtest

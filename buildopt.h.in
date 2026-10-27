@@ -33,4 +33,6 @@
 
 #cmakedefine NoVoip
 
+#cmakedefine NoPidgin
+
 #endif

@@ -9,6 +9,10 @@
 - **A stranger who writes to you is no longer added to the buddy list while Telegram offers to report them as spam.**
 - **A deleted account's buddy keeps its name, marked "(deleted)", and moves to the group "Deleted Accounts (Telegram)", instead of losing its name.**
 
+### Build
+
+- **Pidgin's headers are needed to build, for features of its conversation window, and `-DNoPidgin=True` builds without them.**
+
 ## 0.9.3 (2026-10-19)
 
 ### Features

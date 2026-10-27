@@ -5,6 +5,7 @@
 #include "purple-info.h"
 #include "format.h"
 #include "buildopt.h"
+#include "pidgin-ui.h"
 #include <purple.h>
 
 #include <cstdint>
@@ -15,6 +16,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include <vector>
 #include <array>
 #include <deque>
@@ -937,19 +939,21 @@ void tgprpl_open_message_link(const char *link)
 
 // Pidgin's conversation window, GtkIMHtml, lets a program handle links of a scheme of its own.
 // Looked up by name, as the plugin does not depend on GTK; front-ends without it get links to
-// files instead. The declarations, from gtkimhtml.h:
-//   gboolean gtk_imhtml_class_register_protocol(const char *name,
-//       gboolean (*activate)(GtkIMHtml *imhtml, GtkIMHtmlLink *link),
-//       gboolean (*context_menu)(GtkIMHtml *imhtml, GtkIMHtmlLink *link, GtkWidget *menu));
-//   const char *gtk_imhtml_link_get_url(GtkIMHtmlLink *link);
-using LinkActivate     = gboolean (*)(void *imhtml, void *link);
-using LinkContextMenu  = gboolean (*)(void *imhtml, void *link, void *menu);
+// files instead. Their types come from gtkimhtml.h (pidgin-ui.h).
+using LinkActivate     = gboolean (*)(PidginIMHtml *imhtml, PidginIMHtmlLink *link);
+using LinkContextMenu  = gboolean (*)(PidginIMHtml *imhtml, PidginIMHtmlLink *link, PidginWidget *menu);
 using RegisterProtocol = gboolean (*)(const char *name, LinkActivate activate, LinkContextMenu contextMenu);
-using LinkGetUrl       = const char *(*)(void *link);
+using LinkGetUrl       = const char *(*)(PidginIMHtmlLink *link);
+#ifndef NoPidgin
+static_assert(std::is_same<RegisterProtocol, decltype(&gtk_imhtml_class_register_protocol)>::value,
+              "gtk_imhtml_class_register_protocol() differs from what is called");
+static_assert(std::is_same<LinkGetUrl, decltype(&gtk_imhtml_link_get_url)>::value,
+              "gtk_imhtml_link_get_url() differs from what is called");
+#endif
 static RegisterProtocol g_registerProtocol;
 static LinkGetUrl       g_linkGetUrl;
 
-static gboolean messageLinkClicked(void *imhtml, void *link)
+static gboolean messageLinkClicked(PidginIMHtml *imhtml, PidginIMHtmlLink *link)
 {
     const char *url = g_linkGetUrl(link);
     if (url)
@@ -958,7 +962,7 @@ static gboolean messageLinkClicked(void *imhtml, void *link)
 }
 
 // Called whenever the link is right-clicked; it adds nothing to the menu
-static gboolean messageLinkContextMenu(void *imhtml, void *link, void *menu)
+static gboolean messageLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *link, PidginWidget *menu)
 {
     return TRUE;
 }

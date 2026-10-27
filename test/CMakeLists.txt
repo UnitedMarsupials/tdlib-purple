@@ -63,6 +63,11 @@ if (DEFINED GTEST_PATH)
 endif (DEFINED GTEST_PATH)
 
 
+if (NOT NoPidgin)
+    target_include_directories(tests SYSTEM PRIVATE ${Pidgin_INCLUDE_DIRS})
+    target_compile_options(tests PRIVATE ${Pidgin_CFLAGS_OTHER})
+endif (NOT NoPidgin)
+
 if (NOT NoLottie)
     target_compile_definitions(tests PRIVATE LOT_BUILD)
 endif (NOT NoLottie)
