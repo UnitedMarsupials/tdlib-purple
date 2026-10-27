@@ -1076,25 +1076,32 @@ void setMessageLinksEnabled(bool enabled)
     g_messageLinksEnabled = enabled;
 }
 
+// <scheme><account>/<chat id>/<message id>
+static std::string makeLink(const char *scheme, PurpleAccount *account, ChatId chatId, MessageId messageId)
+{
+    gchar *accountName = g_uri_escape_string(purple_account_get_username(account), NULL, FALSE);
+    std::string result = std::string(scheme) + accountName + '/' +
+                         std::to_string(chatId.value()) + '/' + std::to_string(messageId.value());
+    g_free(accountName);
+    return result;
+}
+
 // tdlib://<account>/<chat id>/<message id>: the message, rather than its file, which may not be
 // there yet, and whose path would not outlive TDLib's file cache
 std::string makeMessageLink(PurpleAccount *account, ChatId chatId, MessageId messageId,
                             const std::string &variant)
 {
-    gchar *accountName = g_uri_escape_string(purple_account_get_username(account), NULL, FALSE);
-    std::string result = std::string(MESSAGE_LINK_SCHEME) + accountName + '/' +
-                         std::to_string(chatId.value()) + '/' + std::to_string(messageId.value());
-    g_free(accountName);
+    std::string result = makeLink(MESSAGE_LINK_SCHEME, account, chatId, messageId);
     if (!variant.empty())
         result += '/' + variant;
     return result;
 }
 
-bool parseMessageLink(const char *link, std::string &accountName, ChatId &chatId, MessageId &messageId,
-                      std::string &variant)
+static bool parseLink(const char *scheme, const char *link, std::string &accountName, ChatId &chatId,
+                      MessageId &messageId, std::string &variant)
 {
-    size_t schemeLength = strlen(MESSAGE_LINK_SCHEME);
-    if (strncmp(link, MESSAGE_LINK_SCHEME, schemeLength))
+    size_t schemeLength = strlen(scheme);
+    if (strncmp(link, scheme, schemeLength))
         return false;
 
     gchar **parts = g_strsplit(link + schemeLength, "/", -1);
@@ -1113,6 +1120,39 @@ bool parseMessageLink(const char *link, std::string &accountName, ChatId &chatId
     }
     g_strfreev(parts);
     return valid;
+}
+
+bool parseMessageLink(const char *link, std::string &accountName, ChatId &chatId, MessageId &messageId,
+                      std::string &variant)
+{
+    return parseLink(MESSAGE_LINK_SCHEME, link, accountName, chatId, messageId, variant);
+}
+
+static bool g_jumpLinksEnabled = false;
+
+bool jumpLinksEnabled()
+{
+    return g_jumpLinksEnabled;
+}
+
+void setJumpLinksEnabled(bool enabled)
+{
+    g_jumpLinksEnabled = enabled;
+}
+
+// tdlib-message://<account>/<chat id>/<message id>
+std::string linkToMessage(PurpleAccount *account, ChatId chatId, MessageId messageId,
+                          const std::string &markup)
+{
+    if (!g_jumpLinksEnabled || !chatId.valid() || !messageId.valid())
+        return markup;
+    return "<a href=\"" + makeLink(JUMP_LINK_SCHEME, account, chatId, messageId) + "\">" + markup + "</a>";
+}
+
+bool parseJumpLink(const char *link, std::string &accountName, ChatId &chatId, MessageId &messageId)
+{
+    std::string variant;
+    return parseLink(JUMP_LINK_SCHEME, link, accountName, chatId, messageId, variant) && variant.empty();
 }
 
 std::string getDownloadXferPeerName(ChatId chatId,

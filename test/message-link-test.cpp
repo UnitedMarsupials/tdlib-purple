@@ -427,3 +427,32 @@ TEST_F(MessageLinkTest, PhotoSizesIgnored)
     );
     tgl.verifyNoRequests();
 }
+
+TEST(JumpLink, Parse)
+{
+    std::string accountName;
+    ChatId      chatId;
+    MessageId   messageId;
+    ASSERT_TRUE(parseJumpLink("tdlib-message://%2B1234/-100/5", accountName, chatId, messageId));
+    ASSERT_EQ(std::string("+1234"), accountName);
+    ASSERT_EQ(-100, chatId.value());
+    ASSERT_EQ(5, messageId.value());
+
+    // A file's link, or one naming a size, is something else
+    ASSERT_FALSE(parseJumpLink("tdlib://%2B1234/-100/5", accountName, chatId, messageId));
+    ASSERT_FALSE(parseJumpLink("tdlib-message://%2B1234/-100/5/original", accountName, chatId, messageId));
+    ASSERT_FALSE(parseJumpLink("tdlib-message://%2B1234/-100", accountName, chatId, messageId));
+}
+
+TEST(JumpLink, OnlyWhereEnabled)
+{
+    PurpleAccount *account = purple_account_new("+1234", NULL);
+    ASSERT_EQ(std::string("12:00"), linkToMessage(account, ChatId::fromString("-100"), MessageId::fromString("5"), "12:00"));
+    setJumpLinksEnabled(true);
+    ASSERT_EQ(std::string("<a href=\"tdlib-message://%2B1234/-100/5\">12:00</a>"),
+              linkToMessage(account, ChatId::fromString("-100"), MessageId::fromString("5"), "12:00"));
+    // Nothing to link to
+    ASSERT_EQ(std::string("12:00"), linkToMessage(account, ChatId::fromString("-100"), MessageId::invalid, "12:00"));
+    setJumpLinksEnabled(false);
+    purple_account_destroy(account);
+}

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Features
+
+- **In Pidgin, a reply's quote and the notices of an edit, a deletion or a reaction link to their message, scrolling the conversation to it.**
+
 ### Fixes
 
 - **A video's file link gives its file size and, where it has other sizes, is marked as the original, which is no longer listed among them.**

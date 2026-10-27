@@ -28,6 +28,7 @@ using PidginTextMark   = void;
 // Pidgin, everything below does nothing, and finds nothing.
 void pidginUiLoad(PurplePlugin *plugin);
 void pidginUiUnload();
+bool pidginUiFound();
 
 // Each message shown is bracketed in its tab by two marks, found again by its id; those of a
 // message shown again are moved. While an object of this class lives, what is written into a
@@ -51,5 +52,8 @@ struct MessageMarks {
 
 // Where the message is in the conversation's tab, if it is there
 MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId);
+
+// Scrolls the tab's text to the message and selects it; false if it is not there
+bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId);
 
 #endif

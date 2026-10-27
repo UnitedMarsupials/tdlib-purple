@@ -961,6 +961,25 @@ static gboolean messageLinkClicked(PidginIMHtml *imhtml, PidginIMHtmlLink *link)
     return TRUE;
 }
 
+// Scrolls the very tab the link is in, as the message it names is shown there, if anywhere
+static gboolean jumpLinkClicked(PidginIMHtml *imhtml, PidginIMHtmlLink *link)
+{
+    const char *url = g_linkGetUrl(link);
+    std::string accountName;
+    ChatId      chatId;
+    MessageId   messageId;
+    if (!url || !parseJumpLink(url, accountName, chatId, messageId)) {
+        purple_debug_warning(config::pluginId, "Not a link to a message: %s\n", url ? url : "");
+        return TRUE;
+    }
+    if (!scrollToMessage(imhtml, messageId))
+        // TRANSLATOR: Information dialog, after a link to a message in a conversation was clicked. Primary content.
+        purple_notify_info(NULL, config::pluginName, _("The message is not shown"),
+                           // TRANSLATOR: Information dialog, secondary content.
+                           _("It is no longer in this conversation's window."));
+    return TRUE;
+}
+
 // Called whenever the link is right-clicked; it adds nothing to the menu
 static gboolean messageLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *link, PidginWidget *linkMenu)
 {
@@ -975,13 +994,19 @@ static void registerMessageLinks()
                            g_registerProtocol(MESSAGE_LINK_SCHEME, messageLinkClicked, messageLinkContextMenu));
     purple_debug_info(config::pluginId, "Links to messages' files: %s\n",
                       messageLinksEnabled() ? MESSAGE_LINK_SCHEME : "file://");
+    // Only where Pidgin's tab can be scrolled to the message
+    setJumpLinksEnabled(messageLinksEnabled() && pidginUiFound() &&
+                        g_registerProtocol(JUMP_LINK_SCHEME, jumpLinkClicked, messageLinkContextMenu));
 }
 
 static void unregisterMessageLinks()
 {
     // Registering a scheme without a handler removes it
+    if (jumpLinksEnabled())
+        g_registerProtocol(JUMP_LINK_SCHEME, NULL, NULL);
     if (messageLinksEnabled())
         g_registerProtocol(MESSAGE_LINK_SCHEME, NULL, NULL);
+    setJumpLinksEnabled(false);
     setMessageLinksEnabled(false);
 }
 
@@ -996,8 +1021,8 @@ static gboolean tgprpl_load (PurplePlugin *plugin)
 {
     if (!checkTdlibVersion())
         return FALSE;
-    registerMessageLinks();
     pidginUiLoad(plugin);
+    registerMessageLinks();
 
     purple_cmd_register("kick", "s", PURPLE_CMD_P_PLUGIN,
                         (PurpleCmdFlag)(PURPLE_CMD_FLAG_CHAT | PURPLE_CMD_FLAG_PRPL_ONLY),

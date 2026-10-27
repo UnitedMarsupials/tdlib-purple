@@ -18,6 +18,9 @@ FRONT_END_FUNCTION(gtk_text_iter_get_offset);
 FRONT_END_FUNCTION(gtk_text_buffer_get_mark);
 FRONT_END_FUNCTION(gtk_text_buffer_create_mark);
 FRONT_END_FUNCTION(gtk_text_buffer_move_mark);
+FRONT_END_FUNCTION(gtk_text_buffer_get_iter_at_mark);
+FRONT_END_FUNCTION(gtk_text_buffer_select_range);
+FRONT_END_FUNCTION(gtk_text_view_scroll_to_mark);
 
 static bool g_pidginUi = false;
 
@@ -99,10 +102,15 @@ void pidginUiLoad(PurplePlugin *plugin)
     LOOK_UP(gtk_text_buffer_get_mark);
     LOOK_UP(gtk_text_buffer_create_mark);
     LOOK_UP(gtk_text_buffer_move_mark);
+    LOOK_UP(gtk_text_buffer_get_iter_at_mark);
+    LOOK_UP(gtk_text_buffer_select_range);
+    LOOK_UP(gtk_text_view_scroll_to_mark);
     g_pidginUi = p_pidgin_conversations_get_handle && p_pidgin_conversations_get_conv_ui_ops &&
                  p_gtk_text_buffer_get_end_iter && p_gtk_text_buffer_get_iter_at_offset &&
                  p_gtk_text_iter_get_offset && p_gtk_text_buffer_get_mark &&
-                 p_gtk_text_buffer_create_mark && p_gtk_text_buffer_move_mark;
+                 p_gtk_text_buffer_create_mark && p_gtk_text_buffer_move_mark &&
+                 p_gtk_text_buffer_get_iter_at_mark && p_gtk_text_buffer_select_range &&
+                 p_gtk_text_view_scroll_to_mark;
     purple_debug_info(config::pluginId, "Pidgin's conversation window: %s\n",
                       g_pidginUi ? "found" : "not found");
     if (!g_pidginUi)
@@ -121,9 +129,14 @@ void pidginUiUnload()
     g_pidginUi = false;
 }
 
+bool pidginUiFound()
+{
+    return g_pidginUi;
+}
+
 MessageMarkScope::MessageMarkScope(MessageId messageId)
 {
-    if (g_pidginUi && !g_messageBeingWritten) {
+    if (g_pidginUi && messageId.valid() && !g_messageBeingWritten) {
         g_messageBeingWritten = new MessageBeingWritten;
         g_messageBeingWritten->messageId = messageId;
         m_active = true;
@@ -151,6 +164,23 @@ MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId)
     return marks;
 }
 
+bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId)
+{
+    GtkTextBuffer *buffer = (g_pidginUi && imhtml) ? imhtml->text_buffer : nullptr;
+    GtkTextMark   *start  = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, true).c_str()) : nullptr;
+    GtkTextMark   *end    = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, false).c_str()) : nullptr;
+    if (!start || !end)
+        return false;
+
+    GtkTextIter startIter, endIter;
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &startIter, start);
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &endIter, end);
+    p_gtk_text_buffer_select_range(buffer, &startIter, &endIter);
+    // The message's beginning a little below the top, so what came just before shows too
+    p_gtk_text_view_scroll_to_mark(reinterpret_cast<GtkTextView *>(imhtml), start, 0.0, TRUE, 0.0, 0.1);
+    return true;
+}
+
 #else
 
 void pidginUiLoad(PurplePlugin *plugin)
@@ -159,6 +189,11 @@ void pidginUiLoad(PurplePlugin *plugin)
 
 void pidginUiUnload()
 {
+}
+
+bool pidginUiFound()
+{
+    return false;
 }
 
 MessageMarkScope::MessageMarkScope(MessageId messageId)
@@ -172,6 +207,11 @@ MessageMarkScope::~MessageMarkScope()
 MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId)
 {
     return MessageMarks();
+}
+
+bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId)
+{
+    return false;
 }
 
 #endif

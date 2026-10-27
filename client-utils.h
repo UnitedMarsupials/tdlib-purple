@@ -59,6 +59,16 @@ std::string makeMessageLink(PurpleAccount *account, ChatId chatId, MessageId mes
 bool        parseMessageLink(const char *link, std::string &accountName, ChatId &chatId,
                              MessageId &messageId, std::string &variant);
 
+// Links that scroll Pidgin's tab to a message shown in it, as where a reply quotes it or a notice
+// tells of its edit. Where they cannot work, the markup is given back as it is.
+constexpr const char *JUMP_LINK_SCHEME = "tdlib-message://";
+bool        jumpLinksEnabled();
+void        setJumpLinksEnabled(bool enabled);
+std::string linkToMessage(PurpleAccount *account, ChatId chatId, MessageId messageId,
+                          const std::string &markup);
+bool        parseJumpLink(const char *link, std::string &accountName, ChatId &chatId,
+                          MessageId &messageId);
+
 std::string getDownloadXferPeerName(ChatId chatId,
                                     const TgMessageInfo &message,
                                     TdAccountData &account);
