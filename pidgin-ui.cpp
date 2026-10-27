@@ -130,7 +130,10 @@ static void displayedMessage(PurpleAccount *account, const char *who, char *mess
     }
 }
 
-// Inserts what precedes a message at its start, once. The start mark stays before it, so the
+// Longer than "(Mon, 26 Oct 2026 23:41:54)", as dates go in old messages
+static constexpr unsigned MAX_TIMESTAMP_LENGTH = 48;
+
+// Inserts what precedes a message after its timestamp, once. The start mark stays before it, so the
 // message takes it in.
 static void insertPrefix(PurpleConversation *conv, MessageId messageId, const std::string &prefix)
 {
@@ -142,6 +145,22 @@ static void insertPrefix(PurpleConversation *conv, MessageId messageId, const st
 
     GtkTextIter where;
     p_gtk_text_buffer_get_iter_at_mark(buffer, &where, start);
+    // Between the timestamp, if Pidgin shows one, and the name, where other plugins put theirs
+    if (p_gtk_text_iter_get_char(&where) == '(') {
+        GtkTextIter after = where;
+        for (unsigned i = 0; (i < MAX_TIMESTAMP_LENGTH) && p_gtk_text_iter_forward_char(&after); i++) {
+            gunichar c = p_gtk_text_iter_get_char(&after);
+            if (c == '\n')
+                break;
+            if (c == ')') {
+                p_gtk_text_iter_forward_char(&after);
+                if (p_gtk_text_iter_get_char(&after) == ' ')
+                    p_gtk_text_iter_forward_char(&after);
+                where = after;
+                break;
+            }
+        }
+    }
     p_gtk_text_buffer_create_mark(buffer, getMarkName(messageId, MarkKind::Prefix).c_str(), &where, TRUE);
     // Into the tab only, not the log
     p_gtk_imhtml_insert_html_at_iter(imhtml, prefix.c_str(), GTK_IMHTML_NO_SCROLL, &where);
