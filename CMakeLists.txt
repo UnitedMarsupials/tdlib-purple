@@ -46,6 +46,9 @@ if (NOT NoPkgConfig)
 
     pkg_get_variable(PURPLE_PLUGIN_DIR purple plugindir)
     pkg_get_variable(PURPLE_DATA_DIR purple datarootdir)
+elseif (NOT NoPidgin AND NOT DEFINED Pidgin_INCLUDE_DIRS)
+    message(FATAL_ERROR "Without pkg-config, give Pidgin's headers (and GTK's) in -DPidgin_INCLUDE_DIRS, "
+                        "or build without them: -DNoPidgin=True")
 endif (NOT NoPkgConfig)
 
 link_directories(${Purple_LIBRARY_DIRS})

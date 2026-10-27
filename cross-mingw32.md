@@ -133,6 +133,7 @@ cmake -DCMAKE_SYSTEM_NAME=Windows \
     -DNoPkgConfig=True \
     -DPurple_INCLUDE_DIRS="$PWD/../../deps/pidgin-2.13.0/libpurple;$PWD/../../deps/win32-dev/gtk_2_0-2.14/include/glib-2.0;$PWD/../../deps/win32-dev/gtk_2_0-2.14/lib/glib-2.0/include" \
     -DPurple_LIBRARIES="$PWD/../../deps/pidgin-2.13.0/libpurple/libpurple.dll.a;$PWD/../../deps/win32-dev/gtk_2_0-2.14/lib/libglib-2.0.dll.a;$PWD/../../deps/win32-dev/gtk_2_0-2.14/lib/libgthread-2.0.dll.a" \
+    -DPidgin_INCLUDE_DIRS="$PWD/../../deps/pidgin-2.13.0/pidgin;$PWD/../../deps/win32-dev/gtk_2_0-2.14/include/gtk-2.0;$PWD/../../deps/win32-dev/gtk_2_0-2.14/lib/gtk-2.0/include;$PWD/../../deps/win32-dev/gtk_2_0-2.14/include/pango-1.0;$PWD/../../deps/win32-dev/gtk_2_0-2.14/include/cairo;$PWD/../../deps/win32-dev/gtk_2_0-2.14/include/atk-1.0;$PWD/../../deps/win32-dev/gtk_2_0-2.14/include/gdk-pixbuf-2.0;$PWD/../../deps/win32-dev/gtk_2_0-2.14/include" \
     -DGModule_LIBRARIES=$PWD/../../deps/win32-dev/gtk_2_0-2.14/lib/libgmodule-2.0.dll.a \
     -DPURPLE_PLUGIN_DIR=/ \
     -DIntl_INCLUDE_DIR=$PWD/../../deps/win32-dev/gtk_2_0-2.14/include \
