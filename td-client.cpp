@@ -1007,6 +1007,9 @@ PurpleTdClient *PurpleTdClient::findConnected(const char *accountName)
     return static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
 }
 
+// As many to a row in the menu as TDLib is asked to place in its top row
+static constexpr unsigned REACTION_MENU_COLUMNS = 8;
+
 void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId)
 {
     // The message for the reactions it has, then those it may have
@@ -1031,7 +1034,7 @@ void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId)
         auto available = td::td_api::make_object<td::td_api::getMessageAvailableReactions>();
         available->chat_id_    = chatId.value();
         available->message_id_ = messageId.value();
-        available->row_size_   = 8;
+        available->row_size_   = REACTION_MENU_COLUMNS;
         m_transceiver.sendQuery(std::move(available), [this, chatId, messageId, reactions](uint64_t, TdObjectPtr object) {
             showMessageMenuResponse(chatId, messageId, reactions, std::move(object));
         });
@@ -1081,6 +1084,7 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
         MenuItem moreItem;
         // TRANSLATOR: Submenu of reactions, after the most likely ones.
         moreItem.label   = _("More");
+        moreItem.columns = REACTION_MENU_COLUMNS;
         moreItem.submenu = std::move(more);
         shown.push_back(std::move(moreItem));
     }
@@ -1094,6 +1098,7 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
     MenuItem reactionItem;
     // TRANSLATOR: Submenu of a message's menu.
     reactionItem.label   = _("Reactions");
+    reactionItem.columns = REACTION_MENU_COLUMNS;
     reactionItem.submenu = std::move(shown);
     popUpMenu({reactionItem});
 }

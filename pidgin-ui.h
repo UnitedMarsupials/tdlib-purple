@@ -65,11 +65,13 @@ void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId
 // Scrolls the tab's text to the message and selects it; false if it is not there
 bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId);
 
-// An item of a menu: a submenu, if it has items, otherwise disabled if it has no action
+// An item of a menu: a submenu, if it has items, otherwise disabled if it has no action. The
+// submenu's items are laid out in rows of the given number, if any, rather than in one column.
 struct MenuItem {
     std::string            label;
     bool                   checkable = false;
     bool                   checked   = false;
+    unsigned               columns   = 0;
     std::function<void()>  action;
     std::vector<MenuItem>  submenu;
 };

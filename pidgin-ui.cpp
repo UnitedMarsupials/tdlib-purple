@@ -29,6 +29,7 @@ FRONT_END_FUNCTION(gtk_check_menu_item_new_with_label);
 FRONT_END_FUNCTION(gtk_check_menu_item_set_active);
 FRONT_END_FUNCTION(gtk_menu_item_set_submenu);
 FRONT_END_FUNCTION(gtk_menu_shell_append);
+FRONT_END_FUNCTION(gtk_menu_attach);
 FRONT_END_FUNCTION(gtk_menu_popup);
 FRONT_END_FUNCTION(gtk_widget_set_sensitive);
 FRONT_END_FUNCTION(gtk_widget_show_all);
@@ -169,7 +170,8 @@ void pidginUiLoad(PurplePlugin *plugin)
                  LOOK_UP(gtk_imhtml_insert_html_at_iter) && LOOK_UP(gtk_menu_new) &&
                  LOOK_UP(gtk_menu_item_new_with_label) && LOOK_UP(gtk_check_menu_item_new_with_label) &&
                  LOOK_UP(gtk_check_menu_item_set_active) && LOOK_UP(gtk_menu_item_set_submenu) &&
-                 LOOK_UP(gtk_menu_shell_append) && LOOK_UP(gtk_menu_popup) &&
+                 LOOK_UP(gtk_menu_shell_append) && LOOK_UP(gtk_menu_attach) &&
+                 LOOK_UP(gtk_menu_popup) &&
                  LOOK_UP(gtk_widget_set_sensitive) && LOOK_UP(gtk_widget_show_all) &&
                  LOOK_UP(gtk_widget_destroy) && LOOK_UP(g_signal_connect_data);
     purple_debug_info(config::pluginId, "Pidgin's conversation window: %s\n",
@@ -281,22 +283,41 @@ static void deleteAction(gpointer data, GClosure *closure)
     delete static_cast<std::function<void()> *>(data);
 }
 
-static GtkWidget *makeMenu(const std::vector<MenuItem> &items)
+// In a grid of the given number of columns, if any, where an item with a submenu takes a row
+static GtkWidget *makeMenu(const std::vector<MenuItem> &items, unsigned columns)
 {
-    GtkWidget *menu = p_gtk_menu_new();
+    GtkWidget *menu   = p_gtk_menu_new();
+    unsigned   column = 0, row = 0;
     for (const MenuItem &item: items) {
         GtkWidget *widget = item.checkable ? p_gtk_check_menu_item_new_with_label(item.label.c_str())
                                            : p_gtk_menu_item_new_with_label(item.label.c_str());
         if (item.checkable)
             p_gtk_check_menu_item_set_active(reinterpret_cast<GtkCheckMenuItem *>(widget), item.checked);
         if (!item.submenu.empty())
-            p_gtk_menu_item_set_submenu(reinterpret_cast<GtkMenuItem *>(widget), makeMenu(item.submenu));
+            p_gtk_menu_item_set_submenu(reinterpret_cast<GtkMenuItem *>(widget),
+                                        makeMenu(item.submenu, item.columns));
         else if (item.action)
             p_g_signal_connect_data(widget, "activate", G_CALLBACK(itemActivated),
                                     new std::function<void()>(item.action), deleteAction, GConnectFlags(0));
         else
             p_gtk_widget_set_sensitive(widget, FALSE);
-        p_gtk_menu_shell_append(reinterpret_cast<GtkMenuShell *>(menu), widget);
+
+        if (!columns)
+            p_gtk_menu_shell_append(reinterpret_cast<GtkMenuShell *>(menu), widget);
+        else if (!item.submenu.empty()) {
+            if (column) {
+                column = 0;
+                row++;
+            }
+            p_gtk_menu_attach(reinterpret_cast<GtkMenu *>(menu), widget, 0, columns, row, row + 1);
+            row++;
+        } else {
+            p_gtk_menu_attach(reinterpret_cast<GtkMenu *>(menu), widget, column, column + 1, row, row + 1);
+            if (++column == columns) {
+                column = 0;
+                row++;
+            }
+        }
     }
     return menu;
 }
@@ -317,7 +338,7 @@ void popUpMenu(const std::vector<MenuItem> &items)
 {
     if (!g_pidginUi || items.empty())
         return;
-    GtkWidget *menu = makeMenu(items);
+    GtkWidget *menu = makeMenu(items, 0);
     p_g_signal_connect_data(menu, "deactivate", G_CALLBACK(menuDeactivated), NULL, NULL, GConnectFlags(0));
     p_gtk_widget_show_all(menu);
     // Where the pointer is, though no button is pressed by now
