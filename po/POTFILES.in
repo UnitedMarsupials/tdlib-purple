@@ -8,7 +8,6 @@ file-transfer.cpp
 format.cpp
 identifiers.cpp
 media-variants.cpp
-pidgin-ui.cpp
 purple-info.cpp
 receiving.cpp
 secret-chat.cpp
