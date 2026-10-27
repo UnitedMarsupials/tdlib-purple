@@ -9,6 +9,9 @@
 #include "buildopt.h"
 #include "identifiers.h"
 #include <purple.h>
+#include <functional>
+#include <string>
+#include <vector>
 
 #ifndef NoPidgin
 #include <gtkimhtml.h>
@@ -32,10 +35,11 @@ bool pidginUiFound();
 
 // Each message shown is bracketed in its tab by two marks, found again by its id; those of a
 // message shown again are moved. While an object of this class lives, what is written into a
-// conversation belongs to the given message.
+// conversation belongs to the given message. The trailer, HTML for the tab only, follows the
+// message once it is written, unless an earlier showing of it already has one.
 class MessageMarkScope {
 public:
-    explicit MessageMarkScope(MessageId messageId);
+    explicit MessageMarkScope(MessageId messageId, const std::string &trailer = std::string());
     ~MessageMarkScope();
     MessageMarkScope(const MessageMarkScope &) = delete;
     MessageMarkScope &operator=(const MessageMarkScope &) = delete;
@@ -53,10 +57,24 @@ struct MessageMarks {
 // Where the message is in the conversation's tab, if it is there
 MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId);
 
-// A message being sent gets a new id once it is: its marks are renamed with it
-void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId);
+// A message being sent gets a new id once it is: its marks are renamed with it, and the trailer,
+// which names the new id, is added only then
+void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId,
+                        const std::string &trailer);
 
 // Scrolls the tab's text to the message and selects it; false if it is not there
 bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId);
+
+// An item of a menu: a submenu, if it has items, otherwise disabled if it has no action
+struct MenuItem {
+    std::string            label;
+    bool                   checkable = false;
+    bool                   checked   = false;
+    std::function<void()>  action;
+    std::vector<MenuItem>  submenu;
+};
+
+// Pops up a menu where the pointer is
+void popUpMenu(const std::vector<MenuItem> &items);
 
 #endif

@@ -3,6 +3,7 @@
 #include "tdlib-purple.h"
 #include "client-utils.h"
 #include "buildopt.h"
+#include "td-client.h"
 
 // Files linked to by their messages, which the plugin fetches and opens when clicked, as it does
 // where the front-end lets it handle a scheme of its own: in Pidgin
@@ -428,20 +429,52 @@ TEST_F(MessageLinkTest, PhotoSizesIgnored)
     tgl.verifyNoRequests();
 }
 
+TEST_F(MessageLinkTest, MessageMenu)
+{
+    loginWithOneContact();
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    const ChatId    chat    = ChatId::fromString(std::to_string(chatIds[0]).c_str());
+    const MessageId message = MessageId::fromString("1");
+
+    // The message for its reactions, then those it may have; without Pidgin, no menu pops up
+    client->showMessageMenu(chat, message);
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(makeDocumentMessage(10000, "", false));
+    tgl.verifyRequest(getMessageAvailableReactions(chatIds[0], messageId, 8));
+    tgl.reply(make_object<availableReactions>());
+    prpl.verifyNoEvents();
+
+    client->setMessageReaction(chat, message, "\xF0\x9F\x91\x8D", true);
+    tgl.verifyRequest(addMessageReaction(chatIds[0], messageId, make_object<reactionTypeEmoji>("\xF0\x9F\x91\x8D"),
+                                         false, true));
+    tgl.reply(make_object<ok>());
+    client->setMessageReaction(chat, message, "\xF0\x9F\x91\x8D", false);
+    tgl.verifyRequest(removeMessageReaction(chatIds[0], messageId, make_object<reactionTypeEmoji>("\xF0\x9F\x91\x8D")));
+    tgl.reply(make_object<ok>());
+    prpl.verifyNoEvents();
+}
+
 TEST(JumpLink, Parse)
 {
     std::string accountName;
     ChatId      chatId;
     MessageId   messageId;
-    ASSERT_TRUE(parseJumpLink("tdlib-message://%2B1234/-100/5", accountName, chatId, messageId));
+    bool        menu = true;
+    ASSERT_TRUE(parseJumpLink("tdlib-message://%2B1234/-100/5", accountName, chatId, messageId, menu));
     ASSERT_EQ(std::string("+1234"), accountName);
     ASSERT_EQ(-100, chatId.value());
     ASSERT_EQ(5, messageId.value());
+    ASSERT_FALSE(menu);
+
+    ASSERT_TRUE(parseJumpLink("tdlib-message://%2B1234/-100/6/menu", accountName, chatId, messageId, menu));
+    ASSERT_EQ(6, messageId.value());
+    ASSERT_TRUE(menu);
 
     // A file's link, or one naming a size, is something else
-    ASSERT_FALSE(parseJumpLink("tdlib://%2B1234/-100/5", accountName, chatId, messageId));
-    ASSERT_FALSE(parseJumpLink("tdlib-message://%2B1234/-100/5/original", accountName, chatId, messageId));
-    ASSERT_FALSE(parseJumpLink("tdlib-message://%2B1234/-100", accountName, chatId, messageId));
+    ASSERT_FALSE(parseJumpLink("tdlib://%2B1234/-100/5", accountName, chatId, messageId, menu));
+    ASSERT_FALSE(parseJumpLink("tdlib-message://%2B1234/-100/5/original", accountName, chatId, messageId, menu));
+    ASSERT_FALSE(parseJumpLink("tdlib-message://%2B1234/-100", accountName, chatId, messageId, menu));
 }
 
 TEST(JumpLink, OnlyWhereEnabled)
@@ -453,6 +486,9 @@ TEST(JumpLink, OnlyWhereEnabled)
               linkToMessage(account, ChatId::fromString("-100"), MessageId::fromString("5"), "12:00"));
     // Nothing to link to
     ASSERT_EQ(std::string("12:00"), linkToMessage(account, ChatId::fromString("-100"), MessageId::invalid, "12:00"));
+    ASSERT_EQ(std::string("&nbsp;<a href=\"tdlib-message://%2B1234/-100/5/menu\">\xe2\x98\xb0</a>"),
+              makeMenuLink(account, ChatId::fromString("-100"), MessageId::fromString("5")));
     setJumpLinksEnabled(false);
+    ASSERT_EQ(std::string(), makeMenuLink(account, ChatId::fromString("-100"), MessageId::fromString("5")));
     purple_account_destroy(account);
 }

@@ -1149,10 +1149,25 @@ std::string linkToMessage(PurpleAccount *account, ChatId chatId, MessageId messa
     return "<a href=\"" + makeLink(JUMP_LINK_SCHEME, account, chatId, messageId) + "\">" + markup + "</a>";
 }
 
-bool parseJumpLink(const char *link, std::string &accountName, ChatId &chatId, MessageId &messageId)
+static const char MENU_LINK_SUFFIX[] = "menu";
+
+// tdlib-message://<account>/<chat id>/<message id>/menu
+std::string makeMenuLink(PurpleAccount *account, ChatId chatId, MessageId messageId)
+{
+    if (!g_jumpLinksEnabled || !chatId.valid() || !messageId.valid())
+        return std::string();
+    return "&nbsp;<a href=\"" + makeLink(JUMP_LINK_SCHEME, account, chatId, messageId) + '/' +
+           MENU_LINK_SUFFIX + "\">\xe2\x98\xb0</a>";
+}
+
+bool parseJumpLink(const char *link, std::string &accountName, ChatId &chatId, MessageId &messageId,
+                   bool &menu)
 {
     std::string variant;
-    return parseLink(JUMP_LINK_SCHEME, link, accountName, chatId, messageId, variant) && variant.empty();
+    if (!parseLink(JUMP_LINK_SCHEME, link, accountName, chatId, messageId, variant))
+        return false;
+    menu = (variant == MENU_LINK_SUFFIX);
+    return menu || variant.empty();
 }
 
 std::string getDownloadXferPeerName(ChatId chatId,

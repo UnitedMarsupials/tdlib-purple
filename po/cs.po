@@ -1262,3 +1262,28 @@ msgstr "Zpráva není zobrazena"
 #: ../tdlib-purple.cpp:979
 msgid "It is no longer in this conversation's window."
 msgstr "V okně této konverzace už není."
+
+#. TRANSLATOR: Error dialog, primary content, after the menu link after a message was clicked.
+#: ../td-client.cpp:1019 ../tdlib-purple.cpp:982
+msgid "Cannot open the message's menu"
+msgstr "Nabídku zprávy nelze otevřít"
+
+#. TRANSLATOR: Submenu of reactions, after the most likely ones.
+#: ../td-client.cpp:1083
+msgid "More"
+msgstr "Další"
+
+#. TRANSLATOR: Disabled item of the reactions' submenu, in a message's menu.
+#: ../td-client.cpp:1090
+msgid "No reactions allowed"
+msgstr "Reakce nejsou povoleny"
+
+#. TRANSLATOR: Submenu of a message's menu.
+#: ../td-client.cpp:1096
+msgid "Reactions"
+msgstr "Reakce"
+
+#. TRANSLATOR: Error dialog, primary content, after a reaction was picked from a message's menu.
+#: ../td-client.cpp:1115
+msgid "Cannot change the reaction"
+msgstr "Reakci nelze změnit"

@@ -58,6 +58,12 @@ public:
     // A link to the message's file was clicked: fetches the file, if need be, and opens it; a variant,
     // if given, names one of the sizes a photo or video comes in
     void openMessageFile(ChatId chatId, MessageId messageId, const std::string &variant = std::string());
+    // The link after a message in Pidgin's tab was clicked: pops up its menu
+    void showMessageMenu(ChatId chatId, MessageId messageId);
+    void setMessageReaction(ChatId chatId, MessageId messageId, const std::string &emoji, bool chosen);
+
+    // The client of an account by its name, if it is connected
+    static PurpleTdClient *findConnected(const char *accountName);
 private:
     using TdObjectPtr   = td::td_api::object_ptr<td::td_api::Object>;
     using ResponseCb    = void (PurpleTdClient::*)(uint64_t requestId, TdObjectPtr object);
@@ -182,6 +188,13 @@ private:
     std::map<std::string, OpenedFile> m_openedFiles;
 
     void openMessageFileResponse(ChatId chatId, MessageId messageId, const std::string &variant,
+                                 TdObjectPtr object);
+    struct ShownReaction {
+        std::string emoji;
+        int32_t     count;
+        bool        chosen;
+    };
+    void showMessageMenuResponse(ChatId chatId, MessageId messageId, const std::vector<ShownReaction> &reactions,
                                  TdObjectPtr object);
     void openDownloadedFile(ChatId chatId, const std::string &key, const std::string &description,
                             TdObjectPtr object);

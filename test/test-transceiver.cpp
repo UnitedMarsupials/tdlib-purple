@@ -565,6 +565,34 @@ static void compare(const getChatHistory &actual, const getChatHistory &expected
     COMPARE(only_local_);
 }
 
+static void compare(const getMessageAvailableReactions &actual, const getMessageAvailableReactions &expected)
+{
+    COMPARE(chat_id_);
+    COMPARE(message_id_);
+    COMPARE(row_size_);
+}
+
+static void compareReaction(const object_ptr<ReactionType> &actual, const object_ptr<ReactionType> &expected)
+{
+    ASSERT_EQ(to_string(expected), to_string(actual));
+}
+
+static void compare(const addMessageReaction &actual, const addMessageReaction &expected)
+{
+    COMPARE(chat_id_);
+    COMPARE(message_id_);
+    compareReaction(actual.reaction_type_, expected.reaction_type_);
+    COMPARE(is_big_);
+    COMPARE(update_recent_reactions_);
+}
+
+static void compare(const removeMessageReaction &actual, const removeMessageReaction &expected)
+{
+    COMPARE(chat_id_);
+    COMPARE(message_id_);
+    compareReaction(actual.reaction_type_, expected.reaction_type_);
+}
+
 static void compareRequests(const Function &actual, const Function &expected,
                             std::vector<std::string> &m_inputPhotoPaths)
 {
@@ -619,6 +647,9 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(joinChat)
         C(createNewSecretChat)
         C(getChatHistory)
+        C(getMessageAvailableReactions)
+        C(addMessageReaction)
+        C(removeMessageReaction)
         default: ASSERT_TRUE(false) << "Unsupported request " << requestToString(actual);
     }
 }

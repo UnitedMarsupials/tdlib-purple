@@ -8,7 +8,7 @@
 
 // Pidgin's and GTK's functions, looked up by name: their types are those the headers declare
 #define FRONT_END_FUNCTION(name) static decltype(&name) p_##name
-#define LOOK_UP(name) p_##name = reinterpret_cast<decltype(&name)>(findFrontEndSymbol(#name))
+#define LOOK_UP(name) (p_##name = reinterpret_cast<decltype(&name)>(findFrontEndSymbol(#name)))
 
 FRONT_END_FUNCTION(pidgin_conversations_get_handle);
 FRONT_END_FUNCTION(pidgin_conversations_get_conv_ui_ops);
@@ -22,33 +22,62 @@ FRONT_END_FUNCTION(gtk_text_buffer_delete_mark);
 FRONT_END_FUNCTION(gtk_text_buffer_get_iter_at_mark);
 FRONT_END_FUNCTION(gtk_text_buffer_select_range);
 FRONT_END_FUNCTION(gtk_text_view_scroll_to_mark);
+FRONT_END_FUNCTION(gtk_imhtml_insert_html_at_iter);
+FRONT_END_FUNCTION(gtk_menu_new);
+FRONT_END_FUNCTION(gtk_menu_item_new_with_label);
+FRONT_END_FUNCTION(gtk_check_menu_item_new_with_label);
+FRONT_END_FUNCTION(gtk_check_menu_item_set_active);
+FRONT_END_FUNCTION(gtk_menu_item_set_submenu);
+FRONT_END_FUNCTION(gtk_menu_shell_append);
+FRONT_END_FUNCTION(gtk_menu_popup);
+FRONT_END_FUNCTION(gtk_widget_set_sensitive);
+FRONT_END_FUNCTION(gtk_widget_show_all);
+FRONT_END_FUNCTION(gtk_widget_destroy);
+FRONT_END_FUNCTION(g_signal_connect_data);
 
 static bool g_pidginUi = false;
 
 // The message being written, and where its text starts in the first conversation it goes to
 struct MessageBeingWritten {
     MessageId           messageId;
+    std::string         trailer;
     PurpleConversation *conv        = nullptr;
     gint                startOffset = 0;
 };
 static MessageBeingWritten *g_messageBeingWritten = nullptr;
 
-// The text of a conversation's tab, if Pidgin shows it
-static GtkTextBuffer *getTextBuffer(PurpleConversation *conv)
+// A conversation's tab, if Pidgin shows it
+static GtkIMHtml *getIMHtml(PurpleConversation *conv)
 {
     if (!g_pidginUi || !conv || (purple_conversation_get_ui_ops(conv) != p_pidgin_conversations_get_conv_ui_ops()))
         return nullptr;
     PidginConversation *gtkconv = PIDGIN_CONVERSATION(conv);
-    if (!gtkconv || !gtkconv->imhtml)
-        return nullptr;
     // GTK_IMHTML() would call gtk_imhtml_get_type(), which the plugin does not link against
-    return reinterpret_cast<GtkIMHtml *>(gtkconv->imhtml)->text_buffer;
+    return gtkconv ? reinterpret_cast<GtkIMHtml *>(gtkconv->imhtml) : nullptr;
+}
+
+static GtkTextBuffer *getTextBuffer(PurpleConversation *conv)
+{
+    GtkIMHtml *imhtml = getIMHtml(conv);
+    return imhtml ? imhtml->text_buffer : nullptr;
+}
+
+enum class MarkKind {
+    Start,
+    End,
+    Trailer
+};
+
+static std::string getMarkName(MessageId messageId, MarkKind kind)
+{
+    const char *prefix = (kind == MarkKind::Start) ? "tdlib-message-start-" :
+                         (kind == MarkKind::End)   ? "tdlib-message-end-" : "tdlib-message-trailer-";
+    return prefix + std::to_string(messageId.value());
 }
 
 static std::string getMarkName(MessageId messageId, bool start)
 {
-    return std::string(start ? "tdlib-message-start-" : "tdlib-message-end-") +
-           std::to_string(messageId.value());
+    return getMarkName(messageId, start ? MarkKind::Start : MarkKind::End);
 }
 
 static void setMark(GtkTextBuffer *buffer, const std::string &name, const GtkTextIter &where)
@@ -93,6 +122,23 @@ static void displayedMessage(PurpleAccount *account, const char *who, char *mess
     }
 }
 
+// Inserts what follows a message after its end, once: the message is then up to its end
+static void appendTrailer(PurpleConversation *conv, MessageId messageId, const std::string &trailer)
+{
+    GtkIMHtml     *imhtml = getIMHtml(conv);
+    GtkTextBuffer *buffer = imhtml ? imhtml->text_buffer : nullptr;
+    GtkTextMark   *end    = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, false).c_str()) : nullptr;
+    if (trailer.empty() || !end || p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Trailer).c_str()))
+        return;
+
+    GtkTextIter where;
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &where, end);
+    p_gtk_text_buffer_create_mark(buffer, getMarkName(messageId, MarkKind::Trailer).c_str(), &where, TRUE);
+    // Into the tab only, not the log
+    p_gtk_imhtml_insert_html_at_iter(imhtml, trailer.c_str(), GTK_IMHTML_NO_SCROLL, &where);
+    p_gtk_text_buffer_move_mark(buffer, end, &where);
+}
+
 static guint g_connectSource = 0;
 
 // Disconnected by libpurple when the plugin is unloaded
@@ -114,25 +160,18 @@ static gboolean connectSignals(gpointer plugin)
 
 void pidginUiLoad(PurplePlugin *plugin)
 {
-    LOOK_UP(pidgin_conversations_get_handle);
-    LOOK_UP(pidgin_conversations_get_conv_ui_ops);
-    LOOK_UP(gtk_text_buffer_get_end_iter);
-    LOOK_UP(gtk_text_buffer_get_iter_at_offset);
-    LOOK_UP(gtk_text_iter_get_offset);
-    LOOK_UP(gtk_text_buffer_get_mark);
-    LOOK_UP(gtk_text_buffer_create_mark);
-    LOOK_UP(gtk_text_buffer_move_mark);
-    LOOK_UP(gtk_text_buffer_delete_mark);
-    LOOK_UP(gtk_text_buffer_get_iter_at_mark);
-    LOOK_UP(gtk_text_buffer_select_range);
-    LOOK_UP(gtk_text_view_scroll_to_mark);
-    g_pidginUi = p_pidgin_conversations_get_handle && p_pidgin_conversations_get_conv_ui_ops &&
-                 p_gtk_text_buffer_get_end_iter && p_gtk_text_buffer_get_iter_at_offset &&
-                 p_gtk_text_iter_get_offset && p_gtk_text_buffer_get_mark &&
-                 p_gtk_text_buffer_create_mark && p_gtk_text_buffer_move_mark &&
-                 p_gtk_text_buffer_delete_mark &&
-                 p_gtk_text_buffer_get_iter_at_mark && p_gtk_text_buffer_select_range &&
-                 p_gtk_text_view_scroll_to_mark;
+    g_pidginUi = LOOK_UP(pidgin_conversations_get_handle) && LOOK_UP(pidgin_conversations_get_conv_ui_ops) &&
+                 LOOK_UP(gtk_text_buffer_get_end_iter) && LOOK_UP(gtk_text_buffer_get_iter_at_offset) &&
+                 LOOK_UP(gtk_text_iter_get_offset) && LOOK_UP(gtk_text_buffer_get_mark) &&
+                 LOOK_UP(gtk_text_buffer_create_mark) && LOOK_UP(gtk_text_buffer_move_mark) &&
+                 LOOK_UP(gtk_text_buffer_delete_mark) && LOOK_UP(gtk_text_buffer_get_iter_at_mark) &&
+                 LOOK_UP(gtk_text_buffer_select_range) && LOOK_UP(gtk_text_view_scroll_to_mark) &&
+                 LOOK_UP(gtk_imhtml_insert_html_at_iter) && LOOK_UP(gtk_menu_new) &&
+                 LOOK_UP(gtk_menu_item_new_with_label) && LOOK_UP(gtk_check_menu_item_new_with_label) &&
+                 LOOK_UP(gtk_check_menu_item_set_active) && LOOK_UP(gtk_menu_item_set_submenu) &&
+                 LOOK_UP(gtk_menu_shell_append) && LOOK_UP(gtk_menu_popup) &&
+                 LOOK_UP(gtk_widget_set_sensitive) && LOOK_UP(gtk_widget_show_all) &&
+                 LOOK_UP(gtk_widget_destroy) && LOOK_UP(g_signal_connect_data);
     purple_debug_info(config::pluginId, "Pidgin's conversation window: %s\n",
                       g_pidginUi ? "found" : "not found");
     if (!g_pidginUi)
@@ -157,11 +196,12 @@ bool pidginUiFound()
     return g_pidginUi;
 }
 
-MessageMarkScope::MessageMarkScope(MessageId messageId)
+MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &trailer)
 {
     if (g_pidginUi && messageId.valid() && !g_messageBeingWritten) {
         g_messageBeingWritten = new MessageBeingWritten;
         g_messageBeingWritten->messageId = messageId;
+        g_messageBeingWritten->trailer   = trailer;
         m_active = true;
     }
 }
@@ -169,6 +209,9 @@ MessageMarkScope::MessageMarkScope(MessageId messageId)
 MessageMarkScope::~MessageMarkScope()
 {
     if (m_active) {
+        if (g_messageBeingWritten->conv)
+            appendTrailer(g_messageBeingWritten->conv, g_messageBeingWritten->messageId,
+                          g_messageBeingWritten->trailer);
         delete g_messageBeingWritten;
         g_messageBeingWritten = nullptr;
     }
@@ -187,7 +230,7 @@ MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId)
     return marks;
 }
 
-void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId)
+void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId, const std::string &trailer)
 {
     if (!g_pidginUi)
         return;
@@ -207,6 +250,7 @@ void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId
                 p_gtk_text_buffer_delete_mark(buffer, mark);
             }
         }
+        appendTrailer(conv, newId, trailer);
     }
 }
 
@@ -227,6 +271,59 @@ bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId)
     return true;
 }
 
+static void itemActivated(GtkWidget *item, gpointer data)
+{
+    (*static_cast<std::function<void()> *>(data))();
+}
+
+static void deleteAction(gpointer data, GClosure *closure)
+{
+    delete static_cast<std::function<void()> *>(data);
+}
+
+static GtkWidget *makeMenu(const std::vector<MenuItem> &items)
+{
+    GtkWidget *menu = p_gtk_menu_new();
+    for (const MenuItem &item: items) {
+        GtkWidget *widget = item.checkable ? p_gtk_check_menu_item_new_with_label(item.label.c_str())
+                                           : p_gtk_menu_item_new_with_label(item.label.c_str());
+        if (item.checkable)
+            p_gtk_check_menu_item_set_active(reinterpret_cast<GtkCheckMenuItem *>(widget), item.checked);
+        if (!item.submenu.empty())
+            p_gtk_menu_item_set_submenu(reinterpret_cast<GtkMenuItem *>(widget), makeMenu(item.submenu));
+        else if (item.action)
+            p_g_signal_connect_data(widget, "activate", G_CALLBACK(itemActivated),
+                                    new std::function<void()>(item.action), deleteAction, GConnectFlags(0));
+        else
+            p_gtk_widget_set_sensitive(widget, FALSE);
+        p_gtk_menu_shell_append(reinterpret_cast<GtkMenuShell *>(menu), widget);
+    }
+    return menu;
+}
+
+static gboolean destroyMenu(gpointer menu)
+{
+    p_gtk_widget_destroy(static_cast<GtkWidget *>(menu));
+    return FALSE;
+}
+
+// The chosen item is activated after the menu goes away
+static void menuDeactivated(GtkWidget *menu, gpointer data)
+{
+    g_idle_add(destroyMenu, menu);
+}
+
+void popUpMenu(const std::vector<MenuItem> &items)
+{
+    if (!g_pidginUi || items.empty())
+        return;
+    GtkWidget *menu = makeMenu(items);
+    p_g_signal_connect_data(menu, "deactivate", G_CALLBACK(menuDeactivated), NULL, NULL, GConnectFlags(0));
+    p_gtk_widget_show_all(menu);
+    // Where the pointer is, though no button is pressed by now
+    p_gtk_menu_popup(reinterpret_cast<GtkMenu *>(menu), NULL, NULL, NULL, NULL, 0, GDK_CURRENT_TIME);
+}
+
 #else
 
 void pidginUiLoad(PurplePlugin *plugin)
@@ -242,7 +339,7 @@ bool pidginUiFound()
     return false;
 }
 
-MessageMarkScope::MessageMarkScope(MessageId messageId)
+MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &trailer)
 {
 }
 
@@ -255,13 +352,17 @@ MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId)
     return MessageMarks();
 }
 
-void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId)
+void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId, const std::string &trailer)
 {
 }
 
 bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId)
 {
     return false;
+}
+
+void popUpMenu(const std::vector<MenuItem> &items)
+{
 }
 
 #endif

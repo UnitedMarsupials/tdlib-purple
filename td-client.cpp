@@ -164,7 +164,9 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
             removeTempFile(getChatId(*sendSucceeded.message_), sendSucceeded.old_message_id_);
             m_data.renameShownMessage(getChatId(*sendSucceeded.message_), getOldMessageId(sendSucceeded),
                                       getId(*sendSucceeded.message_));
-            renameMessageMarks(m_data.purpleAccount, getOldMessageId(sendSucceeded), getId(*sendSucceeded.message_));
+            renameMessageMarks(m_data.purpleAccount, getOldMessageId(sendSucceeded), getId(*sendSucceeded.message_),
+                               makeMenuLink(m_data.purpleAccount, getChatId(*sendSucceeded.message_),
+                                            getId(*sendSucceeded.message_)));
         }
         break;
     }
@@ -994,6 +996,125 @@ void PurpleTdClient::openMessageFile(ChatId chatId, MessageId messageId, const s
         [this, chatId, messageId, variant](uint64_t, TdObjectPtr object) {
             openMessageFileResponse(chatId, messageId, variant, std::move(object));
         });
+}
+
+PurpleTdClient *PurpleTdClient::findConnected(const char *accountName)
+{
+    PurpleAccount    *account = purple_accounts_find(accountName, config::pluginId);
+    PurpleConnection *gc      = account ? purple_account_get_connection(account) : NULL;
+    if (!gc || !PURPLE_CONNECTION_IS_CONNECTED(gc))
+        return nullptr;
+    return static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+}
+
+void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId)
+{
+    // The message for the reactions it has, then those it may have
+    auto request = td::td_api::make_object<td::td_api::getMessage>();
+    request->chat_id_    = chatId.value();
+    request->message_id_ = messageId.value();
+    m_transceiver.sendQuery(std::move(request), [this, chatId, messageId](uint64_t, TdObjectPtr object) {
+        if (!object || (object->get_id() != td::td_api::message::ID)) {
+            // TRANSLATOR: Error dialog, primary content, after the menu link after a message was clicked.
+            purple_notify_error(NULL, config::pluginName, _("Cannot open the message's menu"),
+                                getDisplayedError(object).c_str());
+            return;
+        }
+        const td::td_api::message &message = static_cast<const td::td_api::message &>(*object);
+        std::vector<ShownReaction> reactions;
+        if (message.interaction_info_ && message.interaction_info_->reactions_)
+            for (const auto &reaction: message.interaction_info_->reactions_->reactions_)
+                if (reaction && reaction->type_ && (reaction->type_->get_id() == td::td_api::reactionTypeEmoji::ID))
+                    reactions.push_back({static_cast<const td::td_api::reactionTypeEmoji &>(*reaction->type_).emoji_,
+                                         reaction->total_count_, reaction->is_chosen_});
+
+        auto available = td::td_api::make_object<td::td_api::getMessageAvailableReactions>();
+        available->chat_id_    = chatId.value();
+        available->message_id_ = messageId.value();
+        available->row_size_   = 8;
+        m_transceiver.sendQuery(std::move(available), [this, chatId, messageId, reactions](uint64_t, TdObjectPtr object) {
+            showMessageMenuResponse(chatId, messageId, reactions, std::move(object));
+        });
+    });
+}
+
+void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
+                                             const std::vector<ShownReaction> &reactions, TdObjectPtr object)
+{
+    // Picking one finds the account again, as it may be gone by then
+    std::string accountName = purple_account_get_username(m_data.purpleAccount);
+    auto makeItem = [&](const std::string &emoji, int32_t count, bool chosen) {
+        MenuItem item;
+        item.label     = (count > 0) ? emoji + ' ' + std::to_string(count) : emoji;
+        item.checkable = true;
+        item.checked   = chosen;
+        item.action    = [accountName, chatId, messageId, emoji, chosen]() {
+            PurpleTdClient *client = findConnected(accountName.c_str());
+            if (client)
+                client->setMessageReaction(chatId, messageId, emoji, !chosen);
+        };
+        return item;
+    };
+
+    // Those the message has first, then those it may have, the less likely ones further down
+    std::vector<MenuItem> shown, more;
+    std::set<std::string> listed;
+    for (const ShownReaction &reaction: reactions)
+        if (listed.insert(reaction.emoji).second)
+            shown.push_back(makeItem(reaction.emoji, reaction.count, reaction.chosen));
+    if (object && (object->get_id() == td::td_api::availableReactions::ID)) {
+        const auto &available = static_cast<const td::td_api::availableReactions &>(*object);
+        for (const auto *list: {&available.top_reactions_, &available.recent_reactions_, &available.popular_reactions_})
+            for (const auto &reaction: *list)
+                if (reaction && !reaction->needs_premium_ && reaction->type_ &&
+                    (reaction->type_->get_id() == td::td_api::reactionTypeEmoji::ID))
+                {
+                    const std::string &emoji = static_cast<const td::td_api::reactionTypeEmoji &>(*reaction->type_).emoji_;
+                    if (listed.insert(emoji).second)
+                        ((list == &available.top_reactions_) ? shown : more).push_back(makeItem(emoji, 0, false));
+                }
+    } else
+        purple_debug_warning(config::pluginId, "Reactions to message %" G_GINT64_FORMAT " unknown: %s\n",
+                             messageId.value(), getDisplayedError(object).c_str());
+
+    if (!more.empty()) {
+        MenuItem moreItem;
+        // TRANSLATOR: Submenu of reactions, after the most likely ones.
+        moreItem.label   = _("More");
+        moreItem.submenu = std::move(more);
+        shown.push_back(std::move(moreItem));
+    }
+    if (shown.empty()) {
+        MenuItem none;
+        // TRANSLATOR: Disabled item of the reactions' submenu, in a message's menu.
+        none.label = _("No reactions allowed");
+        shown.push_back(std::move(none));
+    }
+
+    MenuItem reactionItem;
+    // TRANSLATOR: Submenu of a message's menu.
+    reactionItem.label   = _("Reactions");
+    reactionItem.submenu = std::move(shown);
+    popUpMenu({reactionItem});
+}
+
+void PurpleTdClient::setMessageReaction(ChatId chatId, MessageId messageId, const std::string &emoji, bool chosen)
+{
+    td::td_api::object_ptr<td::td_api::Function>     request;
+    td::td_api::object_ptr<td::td_api::ReactionType> type = td::td_api::make_object<td::td_api::reactionTypeEmoji>(emoji);
+    if (chosen)
+        request = td::td_api::make_object<td::td_api::addMessageReaction>(chatId.value(), messageId.value(),
+                                                                          std::move(type), false, true);
+    else
+        request = td::td_api::make_object<td::td_api::removeMessageReaction>(chatId.value(), messageId.value(),
+                                                                             std::move(type));
+    // What changes comes back as an update, as from any other client
+    m_transceiver.sendQuery(std::move(request), [](uint64_t, TdObjectPtr object) {
+        if (!object || (object->get_id() != td::td_api::ok::ID))
+            // TRANSLATOR: Error dialog, primary content, after a reaction was picked from a message's menu.
+            purple_notify_error(NULL, config::pluginName, _("Cannot change the reaction"),
+                                getDisplayedError(object).c_str());
+    });
 }
 
 void PurpleTdClient::openMessageFileResponse(ChatId chatId, MessageId messageId, const std::string &variant,
