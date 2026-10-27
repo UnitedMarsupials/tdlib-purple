@@ -38,9 +38,8 @@ FRONT_END_FUNCTION(gtk_label_set_markup);
 FRONT_END_FUNCTION(gtk_widget_show_all);
 FRONT_END_FUNCTION(gtk_widget_destroy);
 FRONT_END_FUNCTION(g_signal_connect_data);
-FRONT_END_FUNCTION(gtk_text_buffer_delete);
-FRONT_END_FUNCTION(gtk_text_buffer_create_tag);
-FRONT_END_FUNCTION(gtk_text_buffer_apply_tag);
+FRONT_END_FUNCTION(gtk_imhtml_delete);
+FRONT_END_FUNCTION(gtk_text_buffer_apply_tag_by_name);
 FRONT_END_FUNCTION(gtk_text_iter_forward_search);
 FRONT_END_FUNCTION(gtk_text_iter_compare);
 
@@ -152,7 +151,7 @@ static void replaceBody(PurpleConversation *conv, const char *html)
         GtkTextIter body, end;
         if (!getBody(buffer, id, body, end))
             return;
-        p_gtk_text_buffer_delete(buffer, &body, &end);
+        p_gtk_imhtml_delete(imhtml, &body, &end);
         g_messageBeingWritten->bodyMarked = true;
         text = std::string(html) + g_messageBeingWritten->editNote;
     } else
@@ -231,7 +230,7 @@ static void displayedMessage(PurpleAccount *account, const char *who, char *mess
         if (!g_messageBeingWritten->bodyMarked &&
             p_gtk_text_iter_forward_search(&start, BODY_MARKER, GTK_TEXT_SEARCH_TEXT_ONLY, &marker, &pastMarker, &end))
         {
-            p_gtk_text_buffer_delete(buffer, &marker, &pastMarker);
+            p_gtk_imhtml_delete(getIMHtml(conv), &marker, &pastMarker);
             setMark(buffer, getMarkName(g_messageBeingWritten->messageId, MarkKind::Body), marker);
         }
         g_messageBeingWritten->bodyMarked = true;
@@ -310,8 +309,8 @@ void pidginUiLoad(PurplePlugin *plugin)
                  LOOK_UP(gtk_bin_get_child) && LOOK_UP(gtk_label_set_markup) &&
                  LOOK_UP(gtk_widget_show_all) &&
                  LOOK_UP(gtk_widget_destroy) && LOOK_UP(g_signal_connect_data) &&
-                 LOOK_UP(gtk_text_buffer_delete) && LOOK_UP(gtk_text_buffer_create_tag) &&
-                 LOOK_UP(gtk_text_buffer_apply_tag) && LOOK_UP(gtk_text_iter_forward_search) &&
+                 LOOK_UP(gtk_imhtml_delete) && LOOK_UP(gtk_text_buffer_apply_tag_by_name) &&
+                 LOOK_UP(gtk_text_iter_forward_search) &&
                  LOOK_UP(gtk_text_iter_compare);
     purple_debug_info(config::pluginId, "Pidgin's conversation window: %s\n",
                       g_pidginUi ? "found" : "not found");
@@ -376,7 +375,7 @@ void showMessageReactions(PurpleConversation *conv, MessageId messageId, const s
     if (areaEndMark) {
         p_gtk_text_buffer_get_iter_at_mark(buffer, &areaEnd, areaEndMark);
         if (p_gtk_text_iter_compare(&end, &areaEnd) < 0) {
-            p_gtk_text_buffer_delete(buffer, &end, &areaEnd);
+            p_gtk_imhtml_delete(imhtml, &end, &areaEnd);
             p_gtk_text_buffer_get_iter_at_mark(buffer, &end, endMark);
         }
         p_gtk_text_buffer_move_mark(buffer, areaEndMark, &end);
@@ -409,8 +408,9 @@ void strikeOutMessage(PurpleConversation *conv, MessageId messageId)
     GtkTextIter    body, end;
     if (!buffer || !getBody(buffer, messageId, body, end))
         return;
-    GtkTextTag *tag = p_gtk_text_buffer_create_tag(buffer, NULL, "strikethrough", TRUE, NULL);
-    p_gtk_text_buffer_apply_tag(buffer, tag, &body, &end);
+    // GtkIMHtml's own, as for <s>: a tag of ours would need a name, as GtkIMHtml compares
+    // the names of all tags with strncmp() when it draws, and crashes on one without
+    p_gtk_text_buffer_apply_tag_by_name(buffer, "STRIKE", &body, &end);
 }
 
 MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId)
