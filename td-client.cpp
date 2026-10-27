@@ -1009,6 +1009,8 @@ PurpleTdClient *PurpleTdClient::findConnected(const char *accountName)
 
 // As many to a row in the menu as TDLib is asked to place in its top row
 static constexpr unsigned REACTION_MENU_COLUMNS = 8;
+// Stands for the paid reaction, which has no emoji of its own
+static const char PAID_REACTION[] = "⭐";
 
 void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId)
 {
@@ -1026,10 +1028,13 @@ void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId)
         const td::td_api::message &message = static_cast<const td::td_api::message &>(*object);
         std::vector<ShownReaction> reactions;
         if (message.interaction_info_ && message.interaction_info_->reactions_)
-            for (const auto &reaction: message.interaction_info_->reactions_->reactions_)
+            for (const auto &reaction: message.interaction_info_->reactions_->reactions_) {
                 if (reaction && reaction->type_ && (reaction->type_->get_id() == td::td_api::reactionTypeEmoji::ID))
                     reactions.push_back({static_cast<const td::td_api::reactionTypeEmoji &>(*reaction->type_).emoji_,
                                          reaction->total_count_, reaction->is_chosen_});
+                else if (reaction && reaction->type_ && (reaction->type_->get_id() == td::td_api::reactionTypePaid::ID))
+                    reactions.push_back({PAID_REACTION, reaction->total_count_, reaction->is_chosen_});
+            }
 
         auto available = td::td_api::make_object<td::td_api::getMessageAvailableReactions>();
         available->chat_id_    = chatId.value();
@@ -1049,6 +1054,17 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
     auto makeItem = [&](const std::string &emoji, int32_t count, bool chosen) {
         MenuItem item;
         item.label     = (count > 0) ? emoji + ' ' + std::to_string(count) : emoji;
+        // Stars once spent are not taken back, so there is only more to add
+        if (emoji == PAID_REACTION) {
+            // TRANSLATOR: Tooltip of the paid reaction in a message's menu.
+            item.tooltip = _("Spend Telegram Stars on a reaction");
+            item.action  = [accountName, chatId, messageId]() {
+                PurpleTdClient *client = findConnected(accountName.c_str());
+                if (client)
+                    client->askPaidReaction(chatId, messageId);
+            };
+            return item;
+        }
         item.checkable = true;
         item.checked   = chosen;
         item.action    = [accountName, chatId, messageId, emoji, chosen]() {
@@ -1073,14 +1089,16 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
             for (const auto &reaction: *list) {
                 if (!reaction || !reaction->type_)
                     continue;
-                if (reaction->type_->get_id() != td::td_api::reactionTypeEmoji::ID) {
-                    purple_debug_misc(config::pluginId, "Reaction to message %" G_GINT64_FORMAT " left out: %s\n",
-                                      messageId.value(),
-                                      (reaction->type_->get_id() == td::td_api::reactionTypePaid::ID)
-                                          ? "paid (stars)" : "custom emoji");
+                std::string emoji;
+                if (reaction->type_->get_id() == td::td_api::reactionTypeEmoji::ID)
+                    emoji = static_cast<const td::td_api::reactionTypeEmoji &>(*reaction->type_).emoji_;
+                else if (reaction->type_->get_id() == td::td_api::reactionTypePaid::ID)
+                    emoji = PAID_REACTION;
+                else {
+                    purple_debug_misc(config::pluginId, "Custom-emoji reaction to message %" G_GINT64_FORMAT " left out\n",
+                                      messageId.value());
                     continue;
                 }
-                const std::string &emoji = static_cast<const td::td_api::reactionTypeEmoji &>(*reaction->type_).emoji_;
                 if (!listed.insert(emoji).second)
                     continue;
                 // Offered all the same, as Telegram's servers may not insist on it
@@ -1136,16 +1154,96 @@ void PurpleTdClient::setMessageReaction(ChatId chatId, MessageId messageId, cons
                                                                              std::move(type));
     // What changes comes back as an update, as from any other client
     m_transceiver.sendQuery(std::move(request), [this, chatId, emoji](uint64_t, TdObjectPtr object) {
-        if (object && (object->get_id() == td::td_api::ok::ID))
+        reportReactionError(chatId, emoji, object);
+    });
+}
+
+void PurpleTdClient::reportReactionError(ChatId chatId, const std::string &emoji, const TdObjectPtr &object)
+{
+    if (object && (object->get_id() == td::td_api::ok::ID))
+        return;
+    // TRANSLATOR: In-chat error, after a reaction was picked from a message's menu; followed by the reaction.
+    std::string           notice = std::string(_("Cannot change the reaction")) + ' ' + emoji + ": " +
+                                   getDisplayedError(object);
+    const td::td_api::chat *chat = m_data.getChat(chatId);
+    if (chat)
+        showChatNotification(m_data, *chat, notice.c_str(), PURPLE_MESSAGE_ERROR);
+    else
+        purple_notify_error(NULL, config::pluginName, notice.c_str(), NULL);
+}
+
+namespace {
+struct PaidReactionRequest {
+    std::string accountName;
+    ChatId      chatId;
+    MessageId   messageId;
+};
+}
+
+void PurpleTdClient::askPaidReaction(ChatId chatId, MessageId messageId)
+{
+    // Not tied to the connection: the account is found again once the user answers
+    auto *request = new PaidReactionRequest{purple_account_get_username(m_data.purpleAccount), chatId, messageId};
+    // TRANSLATOR: Paid reaction dialog, title
+    purple_request_input(NULL, _("Paid reaction"),
+                         // TRANSLATOR: Paid reaction dialog, primary content
+                         _("How many Telegram Stars to spend on this message?"),
+                         // TRANSLATOR: Paid reaction dialog, secondary content
+                         _("They are spent at once, and cannot be taken back."),
+                         "1",   // default value
+                         FALSE, // multiline input
+                         FALSE, // masked input
+                         NULL,
+                         // TRANSLATOR: Paid reaction dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
+                         _("_OK"), G_CALLBACK(PurpleTdClient::paidReactionEntered),
+                         // TRANSLATOR: Paid reaction dialog, alternative is "_OK". The underscore marks accelerator keys, they must be different!
+                         _("_Cancel"), G_CALLBACK(PurpleTdClient::paidReactionCancelled),
+                         m_data.purpleAccount,
+                         NULL, // buddy
+                         NULL, // conversation
+                         request);
+}
+
+void PurpleTdClient::paidReactionEntered(void *data, const char *starCount)
+{
+    std::unique_ptr<PaidReactionRequest> request(static_cast<PaidReactionRequest *>(data));
+    PurpleTdClient *client = findConnected(request->accountName.c_str());
+    if (!client)
+        return;
+    char   *end   = NULL;
+    gint64  count = starCount ? g_ascii_strtoll(starCount, &end, 10) : 0;
+    if (!end || (end == starCount) || *end || (count <= 0)) {
+        auto error = td::td_api::make_object<td::td_api::error>(400,
+            // TRANSLATOR: In-chat error, when the paid reaction dialog got something other than a number of stars.
+            formatMessage(_("Not a number of Telegram Stars: {}"), std::string(starCount ? starCount : "")));
+        client->reportReactionError(request->chatId, PAID_REACTION, TdObjectPtr(std::move(error)));
+        return;
+    }
+    client->sendPaidReaction(request->chatId, request->messageId, count);
+}
+
+void PurpleTdClient::paidReactionCancelled(void *data)
+{
+    delete static_cast<PaidReactionRequest *>(data);
+}
+
+void PurpleTdClient::sendPaidReaction(ChatId chatId, MessageId messageId, int64_t starCount)
+{
+    purple_debug_misc(config::pluginId, "Paid reaction of %" G_GINT64_FORMAT " stars to message %" G_GINT64_FORMAT "\n",
+                      (gint64)starCount, messageId.value());
+    // TDLib holds a paid reaction back, for it to be undone; sent at once instead, as the dialog asked already
+    auto add = td::td_api::make_object<td::td_api::addPendingPaidMessageReaction>(chatId.value(), messageId.value(),
+                                                                                   starCount, nullptr);
+    m_transceiver.sendQuery(std::move(add), [this, chatId, messageId](uint64_t, TdObjectPtr object) {
+        if (!object || (object->get_id() != td::td_api::ok::ID)) {
+            reportReactionError(chatId, PAID_REACTION, object);
             return;
-        // TRANSLATOR: In-chat error, after a reaction was picked from a message's menu; followed by the reaction.
-        std::string           notice = std::string(_("Cannot change the reaction")) + ' ' + emoji + ": " +
-                                       getDisplayedError(object);
-        const td::td_api::chat *chat = m_data.getChat(chatId);
-        if (chat)
-            showChatNotification(m_data, *chat, notice.c_str(), PURPLE_MESSAGE_ERROR);
-        else
-            purple_notify_error(NULL, config::pluginName, notice.c_str(), NULL);
+        }
+        auto commit = td::td_api::make_object<td::td_api::commitPendingPaidMessageReactions>(chatId.value(),
+                                                                                              messageId.value());
+        m_transceiver.sendQuery(std::move(commit), [this, chatId](uint64_t, TdObjectPtr object) {
+            reportReactionError(chatId, PAID_REACTION, object);
+        });
     });
 }
 

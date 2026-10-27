@@ -61,6 +61,7 @@ public:
     // The link before a message in Pidgin's tab was clicked: pops up its menu
     void showMessageMenu(ChatId chatId, MessageId messageId);
     void setMessageReaction(ChatId chatId, MessageId messageId, const std::string &emoji, bool chosen);
+    void askPaidReaction(ChatId chatId, MessageId messageId);
 
     // The client of an account by its name, if it is connected
     static PurpleTdClient *findConnected(const char *accountName);
@@ -189,6 +190,10 @@ private:
 
     void openMessageFileResponse(ChatId chatId, MessageId messageId, const std::string &variant,
                                  TdObjectPtr object);
+    void sendPaidReaction(ChatId chatId, MessageId messageId, int64_t starCount);
+    void reportReactionError(ChatId chatId, const std::string &emoji, const TdObjectPtr &object);
+    static void paidReactionEntered(void *data, const char *starCount);
+    static void paidReactionCancelled(void *data);
     struct ShownReaction {
         std::string emoji;
         int32_t     count;
