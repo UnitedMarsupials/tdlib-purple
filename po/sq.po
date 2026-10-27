@@ -1255,3 +1255,13 @@ msgstr "Kjo llogari është fshirë."
 #: ../client-utils.cpp:444
 msgid "This account has been restored."
 msgstr "Kjo llogari është rikthyer."
+
+#. TRANSLATOR: Information dialog, after a link to a message in a conversation was clicked. Primary content.
+#: ../tdlib-purple.cpp:977
+msgid "The message is not shown"
+msgstr "Mesazhi nuk shfaqet"
+
+#. TRANSLATOR: Information dialog, secondary content.
+#: ../tdlib-purple.cpp:979
+msgid "It is no longer in this conversation's window."
+msgstr "Nuk ndodhet më në dritaren e kësaj bisede."

@@ -12,6 +12,7 @@ include(cmake/tdlib-version.cmake)
 set(NoLottie FALSE CACHE BOOL "Disable animated sticker conversion")
 set(NoTranslations FALSE CACHE BOOL "Disable translation support")
 set(NoVoip FALSE CACHE BOOL "Disable voice call support")
+set(NoPidgin FALSE CACHE BOOL "Build without Pidgin's headers, so without what only its conversation window can do")
 set(API_ID 94575 CACHE STRING "API id")
 set(API_HASH a3406de8d171bb422bb6ddf3bbd800e2 CACHE STRING "API hash")
 set(STUFF "" CACHE STRING "")
@@ -32,9 +33,22 @@ if (NOT NoPkgConfig)
     if (NOT NoLottie)
         pkg_check_modules(rlottie REQUIRED rlottie)
     endif (NOT NoLottie)
+    # Pidgin's headers only, for its types: its functions, and GTK's, are
+    # looked up at run time, so the plugin still loads into other front-ends
+    if (NOT NoPidgin)
+        pkg_check_modules(Pidgin pidgin)
+        if (NOT Pidgin_FOUND)
+            message(FATAL_ERROR "Pidgin's headers not found: install them (pidgin-dev on Debian, "
+                                "Ubuntu and Alpine, pidgin-devel on Fedora, pidgin elsewhere), "
+                                "or build without them: -DNoPidgin=True")
+        endif (NOT Pidgin_FOUND)
+    endif (NOT NoPidgin)
 
     pkg_get_variable(PURPLE_PLUGIN_DIR purple plugindir)
     pkg_get_variable(PURPLE_DATA_DIR purple datarootdir)
+elseif (NOT NoPidgin AND NOT DEFINED Pidgin_INCLUDE_DIRS)
+    message(FATAL_ERROR "Without pkg-config, give Pidgin's headers (and GTK's) in -DPidgin_INCLUDE_DIRS, "
+                        "or build without them: -DNoPidgin=True")
 endif (NOT NoPkgConfig)
 
 link_directories(${Purple_LIBRARY_DIRS})
@@ -70,6 +84,7 @@ add_library(telegram-tdlib SHARED
     call.cpp
     identifiers.cpp
     secret-chat.cpp
+    pidgin-ui.cpp
 )
 
 #target_compile_options(telegram-tdlib PRIVATE -Wmissing-declarations)
@@ -90,6 +105,12 @@ endif (${VERSION_SCRIPT_SUPPORTED})
 set_property(TARGET telegram-tdlib PROPERTY CXX_STANDARD 14)
 
 set(BUILD_SHARED_LIBS OFF)
+
+if (NOT NoPidgin)
+    # GTK 2's headers warn under today's compilers
+    target_include_directories(telegram-tdlib SYSTEM PRIVATE ${Pidgin_INCLUDE_DIRS})
+    target_compile_options(telegram-tdlib PRIVATE ${Pidgin_CFLAGS_OTHER})
+endif (NOT NoPidgin)
 
 if (NOT tgvoip_INCLUDE_DIRS STREQUAL "")
     target_include_directories(telegram-tdlib SYSTEM PRIVATE ${tgvoip_INCLUDE_DIRS})

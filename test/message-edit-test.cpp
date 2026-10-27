@@ -1,5 +1,6 @@
 #include "fixture.h"
 #include "libpurple-mock.h"
+#include "client-utils.h"
 #include <fmt/format.h>
 #include <ctime>
 
@@ -351,4 +352,35 @@ TEST_F(MessageEditTest, EditedWhilePending)
     ));
     tgl.verifyRequest(viewMessages(chatIds[0], {replyId}, nullptr, true));
     prpl.verifyNoEvents();
+}
+
+// In Pidgin, where its tab can be scrolled to the message, the notices link to it
+TEST_F(MessageEditTest, NoticesLinkToMessage)
+{
+    setJumpLinksEnabled(true);
+    loginWithOneContact();
+    receiveText("old");
+    std::string link = "tdlib-message://%2B" + selfPhoneNumber + "/" + std::to_string(chatIds[0]) + "/" +
+                       std::to_string(messageId);
+
+    tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makeTextMessage("new")));
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    object_ptr<message> edited = makeMessage(messageId, userIds[0], chatIds[0], false, date,
+                                             makeTextMessage("new"));
+    edited->edit_date_ = editDate;
+    tgl.reply(std::move(edited));
+    prpl.verifyEvents(ConversationWriteEvent(
+        purpleUserName(0), purpleUserName(0),
+        userFirstNames[0] + " " + userLastNames[0] + " edited the message from <a href=\"" + link + "\">" +
+        messageTime(date) + "</a>: new",
+        PURPLE_MESSAGE_SYSTEM, editDate
+    ));
+
+    tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
+    prpl.verifyEvents(ConversationWriteEvent(
+        purpleUserName(0), purpleUserName(0),
+        "Message from <a href=\"" + link + "\">" + messageTime(date) + "</a> has been deleted",
+        PURPLE_MESSAGE_SYSTEM, 0
+    ));
+    setJumpLinksEnabled(false);
 }

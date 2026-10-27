@@ -43,6 +43,7 @@ add_executable(tests EXCLUDE_FROM_ALL
     ../call.cpp
     ../identifiers.cpp
     ../secret-chat.cpp
+    ../pidgin-ui.cpp
 )
 
 # C++17, not the plugin's C++14: GoogleTest requires it from 1.17 on.
@@ -62,6 +63,11 @@ if (DEFINED GTEST_PATH)
     link_directories(${GTEST_PATH}/lib)
 endif (DEFINED GTEST_PATH)
 
+
+if (NOT NoPidgin)
+    target_include_directories(tests SYSTEM PRIVATE ${Pidgin_INCLUDE_DIRS})
+    target_compile_options(tests PRIVATE ${Pidgin_CFLAGS_OTHER})
+endif (NOT NoPidgin)
 
 if (NOT NoLottie)
     target_compile_definitions(tests PRIVATE LOT_BUILD)

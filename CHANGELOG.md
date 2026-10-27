@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- **In Pidgin, a reply's quote and the notices of an edit, a deletion or a reaction link to their message, scrolling the conversation to it.**
+
+### Build
+
+- **Pidgin's headers are needed to build, for features of its conversation window, and `-DNoPidgin=True` builds without them.**
+
 ## 0.9.4 (2026-10-27)
 
 ### Fixes

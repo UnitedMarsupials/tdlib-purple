@@ -8,6 +8,7 @@
 #include "media-variants.h"
 #include "config.h"
 #include "call.h"
+#include "pidgin-ui.h"
 #include <algorithm>
 #include <tuple>
 #include <fmt/format.h>
@@ -595,7 +596,10 @@ static std::string quoteMessage(const td::td_api::message *message, TdAccountDat
 
     // TRANSLATOR: In-chat notification of a reply. Arguments will be username and the original text or description thereof. Please preserve the HTML.
     return formatMessage(_("<b>&gt; {0} wrote:</b>\n&gt; {1}"),
-                         {escapeForDisplay(originalName), escapeForDisplay(text)});
+                         {escapeForDisplay(originalName),
+                          message ? linkToMessage(account.purpleAccount, getChatId(*message), getId(*message),
+                                                  escapeForDisplay(text))
+                                  : escapeForDisplay(text)});
 }
 
 // The name a private chat's conversation goes by
@@ -653,6 +657,8 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
     if (!newText.empty())
         text = newText.c_str();
 
+    // Marks for the message's own text, not for a notice about it, which carries its id
+    MessageMarkScope markScope(text ? message.id : MessageId::invalid);
     const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
     if (privateUser) {
         std::string userName = getPrivateChatPurpleName(account, *privateUser);
@@ -1153,7 +1159,8 @@ static bool showEditNotice(const td::td_api::chat &chat, IncomingMessage &fullMe
     const td::td_api::MessageContent &content = *fullMessage.message->content_;
     std::string          sender      = escapeForDisplay(getSenderDisplayName(chat, messageInfo,
                                                                             account.purpleAccount));
-    std::string          sentAt      = formatMessageTime(fullMessage.editedMessageTime);
+    std::string          sentAt      = linkToMessage(account.purpleAccount, getId(chat), messageInfo.id,
+                                                     formatMessageTime(fullMessage.editedMessageTime));
     FileInfo             fileInfo;
     getFileFromMessage(fullMessage, fileInfo);
 
@@ -1899,7 +1906,7 @@ static std::string getReactionSenderName(TdAccountData &account, const std::stri
 // Shown as a message from whoever reacted, as purple-gowhatsapp has it, which names the message by
 // the beginning of its text, or failing that, by what it is and when it was sent. The reaction is
 // markup, a picture perhaps; without one, it is one taken back.
-static void showReactionText(TdAccountData &account, const td::td_api::chat &chat,
+static void showReactionText(TdAccountData &account, const td::td_api::chat &chat, MessageId messageId,
                              const ShownMessage &shownMessage, const std::string &reactionKey, bool self,
                              const std::string *reaction, bool image)
 {
@@ -1914,10 +1921,11 @@ static void showReactionText(TdAccountData &account, const td::td_api::chat &cha
             quote.erase(g_utf8_offset_to_pointer(quote.c_str(), MAX_QUOTE_LENGTH) - quote.c_str());
             quote += "…";
         }
-        quote = escapeForDisplay(quote);
+        quote = linkToMessage(account.purpleAccount, getId(chat), messageId, escapeForDisplay(quote));
     }
     std::string kind   = escapeForDisplay(shownMessage.kind);
-    std::string sentAt = formatMessageTime(shownMessage.timestamp);
+    std::string sentAt = linkToMessage(account.purpleAccount, getId(chat), messageId,
+                                       formatMessageTime(shownMessage.timestamp));
 
     std::string text;
     if (reaction) {
@@ -2077,18 +2085,19 @@ static void customEmojiResponse(TdAccountData &account, ChatId chatId,
         });
 }
 
-static void showReaction(TdAccountData &account, const td::td_api::chat &chat, const ShownMessage &shownMessage,
+static void showReaction(TdAccountData &account, const td::td_api::chat &chat, MessageId messageId,
+                         const ShownMessage &shownMessage,
                          const std::string &reactionKey, bool self, const td::td_api::ReactionType *reaction)
 {
     if (!reaction) {
-        showReactionText(account, chat, shownMessage, reactionKey, self, nullptr, false);
+        showReactionText(account, chat, messageId, shownMessage, reactionKey, self, nullptr, false);
         return;
     }
 
     switch (reaction->get_id()) {
     case td::td_api::reactionTypeEmoji::ID: {
         std::string emoji = escapeForDisplay(static_cast<const td::td_api::reactionTypeEmoji &>(*reaction).emoji_);
-        showReactionText(account, chat, shownMessage, reactionKey, self, &emoji, false);
+        showReactionText(account, chat, messageId, shownMessage, reactionKey, self, &emoji, false);
         break;
     }
     case td::td_api::reactionTypeCustomEmoji::ID: {
@@ -2101,11 +2110,11 @@ static void showReaction(TdAccountData &account, const td::td_api::chat &chat, c
         message.quotable  = shownMessage.quotable;
         message.kind      = shownMessage.kind;
         message.timestamp = shownMessage.timestamp;
-        CustomEmojiShown shown = [chatId, message, reactionKey, self](TdAccountData &account,
+        CustomEmojiShown shown = [chatId, messageId, message, reactionKey, self](TdAccountData &account,
                                                                      const std::string &reaction, bool image) {
             const td::td_api::chat *chat = account.getChat(chatId);
             if (chat)
-                showReactionText(account, *chat, message, reactionKey, self, &reaction, image);
+                showReactionText(account, *chat, messageId, message, reactionKey, self, &reaction, image);
         };
         auto request = td::td_api::make_object<td::td_api::getCustomEmojiStickers>();
         request->custom_emoji_ids_.push_back(customEmojiId);
@@ -2118,7 +2127,7 @@ static void showReaction(TdAccountData &account, const td::td_api::chat &chat, c
     default: {
         // Paid in Telegram Stars
         std::string star = "\u2B50";
-        showReactionText(account, chat, shownMessage, reactionKey, self, &star, false);
+        showReactionText(account, chat, messageId, shownMessage, reactionKey, self, &star, false);
     }
     }
 }
@@ -2292,7 +2301,8 @@ void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessag
             // Telegram does not say who deleted it, so the notice cannot either.
             std::string notice = formatMessage(
                 // TRANSLATOR: In-chat notification. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
-                _("Message from {} has been deleted"), formatMessageTime(messageTime));
+                _("Message from {} has been deleted"),
+                linkToMessage(account.purpleAccount, chatId, messageId, formatMessageTime(messageTime)));
             showChatNotification(account, *chat, notice.c_str());
         }
     }
@@ -2412,7 +2422,7 @@ void updateMessageReactions(TdAccountData &account, ChatId chatId, MessageId mes
         if (shownMessage->reactions.emplace(reaction.key, reaction.self).second) {
             changedBy.insert(reaction.key.substr(0, reaction.key.find(' ')));
             if (show)
-                showReaction(account, *chat, *shownMessage, reaction.key, reaction.self, reaction.type);
+                showReaction(account, *chat, messageId, *shownMessage, reaction.key, reaction.self, reaction.type);
         }
     }
 
@@ -2426,7 +2436,7 @@ void updateMessageReactions(TdAccountData &account, ChatId chatId, MessageId mes
             continue;
         }
         if (show && !changedBy.count(it->first.substr(0, space)))
-            showReaction(account, *chat, *shownMessage, it->first, it->second, nullptr);
+            showReaction(account, *chat, messageId, *shownMessage, it->first, it->second, nullptr);
         it = shownMessage->reactions.erase(it);
     }
 }
@@ -2447,7 +2457,7 @@ static void showUnreadReactions(TdAccountData &account, ChatId chatId, MessageId
         if (reaction && reaction->type_ && reaction->sender_id_) {
             std::string key = getReactionKey(getSenderKey(*reaction->sender_id_), *reaction->type_);
             if (shownMessage->reactions.emplace(key, false).second && show)
-                showReaction(account, *chat, *shownMessage, key, false, reaction->type_.get());
+                showReaction(account, *chat, messageId, *shownMessage, key, false, reaction->type_.get());
         }
 }
 

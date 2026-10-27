@@ -780,6 +780,12 @@ PurpleConversation *purple_find_conversation_with_account(
     return NULL;
 }
 
+GList *purple_get_conversations(void)
+{
+    // Only wanted for Pidgin's window, which the tests do not have
+    return NULL;
+}
+
 void *purple_notify_message(void *handle, PurpleNotifyMsgType type,
 						  const char *title, const char *primary,
 						  const char *secondary, PurpleNotifyCloseCallback cb,

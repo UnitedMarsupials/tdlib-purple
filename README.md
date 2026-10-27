@@ -87,6 +87,8 @@ Building without localization: `-DNoTranslations=True`
 
 Building without voice call support: `-DNoVoip=True`
 
+Building without Pidgin's headers: `-DNoPidgin=True`. The plugin is then built against libpurple alone, and features that need Pidgin's conversation window are left out.
+
 Building with voice call support: `-Dtgvoip_LIBRARIES="tgvoip;opus;<any other tgvoip dependencies>"`
 
 If libtgvoip is not installed in include/library path then build with

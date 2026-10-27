@@ -1252,3 +1252,13 @@ msgstr "Tento účet byl smazán."
 #: ../client-utils.cpp:444
 msgid "This account has been restored."
 msgstr "Tento účet byl obnoven."
+
+#. TRANSLATOR: Information dialog, after a link to a message in a conversation was clicked. Primary content.
+#: ../tdlib-purple.cpp:977
+msgid "The message is not shown"
+msgstr "Zpráva není zobrazena"
+
+#. TRANSLATOR: Information dialog, secondary content.
+#: ../tdlib-purple.cpp:979
+msgid "It is no longer in this conversation's window."
+msgstr "V okně této konverzace už není."

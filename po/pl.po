@@ -1263,3 +1263,13 @@ msgstr "To konto zostało usunięte."
 #: ../client-utils.cpp:444
 msgid "This account has been restored."
 msgstr "To konto zostało przywrócone."
+
+#. TRANSLATOR: Information dialog, after a link to a message in a conversation was clicked. Primary content.
+#: ../tdlib-purple.cpp:977
+msgid "The message is not shown"
+msgstr "Wiadomość nie jest wyświetlana"
+
+#. TRANSLATOR: Information dialog, secondary content.
+#: ../tdlib-purple.cpp:979
+msgid "It is no longer in this conversation's window."
+msgstr "Nie ma jej już w oknie tej rozmowy."
