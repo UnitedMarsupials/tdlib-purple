@@ -93,6 +93,25 @@ static void displayedMessage(PurpleAccount *account, const char *who, char *mess
     }
 }
 
+static guint g_connectSource = 0;
+
+// Disconnected by libpurple when the plugin is unloaded
+static gboolean connectSignals(gpointer plugin)
+{
+    g_connectSource = 0;
+    void *handle    = p_pidgin_conversations_get_handle();
+    bool  connected = true;
+    for (const char *signal: {"displaying-im-msg", "displaying-chat-msg"})
+        connected = purple_signal_connect(handle, signal, plugin, PURPLE_CALLBACK(displayingMessage), NULL) &&
+                    connected;
+    for (const char *signal: {"displayed-im-msg", "displayed-chat-msg"})
+        connected = purple_signal_connect(handle, signal, plugin, PURPLE_CALLBACK(displayedMessage), NULL) &&
+                    connected;
+    if (!connected)
+        purple_debug_warning(config::pluginId, "Cannot follow Pidgin's conversation window\n");
+    return FALSE;
+}
+
 void pidginUiLoad(PurplePlugin *plugin)
 {
     LOOK_UP(pidgin_conversations_get_handle);
@@ -119,16 +138,17 @@ void pidginUiLoad(PurplePlugin *plugin)
     if (!g_pidginUi)
         return;
 
-    // Disconnected by libpurple when the plugin is unloaded
-    void *handle = p_pidgin_conversations_get_handle();
-    for (const char *signal: {"displaying-im-msg", "displaying-chat-msg"})
-        purple_signal_connect(handle, signal, plugin, PURPLE_CALLBACK(displayingMessage), NULL);
-    for (const char *signal: {"displayed-im-msg", "displayed-chat-msg"})
-        purple_signal_connect(handle, signal, plugin, PURPLE_CALLBACK(displayedMessage), NULL);
+    // A protocol plugin is loaded before Pidgin's window registers its signals: they are
+    // connected to once the main loop is idle
+    g_connectSource = g_idle_add(connectSignals, plugin);
 }
 
 void pidginUiUnload()
 {
+    if (g_connectSource) {
+        g_source_remove(g_connectSource);
+        g_connectSource = 0;
+    }
     g_pidginUi = false;
 }
 
