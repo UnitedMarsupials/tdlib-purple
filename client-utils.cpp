@@ -1163,10 +1163,11 @@ std::string makeMenuLink(PurpleAccount *account, ChatId chatId, MessageId messag
     gchar      *escaped = g_markup_escape_text(title.c_str(), -1);
     title = escaped;
     g_free(escaped);
-    // GtkIMHtml ignores the title, and shows the address instead, for now. The space after it is
-    // part of it, a wider target to click.
+    // GtkIMHtml ignores the title and the style, for now: it shows the address as the tooltip, and
+    // a clicked link in another color. LinkText, the color of a link not visited, is for both. The
+    // spaces around the triangle are part of the link, a wider target to click.
     return "<a href=\"" + makeLink(JUMP_LINK_SCHEME, account, chatId, messageId) + '/' +
-           MENU_LINK_SUFFIX + "\" title=\"" + title + "\">\xe2\x96\xbc&nbsp;</a>";
+           MENU_LINK_SUFFIX + "\" title=\"" + title + "\" style=\"color: LinkText\"> \xe2\x96\xbc </a>";
 }
 
 bool parseJumpLink(const char *link, std::string &accountName, ChatId &chatId, MessageId &messageId,

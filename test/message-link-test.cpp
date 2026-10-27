@@ -486,10 +486,10 @@ TEST(JumpLink, OnlyWhereEnabled)
               linkToMessage(account, ChatId::fromString("-100"), MessageId::fromString("5"), "12:00"));
     // Nothing to link to
     ASSERT_EQ(std::string("12:00"), linkToMessage(account, ChatId::fromString("-100"), MessageId::invalid, "12:00"));
-    ASSERT_EQ(std::string("<a href=\"tdlib-message://%2B1234/-100/5/menu\" title=\"Menu of message #5\">\xe2\x96\xbc&nbsp;</a>"),
+    ASSERT_EQ(std::string("<a href=\"tdlib-message://%2B1234/-100/5/menu\" title=\"Menu of message #5\" style=\"color: LinkText\"> \xe2\x96\xbc </a>"),
               makeMenuLink(account, ChatId::fromString("-100"), MessageId::fromString("5")));
     // A message on the server: numbered as in its t.me link
-    ASSERT_EQ(std::string("<a href=\"tdlib-message://%2B1234/-100/12582912/menu\" title=\"Menu of message #12\">\xe2\x96\xbc&nbsp;</a>"),
+    ASSERT_EQ(std::string("<a href=\"tdlib-message://%2B1234/-100/12582912/menu\" title=\"Menu of message #12\" style=\"color: LinkText\"> \xe2\x96\xbc </a>"),
               makeMenuLink(account, ChatId::fromString("-100"), MessageId::fromString("12582912")));
     setJumpLinksEnabled(false);
     ASSERT_EQ(std::string(), makeMenuLink(account, ChatId::fromString("-100"), MessageId::fromString("5")));
