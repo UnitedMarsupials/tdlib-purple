@@ -119,6 +119,15 @@ jobs:
             experimental: false
             sanitize: false
             valgrind: true
+          - name: Alpine x86_64 (g++, NoPidgin)
+            runner: ubuntu-24.04
+            platform: linux/amd64
+            cxx: g++
+            compiler: ''
+            options: -DNoPidgin=1
+            experimental: false
+            sanitize: false
+            valgrind: true
           - name: Alpine x86 (g++)
             runner: ubuntu-24.04
             platform: linux/386
@@ -278,6 +287,18 @@ jobs:
             install: >-
               sudo pkg install -y cmake ninja pkgconf gettext-tools
               libpurple pidgin tdlib libfmt rlottie googletest valgrind
+          # Without the pidgin package, so a stray need for its headers fails.
+          - name: FreeBSD 15.1 (NoPidgin)
+            os: freebsd
+            version: '15.1'
+            experimental: false
+            valgrind: false
+            sanitize: false
+            prefix: /usr/local
+            options: -DNoPidgin=1
+            install: >-
+              sudo pkg install -y cmake ninja pkgconf gettext-tools
+              libpurple tdlib libfmt rlottie googletest
           - name: FreeBSD 14.4
             os: freebsd
             version: '14.4'
