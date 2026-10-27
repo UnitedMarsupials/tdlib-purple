@@ -1077,7 +1077,14 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
                     const std::string &emoji = static_cast<const td::td_api::reactionTypeEmoji &>(*reaction->type_).emoji_;
                     if (listed.insert(emoji).second)
                         ((list == &available.top_reactions_) ? shown : more).push_back(makeItem(emoji, 0, false));
-                }
+                } else if (reaction && reaction->type_)
+                    purple_debug_misc(config::pluginId, "Reaction to message %" G_GINT64_FORMAT " left out: %s%s\n",
+                                      messageId.value(),
+                                      (reaction->type_->get_id() == td::td_api::reactionTypeEmoji::ID)
+                                          ? static_cast<const td::td_api::reactionTypeEmoji &>(*reaction->type_).emoji_.c_str()
+                                          : (reaction->type_->get_id() == td::td_api::reactionTypePaid::ID)
+                                                ? "paid (stars)" : "custom emoji",
+                                      reaction->needs_premium_ ? ", needs Premium" : "");
         purple_debug_misc(config::pluginId,
                           "Reactions to message %" G_GINT64_FORMAT ": %zu shown, %zu top, %zu recent, %zu popular%s\n",
                           messageId.value(), reactions.size(), available.top_reactions_.size(),
