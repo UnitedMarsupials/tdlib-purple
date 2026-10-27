@@ -1156,9 +1156,17 @@ std::string makeMenuLink(PurpleAccount *account, ChatId chatId, MessageId messag
 {
     if (!g_jumpLinksEnabled || !chatId.valid() || !messageId.valid())
         return std::string();
-    // The spaces around it are part of it, a wider target to click
+    // A message's number as in its t.me link; that of one not yet sent is its temporary id
+    int64_t number = ((messageId.value() & 0xFFFFF) == 0) ? (messageId.value() >> 20) : messageId.value();
+    // TRANSLATOR: Tooltip of the link that opens a message's menu. Argument is the message's number.
+    std::string title = formatMessage(_("Menu of message #{}"), std::to_string(number));
+    gchar      *escaped = g_markup_escape_text(title.c_str(), -1);
+    title = escaped;
+    g_free(escaped);
+    // GtkIMHtml ignores the title, and shows the address instead, for now. The space after it is
+    // part of it, a wider target to click.
     return "<a href=\"" + makeLink(JUMP_LINK_SCHEME, account, chatId, messageId) + '/' +
-           MENU_LINK_SUFFIX + "\">\xe2\x96\xbc&nbsp;</a>";
+           MENU_LINK_SUFFIX + "\" title=\"" + title + "\">\xe2\x96\xbc&nbsp;</a>";
 }
 
 bool parseJumpLink(const char *link, std::string &accountName, ChatId &chatId, MessageId &messageId,
