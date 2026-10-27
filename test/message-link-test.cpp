@@ -437,10 +437,13 @@ TEST_F(MessageLinkTest, MessageMenu)
     const ChatId    chat    = ChatId::fromString(std::to_string(chatIds[0]).c_str());
     const MessageId message = MessageId::fromString("1");
 
-    // The message for its reactions, then those it may have; without Pidgin, no menu pops up
+    // The message for its reactions, then what may be done to it, then the reactions it may have;
+    // without Pidgin, no menu pops up
     client->showMessageMenu(chat, message);
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
     tgl.reply(makeDocumentMessage(10000, "", false));
+    tgl.verifyRequest(getMessageProperties(chatIds[0], messageId));
+    tgl.reply(make_object<messageProperties>());
     tgl.verifyRequest(getMessageAvailableReactions(chatIds[0], messageId, 8));
     tgl.reply(make_object<availableReactions>());
     prpl.verifyNoEvents();
@@ -453,6 +456,31 @@ TEST_F(MessageLinkTest, MessageMenu)
     tgl.verifyRequest(removeMessageReaction(chatIds[0], messageId, make_object<reactionTypeEmoji>("\xF0\x9F\x91\x8D")));
     tgl.reply(make_object<ok>());
     prpl.verifyNoEvents();
+
+    // Editing and deleting, as the menu's dialogs end
+    client->editMessage(chat, message, "new text", false);
+    {
+        auto content = make_object<inputMessageText>();
+        content->text_ = makeFormattedText("new text");
+        tgl.verifyRequest(editMessageText(chatIds[0], messageId, nullptr, std::move(content)));
+    }
+    tgl.reply(makeDocumentMessage(10000, "", false));
+    client->editMessage(chat, message, "new caption", true);
+    tgl.verifyRequest(editMessageCaption(chatIds[0], messageId, nullptr, makeFormattedText("new caption"), false));
+    tgl.reply(makeDocumentMessage(10000, "", false));
+    client->deleteMessage(chat, message, true);
+    tgl.verifyRequest(deleteMessages(chatIds[0], {messageId}, true));
+    tgl.reply(make_object<ok>());
+    prpl.verifyNoEvents();
+
+    // A failure is told in the conversation
+    client->deleteMessage(chat, message, false);
+    tgl.verifyRequest(deleteMessages(chatIds[0], {messageId}, false));
+    tgl.reply(make_object<error>(400, "MESSAGE_DELETE_FORBIDDEN"));
+    prpl.verifyEvents(NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+                      ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                                             "Cannot delete the message: code 400 (MESSAGE_DELETE_FORBIDDEN)",
+                                             PURPLE_MESSAGE_ERROR, 0));
 }
 
 TEST(JumpLink, Parse)

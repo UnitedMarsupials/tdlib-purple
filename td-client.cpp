@@ -1012,9 +1012,37 @@ static constexpr unsigned REACTION_MENU_COLUMNS = 8;
 // Stands for the paid reaction, which has no emoji of its own
 static const char PAID_REACTION[] = "⭐";
 
+// The text a message's editing changes: its text, or a caption, if it can have one
+static const td::td_api::formattedText *getEditableText(const td::td_api::message &message, bool &isCaption)
+{
+    isCaption = true;
+    if (!message.content_)
+        return nullptr;
+    switch (message.content_->get_id()) {
+    case td::td_api::messageText::ID:
+        isCaption = false;
+        return static_cast<const td::td_api::messageText &>(*message.content_).text_.get();
+    case td::td_api::messagePhoto::ID:
+        return static_cast<const td::td_api::messagePhoto &>(*message.content_).caption_.get();
+    case td::td_api::messageVideo::ID:
+        return static_cast<const td::td_api::messageVideo &>(*message.content_).caption_.get();
+    case td::td_api::messageAnimation::ID:
+        return static_cast<const td::td_api::messageAnimation &>(*message.content_).caption_.get();
+    case td::td_api::messageDocument::ID:
+        return static_cast<const td::td_api::messageDocument &>(*message.content_).caption_.get();
+    case td::td_api::messageAudio::ID:
+        return static_cast<const td::td_api::messageAudio &>(*message.content_).caption_.get();
+    case td::td_api::messageVoiceNote::ID:
+        return static_cast<const td::td_api::messageVoiceNote &>(*message.content_).caption_.get();
+    default:
+        return nullptr;
+    }
+}
+
 void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId)
 {
-    // The message for the reactions it has, then those it may have
+    // The message for the reactions it has, then what may be done to it, then the reactions it
+    // may have
     auto request = td::td_api::make_object<td::td_api::getMessage>();
     request->chat_id_    = chatId.value();
     request->message_id_ = messageId.value();
@@ -1026,28 +1054,45 @@ void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId)
             return;
         }
         const td::td_api::message &message = static_cast<const td::td_api::message &>(*object);
-        std::vector<ShownReaction> reactions;
+        MessageMenu menu;
         if (message.interaction_info_ && message.interaction_info_->reactions_)
             for (const auto &reaction: message.interaction_info_->reactions_->reactions_) {
                 if (reaction && reaction->type_ && (reaction->type_->get_id() == td::td_api::reactionTypeEmoji::ID))
-                    reactions.push_back({static_cast<const td::td_api::reactionTypeEmoji &>(*reaction->type_).emoji_,
-                                         reaction->total_count_, reaction->is_chosen_});
+                    menu.reactions.push_back({static_cast<const td::td_api::reactionTypeEmoji &>(*reaction->type_).emoji_,
+                                              reaction->total_count_, reaction->is_chosen_});
                 else if (reaction && reaction->type_ && (reaction->type_->get_id() == td::td_api::reactionTypePaid::ID))
-                    reactions.push_back({PAID_REACTION, reaction->total_count_, reaction->is_chosen_});
+                    menu.reactions.push_back({PAID_REACTION, reaction->total_count_, reaction->is_chosen_});
             }
+        const td::td_api::formattedText *text = getEditableText(message, menu.isCaption);
+        if (text)
+            menu.text = text->text_;
+        else
+            menu.isCaption = false;
 
-        auto available = td::td_api::make_object<td::td_api::getMessageAvailableReactions>();
-        available->chat_id_    = chatId.value();
-        available->message_id_ = messageId.value();
-        available->row_size_   = REACTION_MENU_COLUMNS;
-        m_transceiver.sendQuery(std::move(available), [this, chatId, messageId, reactions](uint64_t, TdObjectPtr object) {
-            showMessageMenuResponse(chatId, messageId, reactions, std::move(object));
+        auto properties = td::td_api::make_object<td::td_api::getMessageProperties>(chatId.value(), messageId.value());
+        m_transceiver.sendQuery(std::move(properties), [this, chatId, messageId, menu, hasText = (text != nullptr)](uint64_t, TdObjectPtr object) mutable {
+            if (object && (object->get_id() == td::td_api::messageProperties::ID)) {
+                const auto &properties = static_cast<const td::td_api::messageProperties &>(*object);
+                menu.canEdit          = properties.can_be_edited_ && hasText;
+                menu.canDeleteForSelf = properties.can_be_deleted_only_for_self_;
+                menu.canDeleteForAll  = properties.can_be_deleted_for_all_users_;
+            } else
+                purple_debug_warning(config::pluginId, "What may be done to message %" G_GINT64_FORMAT " unknown: %s\n",
+                                     messageId.value(), getDisplayedError(object).c_str());
+
+            auto available = td::td_api::make_object<td::td_api::getMessageAvailableReactions>();
+            available->chat_id_    = chatId.value();
+            available->message_id_ = messageId.value();
+            available->row_size_   = REACTION_MENU_COLUMNS;
+            m_transceiver.sendQuery(std::move(available), [this, chatId, messageId, menu](uint64_t, TdObjectPtr object) {
+                showMessageMenuResponse(chatId, messageId, menu, std::move(object));
+            });
         });
     });
 }
 
-void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
-                                             const std::vector<ShownReaction> &reactions, TdObjectPtr object)
+void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId, const MessageMenu &menu,
+                                             TdObjectPtr object)
 {
     // Picking one finds the account again, as it may be gone by then
     std::string accountName = purple_account_get_username(m_data.purpleAccount);
@@ -1080,7 +1125,7 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
     // Those the message has first, then those it may have, the less likely ones further down
     std::vector<MenuItem> shown, more;
     std::set<std::string> listed;
-    for (const ShownReaction &reaction: reactions)
+    for (const ShownReaction &reaction: menu.reactions)
         if (listed.insert(reaction.emoji).second)
             shown.push_back(makeItem(reaction.emoji, reaction.count, reaction.chosen));
     if (object && (object->get_id() == td::td_api::availableReactions::ID)) {
@@ -1112,7 +1157,7 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
             }
         purple_debug_misc(config::pluginId,
                           "Reactions to message %" G_GINT64_FORMAT ": %zu shown, %zu top, %zu recent, %zu popular%s\n",
-                          messageId.value(), reactions.size(), available.top_reactions_.size(),
+                          messageId.value(), menu.reactions.size(), available.top_reactions_.size(),
                           available.recent_reactions_.size(), available.popular_reactions_.size(),
                           available.unavailability_reason_ ? ", unavailable" : "");
     } else
@@ -1139,7 +1184,34 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
     reactionItem.label   = _("Reactions");
     reactionItem.columns = REACTION_MENU_COLUMNS;
     reactionItem.submenu = std::move(shown);
-    popUpMenu({reactionItem});
+    std::vector<MenuItem> items{std::move(reactionItem)};
+
+    if (menu.canEdit) {
+        MenuItem item;
+        // TRANSLATOR: Item of a message's menu; it opens a dialog.
+        item.label  = _("Edit…");
+        item.action = [accountName, chatId, messageId, text = menu.text, isCaption = menu.isCaption]() {
+            PurpleTdClient *client = findConnected(accountName.c_str());
+            if (client)
+                client->askEditMessage(chatId, messageId, text, isCaption);
+        };
+        items.push_back(std::move(item));
+    }
+    for (bool forAll: {false, true})
+        if (forAll ? menu.canDeleteForAll : menu.canDeleteForSelf) {
+            MenuItem item;
+            // TRANSLATOR: Item of a message's menu; it asks for confirmation.
+            item.label  = forAll ? _("Delete for everyone…") :
+                                   // TRANSLATOR: Item of a message's menu; it asks for confirmation.
+                                   _("Delete for me…");
+            item.action = [accountName, chatId, messageId, forAll]() {
+                PurpleTdClient *client = findConnected(accountName.c_str());
+                if (client)
+                    client->askDeleteMessage(chatId, messageId, forAll);
+            };
+            items.push_back(std::move(item));
+        }
+    popUpMenu(items);
 }
 
 void PurpleTdClient::setMessageReaction(ChatId chatId, MessageId messageId, const std::string &emoji, bool chosen)
@@ -1163,9 +1235,14 @@ void PurpleTdClient::reportReactionError(ChatId chatId, const std::string &emoji
     if (object && (object->get_id() == td::td_api::ok::ID))
         return;
     // TRANSLATOR: In-chat error, after a reaction was picked from a message's menu; followed by the reaction.
-    std::string           notice = std::string(_("Cannot change the reaction")) + ' ' + emoji + ": " +
-                                   getDisplayedError(object);
-    const td::td_api::chat *chat = m_data.getChat(chatId);
+    reportMenuError(chatId, std::string(_("Cannot change the reaction")) + ' ' + emoji, object);
+}
+
+// In the conversation, where what failed was asked for
+void PurpleTdClient::reportMenuError(ChatId chatId, const std::string &failure, const TdObjectPtr &object)
+{
+    std::string             notice = failure + ": " + getDisplayedError(object);
+    const td::td_api::chat *chat   = m_data.getChat(chatId);
     if (chat)
         showChatNotification(m_data, *chat, notice.c_str(), PURPLE_MESSAGE_ERROR);
     else
@@ -1244,6 +1321,117 @@ void PurpleTdClient::sendPaidReaction(ChatId chatId, MessageId messageId, int64_
         m_transceiver.sendQuery(std::move(commit), [this, chatId](uint64_t, TdObjectPtr object) {
             reportReactionError(chatId, PAID_REACTION, object);
         });
+    });
+}
+
+namespace {
+struct MessageRequest {
+    std::string accountName;
+    ChatId      chatId;
+    MessageId   messageId;
+    bool        flag; // a caption to edit; deleting for everyone
+};
+}
+
+void PurpleTdClient::askEditMessage(ChatId chatId, MessageId messageId, const std::string &text, bool isCaption)
+{
+    // Not tied to the connection: the account is found again once the user answers
+    auto *request = new MessageRequest{purple_account_get_username(m_data.purpleAccount), chatId, messageId, isCaption};
+    auto  edited  = [](void *data, const char *text) {
+        std::unique_ptr<MessageRequest> request(static_cast<MessageRequest *>(data));
+        PurpleTdClient *client = findConnected(request->accountName.c_str());
+        if (client)
+            client->editMessage(request->chatId, request->messageId, text ? text : "", request->flag);
+    };
+    auto cancelled = [](void *data, const char *) { delete static_cast<MessageRequest *>(data); };
+    // TRANSLATOR: Message editing dialog, title
+    purple_request_input(NULL, _("Edit message"),
+                         // TRANSLATOR: Message editing dialog, primary content
+                         isCaption ? _("New caption of the message") :
+                                     // TRANSLATOR: Message editing dialog, primary content
+                                     _("New text of the message"),
+                         NULL,
+                         text.c_str(), // default value
+                         TRUE,         // multiline input
+                         FALSE,        // masked input
+                         NULL,
+                         // TRANSLATOR: Message editing dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
+                         _("_OK"), G_CALLBACK(+edited),
+                         // TRANSLATOR: Message editing dialog, alternative is "_OK". The underscore marks accelerator keys, they must be different!
+                         _("_Cancel"), G_CALLBACK(+cancelled),
+                         m_data.purpleAccount,
+                         NULL, // buddy
+                         NULL, // conversation
+                         request);
+}
+
+void PurpleTdClient::editMessage(ChatId chatId, MessageId messageId, const char *text, bool isCaption)
+{
+    purple_debug_misc(config::pluginId, "Editing the %s of message %" G_GINT64_FORMAT "\n",
+                      isCaption ? "caption" : "text", messageId.value());
+    // Plain text, as messages are sent
+    auto formatted = td::td_api::make_object<td::td_api::formattedText>();
+    formatted->text_ = text;
+    td::td_api::object_ptr<td::td_api::Function> request;
+    if (isCaption)
+        request = td::td_api::make_object<td::td_api::editMessageCaption>(chatId.value(), messageId.value(), nullptr,
+                                                                          std::move(formatted), false);
+    else {
+        auto content = td::td_api::make_object<td::td_api::inputMessageText>();
+        content->text_ = std::move(formatted);
+        request = td::td_api::make_object<td::td_api::editMessageText>(chatId.value(), messageId.value(), nullptr,
+                                                                       std::move(content));
+    }
+    // The edit comes back as an update, as from any other client
+    m_transceiver.sendQuery(std::move(request), [this, chatId](uint64_t, TdObjectPtr object) {
+        if (!object || (object->get_id() != td::td_api::message::ID))
+            // TRANSLATOR: In-chat error, after a message was edited from its menu; followed by the reason.
+            reportMenuError(chatId, _("Cannot edit the message"), object);
+    });
+}
+
+void PurpleTdClient::askDeleteMessage(ChatId chatId, MessageId messageId, bool forAll)
+{
+    auto *request = new MessageRequest{purple_account_get_username(m_data.purpleAccount), chatId, messageId, forAll};
+    auto  confirmed = [](void *data, int) {
+        std::unique_ptr<MessageRequest> request(static_cast<MessageRequest *>(data));
+        PurpleTdClient *client = findConnected(request->accountName.c_str());
+        if (client)
+            client->deleteMessage(request->chatId, request->messageId, request->flag);
+    };
+    auto cancelled = [](void *data, int) { delete static_cast<MessageRequest *>(data); };
+    // TRANSLATOR: Message deletion dialog, title
+    purple_request_action(NULL, _("Delete message"),
+                          // TRANSLATOR: Message deletion dialog, primary content
+                          forAll ? _("Delete the message for everyone in the chat?") :
+                                   // TRANSLATOR: Message deletion dialog, primary content
+                                   _("Delete the message for yourself only?"),
+                          // TRANSLATOR: Message deletion dialog, secondary content
+                          _("This cannot be undone."),
+                          1, // default: cancel
+                          m_data.purpleAccount,
+                          NULL, // buddy
+                          NULL, // conversation
+                          request, 2,
+                          // TRANSLATOR: Message deletion dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
+                          _("_Delete"), PURPLE_CALLBACK(+confirmed),
+                          // TRANSLATOR: Message deletion dialog, alternative is "_Delete". The underscore marks accelerator keys, they must be different!
+                          _("_Cancel"), PURPLE_CALLBACK(+cancelled));
+}
+
+void PurpleTdClient::deleteMessage(ChatId chatId, MessageId messageId, bool forAll)
+{
+    purple_debug_misc(config::pluginId, "Deleting message %" G_GINT64_FORMAT " for %s\n", messageId.value(),
+                      forAll ? "everyone" : "self");
+    auto request = td::td_api::make_object<td::td_api::deleteMessages>();
+    request->chat_id_ = chatId.value();
+    request->message_ids_.push_back(messageId.value());
+    request->revoke_ = forAll;
+    // The deletion comes back as an update, as from any other client
+    m_transceiver.sendQuery(std::move(request), [this, chatId](uint64_t, TdObjectPtr object) {
+        if (!object || (object->get_id() != td::td_api::ok::ID))
+            // TRANSLATOR: In-chat error, after a message was deleted from its menu; followed by the reason.
+            reportMenuError(chatId, _("Cannot delete the message"), object);
     });
 }
 

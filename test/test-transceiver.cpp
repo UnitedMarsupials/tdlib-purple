@@ -593,6 +593,37 @@ static void compare(const removeMessageReaction &actual, const removeMessageReac
     compareReaction(actual.reaction_type_, expected.reaction_type_);
 }
 
+static void compare(const getMessageProperties &actual, const getMessageProperties &expected)
+{
+    COMPARE(chat_id_);
+    COMPARE(message_id_);
+}
+
+static void compare(const editMessageText &actual, const editMessageText &expected,
+                    std::vector<std::string> &m_inputPhotoPaths)
+{
+    COMPARE(chat_id_);
+    COMPARE(message_id_);
+    COMPARE(reply_markup_ != nullptr);
+    compare(actual.input_message_content_, expected.input_message_content_, m_inputPhotoPaths);
+}
+
+static void compare(const editMessageCaption &actual, const editMessageCaption &expected)
+{
+    COMPARE(chat_id_);
+    COMPARE(message_id_);
+    COMPARE(reply_markup_ != nullptr);
+    compare(actual.caption_, expected.caption_);
+    COMPARE(show_caption_above_media_);
+}
+
+static void compare(const deleteMessages &actual, const deleteMessages &expected)
+{
+    COMPARE(chat_id_);
+    COMPARE(message_ids_);
+    COMPARE(revoke_);
+}
+
 static void compareRequests(const Function &actual, const Function &expected,
                             std::vector<std::string> &m_inputPhotoPaths)
 {
@@ -650,6 +681,13 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(getMessageAvailableReactions)
         C(addMessageReaction)
         C(removeMessageReaction)
+        C(getMessageProperties)
+        C(editMessageCaption)
+        C(deleteMessages)
+        case editMessageText::ID:
+            compare(static_cast<const editMessageText &>(actual), static_cast<const editMessageText &>(expected),
+                    m_inputPhotoPaths);
+            break;
         default: ASSERT_TRUE(false) << "Unsupported request " << requestToString(actual);
     }
 }

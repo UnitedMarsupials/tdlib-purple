@@ -1280,6 +1280,71 @@ msgstr "Це не кількість Telegram Stars: {}"
 msgid "Menu of message #{}"
 msgstr "Меню повідомлення №{}"
 
+#. TRANSLATOR: Item of a message's menu; it opens a dialog.
+#: ../td-client.cpp:1192
+msgid "Edit…"
+msgstr "Редагувати…"
+
+#. TRANSLATOR: Item of a message's menu; it asks for confirmation.
+#: ../td-client.cpp:1204
+msgid "Delete for everyone…"
+msgstr "Видалити для всіх…"
+
+#. TRANSLATOR: Item of a message's menu; it asks for confirmation.
+#: ../td-client.cpp:1206
+msgid "Delete for me…"
+msgstr "Видалити для себе…"
+
+#. TRANSLATOR: Message editing dialog, title
+#: ../td-client.cpp:1348
+msgid "Edit message"
+msgstr "Редагування повідомлення"
+
+#. TRANSLATOR: Message editing dialog, primary content
+#: ../td-client.cpp:1350
+msgid "New caption of the message"
+msgstr "Новий підпис повідомлення"
+
+#. TRANSLATOR: Message editing dialog, primary content
+#: ../td-client.cpp:1352
+msgid "New text of the message"
+msgstr "Новий текст повідомлення"
+
+#. TRANSLATOR: In-chat error, after a message was edited from its menu; followed by the reason.
+#: ../td-client.cpp:1389
+msgid "Cannot edit the message"
+msgstr "Не вдається змінити повідомлення"
+
+#. TRANSLATOR: Message deletion dialog, title
+#: ../td-client.cpp:1404
+msgid "Delete message"
+msgstr "Видалення повідомлення"
+
+#. TRANSLATOR: Message deletion dialog, primary content
+#: ../td-client.cpp:1406
+msgid "Delete the message for everyone in the chat?"
+msgstr "Видалити повідомлення для всіх у чаті?"
+
+#. TRANSLATOR: Message deletion dialog, primary content
+#: ../td-client.cpp:1408
+msgid "Delete the message for yourself only?"
+msgstr "Видалити повідомлення лише для себе?"
+
+#. TRANSLATOR: Message deletion dialog, secondary content
+#: ../td-client.cpp:1410
+msgid "This cannot be undone."
+msgstr "Цю дію не можна скасувати."
+
+#. TRANSLATOR: Message deletion dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
+#: ../td-client.cpp:1417
+msgid "_Delete"
+msgstr "_Видалити"
+
+#. TRANSLATOR: In-chat error, after a message was deleted from its menu; followed by the reason.
+#: ../td-client.cpp:1434
+msgid "Cannot delete the message"
+msgstr "Не вдається видалити повідомлення"
+
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091
 msgid "Needs Telegram Premium"

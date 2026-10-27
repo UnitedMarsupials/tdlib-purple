@@ -5,7 +5,7 @@
 ### Features
 
 - **In Pidgin, a reply's quote and the notices of an edit, a deletion or a reaction link to their message, scrolling the conversation to it.**
-- **In Pidgin, a "▼" after each message's timestamp opens its menu, where a reaction can be added or taken back.** For now that is all the menu holds. Reactions that need Telegram Premium are offered dimmed, to be tried; the paid ⭐ asks how many Telegram Stars to spend; custom-emoji ones are not offered. A reaction that cannot be set is reported in the conversation.
+- **In Pidgin, a "▼" after each message's timestamp opens its menu, where a reaction can be added or taken back, and the message edited or deleted, as Telegram allows.** An edit is plain text, as messages are sent. Reactions that need Telegram Premium are offered dimmed, to be tried; the paid ⭐ asks how many Telegram Stars to spend; custom-emoji ones are not offered. A reaction that cannot be set is reported in the conversation.
 
 ### Build
 

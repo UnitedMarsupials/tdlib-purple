@@ -62,6 +62,9 @@ public:
     void showMessageMenu(ChatId chatId, MessageId messageId);
     void setMessageReaction(ChatId chatId, MessageId messageId, const std::string &emoji, bool chosen);
     void askPaidReaction(ChatId chatId, MessageId messageId);
+    // What the dialogs of a message's menu do, once answered
+    void editMessage(ChatId chatId, MessageId messageId, const char *text, bool isCaption);
+    void deleteMessage(ChatId chatId, MessageId messageId, bool forAll);
 
     // The client of an account by its name, if it is connected
     static PurpleTdClient *findConnected(const char *accountName);
@@ -191,6 +194,7 @@ private:
     void openMessageFileResponse(ChatId chatId, MessageId messageId, const std::string &variant,
                                  TdObjectPtr object);
     void sendPaidReaction(ChatId chatId, MessageId messageId, int64_t starCount);
+    void reportMenuError(ChatId chatId, const std::string &failure, const TdObjectPtr &object);
     void reportReactionError(ChatId chatId, const std::string &emoji, const TdObjectPtr &object);
     static void paidReactionEntered(void *data, const char *starCount);
     static void paidReactionCancelled(void *data);
@@ -199,8 +203,19 @@ private:
         int32_t     count;
         bool        chosen;
     };
-    void showMessageMenuResponse(ChatId chatId, MessageId messageId, const std::vector<ShownReaction> &reactions,
+    // What a message's menu offers, besides the reactions it may have
+    struct MessageMenu {
+        std::vector<ShownReaction> reactions;
+        bool                       canEdit          = false;
+        bool                       isCaption        = false;
+        std::string                text;
+        bool                       canDeleteForSelf = false;
+        bool                       canDeleteForAll  = false;
+    };
+    void showMessageMenuResponse(ChatId chatId, MessageId messageId, const MessageMenu &menu,
                                  TdObjectPtr object);
+    void askEditMessage(ChatId chatId, MessageId messageId, const std::string &text, bool isCaption);
+    void askDeleteMessage(ChatId chatId, MessageId messageId, bool forAll);
     void openDownloadedFile(ChatId chatId, const std::string &key, const std::string &description,
                             TdObjectPtr object);
     void finishOpeningFile(ChatId chatId, const std::string &key, const std::string &description,
