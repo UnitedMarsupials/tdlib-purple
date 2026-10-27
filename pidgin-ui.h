@@ -36,10 +36,13 @@ bool pidginUiFound();
 // Each message shown is bracketed in its tab by two marks, found again by its id; those of a
 // message shown again are moved. While an object of this class lives, what is written into a
 // conversation belongs to the given message. The prefix, HTML for the tab only, goes before the
-// message once it is written, unless an earlier showing of it already has one.
+// message once it is written, unless an earlier showing of it already has one. With an edit note,
+// the message is written over its earlier version, where that is shown, its header kept, and the
+// note after its text; elsewhere it is written anew.
 class MessageMarkScope {
 public:
-    explicit MessageMarkScope(MessageId messageId, const std::string &prefix = std::string());
+    explicit MessageMarkScope(MessageId messageId, const std::string &prefix = std::string(),
+                              const char *editNote = nullptr);
     ~MessageMarkScope();
     MessageMarkScope(const MessageMarkScope &) = delete;
     MessageMarkScope &operator=(const MessageMarkScope &) = delete;
@@ -53,6 +56,12 @@ struct MessageMarks {
     PidginTextMark *start = nullptr;
     PidginTextMark *end   = nullptr;
 };
+
+// Whether the message's text is in the conversation's tab, to be written over
+bool canReplaceMessage(PurpleConversation *conv, MessageId messageId);
+
+// Strikes out a deleted message's text, where the tab shows it
+void strikeOutMessage(PurpleConversation *conv, MessageId messageId);
 
 // Where the message is in the conversation's tab, if it is there
 MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId);

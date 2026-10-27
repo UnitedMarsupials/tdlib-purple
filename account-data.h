@@ -148,6 +148,7 @@ struct TgMessageInfo {
     bool        anonymousChannelPost = false; // incomingGroupchatSender is "Channel post", naming nobody
     bool        fromHistory = false; // fetched to catch up with a chat, rather than just sent
     std::string mediaVariantLinks; // markup: links to each size a photo or video comes in
+    bool        unlogged = false; // shown in the tab only, the log having it in an edit's notice
 
     void assign(const TgMessageInfo &other)
     {
@@ -164,6 +165,7 @@ struct TgMessageInfo {
         anonymousChannelPost = other.anonymousChannelPost;
         fromHistory = other.fromHistory;
         mediaVariantLinks = other.mediaVariantLinks;
+        unlogged = other.unlogged;
     }
 };
 
@@ -272,6 +274,8 @@ struct IncomingMessage {
     // its caption is all that changed, and so all there is to show
     time_t   editedMessageTime = 0;
     bool     captionOnly       = false;
+    // Written over its earlier version, where Pidgin's tab still shows it
+    bool     replacing         = false;
     // Deleted while waiting to be shown, which it then never is
     bool     deleted           = false;
 };

@@ -1345,6 +1345,11 @@ msgstr "_Видалити"
 msgid "Cannot delete the message"
 msgstr "Не вдається видалити повідомлення"
 
+#. TRANSLATOR: After the text of a message edited where it stands, in Pidgin's conversation window.
+#: ../receiving.cpp:1274
+msgid "edited"
+msgstr "змінено"
+
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091
 msgid "Needs Telegram Premium"

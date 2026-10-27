@@ -1392,6 +1392,11 @@ msgstr "_Löschen"
 msgid "Cannot delete the message"
 msgstr "Die Nachricht kann nicht gelöscht werden"
 
+#. TRANSLATOR: After the text of a message edited where it stands, in Pidgin's conversation window.
+#: ../receiving.cpp:1274
+msgid "edited"
+msgstr "bearbeitet"
+
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091
 msgid "Needs Telegram Premium"

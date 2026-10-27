@@ -38,14 +38,23 @@ FRONT_END_FUNCTION(gtk_label_set_markup);
 FRONT_END_FUNCTION(gtk_widget_show_all);
 FRONT_END_FUNCTION(gtk_widget_destroy);
 FRONT_END_FUNCTION(g_signal_connect_data);
+FRONT_END_FUNCTION(gtk_text_buffer_delete);
+FRONT_END_FUNCTION(gtk_text_buffer_create_tag);
+FRONT_END_FUNCTION(gtk_text_buffer_apply_tag);
+FRONT_END_FUNCTION(gtk_text_iter_forward_search);
+FRONT_END_FUNCTION(gtk_text_iter_compare);
 
 static bool g_pidginUi = false;
 
-// The message being written, and the first conversation it goes to
+// The message being written, and the first conversation it goes to. Written in place of its
+// earlier version, if replacing, with the note after its first part.
 struct MessageBeingWritten {
     MessageId           messageId;
     std::string         prefix;
     PurpleConversation *conv = nullptr;
+    bool                replacing = false;
+    std::string         editNote;
+    bool                bodyMarked = false;
 };
 static MessageBeingWritten *g_messageBeingWritten = nullptr;
 
@@ -65,8 +74,11 @@ static GtkTextBuffer *getTextBuffer(PurpleConversation *conv)
     return imhtml ? imhtml->text_buffer : nullptr;
 }
 
+// Where a message starts, before its header; where its own text starts, after the header; where it
+// ends; and where its prefix went, if it has one
 enum class MarkKind {
     Start,
+    Body,
     End,
     Prefix
 };
@@ -74,6 +86,7 @@ enum class MarkKind {
 static std::string getMarkName(MessageId messageId, MarkKind kind)
 {
     const char *prefix = (kind == MarkKind::Start) ? "tdlib-message-start-" :
+                         (kind == MarkKind::Body)  ? "tdlib-message-body-" :
                          (kind == MarkKind::End)   ? "tdlib-message-end-" : "tdlib-message-prefix-";
     return prefix + std::to_string(messageId.value());
 }
@@ -93,19 +106,89 @@ static void setMark(GtkTextBuffer *buffer, const std::string &name, const GtkTex
         p_gtk_text_buffer_create_mark(buffer, name.c_str(), &where, TRUE);
 }
 
-// Emitted by Pidgin just before it writes into a tab, for IM and chat messages alike
+// Put by us before a message's own text, after Pidgin's header, so as to find where it starts; it
+// is gone once found. A word joiner, which shows as nothing, should it stay.
+static const char BODY_MARKER[] = "\xe2\x81\xa0";
+
+// The message's text and its end, if it is in the tab still, and not trimmed away
+static bool getBody(GtkTextBuffer *buffer, MessageId messageId, GtkTextIter &body, GtkTextIter &end)
+{
+    GtkTextMark *bodyMark = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Body).c_str());
+    GtkTextMark *endMark  = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::End).c_str());
+    if (!bodyMark || !endMark)
+        return false;
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &body, bodyMark);
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &end, endMark);
+    return p_gtk_text_iter_compare(&body, &end) < 0;
+}
+
+// Inserts HTML at a mark, moving it past what is inserted
+static void insertAtMark(GtkIMHtml *imhtml, GtkTextMark *mark, const char *html)
+{
+    GtkTextBuffer *buffer = imhtml->text_buffer;
+    GtkTextIter    where;
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &where, mark);
+    // Right gravity: it stays after what is inserted
+    GtkTextMark *after = p_gtk_text_buffer_create_mark(buffer, NULL, &where, FALSE);
+    p_gtk_imhtml_insert_html_at_iter(imhtml, html, GTK_IMHTML_NO_SCROLL, &where);
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &where, after);
+    p_gtk_text_buffer_move_mark(buffer, mark, &where);
+    p_gtk_text_buffer_delete_mark(buffer, after);
+}
+
+// A part of the message written over its earlier version: the first replaces all of its text,
+// header aside; the next ones follow it
+static void replaceBody(PurpleConversation *conv, const char *html)
+{
+    GtkIMHtml     *imhtml  = getIMHtml(conv);
+    GtkTextBuffer *buffer  = imhtml->text_buffer;
+    MessageId      id      = g_messageBeingWritten->messageId;
+    GtkTextMark   *endMark = p_gtk_text_buffer_get_mark(buffer, getMarkName(id, MarkKind::End).c_str());
+    std::string    text;
+    if (!g_messageBeingWritten->bodyMarked) {
+        GtkTextIter body, end;
+        if (!getBody(buffer, id, body, end))
+            return;
+        p_gtk_text_buffer_delete(buffer, &body, &end);
+        g_messageBeingWritten->bodyMarked = true;
+        text = std::string(html) + g_messageBeingWritten->editNote;
+    } else
+        text = std::string("<br>") + html;
+    insertAtMark(imhtml, endMark, text.c_str());
+}
+
+// Emitted by Pidgin just before it writes into a tab, for IM and chat messages alike; returning
+// TRUE stops it from writing
 static gboolean displayingMessage(PurpleAccount *account, const char *who, char **message,
                                   PurpleConversation *conv, PurpleMessageFlags flags)
 {
-    if (g_messageBeingWritten && !g_messageBeingWritten->conv) {
+    if (!g_messageBeingWritten)
+        return FALSE;
+    if (!g_messageBeingWritten->conv) {
         GtkTextBuffer *buffer = getTextBuffer(conv);
-        if (buffer) {
+        if (!buffer)
+            return FALSE;
+        g_messageBeingWritten->conv = conv;
+        GtkTextIter body, end;
+        if (g_messageBeingWritten->replacing && !getBody(buffer, g_messageBeingWritten->messageId, body, end))
+            // Gone from the tab since: shown anew instead
+            g_messageBeingWritten->replacing = false;
+        if (!g_messageBeingWritten->replacing) {
             // A mark, not an offset: Pidgin may yet trim the tab's oldest lines
-            GtkTextIter end;
             p_gtk_text_buffer_get_end_iter(buffer, &end);
-            g_messageBeingWritten->conv = conv;
             setMark(buffer, getMarkName(g_messageBeingWritten->messageId, true), end);
         }
+    }
+    if (g_messageBeingWritten->conv != conv)
+        return FALSE;
+    if (g_messageBeingWritten->replacing) {
+        replaceBody(conv, *message);
+        return TRUE;
+    }
+    if (!g_messageBeingWritten->bodyMarked) {
+        gchar *marked = g_strconcat(BODY_MARKER, *message, NULL);
+        g_free(*message);
+        *message = marked;
     }
     return FALSE;
 }
@@ -127,6 +210,16 @@ static void displayedMessage(PurpleAccount *account, const char *who, char *mess
         p_gtk_text_buffer_get_end_iter(buffer, &end);
         setMark(buffer, getMarkName(g_messageBeingWritten->messageId, true), start);
         setMark(buffer, getMarkName(g_messageBeingWritten->messageId, false), end);
+
+        // Where the first part's text starts, past the header
+        GtkTextIter marker, pastMarker;
+        if (!g_messageBeingWritten->bodyMarked &&
+            p_gtk_text_iter_forward_search(&start, BODY_MARKER, GTK_TEXT_SEARCH_TEXT_ONLY, &marker, &pastMarker, &end))
+        {
+            p_gtk_text_buffer_delete(buffer, &marker, &pastMarker);
+            setMark(buffer, getMarkName(g_messageBeingWritten->messageId, MarkKind::Body), marker);
+        }
+        g_messageBeingWritten->bodyMarked = true;
     }
 }
 
@@ -201,7 +294,10 @@ void pidginUiLoad(PurplePlugin *plugin)
                  LOOK_UP(gtk_widget_set_sensitive) && LOOK_UP(gtk_widget_set_tooltip_text) &&
                  LOOK_UP(gtk_bin_get_child) && LOOK_UP(gtk_label_set_markup) &&
                  LOOK_UP(gtk_widget_show_all) &&
-                 LOOK_UP(gtk_widget_destroy) && LOOK_UP(g_signal_connect_data);
+                 LOOK_UP(gtk_widget_destroy) && LOOK_UP(g_signal_connect_data) &&
+                 LOOK_UP(gtk_text_buffer_delete) && LOOK_UP(gtk_text_buffer_create_tag) &&
+                 LOOK_UP(gtk_text_buffer_apply_tag) && LOOK_UP(gtk_text_iter_forward_search) &&
+                 LOOK_UP(gtk_text_iter_compare);
     purple_debug_info(config::pluginId, "Pidgin's conversation window: %s\n",
                       g_pidginUi ? "found" : "not found");
     if (!g_pidginUi)
@@ -226,12 +322,16 @@ bool pidginUiFound()
     return g_pidginUi;
 }
 
-MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &prefix)
+MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &prefix, const char *editNote)
 {
     if (g_pidginUi && messageId.valid() && !g_messageBeingWritten) {
         g_messageBeingWritten = new MessageBeingWritten;
         g_messageBeingWritten->messageId = messageId;
         g_messageBeingWritten->prefix    = prefix;
+        if (editNote) {
+            g_messageBeingWritten->replacing = true;
+            g_messageBeingWritten->editNote  = editNote;
+        }
         m_active = true;
     }
 }
@@ -245,6 +345,23 @@ MessageMarkScope::~MessageMarkScope()
         delete g_messageBeingWritten;
         g_messageBeingWritten = nullptr;
     }
+}
+
+bool canReplaceMessage(PurpleConversation *conv, MessageId messageId)
+{
+    GtkTextBuffer *buffer = getTextBuffer(conv);
+    GtkTextIter    body, end;
+    return buffer && getBody(buffer, messageId, body, end);
+}
+
+void strikeOutMessage(PurpleConversation *conv, MessageId messageId)
+{
+    GtkTextBuffer *buffer = getTextBuffer(conv);
+    GtkTextIter    body, end;
+    if (!buffer || !getBody(buffer, messageId, body, end))
+        return;
+    GtkTextTag *tag = p_gtk_text_buffer_create_tag(buffer, NULL, "strikethrough", TRUE, NULL);
+    p_gtk_text_buffer_apply_tag(buffer, tag, &body, &end);
 }
 
 MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId)
@@ -271,12 +388,12 @@ void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId
         GtkTextBuffer      *buffer = (purple_conversation_get_account(conv) == account) ? getTextBuffer(conv) : nullptr;
         if (!buffer)
             continue;
-        for (bool start: {true, false}) {
-            GtkTextMark *mark = p_gtk_text_buffer_get_mark(buffer, getMarkName(oldId, start).c_str());
+        for (MarkKind kind: {MarkKind::Start, MarkKind::Body, MarkKind::End}) {
+            GtkTextMark *mark = p_gtk_text_buffer_get_mark(buffer, getMarkName(oldId, kind).c_str());
             if (mark) {
                 GtkTextIter where;
                 p_gtk_text_buffer_get_iter_at_mark(buffer, &where, mark);
-                setMark(buffer, getMarkName(newId, start), where);
+                setMark(buffer, getMarkName(newId, kind), where);
                 p_gtk_text_buffer_delete_mark(buffer, mark);
             }
         }
@@ -396,11 +513,20 @@ bool pidginUiFound()
     return false;
 }
 
-MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &prefix)
+MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &prefix, const char *editNote)
 {
 }
 
 MessageMarkScope::~MessageMarkScope()
+{
+}
+
+bool canReplaceMessage(PurpleConversation *conv, MessageId messageId)
+{
+    return false;
+}
+
+void strikeOutMessage(PurpleConversation *conv, MessageId messageId)
 {
 }
 

@@ -643,6 +643,8 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
 {
     PurpleMessageFlags directionFlag = message.outgoing ? PURPLE_MESSAGE_SEND : PURPLE_MESSAGE_RECV;
     PurpleMessageFlags flags = (PurpleMessageFlags) (extraFlags | directionFlag);
+    if (message.unlogged)
+        flags = (PurpleMessageFlags) (flags | PURPLE_MESSAGE_NO_LOG);
     if (message.outgoing && !message.sentLocally)
         flags = (PurpleMessageFlags) (flags | PURPLE_MESSAGE_REMOTE_SEND);
 
@@ -1239,8 +1241,13 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
     messageInfo.repliedMessage = std::move(fullMessage.repliedMessage);
 
     if (fullMessage.editedMessageTime && showEditNotice(chat, fullMessage, account)) {
-        showPendingEdit(account, getChatId(message), getId(message));
-        return;
+        // The notice holds all of the edit; the tab gets the message over its earlier version
+        // all the same, but not the log
+        if (!fullMessage.replacing) {
+            showPendingEdit(account, getChatId(message), getId(message));
+            return;
+        }
+        messageInfo.unlogged = true;
     }
 
     // ttl_ field was removed in newer tdlib versions
@@ -1259,8 +1266,14 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
     //     }
     // }
 
-    // All its parts, notices included, are the message, and its menu goes before the first
-    MessageMarkScope markScope(messageInfo.id, getMessagePrefix(account, chat, messageInfo));
+    // All its parts, notices included, are the message, and its menu goes before the first. An edit
+    // goes over the earlier version, saying it was edited.
+    std::string editNote;
+    if (fullMessage.replacing)
+        // TRANSLATOR: After the text of a message edited where it stands, in Pidgin's conversation window.
+        editNote = formatMessage(" <font size=\"2\"><i>({})</i></font>", std::string(_("edited")));
+    MessageMarkScope markScope(messageInfo.id, getMessagePrefix(account, chat, messageInfo),
+                               fullMessage.replacing ? editNote.c_str() : nullptr);
     FileInfo fileInfo;
     getFileFromMessage(fullMessage, fileInfo);
     if (fileInfo.secret) {
@@ -2205,14 +2218,20 @@ static void editedMessageResponse(TdAccountData &account, const PendingEdit &edi
 
     td::td_api::object_ptr<td::td_api::message> message = td::move_tl_object_as<td::td_api::message>(object);
     time_t editDate = message->edit_date_ ? message->edit_date_ : time(NULL);
-    // Without the reply or forward header, which the original had already
-    message->reply_to_     = nullptr;
-    message->forward_info_ = nullptr;
+    // Written over the original where Pidgin shows it, the reply or forward header included, as
+    // the whole of its text goes; otherwise after the notice, without them, the original having
+    // them already
+    bool replacing = canReplaceMessage(getMessageConversation(account, *chat), edit.messageId);
+    if (!replacing) {
+        message->reply_to_     = nullptr;
+        message->forward_info_ = nullptr;
+    }
 
     IncomingMessage fullMessage;
     makeFullMessage(*chat, std::move(message), fullMessage, account);
     fullMessage.editedMessageTime     = edit.messageTime;
     fullMessage.captionOnly           = edit.captionOnly;
+    fullMessage.replacing             = replacing;
     fullMessage.messageInfo.timestamp = editDate;
     queueMessage(account, *chat, std::move(fullMessage), PendingMessageQueue::Append);
 }
@@ -2307,6 +2326,7 @@ void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessag
         if (pendingMessage)
             pendingMessage->deleted = true;
         if ((!pendingMessage || pendingMessage->editedMessageTime) && chat) {
+            strikeOutMessage(getMessageConversation(account, *chat), messageId);
             // Telegram does not say who deleted it, so the notice cannot either.
             std::string notice = formatMessage(
                 // TRANSLATOR: In-chat notification. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
