@@ -8,6 +8,7 @@
 #include "secret-chat.h"
 #include "sticker.h"
 #include "media-variants.h"
+#include "pidgin-ui.h"
 #include "receiving.h"
 #include <unistd.h>
 #include <stdlib.h>
@@ -163,6 +164,7 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
             removeTempFile(getChatId(*sendSucceeded.message_), sendSucceeded.old_message_id_);
             m_data.renameShownMessage(getChatId(*sendSucceeded.message_), getOldMessageId(sendSucceeded),
                                       getId(*sendSucceeded.message_));
+            renameMessageMarks(m_data.purpleAccount, getOldMessageId(sendSucceeded), getId(*sendSucceeded.message_));
         }
         break;
     }

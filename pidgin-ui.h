@@ -53,6 +53,9 @@ struct MessageMarks {
 // Where the message is in the conversation's tab, if it is there
 MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId);
 
+// A message being sent gets a new id once it is: its marks are renamed with it
+void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId);
+
 // Scrolls the tab's text to the message and selects it; false if it is not there
 bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId);
 

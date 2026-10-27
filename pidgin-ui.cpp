@@ -18,6 +18,7 @@ FRONT_END_FUNCTION(gtk_text_iter_get_offset);
 FRONT_END_FUNCTION(gtk_text_buffer_get_mark);
 FRONT_END_FUNCTION(gtk_text_buffer_create_mark);
 FRONT_END_FUNCTION(gtk_text_buffer_move_mark);
+FRONT_END_FUNCTION(gtk_text_buffer_delete_mark);
 FRONT_END_FUNCTION(gtk_text_buffer_get_iter_at_mark);
 FRONT_END_FUNCTION(gtk_text_buffer_select_range);
 FRONT_END_FUNCTION(gtk_text_view_scroll_to_mark);
@@ -102,6 +103,7 @@ void pidginUiLoad(PurplePlugin *plugin)
     LOOK_UP(gtk_text_buffer_get_mark);
     LOOK_UP(gtk_text_buffer_create_mark);
     LOOK_UP(gtk_text_buffer_move_mark);
+    LOOK_UP(gtk_text_buffer_delete_mark);
     LOOK_UP(gtk_text_buffer_get_iter_at_mark);
     LOOK_UP(gtk_text_buffer_select_range);
     LOOK_UP(gtk_text_view_scroll_to_mark);
@@ -109,6 +111,7 @@ void pidginUiLoad(PurplePlugin *plugin)
                  p_gtk_text_buffer_get_end_iter && p_gtk_text_buffer_get_iter_at_offset &&
                  p_gtk_text_iter_get_offset && p_gtk_text_buffer_get_mark &&
                  p_gtk_text_buffer_create_mark && p_gtk_text_buffer_move_mark &&
+                 p_gtk_text_buffer_delete_mark &&
                  p_gtk_text_buffer_get_iter_at_mark && p_gtk_text_buffer_select_range &&
                  p_gtk_text_view_scroll_to_mark;
     purple_debug_info(config::pluginId, "Pidgin's conversation window: %s\n",
@@ -164,6 +167,29 @@ MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId)
     return marks;
 }
 
+void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId)
+{
+    if (!g_pidginUi)
+        return;
+    // The message's conversation is not looked for, lest it be opened again: a temporary id is
+    // not that of a message in another chat
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv   = static_cast<PurpleConversation *>(item->data);
+        GtkTextBuffer      *buffer = (purple_conversation_get_account(conv) == account) ? getTextBuffer(conv) : nullptr;
+        if (!buffer)
+            continue;
+        for (bool start: {true, false}) {
+            GtkTextMark *mark = p_gtk_text_buffer_get_mark(buffer, getMarkName(oldId, start).c_str());
+            if (mark) {
+                GtkTextIter where;
+                p_gtk_text_buffer_get_iter_at_mark(buffer, &where, mark);
+                setMark(buffer, getMarkName(newId, start), where);
+                p_gtk_text_buffer_delete_mark(buffer, mark);
+            }
+        }
+    }
+}
+
 bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId)
 {
     GtkTextBuffer *buffer = (g_pidginUi && imhtml) ? imhtml->text_buffer : nullptr;
@@ -207,6 +233,10 @@ MessageMarkScope::~MessageMarkScope()
 MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId)
 {
     return MessageMarks();
+}
+
+void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId)
+{
 }
 
 bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId)
