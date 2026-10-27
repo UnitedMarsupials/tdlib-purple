@@ -13,8 +13,6 @@
 FRONT_END_FUNCTION(pidgin_conversations_get_handle);
 FRONT_END_FUNCTION(pidgin_conversations_get_conv_ui_ops);
 FRONT_END_FUNCTION(gtk_text_buffer_get_end_iter);
-FRONT_END_FUNCTION(gtk_text_buffer_get_iter_at_offset);
-FRONT_END_FUNCTION(gtk_text_iter_get_offset);
 FRONT_END_FUNCTION(gtk_text_iter_get_char);
 FRONT_END_FUNCTION(gtk_text_iter_forward_char);
 FRONT_END_FUNCTION(gtk_text_buffer_get_mark);
@@ -40,12 +38,11 @@ FRONT_END_FUNCTION(g_signal_connect_data);
 
 static bool g_pidginUi = false;
 
-// The message being written, and where its text starts in the first conversation it goes to
+// The message being written, and the first conversation it goes to
 struct MessageBeingWritten {
     MessageId           messageId;
     std::string         prefix;
-    PurpleConversation *conv        = nullptr;
-    gint                startOffset = 0;
+    PurpleConversation *conv = nullptr;
 };
 static MessageBeingWritten *g_messageBeingWritten = nullptr;
 
@@ -100,10 +97,11 @@ static gboolean displayingMessage(PurpleAccount *account, const char *who, char 
     if (g_messageBeingWritten && !g_messageBeingWritten->conv) {
         GtkTextBuffer *buffer = getTextBuffer(conv);
         if (buffer) {
+            // A mark, not an offset: Pidgin may yet trim the tab's oldest lines
             GtkTextIter end;
             p_gtk_text_buffer_get_end_iter(buffer, &end);
-            g_messageBeingWritten->conv        = conv;
-            g_messageBeingWritten->startOffset = p_gtk_text_iter_get_offset(&end);
+            g_messageBeingWritten->conv = conv;
+            setMark(buffer, getMarkName(g_messageBeingWritten->messageId, true), end);
         }
     }
     return FALSE;
@@ -117,8 +115,9 @@ static void displayedMessage(PurpleAccount *account, const char *who, char *mess
     GtkTextBuffer *buffer = (g_messageBeingWritten && (g_messageBeingWritten->conv == conv))
                             ? getTextBuffer(conv) : nullptr;
     if (buffer) {
-        GtkTextIter start, end;
-        p_gtk_text_buffer_get_iter_at_offset(buffer, &start, g_messageBeingWritten->startOffset);
+        GtkTextMark *startMark = p_gtk_text_buffer_get_mark(buffer, getMarkName(g_messageBeingWritten->messageId, true).c_str());
+        GtkTextIter  start, end;
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &start, startMark);
         // Pidgin ends the previous line only after saying a message is coming
         if (p_gtk_text_iter_get_char(&start) == '\n')
             p_gtk_text_iter_forward_char(&start);
@@ -167,8 +166,7 @@ static gboolean connectSignals(gpointer plugin)
 void pidginUiLoad(PurplePlugin *plugin)
 {
     g_pidginUi = LOOK_UP(pidgin_conversations_get_handle) && LOOK_UP(pidgin_conversations_get_conv_ui_ops) &&
-                 LOOK_UP(gtk_text_buffer_get_end_iter) && LOOK_UP(gtk_text_buffer_get_iter_at_offset) &&
-                 LOOK_UP(gtk_text_iter_get_offset) && LOOK_UP(gtk_text_iter_get_char) &&
+                 LOOK_UP(gtk_text_buffer_get_end_iter) && LOOK_UP(gtk_text_iter_get_char) &&
                  LOOK_UP(gtk_text_iter_forward_char) && LOOK_UP(gtk_text_buffer_get_mark) &&
                  LOOK_UP(gtk_text_buffer_create_mark) && LOOK_UP(gtk_text_buffer_move_mark) &&
                  LOOK_UP(gtk_text_buffer_delete_mark) && LOOK_UP(gtk_text_buffer_get_iter_at_mark) &&
