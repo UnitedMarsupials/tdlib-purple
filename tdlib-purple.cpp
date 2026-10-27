@@ -988,6 +988,7 @@ static void unregisterMessageLinks()
 static gboolean tgprpl_unload (PurplePlugin *plugin)
 {
     unregisterMessageLinks();
+    pidginUiUnload();
     return TRUE;
 }
 
@@ -996,6 +997,7 @@ static gboolean tgprpl_load (PurplePlugin *plugin)
     if (!checkTdlibVersion())
         return FALSE;
     registerMessageLinks();
+    pidginUiLoad(plugin);
 
     purple_cmd_register("kick", "s", PURPLE_CMD_P_PLUGIN,
                         (PurpleCmdFlag)(PURPLE_CMD_FLAG_CHAT | PURPLE_CMD_FLAG_PRPL_ONLY),

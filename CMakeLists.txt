@@ -84,6 +84,7 @@ add_library(telegram-tdlib SHARED
     call.cpp
     identifiers.cpp
     secret-chat.cpp
+    pidgin-ui.cpp
 )
 
 #target_compile_options(telegram-tdlib PRIVATE -Wmissing-declarations)

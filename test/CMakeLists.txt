@@ -43,6 +43,7 @@ add_executable(tests EXCLUDE_FROM_ALL
     ../call.cpp
     ../identifiers.cpp
     ../secret-chat.cpp
+    ../pidgin-ui.cpp
 )
 
 # C++17, not the plugin's C++14: GoogleTest requires it from 1.17 on.

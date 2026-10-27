@@ -8,6 +8,7 @@
 #include "media-variants.h"
 #include "config.h"
 #include "call.h"
+#include "pidgin-ui.h"
 #include <algorithm>
 #include <tuple>
 #include <fmt/format.h>
@@ -653,6 +654,7 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
     if (!newText.empty())
         text = newText.c_str();
 
+    MessageMarkScope markScope(message.id);
     const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
     if (privateUser) {
         std::string userName = getPrivateChatPurpleName(account, *privateUser);
