@@ -38,11 +38,12 @@ bool pidginUiFound();
 // conversation belongs to the given message. The prefix, HTML for the tab only, goes before the
 // message once it is written, unless an earlier showing of it already has one. With an edit note,
 // the message is written over its earlier version, where that is shown, its header kept, and the
-// note after its text; elsewhere it is written anew.
+// note after its text; elsewhere it is written anew. A message written anew, all of it, takes its
+// marks and prefix from an earlier showing; otherwise what is written extends what was, if any.
 class MessageMarkScope {
 public:
     explicit MessageMarkScope(MessageId messageId, const std::string &prefix = std::string(),
-                              const char *editNote = nullptr);
+                              const char *editNote = nullptr, bool anew = false);
     ~MessageMarkScope();
     MessageMarkScope(const MessageMarkScope &) = delete;
     MessageMarkScope &operator=(const MessageMarkScope &) = delete;
@@ -57,8 +58,15 @@ struct MessageMarks {
     PidginTextMark *end   = nullptr;
 };
 
+// Whether Pidgin shows the conversation, so that it can be emptied and filled anew
+bool canRedrawConversation(PurpleConversation *conv);
+
 // Whether the message's text is in the conversation's tab, to be written over
 bool canReplaceMessage(PurpleConversation *conv, MessageId messageId);
+
+// The line under a message that lists its reactions, as HTML, replacing what it said before; none
+// if empty. In Pidgin's tab only, where the message is.
+void showMessageReactions(PurpleConversation *conv, MessageId messageId, const std::string &html);
 
 // Strikes out a deleted message's text, where the tab shows it
 void strikeOutMessage(PurpleConversation *conv, MessageId messageId);

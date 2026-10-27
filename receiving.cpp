@@ -614,6 +614,22 @@ static std::string getPrivateChatPurpleName(TdAccountData &account, const td::td
     return userName;
 }
 
+// The chat's conversation, if it is open; none is opened
+static PurpleConversation *findMessageConversation(TdAccountData &account, const td::td_api::chat &chat)
+{
+    const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
+    if (privateUser)
+        return purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM,
+                                                     getPrivateChatPurpleName(account, *privateUser).c_str(),
+                                                     account.purpleAccount);
+    SecretChatId secretChatId = getSecretChatId(chat);
+    if (secretChatId.valid())
+        return purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, getSecretChatBuddyName(secretChatId).c_str(),
+                                                     account.purpleAccount);
+    PurpleConvChat *conv = findChatConversation(account.purpleAccount, chat);
+    return conv ? purple_conv_chat_get_conversation(conv) : NULL;
+}
+
 PurpleConversation *getMessageConversation(TdAccountData &account, const td::td_api::chat &chat)
 {
     const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
@@ -643,7 +659,7 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
 {
     PurpleMessageFlags directionFlag = message.outgoing ? PURPLE_MESSAGE_SEND : PURPLE_MESSAGE_RECV;
     PurpleMessageFlags flags = (PurpleMessageFlags) (extraFlags | directionFlag);
-    if (message.unlogged)
+    if (message.unlogged || message.redrawn)
         flags = (PurpleMessageFlags) (flags | PURPLE_MESSAGE_NO_LOG);
     if (message.outgoing && !message.sentLocally)
         flags = (PurpleMessageFlags) (flags | PURPLE_MESSAGE_REMOTE_SEND);
@@ -999,7 +1015,7 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
             notice = formatMessage(_("Downloading {}"), escapeForDisplay(fileDesc));
         }
         autoDownload = true;
-    } else if (!ignoreBigDownloads(account.purpleAccount)) {
+    } else if (!ignoreBigDownloads(account.purpleAccount) && !fullMessage.messageInfo.redrawn) {
         // TRANSLATOR: In-chat notification, appears after a colon (':'). Argument is a file *type*, not a filename.
         notice = formatMessage(_("Requesting {} download"), escapeForDisplay(fileDesc));
         askDownload = true;
@@ -1222,6 +1238,51 @@ static bool showEditNotice(const td::td_api::chat &chat, IncomingMessage &fullMe
     return complete;
 }
 
+// The line of a message's reactions, under it in Pidgin's tab: each with its count, ours in bold.
+// Custom-emoji ones are left out, as they would need looking up first.
+static std::string formatReactions(const td::td_api::messageInteractionInfo *info)
+{
+    std::string line;
+    if (!info || !info->reactions_)
+        return line;
+    for (const auto &reaction: info->reactions_->reactions_) {
+        if (!reaction || !reaction->type_)
+            continue;
+        std::string emoji;
+        if (reaction->type_->get_id() == td::td_api::reactionTypeEmoji::ID)
+            emoji = escapeForDisplay(static_cast<const td::td_api::reactionTypeEmoji &>(*reaction->type_).emoji_);
+        else if (reaction->type_->get_id() == td::td_api::reactionTypePaid::ID)
+            emoji = "\xe2\xad\x90";
+        else
+            continue;
+        std::string item = emoji + "&nbsp;" + std::to_string(reaction->total_count_);
+        if (reaction->is_chosen_)
+            item = "<b>" + item + "</b>";
+        if (!line.empty())
+            line += "&nbsp;&nbsp;&nbsp;";
+        line += item;
+    }
+    return line.empty() ? line : "<font size=\"2\">" + line + "</font>";
+}
+
+// Shows the message's reactions under it once it has been written
+class ReactionsLine {
+public:
+    ReactionsLine(TdAccountData &account, const td::td_api::chat &chat, MessageId messageId,
+                  const td::td_api::messageInteractionInfo *info)
+    : m_account(account), m_chat(chat), m_messageId(messageId), m_html(formatReactions(info)) {}
+    ~ReactionsLine()
+    {
+        if (!m_html.empty())
+            showMessageReactions(findMessageConversation(m_account, m_chat), m_messageId, m_html);
+    }
+private:
+    TdAccountData           &m_account;
+    const td::td_api::chat  &m_chat;
+    MessageId                m_messageId;
+    std::string              m_html;
+};
+
 void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
                 TdTransceiver &transceiver, TdAccountData &account)
 {
@@ -1266,6 +1327,8 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
     //     }
     // }
 
+    // Under the message, once all of it is written
+    ReactionsLine reactionsLine(account, chat, messageInfo.id, message.interaction_info_.get());
     // All its parts, notices included, are the message, and its menu goes before the first. An edit
     // goes over the earlier version, saying it was edited.
     std::string editNote;
@@ -1273,7 +1336,7 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
         // TRANSLATOR: After the text of a message edited where it stands, in Pidgin's conversation window.
         editNote = formatMessage(" <font size=\"2\"><i>({})</i></font>", std::string(_("edited")));
     MessageMarkScope markScope(messageInfo.id, getMessagePrefix(account, chat, messageInfo),
-                               fullMessage.replacing ? editNote.c_str() : nullptr);
+                               fullMessage.replacing ? editNote.c_str() : nullptr, true);
     FileInfo fileInfo;
     getFileFromMessage(fullMessage, fileInfo);
     if (fileInfo.secret) {
@@ -2156,7 +2219,7 @@ static void showReaction(TdAccountData &account, const td::td_api::chat &chat, M
 
 void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
     td::td_api::object_ptr<td::td_api::message> message,
-    PendingMessageQueue::MessageAction action)
+    PendingMessageQueue::MessageAction action, bool redrawn)
 {
     if (!message) return;
     ChatId chatId = getId(chat);
@@ -2178,7 +2241,8 @@ void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
 
     IncomingMessage fullMessage;
     makeFullMessage(chat, std::move(message), fullMessage, account);
-    fullMessage.messageInfo.fromHistory = (action == PendingMessageQueue::Prepend);
+    fullMessage.messageInfo.fromHistory = (action == PendingMessageQueue::Prepend) || redrawn;
+    fullMessage.messageInfo.redrawn     = redrawn;
     queueMessage(account, chat, std::move(fullMessage), action);
 }
 
@@ -2221,7 +2285,7 @@ static void editedMessageResponse(TdAccountData &account, const PendingEdit &edi
     // Written over the original where Pidgin shows it, the reply or forward header included, as
     // the whole of its text goes; otherwise after the notice, without them, the original having
     // them already
-    bool replacing = canReplaceMessage(getMessageConversation(account, *chat), edit.messageId);
+    bool replacing = canReplaceMessage(findMessageConversation(account, *chat), edit.messageId);
     if (!replacing) {
         message->reply_to_     = nullptr;
         message->forward_info_ = nullptr;
@@ -2326,7 +2390,7 @@ void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessag
         if (pendingMessage)
             pendingMessage->deleted = true;
         if ((!pendingMessage || pendingMessage->editedMessageTime) && chat) {
-            strikeOutMessage(getMessageConversation(account, *chat), messageId);
+            strikeOutMessage(findMessageConversation(account, *chat), messageId);
             // Telegram does not say who deleted it, so the notice cannot either.
             std::string notice = formatMessage(
                 // TRANSLATOR: In-chat notification. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
@@ -2423,6 +2487,120 @@ void fetchHistory(TdAccountData &account, ChatId chatId, MessageId fetchFrom, Me
     fetchHistoryRequest(account, chatId, 0, fetchFrom, stopAt);
 }
 
+// As many messages as Pidgin's tab keeps, at most, it having at least a line for each
+static unsigned getRedrawLimit()
+{
+    static const char SCROLLBACK_PREF[] = "/pidgin/conversations/scrollback_lines";
+    enum { NO_SCROLLBACK_LIMIT = 10000 };
+    int lines = purple_prefs_exists(SCROLLBACK_PREF) ? purple_prefs_get_int(SCROLLBACK_PREF) : 0;
+    return (lines > 0) ? lines : NO_SCROLLBACK_LIMIT;
+}
+
+namespace {
+struct Redraw {
+    ChatId                                                  chatId;
+    MessageId                                               earliest;
+    unsigned                                                limit;
+    // Newest first, as TDLib gives them
+    std::vector<td::td_api::object_ptr<td::td_api::message>> messages;
+};
+}
+
+static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw, MessageId from);
+
+// Messages found too far back for their tab once, which they are no nearer to since
+static std::set<std::pair<int64_t, int64_t>> g_redrawTooFar;
+
+// Empties the tab and has the messages shown in it, oldest first, ahead of any that came meanwhile
+static void redrawShow(TdAccountData &account, Redraw &redraw)
+{
+    const td::td_api::chat *chat = account.getChat(redraw.chatId);
+    PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+    if (conv) {
+        purple_debug_misc(config::pluginId, "Redrawing chat %" G_GINT64_FORMAT " from message %" G_GINT64_FORMAT
+                          ": %zu messages\n", redraw.chatId.value(), redraw.earliest.value(), redraw.messages.size());
+        purple_conversation_clear_message_history(conv);
+        for (auto &message: redraw.messages)
+            if (message && !account.pendingMessages.findPendingMessage(redraw.chatId, getId(*message)))
+                handleIncomingMessage(account, *chat, std::move(message), PendingMessageQueue::Prepend, true);
+    }
+    std::vector<IncomingMessage> readyMessages;
+    account.pendingMessages.setChatReady(redraw.chatId, readyMessages);
+    showMessages(readyMessages, account);
+}
+
+static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redraw,
+                           td::td_api::object_ptr<td::td_api::Object> response)
+{
+    MessageId more;
+    bool      found = false;
+    if (response && (response->get_id() == td::td_api::messages::ID)) {
+        auto &messages = static_cast<td::td_api::messages &>(*response);
+        for (auto &message: messages.messages_) {
+            // The message a batch goes back from may come again, starting it
+            if (!message || (!redraw->messages.empty() && (getId(*message) == getId(*redraw->messages.back()))))
+                continue;
+            more = getId(*message);
+            found = (more == redraw->earliest);
+            redraw->messages.push_back(std::move(message));
+            if (found || (redraw->messages.size() >= redraw->limit))
+                break;
+        }
+        if (found) {
+            redrawShow(account, *redraw);
+            return;
+        }
+        if ((redraw->messages.size() < redraw->limit) && !messages.messages_.empty()) {
+            redrawRequest(account, redraw, more);
+            return;
+        }
+        purple_debug_misc(config::pluginId, "Message %" G_GINT64_FORMAT " is further back than the tab holds\n",
+                          redraw->earliest.value());
+        g_redrawTooFar.insert({redraw->chatId.value(), redraw->earliest.value()});
+    } else
+        purple_debug_warning(config::pluginId, "Cannot fetch chat %" G_GINT64_FORMAT " to redraw it: %s\n",
+                             redraw->chatId.value(), getDisplayedError(response).c_str());
+    // Left as it is
+    std::vector<IncomingMessage> readyMessages;
+    account.pendingMessages.setChatReady(redraw->chatId, readyMessages);
+    showMessages(readyMessages, account);
+}
+
+static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw, MessageId from)
+{
+    auto request = td::td_api::make_object<td::td_api::getChatHistory>();
+    request->chat_id_         = redraw->chatId.value();
+    request->from_message_id_ = from.valid() ? from.value() : 0;
+    request->offset_          = 0;
+    request->limit_           = 100;
+    request->only_local_      = false;
+    account.transceiver.sendQuery(std::move(request),
+        [&account, redraw](uint64_t, td::td_api::object_ptr<td::td_api::Object> response) {
+            redrawResponse(account, redraw, std::move(response));
+        });
+}
+
+void redrawChat(TdAccountData &account, ChatId chatId, MessageId earliest)
+{
+    if (g_redrawTooFar.count({chatId.value(), earliest.value()}))
+        return;
+    const td::td_api::chat *chat = account.getChat(chatId);
+    PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+    if (!conv || !canRedrawConversation(conv))
+        return;
+    // Not while history is being fetched, or the tab redrawn already
+    if (!account.pendingMessages.isChatReady(chatId)) {
+        purple_debug_misc(config::pluginId, "Chat %" G_GINT64_FORMAT " is busy, not redrawn\n", chatId.value());
+        return;
+    }
+    account.pendingMessages.setChatNotReady(chatId);
+    auto redraw = std::make_shared<Redraw>();
+    redraw->chatId   = chatId;
+    redraw->earliest = earliest;
+    redraw->limit    = getRedrawLimit();
+    redrawRequest(account, redraw, MessageId::invalid);
+}
+
 // While a message waits to be shown, its reactions would come before it, and are part of what it
 // is once shown; but one waiting to be shown again, as edited, is in the conversation already
 static bool isMessageInConversation(TdAccountData &account, ChatId chatId, MessageId messageId)
@@ -2468,6 +2646,8 @@ void updateMessageReactions(TdAccountData &account, ChatId chatId, MessageId mes
             showReaction(account, *chat, messageId, *shownMessage, it->first, it->second, nullptr);
         it = shownMessage->reactions.erase(it);
     }
+    if (show)
+        showMessageReactions(findMessageConversation(account, *chat), messageId, formatReactions(info));
 }
 
 using UnreadReactions = std::vector<td::td_api::object_ptr<td::td_api::unreadReaction>>;
@@ -2477,8 +2657,14 @@ static void showUnreadReactions(TdAccountData &account, ChatId chatId, MessageId
 {
     ShownMessage *shownMessage = account.findShownMessage(chatId, messageId);
     const td::td_api::chat *chat = account.getChat(chatId);
-    if (!shownMessage || !chat)
+    if (!chat)
         return;
+    if (!shownMessage) {
+        // Shown, reactions and all, by filling its tab anew from it, if it is open
+        if (!reactions.empty())
+            redrawChat(account, chatId, messageId);
+        return;
+    }
     bool show = isMessageInConversation(account, chatId, messageId);
 
     // Unread ones are to our own messages, from others

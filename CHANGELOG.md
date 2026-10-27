@@ -4,6 +4,8 @@
 
 ### Features
 
+- **In Pidgin, a message's reactions are listed in a line under it, kept up to date as they change.** Each with its count, our own in bold; custom-emoji reactions are not listed yet. The notices of reactions stay, and the line is not logged.
+- **In Pidgin, a reaction to one of our messages that the conversation does not show fills the conversation anew, from that message to the latest, as the phone app does.** Up to as many messages as Pidgin's scrollback setting keeps; the messages are taken from TDLib, which has them stored, and are not logged again, nor are big files offered for download again.
 - **In Pidgin, an edited message is written over its earlier version, which keeps its header, and a deleted one is struck out where it stands.** The notice of the edit or deletion still follows at the end of the conversation, linking to the message, and the log is as before. Messages shown before this version are told of by the notice only.
 - **In Pidgin, a reply's quote and the notices of an edit, a deletion or a reaction link to their message, scrolling the conversation to it.**
 - **In Pidgin, a "▼" after each message's timestamp opens its menu, where a reaction can be added or taken back, and the message edited or deleted, as Telegram allows.** An edit is plain text, as messages are sent. Reactions that need Telegram Premium are offered dimmed, to be tried; the paid ⭐ asks how many Telegram Stars to spend; custom-emoji ones are not offered. A reaction that cannot be set is reported in the conversation.

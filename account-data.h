@@ -149,6 +149,7 @@ struct TgMessageInfo {
     bool        fromHistory = false; // fetched to catch up with a chat, rather than just sent
     std::string mediaVariantLinks; // markup: links to each size a photo or video comes in
     bool        unlogged = false; // shown in the tab only, the log having it in an edit's notice
+    bool        redrawn = false; // shown again, as the tab is filled anew: not logged, nothing asked
 
     void assign(const TgMessageInfo &other)
     {
@@ -166,6 +167,7 @@ struct TgMessageInfo {
         fromHistory = other.fromHistory;
         mediaVariantLinks = other.mediaVariantLinks;
         unlogged = other.unlogged;
+        redrawn = other.redrawn;
     }
 };
 

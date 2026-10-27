@@ -895,6 +895,20 @@ void purple_prpl_got_user_status(PurpleAccount *account, const char *name,
     EVENT(UserStatusEvent, account, name, type);
 }
 
+gboolean purple_prefs_exists(const char *name)
+{
+    return FALSE;
+}
+
+int purple_prefs_get_int(const char *name)
+{
+    return 0;
+}
+
+void purple_conversation_clear_message_history(PurpleConversation *conv)
+{
+}
+
 void *purple_request_action(void *handle, const char *title, const char *primary,
 	const char *secondary, int default_action, PurpleAccount *account,
 	const char *who, PurpleConversation *conv, void *user_data,
