@@ -16,6 +16,7 @@ FRONT_END_FUNCTION(pidgin_conversations_get_conv_ui_ops);
 FRONT_END_FUNCTION(gtk_text_buffer_get_end_iter);
 FRONT_END_FUNCTION(gtk_text_iter_get_char);
 FRONT_END_FUNCTION(gtk_text_iter_forward_char);
+FRONT_END_FUNCTION(gtk_text_iter_backward_char);
 FRONT_END_FUNCTION(gtk_text_buffer_get_mark);
 FRONT_END_FUNCTION(gtk_text_buffer_create_mark);
 FRONT_END_FUNCTION(gtk_text_buffer_move_mark);
@@ -87,6 +88,7 @@ enum class MarkKind {
     Body,
     End,
     Prefix,
+    PrefixEnd,
     Reactions // the end of the line of reactions after the message, if it has one
 };
 
@@ -95,7 +97,8 @@ static std::string getMarkName(MessageId messageId, MarkKind kind)
     const char *prefix = (kind == MarkKind::Start) ? "tdlib-message-start-" :
                          (kind == MarkKind::Body)  ? "tdlib-message-body-" :
                          (kind == MarkKind::End)   ? "tdlib-message-end-" :
-                         (kind == MarkKind::Prefix) ? "tdlib-message-prefix-" : "tdlib-message-reactions-";
+                         (kind == MarkKind::Prefix) ? "tdlib-message-prefix-" :
+                         (kind == MarkKind::PrefixEnd) ? "tdlib-message-prefix-end-" : "tdlib-message-reactions-";
     return prefix + std::to_string(messageId.value());
 }
 
@@ -185,7 +188,7 @@ static gboolean displayingMessage(PurpleAccount *account, const char *who, char 
         GtkTextMark *start = p_gtk_text_buffer_get_mark(buffer, getMarkName(id, MarkKind::Start).c_str());
         if (g_messageBeingWritten->anew) {
             // What went with an earlier showing goes with this one instead
-            for (MarkKind kind: {MarkKind::Body, MarkKind::Prefix, MarkKind::Reactions}) {
+            for (MarkKind kind: {MarkKind::Body, MarkKind::Prefix, MarkKind::PrefixEnd, MarkKind::Reactions}) {
                 GtkTextMark *mark = p_gtk_text_buffer_get_mark(buffer, getMarkName(id, kind).c_str());
                 if (mark)
                     p_gtk_text_buffer_delete_mark(buffer, mark);
@@ -275,6 +278,8 @@ static void insertPrefix(PurpleConversation *conv, MessageId messageId, const st
         }
     }
     p_gtk_text_buffer_create_mark(buffer, getMarkName(messageId, MarkKind::Prefix).c_str(), &where, TRUE);
+    // Right gravity: past the prefix once it is in, so that it can be taken out again
+    p_gtk_text_buffer_create_mark(buffer, getMarkName(messageId, MarkKind::PrefixEnd).c_str(), &where, FALSE);
     // Into the tab only, not the log
     p_gtk_imhtml_insert_html_at_iter(imhtml, prefix.c_str(), GTK_IMHTML_NO_SCROLL, &where);
 }
@@ -302,7 +307,8 @@ void pidginUiLoad(PurplePlugin *plugin)
 {
     g_pidginUi = LOOK_UP(pidgin_conversations_get_handle) && LOOK_UP(pidgin_conversations_get_conv_ui_ops) &&
                  LOOK_UP(gtk_text_buffer_get_end_iter) && LOOK_UP(gtk_text_iter_get_char) &&
-                 LOOK_UP(gtk_text_iter_forward_char) && LOOK_UP(gtk_text_buffer_get_mark) &&
+                 LOOK_UP(gtk_text_iter_forward_char) && LOOK_UP(gtk_text_iter_backward_char) &&
+                 LOOK_UP(gtk_text_buffer_get_mark) &&
                  LOOK_UP(gtk_text_buffer_create_mark) && LOOK_UP(gtk_text_buffer_move_mark) &&
                  LOOK_UP(gtk_text_buffer_delete_mark) && LOOK_UP(gtk_text_buffer_get_iter_at_mark) &&
                  LOOK_UP(gtk_text_buffer_select_range) && LOOK_UP(gtk_text_view_scroll_to_mark) &&
@@ -543,6 +549,47 @@ void strikeOutMessage(PurpleConversation *conv, MessageId messageId)
     // GtkIMHtml's own, as for <s>: a tag of ours would need a name, as GtkIMHtml compares
     // the names of all tags with strncmp() when it draws, and crashes on one without
     p_gtk_text_buffer_apply_tag_by_name(buffer, "STRIKE", &body, &end);
+
+    // Nothing is left to do to it, so its menu goes
+    GtkTextMark *prefix    = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Prefix).c_str());
+    GtkTextMark *prefixEnd = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::PrefixEnd).c_str());
+    if (prefix && prefixEnd) {
+        GtkTextIter from, to;
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &from, prefix);
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &to, prefixEnd);
+        p_gtk_imhtml_delete(getIMHtml(conv), &from, &to);
+    }
+}
+
+void removeMessage(PurpleConversation *conv, MessageId messageId)
+{
+    GtkIMHtml     *imhtml = getIMHtml(conv);
+    GtkTextBuffer *buffer = imhtml ? imhtml->text_buffer : nullptr;
+    GtkTextIter    body, end;
+    GtkTextMark   *start  = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Start).c_str()) : nullptr;
+    if (!start || !getBody(buffer, messageId, body, end))
+        return;
+    GtkTextIter  from, to;
+    GtkTextMark *reactionsEnd = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Reactions).c_str());
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &from, start);
+    to = end;
+    if (reactionsEnd) {
+        GtkTextIter areaEnd;
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &areaEnd, reactionsEnd);
+        if (p_gtk_text_iter_compare(&to, &areaEnd) < 0)
+            to = areaEnd;
+    }
+    // With the line break before it, which Pidgin put there for it
+    if (p_gtk_text_iter_backward_char(&from) && (p_gtk_text_iter_get_char(&from) != '\n'))
+        p_gtk_text_iter_forward_char(&from);
+    p_gtk_imhtml_delete(imhtml, &from, &to);
+    for (MarkKind kind: {MarkKind::Start, MarkKind::Body, MarkKind::End, MarkKind::Prefix, MarkKind::PrefixEnd,
+                         MarkKind::Reactions})
+    {
+        GtkTextMark *mark = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, kind).c_str());
+        if (mark)
+            p_gtk_text_buffer_delete_mark(buffer, mark);
+    }
 }
 
 MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId)
@@ -733,6 +780,10 @@ bool canReplaceMessage(PurpleConversation *conv, MessageId messageId)
 }
 
 void strikeOutMessage(PurpleConversation *conv, MessageId messageId)
+{
+}
+
+void removeMessage(PurpleConversation *conv, MessageId messageId)
 {
 }
 

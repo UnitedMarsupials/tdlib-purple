@@ -1048,9 +1048,13 @@ void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId)
     request->message_id_ = messageId.value();
     m_transceiver.sendQuery(std::move(request), [this, chatId, messageId](uint64_t, TdObjectPtr object) {
         if (!object || (object->get_id() != td::td_api::message::ID)) {
+            // Deleted since, as far as TDLib knows, whatever the tab shows
+            bool gone = object && (object->get_id() == td::td_api::error::ID) &&
+                        (static_cast<const td::td_api::error &>(*object).code_ == 404);
             // TRANSLATOR: Error dialog, primary content, after the menu link before a message was clicked.
             purple_notify_error(NULL, config::pluginName, _("Cannot open the message's menu"),
-                                getDisplayedError(object).c_str());
+                                // TRANSLATOR: Error dialog, secondary content, when the message has been deleted.
+                                gone ? _("The message has been deleted.") : getDisplayedError(object).c_str());
             return;
         }
         const td::td_api::message &message = static_cast<const td::td_api::message &>(*object);

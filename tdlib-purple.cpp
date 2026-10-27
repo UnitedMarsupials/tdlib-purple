@@ -1310,6 +1310,11 @@ static void tgprpl_init (PurplePlugin *plugin)
     prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
 
     // TRANSLATOR: Account settings, key (boolean)
+    opt = purple_account_option_bool_new(_("Strike out deleted messages in Pidgin, rather than remove them"),
+                                         AccountOptions::StrikeOutDeleted, AccountOptions::StrikeOutDeletedDefault);
+    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+
+    // TRANSLATOR: Account settings, key (boolean)
     opt = purple_account_option_bool_new(_("Show messages from channels and groups you have not joined"),
                                          AccountOptions::ShowUnjoinedChats,
                                          AccountOptions::ShowUnjoinedChatsDefault);

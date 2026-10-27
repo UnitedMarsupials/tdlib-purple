@@ -1426,6 +1426,16 @@ msgid ""
 "leaves it as it was."
 msgstr "Edycja wiadomości z {}: wyślij, aby zapisać zmianę; Esc lub /cancel pozostawia ją bez zmian."
 
+#. TRANSLATOR: Error dialog, secondary content, when the message has been deleted.
+#: ../td-client.cpp:1057
+msgid "The message has been deleted."
+msgstr "Wiadomość została usunięta."
+
+#. TRANSLATOR: Account settings, key (boolean)
+#: ../tdlib-purple.cpp:1313
+msgid "Strike out deleted messages in Pidgin, rather than remove them"
+msgstr "Przekreślaj usunięte wiadomości w Pidginie zamiast je usuwać"
+
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091
 msgid "Needs Telegram Premium"

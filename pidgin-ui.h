@@ -85,8 +85,10 @@ bool canReplaceMessage(PurpleConversation *conv, MessageId messageId);
 // if empty. In Pidgin's tab only, where the message is.
 void showMessageReactions(PurpleConversation *conv, MessageId messageId, const std::string &html);
 
-// Strikes out a deleted message's text, where the tab shows it
+// Strikes out a deleted message's text, where the tab shows it, and takes its menu link away
 void strikeOutMessage(PurpleConversation *conv, MessageId messageId);
+// Takes a deleted message out of the tab, its header and reactions with it
+void removeMessage(PurpleConversation *conv, MessageId messageId);
 
 // Where the message is in the conversation's tab, if it is there
 MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId);

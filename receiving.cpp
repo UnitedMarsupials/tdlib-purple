@@ -2390,7 +2390,12 @@ void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessag
         if (pendingMessage)
             pendingMessage->deleted = true;
         if ((!pendingMessage || pendingMessage->editedMessageTime) && chat) {
-            strikeOutMessage(findMessageConversation(account, *chat), messageId);
+            PurpleConversation *conv = findMessageConversation(account, *chat);
+            if (purple_account_get_bool(account.purpleAccount, AccountOptions::StrikeOutDeleted,
+                                        AccountOptions::StrikeOutDeletedDefault))
+                strikeOutMessage(conv, messageId);
+            else
+                removeMessage(conv, messageId);
             // Telegram does not say who deleted it, so the notice cannot either.
             std::string notice = formatMessage(
                 // TRANSLATOR: In-chat notification. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
