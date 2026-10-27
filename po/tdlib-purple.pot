@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: tdlib-purple\n"
 "Report-Msgid-Bugs-To: https://github.com/UnitedMarsupials/tdlib-purple/issues/new \n"
-"POT-Creation-Date: 2026-10-27 00:12-0400\n"
+"POT-Creation-Date: 2026-10-27 13:52-0400\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -66,7 +66,7 @@ msgstr ""
 #. TRANSLATOR: Group creation dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
 #. TRANSLATOR: 2FA settings, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
 #: ../call.cpp:220 ../td-client.cpp:533 ../td-client.cpp:597
-#: ../td-client.cpp:628 ../td-client.cpp:2512 ../tdlib-purple.cpp:526
+#: ../td-client.cpp:628 ../td-client.cpp:2544 ../tdlib-purple.cpp:526
 #: ../tdlib-purple.cpp:1323
 msgid "_OK"
 msgstr ""
@@ -79,7 +79,7 @@ msgstr ""
 #. TRANSLATOR: Group creation dialog, alternative is "_OK". The underscore marks accelerator keys, they must be different!
 #. TRANSLATOR: 2FA settings, alternative is "_OK". The underscore marks accelerator keys, they must be different!
 #: ../call.cpp:222 ../td-client.cpp:535 ../td-client.cpp:599
-#: ../td-client.cpp:630 ../td-client.cpp:2514 ../tdlib-purple.cpp:528
+#: ../td-client.cpp:630 ../td-client.cpp:2546 ../tdlib-purple.cpp:528
 #: ../tdlib-purple.cpp:1325
 msgid "_Cancel"
 msgstr ""
@@ -170,7 +170,7 @@ msgstr ""
 
 #. TRANSLATOR: In-chat error message, argument will be text.
 #. TRANSLATOR: In-chat error message, argument will be a user-sent message
-#: ../client-utils.cpp:1197 ../td-client.cpp:1426
+#: ../client-utils.cpp:1198 ../td-client.cpp:1458
 #, c++-format
 msgid "Failed to send message: {}"
 msgstr ""
@@ -408,7 +408,7 @@ msgid "_No"
 msgstr ""
 
 #. TRANSLATOR: In-chat notification, appears after a colon (':'). Argument is a file *type*, not a filename.
-#: ../receiving.cpp:997 ../td-client.cpp:1152
+#: ../receiving.cpp:997 ../td-client.cpp:1184
 #, c++-format
 msgid "Downloading {}"
 msgstr ""
@@ -649,155 +649,160 @@ msgid "Authentication error: {}"
 msgstr ""
 
 #. TRANSLATOR: Error dialog, primary content, after the menu link before a message was clicked.
-#: ../td-client.cpp:1019 ../tdlib-purple.cpp:982
+#: ../td-client.cpp:1022 ../tdlib-purple.cpp:982
 msgid "Cannot open the message's menu"
 msgstr ""
 
+#. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
+#: ../td-client.cpp:1091
+msgid "Needs Telegram Premium"
+msgstr ""
+
 #. TRANSLATOR: Submenu of reactions, after the most likely ones.
-#: ../td-client.cpp:1083
+#: ../td-client.cpp:1107
 msgid "More"
 msgstr ""
 
 #. TRANSLATOR: Disabled item of the reactions' submenu, in a message's menu.
-#: ../td-client.cpp:1090
+#: ../td-client.cpp:1115
 msgid "No reactions allowed"
 msgstr ""
 
 #. TRANSLATOR: Submenu of a message's menu.
-#: ../td-client.cpp:1096
+#: ../td-client.cpp:1121
 msgid "Reactions"
 msgstr ""
 
-#. TRANSLATOR: Error dialog, primary content, after a reaction was picked from a message's menu.
-#: ../td-client.cpp:1115
+#. TRANSLATOR: In-chat error, after a reaction was picked from a message's menu; followed by the reaction.
+#: ../td-client.cpp:1142
 msgid "Cannot change the reaction"
 msgstr ""
 
 #. Unlikely error message not worth translating
 #. TRANSLATOR: In-chat error message, the reason in "Could not open {0}: {1}".
-#: ../td-client.cpp:1142
+#: ../td-client.cpp:1174
 msgid "no file in the message"
 msgstr ""
 
 #. TRANSLATOR: In-chat error message. Arguments are a file *type* or name, and the reason.
-#: ../td-client.cpp:1198
+#: ../td-client.cpp:1230
 #, c++-format
 msgid "Could not open {0}: {1}"
 msgstr ""
 
-#: ../td-client.cpp:1199
+#: ../td-client.cpp:1231
 msgid "the file"
 msgstr ""
 
 #. TRANSLATOR: In-chat error message, arguments will be a file name and a proper reason
-#: ../td-client.cpp:1272
+#: ../td-client.cpp:1304
 #, c++-format
 msgid "Could not read sticker file {0}: {1}"
 msgstr ""
 
 #. TRANSLATOR: Error dialog, content
-#: ../td-client.cpp:1734
+#: ../td-client.cpp:1766
 #, c++-format
 msgid "Failed to add contact: {}"
 msgstr ""
 
 #. TRANSLATOR: Error dialog, title
-#: ../td-client.cpp:1736
+#: ../td-client.cpp:1768
 msgid "Failed to add contact"
 msgstr ""
 
 #. TRANSLATOR: Buddy-window error message, title (no content), argument will be a phone number.
-#: ../td-client.cpp:1862
+#: ../td-client.cpp:1894
 #, c++-format
 msgid "No user found with phone number '{}'"
 msgstr ""
 
 #. TRANSLATOR: Error dialog, content
-#: ../td-client.cpp:2058
+#: ../td-client.cpp:2090
 #, c++-format
 msgid "Failed to join chat: {}"
 msgstr ""
 
 #. TRANSLATOR: Error dialog, title
 #. TRANSLATOR: Join error dialog, title
-#: ../td-client.cpp:2060 ../td-client.cpp:2085 ../td-client.cpp:2092
+#: ../td-client.cpp:2092 ../td-client.cpp:2117 ../td-client.cpp:2124
 #: ../tdlib-purple.cpp:557 ../tdlib-purple.cpp:576
 msgid "Failed to join chat"
 msgstr ""
 
 #. TRANSLATOR: Error dialog, content
-#: ../td-client.cpp:2087
+#: ../td-client.cpp:2119
 msgid "The name belongs to a user, not a group"
 msgstr ""
 
 #. TRANSLATOR: Error dialog, content, argument is a reason (text)
-#: ../td-client.cpp:2090
+#: ../td-client.cpp:2122
 #, c++-format
 msgid "Could not find group: {}"
 msgstr ""
 
 #. TRANSLATOR: Error dialog, secondary content
-#: ../td-client.cpp:2108
+#: ../td-client.cpp:2140
 msgid "Cannot create basic group without additional members"
 msgstr ""
 
-#: ../td-client.cpp:2114
+#: ../td-client.cpp:2146
 #, c++-format
 msgid "No known user with id {}"
 msgstr ""
 
 #. TRANSLATOR: Error dialog, secondary content, argument is a username
-#: ../td-client.cpp:2123
+#: ../td-client.cpp:2155
 #, c++-format
 msgid "No known user by the name '{}'"
 msgstr ""
 
 #. TRANSLATOR: Error dialog, title
-#: ../td-client.cpp:2137
+#: ../td-client.cpp:2169
 msgid "Failed to create group"
 msgstr ""
 
 #. TRANSLATOR: Error dialog, primary content
-#: ../td-client.cpp:2139
+#: ../td-client.cpp:2171
 msgid "Invalid group members"
 msgstr ""
 
 #. TRANSLATOR: Error dialog, title
-#: ../td-client.cpp:2202
+#: ../td-client.cpp:2234
 msgid "Failed to delete group or channel"
 msgstr ""
 
 #. TRANSLATOR: Error dialog, title
-#: ../td-client.cpp:2229
+#: ../td-client.cpp:2261
 msgid "Failed to set group description"
 msgstr ""
 
 #. TRANSLATOR: In-chat error message, appears after a colon (':')
 #. TRANSLATOR: Buddy infobox, error
-#: ../td-client.cpp:2248 ../td-client.cpp:2323 ../tdlib-purple.cpp:371
+#: ../td-client.cpp:2280 ../td-client.cpp:2355 ../tdlib-purple.cpp:371
 msgid "User not found"
 msgstr ""
 
 #. TRANSLATOR: In-chat error message, argument is a reason (text)
-#: ../td-client.cpp:2252 ../td-client.cpp:2289
+#: ../td-client.cpp:2284 ../td-client.cpp:2321
 #, c++-format
 msgid "Cannot kick user: {}"
 msgstr ""
 
 #. TRANSLATOR: In-chat error message, argument is a reason (text)
-#: ../td-client.cpp:2293 ../td-client.cpp:2327
+#: ../td-client.cpp:2325 ../td-client.cpp:2359
 #, c++-format
 msgid "Cannot add user to group: {}"
 msgstr ""
 
 #. TRANSLATOR: In-chat error message, argument is a reason (text)
-#: ../td-client.cpp:2297
+#: ../td-client.cpp:2329
 #, c++-format
 msgid "Cannot generate invite link: {}"
 msgstr ""
 
 #. TRANSLATOR: In-chat error message, after "Show invite link" was chosen for a chat that has none
-#: ../td-client.cpp:2391
+#: ../td-client.cpp:2423
 msgid ""
 "This chat has no public link or invite link, and only its administrators can "
 "create one"
@@ -805,12 +810,12 @@ msgstr ""
 
 #. "description" is hard-coded in bitlbee as possible field for chat topic
 #. TRANSLATOR: Groupchat infobox key
-#: ../td-client.cpp:2411
+#: ../td-client.cpp:2443
 msgid "Description"
 msgstr ""
 
 #. TRANSLATOR: 2FA setup confirmation dialog, secondary content, argument is an e-mail description (address and code length)
-#: ../td-client.cpp:2501
+#: ../td-client.cpp:2533
 #, c++-format
 msgid ""
 "Password will be changed after new e-mail is confirmed\n"
@@ -821,70 +826,70 @@ msgstr ""
 #. TRANSLATOR: 2FA success notification, title
 #. TRANSLATOR: 2FA failure notification, title
 #. TRANSLATOR: 2FA settings, title
-#: ../td-client.cpp:2504 ../td-client.cpp:2524 ../td-client.cpp:2550
-#: ../td-client.cpp:2573 ../td-client.cpp:2577 ../tdlib-purple.cpp:1321
+#: ../td-client.cpp:2536 ../td-client.cpp:2556 ../td-client.cpp:2582
+#: ../td-client.cpp:2605 ../td-client.cpp:2609 ../tdlib-purple.cpp:1321
 msgid "Two-factor authentication"
 msgstr ""
 
 #. TRANSLATOR: 2FA setup confirmation dialog, primary content
-#: ../td-client.cpp:2506
+#: ../td-client.cpp:2538
 msgid "Enter verification code received in the e-mail"
 msgstr ""
 
 #. TRANSLATOR: 2FA success notification, primary content
-#: ../td-client.cpp:2526
+#: ../td-client.cpp:2558
 msgid "Password set"
 msgstr ""
 
 #. TRANSLATOR: 2FA success notification, primary content
-#: ../td-client.cpp:2528
+#: ../td-client.cpp:2560
 msgid "Password cleared"
 msgstr ""
 
 #. TRANSLATOR: 2FA success notification, secondary content
-#: ../td-client.cpp:2530
+#: ../td-client.cpp:2562
 msgid "Recovery e-mail is configured"
 msgstr ""
 
 #. TRANSLATOR: 2FA success notification, secondary content
-#: ../td-client.cpp:2532
+#: ../td-client.cpp:2564
 msgid "No recovery e-mail configured"
 msgstr ""
 
 #. TRANSLATOR: 2FA setup confirmation dialog, e-mail description
-#: ../td-client.cpp:2541
+#: ../td-client.cpp:2573
 #, c++-format
 msgid "Code sent to {0} (length: {1})"
 msgstr ""
 
 #. TRANSLATOR: 2FA failure notification, primary content
-#: ../td-client.cpp:2552
+#: ../td-client.cpp:2584
 msgid "Failed to set password"
 msgstr ""
 
 #. TRANSLATOR: 2FA failure notification, content
-#: ../td-client.cpp:2579
+#: ../td-client.cpp:2611
 msgid "Looks like the code was wrong"
 msgstr ""
 
 #. TRANSLATOR: In-chat error message
-#: ../td-client.cpp:2664
+#: ../td-client.cpp:2696
 msgid "Unable to send message: The message is too large."
 msgstr ""
 
 #. TRANSLATOR: In-chat error message
-#: ../td-client.cpp:2667
+#: ../td-client.cpp:2699
 msgid "Unable to send message."
 msgstr ""
 
 #. TRANSLATOR: In-chat(?) error message, argument is an error description (text)
-#: ../td-client.cpp:2671
+#: ../td-client.cpp:2703
 #, c++-format
 msgid "Failed to open chat: {}"
 msgstr ""
 
 #. TRANSLATOR: Failure notification, title
-#: ../td-client.cpp:2752
+#: ../td-client.cpp:2784
 msgid "Failed to create secret chat"
 msgstr ""
 

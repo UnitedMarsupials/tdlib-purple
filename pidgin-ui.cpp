@@ -32,6 +32,9 @@ FRONT_END_FUNCTION(gtk_menu_shell_append);
 FRONT_END_FUNCTION(gtk_menu_attach);
 FRONT_END_FUNCTION(gtk_menu_popup);
 FRONT_END_FUNCTION(gtk_widget_set_sensitive);
+FRONT_END_FUNCTION(gtk_widget_set_tooltip_text);
+FRONT_END_FUNCTION(gtk_bin_get_child);
+FRONT_END_FUNCTION(gtk_label_set_markup);
 FRONT_END_FUNCTION(gtk_widget_show_all);
 FRONT_END_FUNCTION(gtk_widget_destroy);
 FRONT_END_FUNCTION(g_signal_connect_data);
@@ -176,7 +179,9 @@ void pidginUiLoad(PurplePlugin *plugin)
                  LOOK_UP(gtk_check_menu_item_set_active) && LOOK_UP(gtk_menu_item_set_submenu) &&
                  LOOK_UP(gtk_menu_shell_append) && LOOK_UP(gtk_menu_attach) &&
                  LOOK_UP(gtk_menu_popup) &&
-                 LOOK_UP(gtk_widget_set_sensitive) && LOOK_UP(gtk_widget_show_all) &&
+                 LOOK_UP(gtk_widget_set_sensitive) && LOOK_UP(gtk_widget_set_tooltip_text) &&
+                 LOOK_UP(gtk_bin_get_child) && LOOK_UP(gtk_label_set_markup) &&
+                 LOOK_UP(gtk_widget_show_all) &&
                  LOOK_UP(gtk_widget_destroy) && LOOK_UP(g_signal_connect_data);
     purple_debug_info(config::pluginId, "Pidgin's conversation window: %s\n",
                       g_pidginUi ? "found" : "not found");
@@ -297,6 +302,14 @@ static GtkWidget *makeMenu(const std::vector<MenuItem> &items, unsigned columns)
                                            : p_gtk_menu_item_new_with_label(item.label.c_str());
         if (item.checkable)
             p_gtk_check_menu_item_set_active(reinterpret_cast<GtkCheckMenuItem *>(widget), item.checked);
+        if (item.dimmed) {
+            gchar *markup = g_markup_printf_escaped("<span alpha=\"40%%\">%s</span>", item.label.c_str());
+            p_gtk_label_set_markup(reinterpret_cast<GtkLabel *>(p_gtk_bin_get_child(reinterpret_cast<GtkBin *>(widget))),
+                                   markup);
+            g_free(markup);
+        }
+        if (!item.tooltip.empty())
+            p_gtk_widget_set_tooltip_text(widget, item.tooltip.c_str());
         if (!item.submenu.empty())
             p_gtk_menu_item_set_submenu(reinterpret_cast<GtkMenuItem *>(widget),
                                         makeMenu(item.submenu, item.columns));

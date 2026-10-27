@@ -1070,21 +1070,28 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
     if (object && (object->get_id() == td::td_api::availableReactions::ID)) {
         const auto &available = static_cast<const td::td_api::availableReactions &>(*object);
         for (const auto *list: {&available.top_reactions_, &available.recent_reactions_, &available.popular_reactions_})
-            for (const auto &reaction: *list)
-                if (reaction && !reaction->needs_premium_ && reaction->type_ &&
-                    (reaction->type_->get_id() == td::td_api::reactionTypeEmoji::ID))
-                {
-                    const std::string &emoji = static_cast<const td::td_api::reactionTypeEmoji &>(*reaction->type_).emoji_;
-                    if (listed.insert(emoji).second)
-                        ((list == &available.top_reactions_) ? shown : more).push_back(makeItem(emoji, 0, false));
-                } else if (reaction && reaction->type_)
-                    purple_debug_misc(config::pluginId, "Reaction to message %" G_GINT64_FORMAT " left out: %s%s\n",
+            for (const auto &reaction: *list) {
+                if (!reaction || !reaction->type_)
+                    continue;
+                if (reaction->type_->get_id() != td::td_api::reactionTypeEmoji::ID) {
+                    purple_debug_misc(config::pluginId, "Reaction to message %" G_GINT64_FORMAT " left out: %s\n",
                                       messageId.value(),
-                                      (reaction->type_->get_id() == td::td_api::reactionTypeEmoji::ID)
-                                          ? static_cast<const td::td_api::reactionTypeEmoji &>(*reaction->type_).emoji_.c_str()
-                                          : (reaction->type_->get_id() == td::td_api::reactionTypePaid::ID)
-                                                ? "paid (stars)" : "custom emoji",
-                                      reaction->needs_premium_ ? ", needs Premium" : "");
+                                      (reaction->type_->get_id() == td::td_api::reactionTypePaid::ID)
+                                          ? "paid (stars)" : "custom emoji");
+                    continue;
+                }
+                const std::string &emoji = static_cast<const td::td_api::reactionTypeEmoji &>(*reaction->type_).emoji_;
+                if (!listed.insert(emoji).second)
+                    continue;
+                // Offered all the same, as Telegram's servers may not insist on it
+                MenuItem item = makeItem(emoji, 0, false);
+                if (reaction->needs_premium_) {
+                    item.dimmed  = true;
+                    // TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
+                    item.tooltip = _("Needs Telegram Premium");
+                }
+                ((list == &available.top_reactions_) ? shown : more).push_back(std::move(item));
+            }
         purple_debug_misc(config::pluginId,
                           "Reactions to message %" G_GINT64_FORMAT ": %zu shown, %zu top, %zu recent, %zu popular%s\n",
                           messageId.value(), reactions.size(), available.top_reactions_.size(),
@@ -1128,11 +1135,17 @@ void PurpleTdClient::setMessageReaction(ChatId chatId, MessageId messageId, cons
         request = td::td_api::make_object<td::td_api::removeMessageReaction>(chatId.value(), messageId.value(),
                                                                              std::move(type));
     // What changes comes back as an update, as from any other client
-    m_transceiver.sendQuery(std::move(request), [](uint64_t, TdObjectPtr object) {
-        if (!object || (object->get_id() != td::td_api::ok::ID))
-            // TRANSLATOR: Error dialog, primary content, after a reaction was picked from a message's menu.
-            purple_notify_error(NULL, config::pluginName, _("Cannot change the reaction"),
-                                getDisplayedError(object).c_str());
+    m_transceiver.sendQuery(std::move(request), [this, chatId, emoji](uint64_t, TdObjectPtr object) {
+        if (object && (object->get_id() == td::td_api::ok::ID))
+            return;
+        // TRANSLATOR: In-chat error, after a reaction was picked from a message's menu; followed by the reaction.
+        std::string           notice = std::string(_("Cannot change the reaction")) + ' ' + emoji + ": " +
+                                       getDisplayedError(object);
+        const td::td_api::chat *chat = m_data.getChat(chatId);
+        if (chat)
+            showChatNotification(m_data, *chat, notice.c_str(), PURPLE_MESSAGE_ERROR);
+        else
+            purple_notify_error(NULL, config::pluginName, notice.c_str(), NULL);
     });
 }
 

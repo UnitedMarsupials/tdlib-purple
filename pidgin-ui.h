@@ -71,6 +71,8 @@ struct MenuItem {
     std::string            label;
     bool                   checkable = false;
     bool                   checked   = false;
+    bool                   dimmed    = false;  // Looks disabled, but can be picked
+    std::string            tooltip;
     unsigned               columns   = 0;
     std::function<void()>  action;
     std::vector<MenuItem>  submenu;
