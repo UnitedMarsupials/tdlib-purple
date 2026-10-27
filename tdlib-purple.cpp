@@ -962,7 +962,7 @@ static gboolean messageLinkClicked(PidginIMHtml *imhtml, PidginIMHtmlLink *link)
 }
 
 // Called whenever the link is right-clicked; it adds nothing to the menu
-static gboolean messageLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *link, PidginWidget *menu)
+static gboolean messageLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *link, PidginWidget *linkMenu)
 {
     return TRUE;
 }
