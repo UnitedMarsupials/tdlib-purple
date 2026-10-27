@@ -58,7 +58,7 @@ public:
     // A link to the message's file was clicked: fetches the file, if need be, and opens it; a variant,
     // if given, names one of the sizes a photo or video comes in
     void openMessageFile(ChatId chatId, MessageId messageId, const std::string &variant = std::string());
-    // The link after a message in Pidgin's tab was clicked: pops up its menu
+    // The link before a message in Pidgin's tab was clicked: pops up its menu
     void showMessageMenu(ChatId chatId, MessageId messageId);
     void setMessageReaction(ChatId chatId, MessageId messageId, const std::string &emoji, bool chosen);
 

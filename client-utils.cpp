@@ -1156,8 +1156,9 @@ std::string makeMenuLink(PurpleAccount *account, ChatId chatId, MessageId messag
 {
     if (!g_jumpLinksEnabled || !chatId.valid() || !messageId.valid())
         return std::string();
-    return "&nbsp;<a href=\"" + makeLink(JUMP_LINK_SCHEME, account, chatId, messageId) + '/' +
-           MENU_LINK_SUFFIX + "\">\xe2\x98\xb0</a>";
+    // The spaces around it are part of it, a wider target to click
+    return "<a href=\"" + makeLink(JUMP_LINK_SCHEME, account, chatId, messageId) + '/' +
+           MENU_LINK_SUFFIX + "\">&nbsp;\xe2\x96\xbe&nbsp;</a>";
 }
 
 bool parseJumpLink(const char *link, std::string &accountName, ChatId &chatId, MessageId &messageId,

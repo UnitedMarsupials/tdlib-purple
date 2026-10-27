@@ -15,6 +15,8 @@ FRONT_END_FUNCTION(pidgin_conversations_get_conv_ui_ops);
 FRONT_END_FUNCTION(gtk_text_buffer_get_end_iter);
 FRONT_END_FUNCTION(gtk_text_buffer_get_iter_at_offset);
 FRONT_END_FUNCTION(gtk_text_iter_get_offset);
+FRONT_END_FUNCTION(gtk_text_iter_get_char);
+FRONT_END_FUNCTION(gtk_text_iter_forward_char);
 FRONT_END_FUNCTION(gtk_text_buffer_get_mark);
 FRONT_END_FUNCTION(gtk_text_buffer_create_mark);
 FRONT_END_FUNCTION(gtk_text_buffer_move_mark);
@@ -41,7 +43,7 @@ static bool g_pidginUi = false;
 // The message being written, and where its text starts in the first conversation it goes to
 struct MessageBeingWritten {
     MessageId           messageId;
-    std::string         trailer;
+    std::string         prefix;
     PurpleConversation *conv        = nullptr;
     gint                startOffset = 0;
 };
@@ -66,13 +68,13 @@ static GtkTextBuffer *getTextBuffer(PurpleConversation *conv)
 enum class MarkKind {
     Start,
     End,
-    Trailer
+    Prefix
 };
 
 static std::string getMarkName(MessageId messageId, MarkKind kind)
 {
     const char *prefix = (kind == MarkKind::Start) ? "tdlib-message-start-" :
-                         (kind == MarkKind::End)   ? "tdlib-message-end-" : "tdlib-message-trailer-";
+                         (kind == MarkKind::End)   ? "tdlib-message-end-" : "tdlib-message-prefix-";
     return prefix + std::to_string(messageId.value());
 }
 
@@ -117,27 +119,30 @@ static void displayedMessage(PurpleAccount *account, const char *who, char *mess
     if (buffer) {
         GtkTextIter start, end;
         p_gtk_text_buffer_get_iter_at_offset(buffer, &start, g_messageBeingWritten->startOffset);
+        // Pidgin ends the previous line only after saying a message is coming
+        if (p_gtk_text_iter_get_char(&start) == '\n')
+            p_gtk_text_iter_forward_char(&start);
         p_gtk_text_buffer_get_end_iter(buffer, &end);
         setMark(buffer, getMarkName(g_messageBeingWritten->messageId, true), start);
         setMark(buffer, getMarkName(g_messageBeingWritten->messageId, false), end);
     }
 }
 
-// Inserts what follows a message after its end, once: the message is then up to its end
-static void appendTrailer(PurpleConversation *conv, MessageId messageId, const std::string &trailer)
+// Inserts what precedes a message at its start, once. The start mark stays before it, so the
+// message takes it in.
+static void insertPrefix(PurpleConversation *conv, MessageId messageId, const std::string &prefix)
 {
     GtkIMHtml     *imhtml = getIMHtml(conv);
     GtkTextBuffer *buffer = imhtml ? imhtml->text_buffer : nullptr;
-    GtkTextMark   *end    = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, false).c_str()) : nullptr;
-    if (trailer.empty() || !end || p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Trailer).c_str()))
+    GtkTextMark   *start  = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, true).c_str()) : nullptr;
+    if (prefix.empty() || !start || p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Prefix).c_str()))
         return;
 
     GtkTextIter where;
-    p_gtk_text_buffer_get_iter_at_mark(buffer, &where, end);
-    p_gtk_text_buffer_create_mark(buffer, getMarkName(messageId, MarkKind::Trailer).c_str(), &where, TRUE);
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &where, start);
+    p_gtk_text_buffer_create_mark(buffer, getMarkName(messageId, MarkKind::Prefix).c_str(), &where, TRUE);
     // Into the tab only, not the log
-    p_gtk_imhtml_insert_html_at_iter(imhtml, trailer.c_str(), GTK_IMHTML_NO_SCROLL, &where);
-    p_gtk_text_buffer_move_mark(buffer, end, &where);
+    p_gtk_imhtml_insert_html_at_iter(imhtml, prefix.c_str(), GTK_IMHTML_NO_SCROLL, &where);
 }
 
 static guint g_connectSource = 0;
@@ -163,7 +168,8 @@ void pidginUiLoad(PurplePlugin *plugin)
 {
     g_pidginUi = LOOK_UP(pidgin_conversations_get_handle) && LOOK_UP(pidgin_conversations_get_conv_ui_ops) &&
                  LOOK_UP(gtk_text_buffer_get_end_iter) && LOOK_UP(gtk_text_buffer_get_iter_at_offset) &&
-                 LOOK_UP(gtk_text_iter_get_offset) && LOOK_UP(gtk_text_buffer_get_mark) &&
+                 LOOK_UP(gtk_text_iter_get_offset) && LOOK_UP(gtk_text_iter_get_char) &&
+                 LOOK_UP(gtk_text_iter_forward_char) && LOOK_UP(gtk_text_buffer_get_mark) &&
                  LOOK_UP(gtk_text_buffer_create_mark) && LOOK_UP(gtk_text_buffer_move_mark) &&
                  LOOK_UP(gtk_text_buffer_delete_mark) && LOOK_UP(gtk_text_buffer_get_iter_at_mark) &&
                  LOOK_UP(gtk_text_buffer_select_range) && LOOK_UP(gtk_text_view_scroll_to_mark) &&
@@ -198,12 +204,12 @@ bool pidginUiFound()
     return g_pidginUi;
 }
 
-MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &trailer)
+MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &prefix)
 {
     if (g_pidginUi && messageId.valid() && !g_messageBeingWritten) {
         g_messageBeingWritten = new MessageBeingWritten;
         g_messageBeingWritten->messageId = messageId;
-        g_messageBeingWritten->trailer   = trailer;
+        g_messageBeingWritten->prefix    = prefix;
         m_active = true;
     }
 }
@@ -212,8 +218,8 @@ MessageMarkScope::~MessageMarkScope()
 {
     if (m_active) {
         if (g_messageBeingWritten->conv)
-            appendTrailer(g_messageBeingWritten->conv, g_messageBeingWritten->messageId,
-                          g_messageBeingWritten->trailer);
+            insertPrefix(g_messageBeingWritten->conv, g_messageBeingWritten->messageId,
+                         g_messageBeingWritten->prefix);
         delete g_messageBeingWritten;
         g_messageBeingWritten = nullptr;
     }
@@ -232,7 +238,7 @@ MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId)
     return marks;
 }
 
-void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId, const std::string &trailer)
+void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId, const std::string &prefix)
 {
     if (!g_pidginUi)
         return;
@@ -252,7 +258,7 @@ void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId
                 p_gtk_text_buffer_delete_mark(buffer, mark);
             }
         }
-        appendTrailer(conv, newId, trailer);
+        insertPrefix(conv, newId, prefix);
     }
 }
 
@@ -360,7 +366,7 @@ bool pidginUiFound()
     return false;
 }
 
-MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &trailer)
+MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &prefix)
 {
 }
 
@@ -373,7 +379,7 @@ MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId)
     return MessageMarks();
 }
 
-void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId, const std::string &trailer)
+void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId, const std::string &prefix)
 {
 }
 

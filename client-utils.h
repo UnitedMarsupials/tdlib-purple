@@ -66,7 +66,7 @@ bool        jumpLinksEnabled();
 void        setJumpLinksEnabled(bool enabled);
 std::string linkToMessage(PurpleAccount *account, ChatId chatId, MessageId messageId,
                           const std::string &markup);
-// The link after each message, which opens its menu, or nothing where it cannot work
+// The link before each message, which opens its menu, or nothing where it cannot work
 std::string makeMenuLink(PurpleAccount *account, ChatId chatId, MessageId messageId);
 // A jump, unless the link opens the message's menu
 bool        parseJumpLink(const char *link, std::string &accountName, ChatId &chatId,

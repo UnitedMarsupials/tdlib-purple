@@ -1266,7 +1266,7 @@ msgstr "Mesazhi nuk shfaqet"
 msgid "It is no longer in this conversation's window."
 msgstr "Nuk ndodhet më në dritaren e kësaj bisede."
 
-#. TRANSLATOR: Error dialog, primary content, after the menu link after a message was clicked.
+#. TRANSLATOR: Error dialog, primary content, after the menu link before a message was clicked.
 #: ../td-client.cpp:1019 ../tdlib-purple.cpp:982
 msgid "Cannot open the message's menu"
 msgstr "Menuja e mesazhit nuk mund të hapet"

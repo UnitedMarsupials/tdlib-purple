@@ -1275,7 +1275,7 @@ msgstr "Die Nachricht wird nicht angezeigt"
 msgid "It is no longer in this conversation's window."
 msgstr "Sie ist nicht mehr im Fenster dieser Unterhaltung."
 
-#. TRANSLATOR: Error dialog, primary content, after the menu link after a message was clicked.
+#. TRANSLATOR: Error dialog, primary content, after the menu link before a message was clicked.
 #: ../td-client.cpp:1019 ../tdlib-purple.cpp:982
 msgid "Cannot open the message's menu"
 msgstr "Das Menü der Nachricht kann nicht geöffnet werden"

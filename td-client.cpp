@@ -1018,7 +1018,7 @@ void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId)
     request->message_id_ = messageId.value();
     m_transceiver.sendQuery(std::move(request), [this, chatId, messageId](uint64_t, TdObjectPtr object) {
         if (!object || (object->get_id() != td::td_api::message::ID)) {
-            // TRANSLATOR: Error dialog, primary content, after the menu link after a message was clicked.
+            // TRANSLATOR: Error dialog, primary content, after the menu link before a message was clicked.
             purple_notify_error(NULL, config::pluginName, _("Cannot open the message's menu"),
                                 getDisplayedError(object).c_str());
             return;
@@ -1052,6 +1052,8 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
         item.checkable = true;
         item.checked   = chosen;
         item.action    = [accountName, chatId, messageId, emoji, chosen]() {
+            purple_debug_misc(config::pluginId, "Reaction %s to message %" G_GINT64_FORMAT " picked, %s\n",
+                              emoji.c_str(), messageId.value(), chosen ? "to take back" : "to add");
             PurpleTdClient *client = findConnected(accountName.c_str());
             if (client)
                 client->setMessageReaction(chatId, messageId, emoji, !chosen);
@@ -1076,6 +1078,11 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
                     if (listed.insert(emoji).second)
                         ((list == &available.top_reactions_) ? shown : more).push_back(makeItem(emoji, 0, false));
                 }
+        purple_debug_misc(config::pluginId,
+                          "Reactions to message %" G_GINT64_FORMAT ": %zu shown, %zu top, %zu recent, %zu popular%s\n",
+                          messageId.value(), reactions.size(), available.top_reactions_.size(),
+                          available.recent_reactions_.size(), available.popular_reactions_.size(),
+                          available.unavailability_reason_ ? ", unavailable" : "");
     } else
         purple_debug_warning(config::pluginId, "Reactions to message %" G_GINT64_FORMAT " unknown: %s\n",
                              messageId.value(), getDisplayedError(object).c_str());
