@@ -924,10 +924,8 @@ void tgprpl_open_message_link(const char *link)
         return;
     }
 
-    PurpleAccount    *account = purple_accounts_find(accountName.c_str(), config::pluginId);
-    PurpleConnection *gc      = account ? purple_account_get_connection(account) : NULL;
-    PurpleTdClient   *client  = gc ? static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc)) : NULL;
-    if (!client || !PURPLE_CONNECTION_IS_CONNECTED(gc)) {
+    PurpleTdClient *client = PurpleTdClient::findConnected(accountName.c_str());
+    if (!client) {
         // TRANSLATOR: Error dialog, secondary content. Argument is the account's name, its phone number.
         std::string reason = formatMessage(_("Account {} is not connected."), accountName);
         // TRANSLATOR: Error dialog, primary content, after a file's link in a conversation was clicked.
@@ -961,15 +959,28 @@ static gboolean messageLinkClicked(PidginIMHtml *imhtml, PidginIMHtmlLink *link)
     return TRUE;
 }
 
-// Scrolls the very tab the link is in, as the message it names is shown there, if anywhere
+// Scrolls the very tab the link is in, as the message it names is shown there, if anywhere; or
+// pops up the message's menu
 static gboolean jumpLinkClicked(PidginIMHtml *imhtml, PidginIMHtmlLink *link)
 {
     const char *url = g_linkGetUrl(link);
     std::string accountName;
     ChatId      chatId;
     MessageId   messageId;
-    if (!url || !parseJumpLink(url, accountName, chatId, messageId)) {
+    bool        menu;
+    if (!url || !parseJumpLink(url, accountName, chatId, messageId, menu)) {
         purple_debug_warning(config::pluginId, "Not a link to a message: %s\n", url ? url : "");
+        return TRUE;
+    }
+    if (menu) {
+        PurpleTdClient *client = PurpleTdClient::findConnected(accountName.c_str());
+        if (client)
+            client->showMessageMenu(chatId, messageId);
+        else {
+            // TRANSLATOR: Error dialog, secondary content. Argument is the account's name, its phone number.
+            std::string reason = formatMessage(_("Account {} is not connected."), accountName);
+            purple_notify_error(NULL, config::pluginName, _("Cannot open the message's menu"), reason.c_str());
+        }
         return TRUE;
     }
     if (!scrollToMessage(imhtml, messageId))

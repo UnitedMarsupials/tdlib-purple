@@ -5,6 +5,7 @@
 ### Features
 
 - **In Pidgin, a reply's quote and the notices of an edit, a deletion or a reaction link to their message, scrolling the conversation to it.**
+- **In Pidgin, a "☰" after each message opens its menu, where a reaction can be added or taken back.** For now that is all the menu holds; reactions that need Telegram Premium, and custom-emoji ones, are not offered.
 
 ### Build
 

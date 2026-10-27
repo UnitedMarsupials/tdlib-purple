@@ -631,6 +631,13 @@ PurpleConversation *getMessageConversation(TdAccountData &account, const td::td_
     return NULL;
 }
 
+// The menu's link after the message; not while it is being sent, under an id it is yet to change
+static std::string getMessageTrailer(TdAccountData &account, const td::td_api::chat &chat,
+                                     const TgMessageInfo &message)
+{
+    return message.sentLocally ? std::string() : makeMenuLink(account.purpleAccount, getId(chat), message.id);
+}
+
 void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const TgMessageInfo &message,
                      const char *text, const char *notification, uint32_t extraFlags)
 {
@@ -658,7 +665,7 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
         text = newText.c_str();
 
     // Marks for the message's own text, not for a notice about it, which carries its id
-    MessageMarkScope markScope(text ? message.id : MessageId::invalid);
+    MessageMarkScope markScope(text ? message.id : MessageId::invalid, getMessageTrailer(account, chat, message));
     const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
     if (privateUser) {
         std::string userName = getPrivateChatPurpleName(account, *privateUser);
@@ -1252,6 +1259,8 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
     //     }
     // }
 
+    // All its parts, notices included, are the message, and its menu follows the last
+    MessageMarkScope markScope(messageInfo.id, getMessageTrailer(account, chat, messageInfo));
     FileInfo fileInfo;
     getFileFromMessage(fullMessage, fileInfo);
     if (fileInfo.secret) {

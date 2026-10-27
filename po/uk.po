@@ -1227,3 +1227,28 @@ msgstr "Повідомлення не показано"
 #: ../tdlib-purple.cpp:979
 msgid "It is no longer in this conversation's window."
 msgstr "Його вже немає у вікні цієї розмови."
+
+#. TRANSLATOR: Error dialog, primary content, after the menu link after a message was clicked.
+#: ../td-client.cpp:1019 ../tdlib-purple.cpp:982
+msgid "Cannot open the message's menu"
+msgstr "Не вдається відкрити меню повідомлення"
+
+#. TRANSLATOR: Submenu of reactions, after the most likely ones.
+#: ../td-client.cpp:1083
+msgid "More"
+msgstr "Ще"
+
+#. TRANSLATOR: Disabled item of the reactions' submenu, in a message's menu.
+#: ../td-client.cpp:1090
+msgid "No reactions allowed"
+msgstr "Реакції не дозволено"
+
+#. TRANSLATOR: Submenu of a message's menu.
+#: ../td-client.cpp:1096
+msgid "Reactions"
+msgstr "Реакції"
+
+#. TRANSLATOR: Error dialog, primary content, after a reaction was picked from a message's menu.
+#: ../td-client.cpp:1115
+msgid "Cannot change the reaction"
+msgstr "Не вдається змінити реакцію"
