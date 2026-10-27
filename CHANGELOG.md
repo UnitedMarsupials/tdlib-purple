@@ -6,16 +6,18 @@
 
 - **In Pidgin, a reply's quote and the notices of an edit, a deletion or a reaction link to their message, scrolling the conversation to it.**
 
+### Build
+
+- **Pidgin's headers are needed to build, for features of its conversation window, and `-DNoPidgin=True` builds without them.**
+
+## 0.9.4 (2026-10-27)
+
 ### Fixes
 
 - **A video's file link gives its file size and, where it has other sizes, is marked as the original, which is no longer listed among them.**
 - **A conversation with someone new stays in its tab when they join the buddy list, instead of moving to another.**
 - **A stranger who writes to you is no longer added to the buddy list while Telegram offers to report them as spam.**
 - **A deleted account's buddy keeps its name, marked "(deleted)", and moves to the group "Deleted Accounts (Telegram)", instead of losing its name.**
-
-### Build
-
-- **Pidgin's headers are needed to build, for features of its conversation window, and `-DNoPidgin=True` builds without them.**
 
 ## 0.9.3 (2026-10-19)
 
