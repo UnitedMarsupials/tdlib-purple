@@ -1,6 +1,8 @@
 #include "pidgin-ui.h"
 #include "client-utils.h"
 #include "config.h"
+#include "format.h"
+#include "translate.h"
 #include <string>
 
 #ifndef NoPidgin
@@ -38,6 +40,14 @@ FRONT_END_FUNCTION(gtk_label_set_markup);
 FRONT_END_FUNCTION(gtk_widget_show_all);
 FRONT_END_FUNCTION(gtk_widget_destroy);
 FRONT_END_FUNCTION(g_signal_connect_data);
+FRONT_END_FUNCTION(g_signal_lookup);
+FRONT_END_FUNCTION(g_signal_handlers_disconnect_matched);
+FRONT_END_FUNCTION(g_signal_emit_by_name);
+FRONT_END_FUNCTION(g_object_get_data);
+FRONT_END_FUNCTION(g_object_set_data_full);
+FRONT_END_FUNCTION(gtk_text_iter_get_tags);
+FRONT_END_FUNCTION(gtk_text_iter_get_buffer);
+FRONT_END_FUNCTION(gtk_text_buffer_get_selection_bounds);
 
 static bool g_pidginUi = false;
 
@@ -130,6 +140,50 @@ static void displayedMessage(PurpleAccount *account, const char *who, char *mess
     }
 }
 
+// Where GtkIMHtml keeps a link's address, which it also shows as the link's tooltip
+static const char LINK_URL_KEY[]  = "link_url";
+static const char LINK_TARGET_KEY[] = "tdlib-purple-link";
+
+// Clicked like any other link, but without GtkIMHtml marking it visited, in another color
+static gboolean linkEvent(GtkTextTag *tag, GObject *imhtml, GdkEvent *event, GtkTextIter *iter, gpointer data)
+{
+    if ((event->type != GDK_BUTTON_RELEASE) || (reinterpret_cast<GdkEventButton *>(event)->button != 1))
+        return FALSE;
+    // Not when it ends a selection
+    GtkTextIter start, end;
+    if (p_gtk_text_buffer_get_selection_bounds(p_gtk_text_iter_get_buffer(iter), &start, &end))
+        return FALSE;
+    const char *target = static_cast<const char *>(p_g_object_get_data(reinterpret_cast<GObject *>(tag),
+                                                                         LINK_TARGET_KEY));
+    if (target)
+        p_g_signal_emit_by_name(imhtml, "url_clicked", target);
+    return FALSE;
+}
+
+// The links our prefix starts with get a tooltip that says what they do, instead of showing
+// their address, and are clicked through our own handler instead of GtkIMHtml's
+static void takeOverLinks(GtkTextIter *where, MessageId messageId)
+{
+    GSList *tags = p_gtk_text_iter_get_tags(where);
+    for (GSList *item = tags; item; item = item->next) {
+        GObject    *tag = static_cast<GObject *>(item->data);
+        const char *url = static_cast<const char *>(p_g_object_get_data(tag, LINK_URL_KEY));
+        if (!url || p_g_object_get_data(tag, LINK_TARGET_KEY))
+            continue;
+        p_g_object_set_data_full(tag, LINK_TARGET_KEY, g_strdup(url), g_free);
+        // A message's number as in its t.me link; that of one not yet sent is its temporary id
+        int64_t number = ((messageId.value() & 0xFFFFF) == 0) ? (messageId.value() >> 20) : messageId.value();
+        // TRANSLATOR: Tooltip of the link that opens a message's menu, in Pidgin. Argument is the message's number.
+        std::string tooltip = formatMessage(_("Menu of message #{}"), std::to_string(number));
+        p_g_object_set_data_full(tag, LINK_URL_KEY, g_strdup(tooltip.c_str()), g_free);
+        p_g_signal_handlers_disconnect_matched(tag, G_SIGNAL_MATCH_ID,
+                                               p_g_signal_lookup("event", G_OBJECT_TYPE(tag)), 0,
+                                               NULL, NULL, NULL);
+        p_g_signal_connect_data(tag, "event", G_CALLBACK(linkEvent), NULL, NULL, GConnectFlags(0));
+    }
+    g_slist_free(tags);
+}
+
 // Longer than "(Mon, 26 Oct 2026 23:41:54)", as dates go in old messages
 static constexpr unsigned MAX_TIMESTAMP_LENGTH = 48;
 
@@ -161,9 +215,14 @@ static void insertPrefix(PurpleConversation *conv, MessageId messageId, const st
             }
         }
     }
-    p_gtk_text_buffer_create_mark(buffer, getMarkName(messageId, MarkKind::Prefix).c_str(), &where, TRUE);
+    GtkTextMark *prefixMark = p_gtk_text_buffer_create_mark(buffer, getMarkName(messageId, MarkKind::Prefix).c_str(),
+                                                             &where, TRUE);
     // Into the tab only, not the log
     p_gtk_imhtml_insert_html_at_iter(imhtml, prefix.c_str(), GTK_IMHTML_NO_SCROLL, &where);
+
+    GtkTextIter prefixStart;
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &prefixStart, prefixMark);
+    takeOverLinks(&prefixStart, messageId);
 }
 
 static guint g_connectSource = 0;
@@ -201,7 +260,11 @@ void pidginUiLoad(PurplePlugin *plugin)
                  LOOK_UP(gtk_widget_set_sensitive) && LOOK_UP(gtk_widget_set_tooltip_text) &&
                  LOOK_UP(gtk_bin_get_child) && LOOK_UP(gtk_label_set_markup) &&
                  LOOK_UP(gtk_widget_show_all) &&
-                 LOOK_UP(gtk_widget_destroy) && LOOK_UP(g_signal_connect_data);
+                 LOOK_UP(gtk_widget_destroy) && LOOK_UP(g_signal_connect_data) &&
+                 LOOK_UP(g_signal_lookup) && LOOK_UP(g_signal_handlers_disconnect_matched) &&
+                 LOOK_UP(g_signal_emit_by_name) && LOOK_UP(g_object_get_data) &&
+                 LOOK_UP(g_object_set_data_full) && LOOK_UP(gtk_text_iter_get_tags) &&
+                 LOOK_UP(gtk_text_iter_get_buffer) && LOOK_UP(gtk_text_buffer_get_selection_bounds);
     purple_debug_info(config::pluginId, "Pidgin's conversation window: %s\n",
                       g_pidginUi ? "found" : "not found");
     if (!g_pidginUi)
