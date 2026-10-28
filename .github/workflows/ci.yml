@@ -287,7 +287,8 @@ jobs:
             prefix: /usr/local
             options: ''
             install: >-
-              sudo pkg upgrade -y pkg &&
+              sudo pkg upgrade -y pkg && sudo pkg update -f &&
+              { pkg config ABI; pkg -vv | grep -iE "abi|osversion|url"; pkg rquery "%n %v %q" cmake pkg; true; } &&
               sudo pkg install -y cmake ninja pkgconf gettext-tools
               libpurple pidgin tdlib libfmt rlottie googletest valgrind
           # Without the pidgin package, so a stray need for its headers fails.
@@ -300,7 +301,8 @@ jobs:
             prefix: /usr/local
             options: -DNoPidgin=1
             install: >-
-              sudo pkg upgrade -y pkg &&
+              sudo pkg upgrade -y pkg && sudo pkg update -f &&
+              { pkg config ABI; pkg -vv | grep -iE "abi|osversion|url"; pkg rquery "%n %v %q" cmake pkg; true; } &&
               sudo pkg install -y cmake ninja pkgconf gettext-tools
               libpurple tdlib libfmt rlottie googletest
           - name: FreeBSD 14.4
@@ -312,7 +314,8 @@ jobs:
             prefix: /usr/local
             options: ''
             install: >-
-              sudo pkg upgrade -y pkg &&
+              sudo pkg upgrade -y pkg && sudo pkg update -f &&
+              { pkg config ABI; pkg -vv | grep -iE "abi|osversion|url"; pkg rquery "%n %v %q" cmake pkg; true; } &&
               sudo pkg install -y cmake ninja pkgconf gettext-tools
               libpurple pidgin tdlib libfmt rlottie googletest valgrind
           # No rlottie package, so no animated stickers; built without Pidgin's
