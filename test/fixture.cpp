@@ -22,7 +22,7 @@ void CommTest::SetUp()
     setMessageLinksEnabled(false);
     setJumpLinksEnabled(false);
     account = purple_account_new(("+" + selfPhoneNumber).c_str(), NULL);
-    connection = new PurpleConnection;
+    connection = new PurpleConnection();
     connection->state = PURPLE_DISCONNECTED;
     connection->account = account;
     purple_connection_set_protocol_data(connection, NULL);
