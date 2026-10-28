@@ -181,6 +181,16 @@ static std::string makeLocationText(const ShownLocation &shown)
     return text;
 }
 
+// The formatting of a text, to tell whether an edit changed it
+static std::string describeFormatting(const td::td_api::formattedText &text)
+{
+    std::string result;
+    for (const auto &entity: text.entities_)
+        if (entity)
+            result += td::td_api::to_string(entity);
+    return result;
+}
+
 // What the conversation shows of a message's content, as far as its sender can change it.
 // A change to anything else - a poll's tally, a live location's position, a link preview -
 // either shows nowhere or is no edit, and is not reported.
@@ -196,8 +206,10 @@ static void getShownContent(const td::td_api::MessageContent &content, ShownMess
     switch (content.get_id()) {
         case td::td_api::messageText::ID: {
             const auto &text = static_cast<const td::td_api::messageText &>(content);
-            if (text.text_)
-                result.content = text.text_->text_;
+            if (text.text_) {
+                result.content    = text.text_->text_;
+                result.formatting = describeFormatting(*text.text_);
+            }
             result.quotable = true;
             break;
         }
@@ -311,8 +323,9 @@ static void getShownContent(const td::td_api::MessageContent &content, ShownMess
     }
 
     if (caption) {
-        result.content  = caption->text_;
-        result.quotable = true;
+        result.content    = caption->text_;
+        result.formatting = describeFormatting(*caption);
+        result.quotable   = true;
     }
 }
 
@@ -2477,7 +2490,9 @@ void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messa
 
     ShownMessage editedMessage;
     getShownContent(*content, editedMessage);
-    if ((editedMessage.file == shownMessage->file) && (editedMessage.content == shownMessage->content)) {
+    if ((editedMessage.file == shownMessage->file) && (editedMessage.content == shownMessage->content) &&
+        (editedMessage.formatting == shownMessage->formatting))
+    {
         purple_debug_misc(config::pluginId, "Message %" G_GINT64_FORMAT " changed out of sight\n",
                           messageId.value());
         return;

@@ -329,6 +329,7 @@ struct ReadReceipt {
 struct ShownMessage {
     std::string file;      // the file the message carries, if any
     std::string content;   // what is shown of it besides: its text, caption or description
+    std::string formatting; // of the text or caption, as an edit may change only that
     bool        quotable = false; // content is the text or caption, as written
     std::string kind;      // what the message is, to name it by where there is no text to quote
     time_t      timestamp;
@@ -338,7 +339,8 @@ struct ShownMessage {
     // As far as an edit changes it
     bool operator==(const ShownMessage &other) const
     {
-        return (file == other.file) && (content == other.content) && (timestamp == other.timestamp);
+        return (file == other.file) && (content == other.content) && (formatting == other.formatting) &&
+               (timestamp == other.timestamp);
     }
 };
 
