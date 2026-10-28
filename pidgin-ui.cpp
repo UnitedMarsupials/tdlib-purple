@@ -476,8 +476,9 @@ void showMessageReactions(PurpleConversation *conv, MessageId messageId, const s
     GtkTextMark   *endMark = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::End).c_str()) : nullptr;
     if (!endMark)
         return;
+    std::string  name = getMarkName(messageId, MarkKind::Reactions);
     GtkTextIter  end, areaEnd;
-    GtkTextMark *areaEndMark = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Reactions).c_str());
+    GtkTextMark *areaEndMark = p_gtk_text_buffer_get_mark(buffer, name.c_str());
     p_gtk_text_buffer_get_iter_at_mark(buffer, &end, endMark);
     if (areaEndMark) {
         p_gtk_text_buffer_get_iter_at_mark(buffer, &areaEnd, areaEndMark);
@@ -485,16 +486,19 @@ void showMessageReactions(PurpleConversation *conv, MessageId messageId, const s
             p_gtk_imhtml_delete(imhtml, &end, &areaEnd);
             p_gtk_text_buffer_get_iter_at_mark(buffer, &end, endMark);
         }
-        p_gtk_text_buffer_move_mark(buffer, areaEndMark, &end);
-    } else
-        // Right gravity: it goes past what is inserted where it is
-        areaEndMark = p_gtk_text_buffer_create_mark(buffer, getMarkName(messageId, MarkKind::Reactions).c_str(),
-                                                    &end, FALSE);
+        p_gtk_text_buffer_delete_mark(buffer, areaEndMark);
+    }
+    // Right gravity only while the line goes in: kept so, at the end of the tab, the mark would go
+    // past the next message too, which a change of reactions would then take away
+    GtkTextMark *after = p_gtk_text_buffer_create_mark(buffer, NULL, &end, FALSE);
     if (!html.empty()) {
         // Into the tab only, not the log
         std::string line = "<br>" + html;
         p_gtk_imhtml_insert_html_at_iter(imhtml, line.c_str(), GTK_IMHTML_NO_SCROLL, &end);
     }
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &areaEnd, after);
+    p_gtk_text_buffer_create_mark(buffer, name.c_str(), &areaEnd, TRUE);
+    p_gtk_text_buffer_delete_mark(buffer, after);
 }
 
 bool canRedrawConversation(PurpleConversation *conv)
