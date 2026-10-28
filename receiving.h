@@ -7,9 +7,10 @@
 
 std::string makeNoticeWithSender(const td::td_api::chat &chat, const TgMessageInfo &message,
                                  const char *noticeText, PurpleAccount *account);
-// As markup; custom emoji given in smileys, by id, are shown by their codes
+// As markup; custom emoji given in smileys, by id, are shown by their codes. Sendable, only the
+// formatting that Pidgin's markup can send back, for editing it.
 std::string getMessageText(const td::td_api::formattedText &text,
-                           const std::map<int64_t, std::string> *smileys = nullptr);
+                           const std::map<int64_t, std::string> *smileys = nullptr, bool sendable = false);
 std::string makeInlineImageText(int imgstoreId);
 // How long a message may wait for its picture, preview or quoted message before it is shown
 // without: longer when catching up with a chat, where keeping messages in order matters more than

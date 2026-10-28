@@ -374,8 +374,10 @@ static void tgprpl_login (PurpleAccount *acct)
     PurpleTdClient   *tdClient = new PurpleTdClient(acct, g_testBackend);
 
     purple_connection_set_protocol_data (gc, tdClient);
-    // this would enable formatting buttons in pidgin
-    // gc->flags = static_cast<PurpleConnectionFlags>(gc->flags | PURPLE_CONNECTION_HTML);
+    // Pidgin's formatting toolbar, but for what Telegram has no formatting for: font faces and colors
+    // it cannot be told to leave out, which are dropped from what is sent
+    gc->flags = static_cast<PurpleConnectionFlags>(gc->flags | PURPLE_CONNECTION_HTML |
+                                                   PURPLE_CONNECTION_NO_BGCOLOR | PURPLE_CONNECTION_NO_FONTSIZE);
 
     purple_signal_connect(purple_conversations_get_handle(), "conversation-updated",
                           acct, PURPLE_CALLBACK(conversation_updated_cb), NULL);
@@ -405,17 +407,14 @@ static bool sendEdit(PurpleTdClient *tdClient, PurpleConversation *conv, const c
     EntryEdit edit;
     if (!endEntryEdit(conv, &edit))
         return false;
-    // Plain text, as messages are sent
-    char *stripped = purple_markup_strip_html(message);
-    char *text     = purple_unescape_html(stripped);
-    if (edit.original == text)
+    // With its formatting, as messages are sent; compared so, as Pidgin writes its markup its own way
+    auto text = parseFormattedText(message);
+    if (isSameFormattedText(*text, *parseFormattedText(edit.original)))
         // TRANSLATOR: In-chat notification, not logged, after a message being edited was sent unchanged.
         purple_conversation_write(conv, NULL, _("The message is left as it was."),
                                   (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), time(NULL));
     else
-        tdClient->editMessage(edit.chatId, edit.messageId, text, edit.isCaption);
-    g_free(text);
-    g_free(stripped);
+        tdClient->editMessage(edit.chatId, edit.messageId, std::move(text), edit.isCaption);
     return true;
 }
 

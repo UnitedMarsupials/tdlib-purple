@@ -1068,9 +1068,10 @@ void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId)
                     menu.reactions.push_back({PAID_REACTION, reaction->total_count_, reaction->is_chosen_});
             }
         const td::td_api::formattedText *text = getEditableText(message, menu.isCaption);
-        if (text)
+        if (text) {
             menu.text = text->text_;
-        else
+            menu.html = getMessageText(*text, nullptr, true);
+        } else
             menu.isCaption = false;
         menu.date = message.date_;
 
@@ -1222,11 +1223,11 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
         MenuItem item;
         // TRANSLATOR: Item of a message's menu; it opens a dialog.
         item.label  = _("Edit…");
-        item.action = [accountName, chatId, messageId, text = menu.text, isCaption = menu.isCaption,
-                       date = menu.date]() {
+        item.action = [accountName, chatId, messageId, text = menu.text, html = menu.html,
+                       isCaption = menu.isCaption, date = menu.date]() {
             PurpleTdClient *client = findConnected(accountName.c_str());
             if (client)
-                client->askEditMessage(chatId, messageId, text, isCaption, date);
+                client->askEditMessage(chatId, messageId, text, html, isCaption, date);
         };
         items.push_back(std::move(item));
     }
@@ -1366,8 +1367,8 @@ struct MessageRequest {
 };
 }
 
-void PurpleTdClient::askEditMessage(ChatId chatId, MessageId messageId, const std::string &text, bool isCaption,
-                                    time_t date)
+void PurpleTdClient::askEditMessage(ChatId chatId, MessageId messageId, const std::string &text,
+                                    const std::string &html, bool isCaption, time_t date)
 {
     // In Pidgin, in the conversation's input field, the next message sent being the edit
     const td::td_api::chat *chat = m_data.getChat(chatId);
@@ -1378,7 +1379,8 @@ void PurpleTdClient::askEditMessage(ChatId chatId, MessageId messageId, const st
         if (client)
             client->showEditCancelled(chatId);
     };
-    if (conv && beginEntryEdit(conv, {chatId, messageId, isCaption, text}, text, editCancelled)) {
+    // There with its formatting, in Pidgin's markup, as what is sent from there
+    if (conv && beginEntryEdit(conv, {chatId, messageId, isCaption, html}, html, editCancelled)) {
         // TRANSLATOR: In-chat notification, not logged. Argument is the time (or date and time) the message was sent at, as the conversation window shows it. "/cancel" must remain verbatim!
         std::string notice = formatMessage(_("Editing the message from {}: send it to save the change; Esc or /cancel leaves it as it was."),
                                            linkToMessage(m_data.purpleAccount, chatId, messageId, formatMessageTime(date)));
@@ -1391,8 +1393,12 @@ void PurpleTdClient::askEditMessage(ChatId chatId, MessageId messageId, const st
     auto  edited  = [](void *data, const char *text) {
         std::unique_ptr<MessageRequest> request(static_cast<MessageRequest *>(data));
         PurpleTdClient *client = findConnected(request->accountName.c_str());
-        if (client)
-            client->editMessage(request->chatId, request->messageId, text ? text : "", request->flag);
+        if (client) {
+            // Plain text, from the dialog
+            auto formatted = td::td_api::make_object<td::td_api::formattedText>();
+            formatted->text_ = text ? text : "";
+            client->editMessage(request->chatId, request->messageId, std::move(formatted), request->flag);
+        }
     };
     auto cancelled = [](void *data, const char *) { delete static_cast<MessageRequest *>(data); };
     // TRANSLATOR: Message editing dialog, title
@@ -1432,13 +1438,11 @@ void PurpleTdClient::showEditCancelled(ChatId chatId)
         showChatNotification(m_data, *chat, _("The message is left as it was."), PURPLE_MESSAGE_NO_LOG);
 }
 
-void PurpleTdClient::editMessage(ChatId chatId, MessageId messageId, const char *text, bool isCaption)
+void PurpleTdClient::editMessage(ChatId chatId, MessageId messageId,
+                                 td::td_api::object_ptr<td::td_api::formattedText> formatted, bool isCaption)
 {
     purple_debug_misc(config::pluginId, "Editing the %s of message %" G_GINT64_FORMAT "\n",
                       isCaption ? "caption" : "text", messageId.value());
-    // Plain text, as messages are sent
-    auto formatted = td::td_api::make_object<td::td_api::formattedText>();
-    formatted->text_ = text;
     td::td_api::object_ptr<td::td_api::Function> request;
     if (isCaption)
         request = td::td_api::make_object<td::td_api::editMessageCaption>(chatId.value(), messageId.value(), nullptr,

@@ -89,6 +89,10 @@ void updateChatConversation(PurpleConvChat *purpleChat, const td::td_api::superg
 void updateSupergroupChatMembers(PurpleConvChat *purpleChat, const td::td_api::chatMembers &members,
                                  const TdAccountData &account);
 
+// Pidgin's markup as Telegram's formatted text: bold, italic, underline, strikethrough and links;
+// the rest of it dropped
+td::td_api::object_ptr<td::td_api::formattedText> parseFormattedText(const std::string &html);
+bool isSameFormattedText(const td::td_api::formattedText &a, const td::td_api::formattedText &b);
 int  transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiver,
                      TdAccountData &account, TdTransceiver::ResponseCb response);
 

@@ -1,5 +1,6 @@
 #include "fixture.h"
 #include "receiving.h"
+#include "client-utils.h"
 
 // Telegram's formatting, as markup Pidgin draws
 TEST(FormattedText, Entities)
@@ -38,4 +39,36 @@ TEST(FormattedText, Entities)
     list.clear();
     list.push_back(makeTextEntity(0, 5, make_object<textEntityTypeMention>()));
     ASSERT_EQ(std::string("@user hi"), format("@user hi", std::move(list)));
+}
+
+// Pidgin's markup, as Telegram's formatting
+TEST(FormattedText, FromMarkup)
+{
+    auto entities = [](const std::string &html) {
+        object_ptr<formattedText> text = parseFormattedText(html);
+        std::string result = text->text_;
+        for (const auto &entity: text->entities_)
+            result += " " + std::to_string(entity->offset_) + "+" + std::to_string(entity->length_) + ":" +
+                      std::to_string(entity->type_->get_id());
+        return result;
+    };
+    auto id = [](int32_t value) { return std::to_string(value); };
+
+    // Nested and overlapping as Pidgin writes them; offsets in UTF-16 units, past the cat
+    ASSERT_EQ("\U0001F63A bold italic 3+11:" + id(textEntityTypeBold::ID) + " 8+6:" + id(textEntityTypeItalic::ID),
+              entities("\U0001F63A <b>bold <i>italic</i></b>"));
+    // Line breaks, entities, styles of spans; font faces and colors dropped
+    ASSERT_EQ("a < b\nc 6+1:" + id(textEntityTypeUnderline::ID) + " 6+1:" + id(textEntityTypeStrikethrough::ID),
+              entities("<font color=\"#ff0000\">a &lt; b</font><br><span style=\"text-decoration: underline line-through;\">c</span>"));
+    // A link with text of its own, and one that is its address
+    object_ptr<formattedText> text = parseFormattedText("<a href=\"https://x.org/?a=1&amp;b=2\">site</a> "
+                                                        "<a href=\"https://y.org\">https://y.org</a>");
+    ASSERT_EQ("site https://y.org", text->text_);
+    ASSERT_EQ(1u, text->entities_.size());
+    ASSERT_EQ(textEntityTypeTextUrl::ID, text->entities_[0]->type_->get_id());
+    ASSERT_EQ("https://x.org/?a=1&b=2", static_cast<const textEntityTypeTextUrl &>(*text->entities_[0]->type_).url_);
+
+    // Pidgin writing it its own way is no change
+    ASSERT_TRUE(isSameFormattedText(*parseFormattedText("<b>x</b> y"), *parseFormattedText("<B>x</B> y")));
+    ASSERT_FALSE(isSameFormattedText(*parseFormattedText("<b>x</b> y"), *parseFormattedText("x y")));
 }

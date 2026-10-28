@@ -458,14 +458,15 @@ TEST_F(MessageLinkTest, MessageMenu)
     prpl.verifyNoEvents();
 
     // Editing and deleting, as the menu's dialogs end
-    client->editMessage(chat, message, "new text", false);
+    client->editMessage(chat, message, parseFormattedText("<b>new</b> text"), false);
     {
         auto content = make_object<inputMessageText>();
         content->text_ = makeFormattedText("new text");
+        content->text_->entities_.push_back(makeTextEntity(0, 3, make_object<textEntityTypeBold>()));
         tgl.verifyRequest(editMessageText(chatIds[0], messageId, nullptr, std::move(content)));
     }
     tgl.reply(makeDocumentMessage(10000, "", false));
-    client->editMessage(chat, message, "new caption", true);
+    client->editMessage(chat, message, parseFormattedText("new caption"), true);
     tgl.verifyRequest(editMessageCaption(chatIds[0], messageId, nullptr, makeFormattedText("new caption"), false));
     tgl.reply(makeDocumentMessage(10000, "", false));
     client->deleteMessage(chat, message, true);
@@ -542,4 +543,3 @@ TEST(MarkChanges, Words)
     // Only spacing or formatting changed
     ASSERT_EQ(std::string("a<br><b>b</b>"), changes("a b", "a<br><b>b</b>"));
 }
-

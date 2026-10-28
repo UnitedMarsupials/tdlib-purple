@@ -66,7 +66,8 @@ public:
     void setMessageReaction(ChatId chatId, MessageId messageId, const std::string &emoji, bool chosen);
     void askPaidReaction(ChatId chatId, MessageId messageId);
     // What the dialogs of a message's menu do, once answered
-    void editMessage(ChatId chatId, MessageId messageId, const char *text, bool isCaption);
+    void editMessage(ChatId chatId, MessageId messageId, td::td_api::object_ptr<td::td_api::formattedText> text,
+                     bool isCaption);
     void deleteMessage(ChatId chatId, MessageId messageId, bool forAll);
     void cancelEntryEdit(ChatId chatId);
     void showEditCancelled(ChatId chatId);
@@ -214,13 +215,15 @@ private:
         bool                       canEdit          = false;
         bool                       isCaption        = false;
         std::string                text;
+        std::string                html;             // with what formatting can be edited
         time_t                     date             = 0;
         bool                       canDeleteForSelf = false;
         bool                       canDeleteForAll  = false;
     };
     void showMessageMenuResponse(ChatId chatId, MessageId messageId, const MessageMenu &menu,
                                  TdObjectPtr object);
-    void askEditMessage(ChatId chatId, MessageId messageId, const std::string &text, bool isCaption, time_t date);
+    void askEditMessage(ChatId chatId, MessageId messageId, const std::string &text, const std::string &html,
+                        bool isCaption, time_t date);
     void askDeleteMessage(ChatId chatId, MessageId messageId, bool forAll);
     void openDownloadedFile(ChatId chatId, const std::string &key, const std::string &description,
                             TdObjectPtr object);

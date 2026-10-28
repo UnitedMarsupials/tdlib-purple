@@ -345,7 +345,7 @@ static const char QUOTE_BAR[] = "<font color=\"#808080\">\xe2\x96\x8e</font> ";
 
 // Telegram's formatting as the markup Pidgin's conversation window draws; what it has no markup
 // for is left plain: mentions, hashtags, addresses (which Pidgin links itself) and the like
-static bool getEntityMarkup(const td::td_api::TextEntityType &type, TextMarkup &markup)
+static bool getEntityMarkup(const td::td_api::TextEntityType &type, TextMarkup &markup, bool sendable)
 {
     switch (type.get_id()) {
     case td::td_api::textEntityTypeBold::ID:
@@ -364,6 +364,16 @@ static bool getEntityMarkup(const td::td_api::TextEntityType &type, TextMarkup &
         markup.open = "<s>";
         markup.close = "</s>";
         return true;
+    case td::td_api::textEntityTypeTextUrl::ID:
+        markup.open = "<a href=\"" +
+                      escapeForDisplay(static_cast<const td::td_api::textEntityTypeTextUrl &>(type).url_) + "\">";
+        markup.close = "</a>";
+        return true;
+    }
+    // The rest, there being no sending them from Pidgin
+    if (sendable)
+        return false;
+    switch (type.get_id()) {
     case td::td_api::textEntityTypeCode::ID:
         markup.open = "<font face=\"monospace\">";
         markup.close = "</font>";
@@ -372,11 +382,6 @@ static bool getEntityMarkup(const td::td_api::TextEntityType &type, TextMarkup &
     case td::td_api::textEntityTypePreCode::ID:
         markup.open = "<pre>";
         markup.close = "</pre>";
-        return true;
-    case td::td_api::textEntityTypeTextUrl::ID:
-        markup.open = "<a href=\"" +
-                      escapeForDisplay(static_cast<const td::td_api::textEntityTypeTextUrl &>(type).url_) + "\">";
-        markup.close = "</a>";
         return true;
     case td::td_api::textEntityTypeSpoiler::ID:
         // Hidden until selected, which shows it in the selection's colors
@@ -394,7 +399,7 @@ static bool getEntityMarkup(const td::td_api::TextEntityType &type, TextMarkup &
 }
 
 std::string getMessageText(const td::td_api::formattedText &text,
-                           const std::map<int64_t, std::string> *smileys)
+                           const std::map<int64_t, std::string> *smileys, bool sendable)
 {
     std::vector<TextMarkup> markups;
     for (const auto &entity: text.entities_) {
@@ -411,7 +416,7 @@ std::string getMessageText(const td::td_api::formattedText &text,
                 continue;
             markup.open     = escapeForDisplay(it->second);
             markup.replaces = true;
-        } else if (!getEntityMarkup(*entity->type_, markup))
+        } else if (!getEntityMarkup(*entity->type_, markup, sendable))
             continue;
         if (markup.start < markup.end)
             markups.push_back(std::move(markup));

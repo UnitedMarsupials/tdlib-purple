@@ -167,8 +167,9 @@ static void compare(const object_ptr<formattedText> &actual, const object_ptr<fo
     if (!actual) return;
 
     ASSERT_EQ(expected->text_, actual->text_);
-    ASSERT_TRUE(actual->entities_.empty()) << "not supported";
-    ASSERT_TRUE(expected->entities_.empty()) << "not supported";
+    ASSERT_EQ(expected->entities_.size(), actual->entities_.size());
+    for (size_t i = 0; i < expected->entities_.size(); i++)
+        ASSERT_EQ(to_string(expected->entities_[i]), to_string(actual->entities_[i]));
 }
 
 static void compare(const inputMessageText &actual,
