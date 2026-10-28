@@ -675,14 +675,13 @@ bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::
     state->edit      = edit;
     state->cancelled = std::move(cancelled);
 
-    gchar      *escaped = g_markup_escape_text(text.c_str(), -1);
+    // Markup already, but for its line breaks
     std::string html;
-    for (const char *c = escaped; *c; c++)
-        if (*c == '\n')
+    for (char c: text)
+        if (c == '\n')
             html += "<br>";
         else
-            html += *c;
-    g_free(escaped);
+            html += c;
     setEntryText(entry, html.c_str());
     tintEntry(entry, true);
     p_gtk_widget_grab_focus(entry);

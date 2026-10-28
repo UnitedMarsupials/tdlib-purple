@@ -60,8 +60,8 @@ struct MessageMarks {
     PidginTextMark *end   = nullptr;
 };
 
-// A message edited in a conversation's input field, in Pidgin: its text takes the place of what the
-// field held, which comes back once the edit is sent or given up, and the field is tinted meanwhile.
+// A message edited in a conversation's input field, in Pidgin: its text, as markup, takes the place
+// of what the field held, which comes back once the edit is sent or given up, and the field is tinted meanwhile.
 // False where that cannot be done.
 struct EntryEdit {
     ChatId      chatId;
