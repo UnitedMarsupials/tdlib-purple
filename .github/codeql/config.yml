@@ -4,6 +4,17 @@ name: "tdlib-purple CodeQL config"
 queries:
   - uses: security-and-quality
 
+# Without a build, CodeQL cannot resolve what the headers of GTK, Pidgin,
+# libpurple and TDLib declare; it then loses uses made through those types
+# (a function pointer called, a function put into a plugin's info) and takes
+# names it cannot find, as TDLib's td namespace, for global variables.  These
+# two queries found nothing else.
+query-filters:
+  - exclude:
+      id: cpp/unused-static-variable
+  - exclude:
+      id: cpp/local-variable-hides-global-variable
+
 # The mock libpurple and the test cases are not shipped.  (For C++ this can
 # only work in build mode "none", as the workflow runs; a traced build
 # analyses whatever it compiles.)
