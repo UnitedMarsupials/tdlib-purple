@@ -1672,12 +1672,15 @@ void PurpleTdClient::sendReadReceipts(PurpleConversation *conversation)
 bool PurpleTdClient::fillConversation(PurpleConversation *conv)
 {
     int days = purple_account_get_int(m_account, AccountOptions::HistoryDays, AccountOptions::HistoryDaysDefault);
-    const td::td_api::chat *chat = findConversationChat(m_data, conv);
-    if ((days <= 0) || !chat)
+    if (days <= 0)
         return true;
+    // Not known yet, or a group chat's tab kept from before not joined again yet, just after login
+    const td::td_api::chat *chat = findConversationChat(m_data, conv);
+    if (!chat || ((purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_CHAT) &&
+                  purple_conv_chat_has_left(purple_conversation_get_chat_data(conv))))
+        return false;
     // Counted back from the latest message, however long ago that was
-    time_t latest = chat->last_message_ ? time_t(chat->last_message_->date_) : time(NULL);
-    return fillChat(m_data, getId(*chat), latest - time_t(days) * 24 * 60 * 60);
+    return fillChat(m_data, getId(*chat), time_t(days) * 24 * 60 * 60);
 }
 
 static bool isLeavingOf(const td::td_api::message &message, int64_t userId)

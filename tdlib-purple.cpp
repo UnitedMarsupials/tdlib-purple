@@ -325,31 +325,41 @@ conversation_updated_cb(PurpleConversation *conv, PurpleConvUpdateType type)
     }
 }
 
-// A conversation just opened, filled once Pidgin has set it up, or the chat is no longer busy
+// A conversation just opened, or a group chat's joined again, filled once Pidgin has set it up,
+// the account is connected and knows the chat, and the chat is not busy
 struct ConversationToFill: PurpleConversationInfo {
     unsigned tries = 0;
 };
+
+static const char FILL_PENDING_KEY[] = "tdlib-fill-pending";
 
 static gboolean fillConversation(void *arg)
 {
     std::unique_ptr<ConversationToFill> info(static_cast<ConversationToFill *>(arg));
     PurpleAccount      *account  = purple_accounts_find(info->accountName.c_str(), config::pluginId);
-    PurpleTdClient     *tdClient = account ? getTdClient(account) : nullptr;
-    PurpleConversation *conv     = tdClient ? purple_find_conversation_with_account(info->type, info->convName.c_str(),
-                                                                                    account)
-                                            : nullptr;
-    // Busy for so long, it is fetching more than the tab would hold anyway
-    enum { RETRY_MS = 1000, MAX_TRIES = 60 };
-    if (conv && !tdClient->fillConversation(conv) && (++info->tries < MAX_TRIES))
+    PurpleConversation *conv     = account ? purple_find_conversation_with_account(info->type, info->convName.c_str(),
+                                                                                   account)
+                                           : nullptr;
+    if (!conv)
+        return G_SOURCE_REMOVE;
+    PurpleTdClient *tdClient = getTdClient(account);
+    // Waiting so long, it is fetching more than the tab would hold anyway, or will never know it
+    enum { RETRY_MS = 1000, MAX_TRIES = 120 };
+    if ((!tdClient || !tdClient->fillConversation(conv)) && (++info->tries < MAX_TRIES))
         g_timeout_add(RETRY_MS, fillConversation, info.release());
+    else
+        purple_conversation_set_data(conv, FILL_PENDING_KEY, nullptr);
     return G_SOURCE_REMOVE;
 }
 
+// Both for a conversation just created, and for a group chat's, kept from an earlier connection,
+// joined again: Pidgin may well have opened it before the account knew the chat
 static void conversationCreated(PurpleConversation *conv, void *data)
 {
     PurpleAccount *account = purple_conversation_get_account(conv);
-    if ((account != data) || !canRedrawConversation(conv))
+    if ((account != data) || !canRedrawConversation(conv) || purple_conversation_get_data(conv, FILL_PENDING_KEY))
         return;
+    purple_conversation_set_data(conv, FILL_PENDING_KEY, conv);
     ConversationToFill *info = new ConversationToFill;
     info->accountName = purple_account_get_username(account);
     info->convName    = purple_conversation_get_name(conv);
@@ -371,6 +381,8 @@ static void tgprpl_login (PurpleAccount *acct)
                           acct, PURPLE_CALLBACK(conversation_updated_cb), NULL);
     purple_signal_connect(purple_conversations_get_handle(), "conversation-created",
                           acct, PURPLE_CALLBACK(conversationCreated), acct);
+    purple_signal_connect(purple_conversations_get_handle(), "chat-joined",
+                          acct, PURPLE_CALLBACK(conversationCreated), acct);
 }
 
 static void tgprpl_close (PurpleConnection *gc)
@@ -380,6 +392,8 @@ static void tgprpl_close (PurpleConnection *gc)
     purple_signal_disconnect(purple_conversations_get_handle(), "conversation-updated",
                              account, PURPLE_CALLBACK(conversation_updated_cb));
     purple_signal_disconnect(purple_conversations_get_handle(), "conversation-created",
+                             account, PURPLE_CALLBACK(conversationCreated));
+    purple_signal_disconnect(purple_conversations_get_handle(), "chat-joined",
                              account, PURPLE_CALLBACK(conversationCreated));
     delete static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
     purple_connection_set_protocol_data(gc, NULL);

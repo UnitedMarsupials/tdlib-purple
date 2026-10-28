@@ -2521,6 +2521,7 @@ namespace {
 struct Redraw {
     ChatId                                                  chatId;
     MessageId                                               earliest; // or
+    time_t                                                  span  = 0; // back from the latest message
     time_t                                                  since = 0;
     unsigned                                                limit;
     // Newest first, as TDLib gives them
@@ -2571,6 +2572,8 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
             // The message a batch goes back from may come again, starting it
             if (!message || (!redraw->messages.empty() && (getId(*message) == getId(*redraw->messages.back()))))
                 continue;
+            if (redraw->span && !redraw->since)
+                redraw->since = std::max<time_t>(message->date_ - redraw->span, 1);
             older = redraw->since && (message->date_ < redraw->since);
             if (older)
                 break;
@@ -2582,7 +2585,7 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
         }
         bool full = redraw->messages.size() >= redraw->limit;
         // Filling it from a time, all there is since, or as much as fits, is enough
-        if (found || (redraw->since && (older || full || messages.messages_.empty()))) {
+        if (found || (redraw->span && (older || full || messages.messages_.empty()))) {
             if (!redraw->messages.empty()) {
                 redrawShow(account, *redraw);
                 return;
@@ -2620,7 +2623,7 @@ static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw
 }
 
 // False if the chat is busy
-static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earliest, time_t since)
+static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earliest, time_t span)
 {
     const td::td_api::chat *chat = account.getChat(chatId);
     PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
@@ -2637,7 +2640,7 @@ static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earlies
     auto redraw = std::make_shared<Redraw>();
     redraw->chatId   = chatId;
     redraw->earliest = earliest;
-    redraw->since    = since;
+    redraw->span     = span;
     redraw->limit    = getRedrawLimit();
     redrawRequest(account, redraw, MessageId::invalid);
     return true;
@@ -2649,9 +2652,9 @@ void redrawChat(TdAccountData &account, ChatId chatId, MessageId earliest)
         startRedraw(account, chatId, earliest, 0);
 }
 
-bool fillChat(TdAccountData &account, ChatId chatId, time_t since)
+bool fillChat(TdAccountData &account, ChatId chatId, time_t span)
 {
-    return startRedraw(account, chatId, MessageId::invalid, since);
+    return startRedraw(account, chatId, MessageId::invalid, span);
 }
 
 // While a message waits to be shown, its reactions would come before it, and are part of what it

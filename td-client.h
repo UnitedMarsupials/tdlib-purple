@@ -25,7 +25,7 @@ public:
     void sendTyping(const char *buddyName, bool isTyping);
     void sendReadReceipts(PurpleConversation *conversation);
     // Fills a tab just opened with the chat's latest messages, as set; false if it is to be tried
-    // again later
+    // again later, the chat being busy or not known yet
     bool fillConversation(PurpleConversation *conv);
 
     void addContact(const std::string &purpleName, const std::string &alias, const std::string &groupName);

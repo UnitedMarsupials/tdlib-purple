@@ -78,9 +78,9 @@ void fetchHistory(TdAccountData &account, ChatId chatId, MessageId fetchFrom, Me
 // Fills the chat's tab anew, in Pidgin, from the given message to the latest, if the tab can hold
 // that many; to show a message it does not, such as one just reacted to
 void redrawChat(TdAccountData &account, ChatId chatId, MessageId earliest);
-// Fills the chat's tab anew, in Pidgin, with its messages since the given time, as many as it can
-// hold, if there are any; false if the chat is busy, to be tried again later
-bool fillChat(TdAccountData &account, ChatId chatId, time_t since);
+// Fills the chat's tab anew, in Pidgin, with its messages of the given span of time back from the
+// latest one, as many as it can hold; false if the chat is busy, to be tried again later
+bool fillChat(TdAccountData &account, ChatId chatId, time_t span);
 // The chat a conversation is of, if known
 const td::td_api::chat *findConversationChat(TdAccountData &account, PurpleConversation *conv);
 void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messageId,
