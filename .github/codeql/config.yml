@@ -1,38 +1,14 @@
 name: "tdlib-purple CodeQL config"
 
-# security-and-quality includes everything in security-extended.
+# The security queries only, the taint and data-flow analysis.  Without a
+# build, CodeQL cannot resolve what the headers of GTK, Pidgin, libpurple and
+# TDLib declare, and the quality queries of security-and-quality then misread
+# the code: locals of a function using those types as globals, their
+# initializations as expressions with no effect, the td of td::td_api as a
+# variable hiding others, a switch over td_api's ::ID constants as having one
+# case.  That was all they found, but for a comment or two.
 queries:
-  - uses: security-and-quality
-
-# Without a build, CodeQL cannot resolve what the headers of GTK, Pidgin,
-# libpurple and TDLib declare; it then loses uses made through those types
-# (a function pointer called, a function put into a plugin's info) and takes
-# names it cannot find, as TDLib's td namespace, for global variables.  It
-# reads a function using such types as declarations at file scope, its
-# locals as globals ("short-global-name") and their initializations as
-# expressions with no effect; each "td" in td::td_api as a variable hiding a
-# parameter or another variable; a switch over td_api's ::ID constants as
-# having one case, the rest of it unreachable, and the function as not
-# returning.  These queries found nothing else.
-query-filters:
-  - exclude:
-      id: cpp/unused-static-variable
-  - exclude:
-      id: cpp/local-variable-hides-global-variable
-  - exclude:
-      id: cpp/short-global-name
-  - exclude:
-      id: cpp/useless-expression
-  - exclude:
-      id: cpp/declaration-hides-parameter
-  - exclude:
-      id: cpp/declaration-hides-variable
-  - exclude:
-      id: cpp/trivial-switch
-  - exclude:
-      id: cpp/dead-code-goto
-  - exclude:
-      id: cpp/missing-return
+  - uses: security-extended
 
 # The mock libpurple and the test cases are not shipped.  (For C++ this can
 # only work in build mode "none", as the workflow runs; a traced build
