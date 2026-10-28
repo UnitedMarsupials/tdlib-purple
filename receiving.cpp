@@ -675,6 +675,9 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
         flags = (PurpleMessageFlags) (flags | PURPLE_MESSAGE_NO_LOG);
     if (message.outgoing && !message.sentLocally)
         flags = (PurpleMessageFlags) (flags | PURPLE_MESSAGE_REMOTE_SEND);
+    // Shown again, nothing new: Pidgin makes no sound for it, nor do notifying plugins
+    if (message.redrawn)
+        flags = (PurpleMessageFlags) (flags | PURPLE_MESSAGE_DELAYED);
 
     std::string newText;
     if (text) {
