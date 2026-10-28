@@ -526,16 +526,19 @@ TEST(JumpLink, OnlyWhereEnabled)
 
 TEST(MarkChanges, Words)
 {
+    auto changes = [](const char *previous, const char *html) {
+        return markChanges(previous, html, "red", "green");
+    };
     // A word changed, one added, one removed
-    ASSERT_EQ(std::string("the <s>quick</s> <u>slow</u> brown fox <u>gladly</u> jumps over the dog"),
-              markChanges("the quick brown fox jumps over the dog", "the slow brown fox gladly jumps over the dog"));
-    ASSERT_EQ(std::string("over the <s>lazy</s> dog"), markChanges("over the lazy\ndog", "over the dog"));
+    ASSERT_EQ(std::string("the <font back=\"red\">quick</font> <font back=\"green\">slow</font> brown fox <font back=\"green\">gladly</font> jumps over the dog"),
+              changes("the quick brown fox jumps over the dog", "the slow brown fox gladly jumps over the dog"));
+    ASSERT_EQ(std::string("over the <font back=\"red\">lazy</font> dog"), changes("over the lazy\ndog", "over the dog"));
     // Formatting of the new text is kept; entities compare as the characters they stand for
-    ASSERT_EQ(std::string("<b>Tom</b> &amp; <s>Spike</s> <i><u>Jerry</u></i>"),
-              markChanges("Tom & Spike", "<b>Tom</b> &amp; <i>Jerry</i>"));
+    ASSERT_EQ(std::string("<b>Tom</b> &amp; <font back=\"red\">Spike</font> <i><font back=\"green\">Jerry</font></i>"),
+              changes("Tom & Spike", "<b>Tom</b> &amp; <i>Jerry</i>"));
     // Removed at either end, and all of it
-    ASSERT_EQ(std::string("<s>Well,</s> yes <s>&lt;indeed&gt;</s>"), markChanges("Well, yes <indeed>", "yes"));
-    ASSERT_EQ(std::string("<s>gone</s> "), markChanges("gone", ""));
+    ASSERT_EQ(std::string("<font back=\"red\">Well,</font> yes <font back=\"red\">&lt;indeed&gt;</font>"), changes("Well, yes <indeed>", "yes"));
+    ASSERT_EQ(std::string("<font back=\"red\">gone</font> "), changes("gone", ""));
     // Only spacing or formatting changed
-    ASSERT_EQ(std::string("a<br><b>b</b>"), markChanges("a b", "a<br><b>b</b>"));
+    ASSERT_EQ(std::string("a<br><b>b</b>"), changes("a b", "a<br><b>b</b>"));
 }

@@ -1175,7 +1175,8 @@ static bool isSpace(char c)
     return (c == ' ') || (c == '\n') || (c == '\t') || (c == '\r');
 }
 
-std::string markChanges(const std::string &previous, const std::string &html)
+std::string markChanges(const std::string &previous, const std::string &html,
+                        const std::string &removedColor, const std::string &addedColor)
 {
     // The new text as words, and tags and spaces between them, all kept as they are
     struct Token {
@@ -1251,15 +1252,18 @@ std::string markChanges(const std::string &previous, const std::string &html)
             added[head + j++] = true;
     }
 
-    auto strikeOut = [](const std::string &words) {
+    auto background = [](const std::string &color, const std::string &html) {
+        return "<font back=\"" + color + "\">" + html + "</font>";
+    };
+    auto putBack = [&](const std::string &words) {
         gchar      *escaped = g_markup_escape_text(words.c_str(), -1);
-        std::string result  = std::string("<s>") + escaped + "</s>";
+        std::string result  = background(removedColor, escaped);
         g_free(escaped);
         return result;
     };
     std::string result;
     if (newCount == 0)
-        result = strikeOut(removed[0]) + ' ';
+        result = putBack(removed[0]) + ' ';
     // Removed words go outside the formatting of the words around them: before the tags opening the
     // next word, after those closing the previous one
     size_t outside = 0;
@@ -1271,13 +1275,13 @@ std::string markChanges(const std::string &previous, const std::string &html)
             continue;
         }
         if (!removed[word].empty())
-            result.insert(outside, strikeOut(removed[word]) + ' ');
-        result += added[word] ? "<u>" + tokens[i].text + "</u>" : tokens[i].text;
+            result.insert(outside, putBack(removed[word]) + ' ');
+        result += added[word] ? background(addedColor, tokens[i].text) : tokens[i].text;
         outside = result.size();
         word++;
     }
     if ((newCount > 0) && !removed[newCount].empty())
-        result.insert(outside, (isSpace(result[outside - 1]) ? "" : " ") + strikeOut(removed[newCount]));
+        result.insert(outside, (isSpace(result[outside - 1]) ? "" : " ") + putBack(removed[newCount]));
     return result;
 }
 

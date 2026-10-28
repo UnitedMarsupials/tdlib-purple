@@ -1425,7 +1425,7 @@ msgstr "Zpráva byla smazána."
 msgid "Strike out deleted messages in Pidgin, rather than remove them"
 msgstr "Smazané zprávy v Pidginu přeškrtnout místo odstranění"
 
-#. TRANSLATOR: Check item of an edited message's menu: removed words struck out, added ones underlined.
+#. TRANSLATOR: Check item of an edited message's menu: removed words put back, and added ones, each on its own color.
 msgid "Show changes"
 msgstr "Zobrazit změny"
 

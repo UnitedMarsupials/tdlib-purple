@@ -700,7 +700,7 @@ msgstr ""
 msgid "Reactions"
 msgstr ""
 
-#. TRANSLATOR: Check item of an edited message's menu: removed words struck out, added ones underlined.
+#. TRANSLATOR: Check item of an edited message's menu: removed words put back, and added ones, each on its own color.
 #: ../td-client.cpp:1200
 msgid "Show changes"
 msgstr ""

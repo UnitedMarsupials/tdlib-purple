@@ -1196,7 +1196,7 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
     bool marked;
     if (canMarkChanges(conv, messageId, marked)) {
         MenuItem item;
-        // TRANSLATOR: Check item of an edited message's menu: removed words struck out, added ones underlined.
+        // TRANSLATOR: Check item of an edited message's menu: removed words put back, and added ones, each on its own color.
         item.label     = _("Show changes");
         item.checkable = true;
         item.checked   = marked;

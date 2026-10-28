@@ -1437,7 +1437,7 @@ msgstr "Die Nachricht wurde gelöscht."
 msgid "Strike out deleted messages in Pidgin, rather than remove them"
 msgstr "Gelöschte Nachrichten in Pidgin durchstreichen statt entfernen"
 
-#. TRANSLATOR: Check item of an edited message's menu: removed words struck out, added ones underlined.
+#. TRANSLATOR: Check item of an edited message's menu: removed words put back, and added ones, each on its own color.
 msgid "Show changes"
 msgstr "Änderungen zeigen"
 

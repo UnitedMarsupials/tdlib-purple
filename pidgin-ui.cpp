@@ -179,16 +179,33 @@ static EditedText *getEditedText(GtkTextBuffer *buffer, MessageId messageId)
                                                           getEditedTextKey(messageId).c_str()));
 }
 
-static std::string formatEditedText(const EditedText &edited)
+// A third of the way to the color from the theme's own background, light or dark, so that the
+// text on it stays as legible
+static std::string tintBackground(GtkIMHtml *imhtml, guint16 red, guint16 green, guint16 blue)
 {
-    return edited.marked ? markChanges(edited.previous, edited.html) : edited.html;
+    GdkColor base = reinterpret_cast<GtkWidget *>(imhtml)->style->base[GTK_STATE_NORMAL];
+    auto     mix  = [](guint16 from, guint16 to) { return (from / 3 * 2 + to / 3) >> 8; };
+    char     color[8];
+    snprintf(color, sizeof(color), "#%02x%02x%02x", mix(base.red, red), mix(base.green, green),
+             mix(base.blue, blue));
+    return color;
+}
+
+static std::string formatEditedText(GtkIMHtml *imhtml, const EditedText &edited)
+{
+    if (!edited.marked)
+        return edited.html;
+    // Colors, not strikes or underlines, which may be the sender's own formatting
+    return markChanges(edited.previous, edited.html, tintBackground(imhtml, 0xFFFF, 0, 0),
+                       tintBackground(imhtml, 0, 0xC0C0, 0));
 }
 
 // The new version of an edited message's text, the change from the previous one marked, unless
 // the earlier version was shown without. The previous one is what the tab shows, unless kept.
-static std::string markEditedText(GtkTextBuffer *buffer, const GtkTextIter &body, const GtkTextIter &end,
+static std::string markEditedText(GtkIMHtml *imhtml, const GtkTextIter &body, const GtkTextIter &end,
                                   const char *html)
 {
+    GtkTextBuffer *buffer = imhtml->text_buffer;
     MessageId   messageId = g_messageBeingWritten->messageId;
     EditedText *edited    = new EditedText;
     edited->html     = html;
@@ -211,7 +228,7 @@ static std::string markEditedText(GtkTextBuffer *buffer, const GtkTextIter &body
     }
     p_g_object_set_data_full(reinterpret_cast<GObject *>(buffer), getEditedTextKey(messageId).c_str(), edited,
                              [](gpointer data) { delete static_cast<EditedText *>(data); });
-    return formatEditedText(*edited);
+    return formatEditedText(imhtml, *edited);
 }
 
 // A part of the message written over its earlier version: the first replaces all of its text,
@@ -227,7 +244,7 @@ static void replaceBody(PurpleConversation *conv, const char *html)
         GtkTextIter body, end;
         if (!getBody(buffer, id, body, end))
             return;
-        text = g_messageBeingWritten->markChanges ? markEditedText(buffer, body, end, html) : std::string(html);
+        text = g_messageBeingWritten->markChanges ? markEditedText(imhtml, body, end, html) : std::string(html);
         p_gtk_imhtml_delete(imhtml, &body, &end);
         g_messageBeingWritten->bodyMarked = true;
         text += g_messageBeingWritten->editNote;
@@ -637,7 +654,7 @@ void setChangesMarked(PurpleConversation *conv, MessageId messageId, bool marked
     edited->marked = marked;
     p_gtk_imhtml_delete(imhtml, &body, &end);
     GtkTextMark *endMark = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::End).c_str());
-    insertAtMark(imhtml, endMark, (formatEditedText(*edited) + edited->editNote).c_str());
+    insertAtMark(imhtml, endMark, (formatEditedText(imhtml, *edited) + edited->editNote).c_str());
 }
 
 void strikeOutMessage(PurpleConversation *conv, MessageId messageId)
