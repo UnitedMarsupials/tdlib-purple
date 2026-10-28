@@ -664,7 +664,14 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
 {
     PurpleMessageFlags directionFlag = message.outgoing ? PURPLE_MESSAGE_SEND : PURPLE_MESSAGE_RECV;
     PurpleMessageFlags flags = (PurpleMessageFlags) (extraFlags | directionFlag);
-    if (message.unlogged || message.redrawn)
+    // Not logged (again): with the conversation's logging off while it is written, as Pidgin shows
+    // a message flagged as not to be logged without its time and sender
+    PurpleConversation *unloggedConv = (message.unlogged || message.redrawn) ? findMessageConversation(account, chat)
+                                                                             : nullptr;
+    bool                logging      = unloggedConv && purple_conversation_is_logging(unloggedConv);
+    if (logging)
+        purple_conversation_set_logging(unloggedConv, FALSE);
+    else if ((message.unlogged || message.redrawn) && !unloggedConv)
         flags = (PurpleMessageFlags) (flags | PURPLE_MESSAGE_NO_LOG);
     if (message.outgoing && !message.sentLocally)
         flags = (PurpleMessageFlags) (flags | PURPLE_MESSAGE_REMOTE_SEND);
@@ -703,6 +710,9 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
 
     if (getBasicGroupId(chat).valid() || getSupergroupId(chat).valid())
         showMessageTextChat(account, chat, message, text, notification, flags);
+
+    if (logging && g_list_find(purple_get_conversations(), unloggedConv))
+        purple_conversation_set_logging(unloggedConv, TRUE);
 }
 
 void showChatNotification(TdAccountData &account, const td::td_api::chat &chat,

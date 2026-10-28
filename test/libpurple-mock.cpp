@@ -554,6 +554,7 @@ static PurpleConversation *purple_conversation_new_impl(PurpleConversationType t
     conv->name = strdup(name);
     conv->title = NULL;
     conv->ui_ops = NULL;
+    conv->logging = TRUE;
     if (conv->type == PURPLE_CONV_TYPE_IM) {
         conv->u.im = new PurpleConvIm;
         conv->u.im->conv = conv;
@@ -577,6 +578,16 @@ PurpleConversation *purple_conversation_new(PurpleConversationType type,
 {
     EVENT(NewConversationEvent, type, account, name);
     return purple_conversation_new_impl(type, account, name);
+}
+
+void purple_conversation_set_logging(PurpleConversation *conv, gboolean log)
+{
+    conv->logging = log;
+}
+
+gboolean purple_conversation_is_logging(const PurpleConversation *conv)
+{
+    return conv->logging;
 }
 
 void purple_conversation_destroy(PurpleConversation *conv)
