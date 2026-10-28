@@ -1196,11 +1196,13 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
     bool marked;
     if (canMarkChanges(conv, messageId, marked)) {
         MenuItem item;
-        // TRANSLATOR: Check item of an edited message's menu: removed words put back, and added ones, each on its own color.
-        item.label     = _("Show changes");
-        item.checkable = true;
-        item.checked   = marked;
-        item.action    = [conv, messageId, marked]() {
+        // What the item switches to
+        item.label  = marked ?
+                      // TRANSLATOR: Item of an edited message's menu, while its latest edit is shown: removed words put back, and added ones, each on its own color. It shows just the text as it now is.
+                      _("Show the latest version") :
+                      // TRANSLATOR: Item of an edited message's menu, while just its text as it now is is shown. It shows the latest edit: removed words put back, and added ones, each on its own color.
+                      _("Show the latest edit");
+        item.action = [conv, messageId, marked]() {
             if (g_list_find(purple_get_conversations(), conv))
                 setChangesMarked(conv, messageId, !marked);
         };

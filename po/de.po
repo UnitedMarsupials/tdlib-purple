@@ -1437,9 +1437,13 @@ msgstr "Die Nachricht wurde gelöscht."
 msgid "Strike out deleted messages in Pidgin, rather than remove them"
 msgstr "Gelöschte Nachrichten in Pidgin durchstreichen statt entfernen"
 
-#. TRANSLATOR: Check item of an edited message's menu: removed words put back, and added ones, each on its own color.
-msgid "Show changes"
-msgstr "Änderungen zeigen"
+#. TRANSLATOR: Item of an edited message's menu, while its latest edit is shown: removed words put back, and added ones, each on its own color. It shows just the text as it now is.
+msgid "Show the latest version"
+msgstr "Letzte Version zeigen"
+
+#. TRANSLATOR: Item of an edited message's menu, while just its text as it now is is shown. It shows the latest edit: removed words put back, and added ones, each on its own color.
+msgid "Show the latest edit"
+msgstr "Letzte Bearbeitung zeigen"
 
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091

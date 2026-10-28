@@ -1425,9 +1425,13 @@ msgstr "Zpráva byla smazána."
 msgid "Strike out deleted messages in Pidgin, rather than remove them"
 msgstr "Smazané zprávy v Pidginu přeškrtnout místo odstranění"
 
-#. TRANSLATOR: Check item of an edited message's menu: removed words put back, and added ones, each on its own color.
-msgid "Show changes"
-msgstr "Zobrazit změny"
+#. TRANSLATOR: Item of an edited message's menu, while its latest edit is shown: removed words put back, and added ones, each on its own color. It shows just the text as it now is.
+msgid "Show the latest version"
+msgstr "Zobrazit poslední verzi"
+
+#. TRANSLATOR: Item of an edited message's menu, while just its text as it now is is shown. It shows the latest edit: removed words put back, and added ones, each on its own color.
+msgid "Show the latest edit"
+msgstr "Zobrazit poslední úpravu"
 
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091
