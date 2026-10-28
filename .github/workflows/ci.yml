@@ -276,8 +276,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # pkg upgrades itself on its own first: done within the install, it
-          # re-creates its catalogue for a new schema and then finds nothing.
+          # cmake-core, not the cmake metapackage, which the repositories may
+          # lack, as FreeBSD 15's did in October 2026: the program is all we use.
           - name: FreeBSD 15.1
             os: freebsd
             version: '15.1'
@@ -287,9 +287,7 @@ jobs:
             prefix: /usr/local
             options: ''
             install: >-
-              sudo pkg upgrade -y pkg && sudo pkg update -f &&
-              { pkg config ABI; pkg -vv | grep -iE "abi|osversion|url"; pkg rquery "%n %v %q" cmake pkg; true; } &&
-              sudo pkg install -y cmake ninja pkgconf gettext-tools
+              sudo pkg install -y cmake-core ninja pkgconf gettext-tools
               libpurple pidgin tdlib libfmt rlottie googletest valgrind
           # Without the pidgin package, so a stray need for its headers fails.
           - name: FreeBSD 15.1 (NoPidgin)
@@ -301,9 +299,7 @@ jobs:
             prefix: /usr/local
             options: -DNoPidgin=1
             install: >-
-              sudo pkg upgrade -y pkg && sudo pkg update -f &&
-              { pkg config ABI; pkg -vv | grep -iE "abi|osversion|url"; pkg rquery "%n %v %q" cmake pkg; true; } &&
-              sudo pkg install -y cmake ninja pkgconf gettext-tools
+              sudo pkg install -y cmake-core ninja pkgconf gettext-tools
               libpurple tdlib libfmt rlottie googletest
           - name: FreeBSD 14.4
             os: freebsd
@@ -314,9 +310,7 @@ jobs:
             prefix: /usr/local
             options: ''
             install: >-
-              sudo pkg upgrade -y pkg && sudo pkg update -f &&
-              { pkg config ABI; pkg -vv | grep -iE "abi|osversion|url"; pkg rquery "%n %v %q" cmake pkg; true; } &&
-              sudo pkg install -y cmake ninja pkgconf gettext-tools
+              sudo pkg install -y cmake-core ninja pkgconf gettext-tools
               libpurple pidgin tdlib libfmt rlottie googletest valgrind
           # No rlottie package, so no animated stickers; built without Pidgin's
           # headers, so that the build without them is tried somewhere.
