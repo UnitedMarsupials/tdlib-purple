@@ -159,29 +159,59 @@ static char *getPlainText(const char *html)
     return text;
 }
 
-// The new version of an edited message's text, the change from the previous one marked. That is
-// what the tab shows, unless kept since the last such change (the tab then shows the marks too).
-static std::string markChanges(GtkTextBuffer *buffer, const GtkTextIter &body, const GtkTextIter &end,
-                               const char *html)
+// An edited message's latest version, and the one before, kept with the tab's buffer, so that the
+// change can be marked or not, and the next one marked against it
+struct EditedText {
+    std::string previous; // plain text
+    std::string html;
+    std::string editNote;
+    bool        marked = true;
+};
+
+static std::string getEditedTextKey(MessageId messageId)
 {
-    GObject    *object = reinterpret_cast<GObject *>(buffer);
-    std::string key    = "tdlib-message-text-" + std::to_string(g_messageBeingWritten->messageId.value());
-    std::string previous;
-    if (const char *kept = static_cast<const char *>(p_g_object_get_data(object, key.c_str())))
-        previous = kept;
-    else {
+    return "tdlib-message-text-" + std::to_string(messageId.value());
+}
+
+static EditedText *getEditedText(GtkTextBuffer *buffer, MessageId messageId)
+{
+    return static_cast<EditedText *>(p_g_object_get_data(reinterpret_cast<GObject *>(buffer),
+                                                          getEditedTextKey(messageId).c_str()));
+}
+
+static std::string formatEditedText(const EditedText &edited)
+{
+    return edited.marked ? markChanges(edited.previous, edited.html) : edited.html;
+}
+
+// The new version of an edited message's text, the change from the previous one marked, unless
+// the earlier version was shown without. The previous one is what the tab shows, unless kept.
+static std::string markEditedText(GtkTextBuffer *buffer, const GtkTextIter &body, const GtkTextIter &end,
+                                  const char *html)
+{
+    MessageId   messageId = g_messageBeingWritten->messageId;
+    EditedText *edited    = new EditedText;
+    edited->html     = html;
+    edited->editNote = g_messageBeingWritten->editNote;
+    if (const EditedText *kept = getEditedText(buffer, messageId)) {
+        char *previous = getPlainText(kept->html.c_str());
+        edited->previous = previous;
+        edited->marked   = kept->marked;
+        g_free(previous);
+    } else {
         char *shown = p_gtk_text_buffer_get_text(buffer, &body, &end, FALSE);
-        char *note  = getPlainText(g_messageBeingWritten->editNote.c_str());
-        previous = shown;
+        char *note  = getPlainText(edited->editNote.c_str());
+        edited->previous = shown;
         // Written after an earlier change, by a version without these marks
-        if ((previous.size() >= strlen(note)) &&
-            (previous.compare(previous.size() - strlen(note), std::string::npos, note) == 0))
-            previous.resize(previous.size() - strlen(note));
+        if ((edited->previous.size() >= strlen(note)) &&
+            (edited->previous.compare(edited->previous.size() - strlen(note), std::string::npos, note) == 0))
+            edited->previous.resize(edited->previous.size() - strlen(note));
         g_free(note);
         g_free(shown);
     }
-    p_g_object_set_data_full(object, key.c_str(), getPlainText(html), g_free);
-    return markChanges(previous, html);
+    p_g_object_set_data_full(reinterpret_cast<GObject *>(buffer), getEditedTextKey(messageId).c_str(), edited,
+                             [](gpointer data) { delete static_cast<EditedText *>(data); });
+    return formatEditedText(*edited);
 }
 
 // A part of the message written over its earlier version: the first replaces all of its text,
@@ -197,7 +227,7 @@ static void replaceBody(PurpleConversation *conv, const char *html)
         GtkTextIter body, end;
         if (!getBody(buffer, id, body, end))
             return;
-        text = g_messageBeingWritten->markChanges ? markChanges(buffer, body, end, html) : std::string(html);
+        text = g_messageBeingWritten->markChanges ? markEditedText(buffer, body, end, html) : std::string(html);
         p_gtk_imhtml_delete(imhtml, &body, &end);
         g_messageBeingWritten->bodyMarked = true;
         text += g_messageBeingWritten->editNote;
@@ -231,6 +261,9 @@ static gboolean displayingMessage(PurpleAccount *account, const char *who, char 
                 if (mark)
                     p_gtk_text_buffer_delete_mark(buffer, mark);
             }
+            // Shown as it is now, the change unmarked
+            p_g_object_set_data_full(reinterpret_cast<GObject *>(buffer), getEditedTextKey(id).c_str(),
+                                     nullptr, nullptr);
         } else if (start && !g_messageBeingWritten->replacing)
             // A part coming later, such as a downloaded picture, extends the message
             g_messageBeingWritten->bodyMarked = true;
@@ -581,6 +614,32 @@ bool canReplaceMessage(PurpleConversation *conv, MessageId messageId)
     return buffer && getBody(buffer, messageId, body, end);
 }
 
+bool canMarkChanges(PurpleConversation *conv, MessageId messageId, bool &marked)
+{
+    GtkTextBuffer *buffer = getTextBuffer(conv);
+    GtkTextIter    body, end;
+    EditedText    *edited = (buffer && getBody(buffer, messageId, body, end)) ? getEditedText(buffer, messageId)
+                                                                            : nullptr;
+    if (edited)
+        marked = edited->marked;
+    return edited;
+}
+
+void setChangesMarked(PurpleConversation *conv, MessageId messageId, bool marked)
+{
+    GtkIMHtml     *imhtml = getIMHtml(conv);
+    GtkTextBuffer *buffer = imhtml ? imhtml->text_buffer : nullptr;
+    GtkTextIter    body, end;
+    EditedText    *edited = (buffer && getBody(buffer, messageId, body, end)) ? getEditedText(buffer, messageId)
+                                                                            : nullptr;
+    if (!edited)
+        return;
+    edited->marked = marked;
+    p_gtk_imhtml_delete(imhtml, &body, &end);
+    GtkTextMark *endMark = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::End).c_str());
+    insertAtMark(imhtml, endMark, (formatEditedText(*edited) + edited->editNote).c_str());
+}
+
 void strikeOutMessage(PurpleConversation *conv, MessageId messageId)
 {
     GtkTextBuffer *buffer = getTextBuffer(conv);
@@ -819,6 +878,15 @@ bool canRedrawConversation(PurpleConversation *conv)
 bool canReplaceMessage(PurpleConversation *conv, MessageId messageId)
 {
     return false;
+}
+
+bool canMarkChanges(PurpleConversation *conv, MessageId messageId, bool &marked)
+{
+    return false;
+}
+
+void setChangesMarked(PurpleConversation *conv, MessageId messageId, bool marked)
+{
 }
 
 void strikeOutMessage(PurpleConversation *conv, MessageId messageId)

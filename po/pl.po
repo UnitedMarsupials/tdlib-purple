@@ -1436,6 +1436,10 @@ msgstr "Wiadomość została usunięta."
 msgid "Strike out deleted messages in Pidgin, rather than remove them"
 msgstr "Przekreślaj usunięte wiadomości w Pidginie zamiast je usuwać"
 
+#. TRANSLATOR: Check item of an edited message's menu: removed words struck out, added ones underlined.
+msgid "Show changes"
+msgstr "Pokaż zmiany"
+
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091
 msgid "Needs Telegram Premium"

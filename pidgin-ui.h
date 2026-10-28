@@ -87,6 +87,11 @@ bool canReplaceMessage(PurpleConversation *conv, MessageId messageId);
 // if empty. In Pidgin's tab only, where the message is.
 void showMessageReactions(PurpleConversation *conv, MessageId messageId, const std::string &html);
 
+// Whether the tab shows an edited message whose change can be marked, and whether it is
+bool canMarkChanges(PurpleConversation *conv, MessageId messageId, bool &marked);
+// Writes the message's latest version anew, with or without the change from the one before marked
+void setChangesMarked(PurpleConversation *conv, MessageId messageId, bool marked);
+
 // Strikes out a deleted message's text, where the tab shows it, and takes its menu link away
 void strikeOutMessage(PurpleConversation *conv, MessageId messageId);
 // Takes a deleted message out of the tab, its header and reactions with it

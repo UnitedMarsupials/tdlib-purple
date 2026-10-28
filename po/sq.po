@@ -1428,6 +1428,10 @@ msgstr "Mesazhi është fshirë."
 msgid "Strike out deleted messages in Pidgin, rather than remove them"
 msgstr "Vija mbi mesazhet e fshira në Pidgin, në vend që t'i hiqni"
 
+#. TRANSLATOR: Check item of an edited message's menu: removed words struck out, added ones underlined.
+msgid "Show changes"
+msgstr "Shfaq ndryshimet"
+
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091
 msgid "Needs Telegram Premium"

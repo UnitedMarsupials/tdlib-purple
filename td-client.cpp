@@ -1193,6 +1193,19 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
 
     const td::td_api::chat *chat = m_data.getChat(chatId);
     PurpleConversation     *conv = chat ? findMessageConversation(m_data, *chat) : nullptr;
+    bool marked;
+    if (canMarkChanges(conv, messageId, marked)) {
+        MenuItem item;
+        // TRANSLATOR: Check item of an edited message's menu: removed words struck out, added ones underlined.
+        item.label     = _("Show changes");
+        item.checkable = true;
+        item.checked   = marked;
+        item.action    = [conv, messageId, marked]() {
+            if (g_list_find(purple_get_conversations(), conv))
+                setChangesMarked(conv, messageId, !marked);
+        };
+        items.push_back(std::move(item));
+    }
     if (isEntryEditing(conv, messageId)) {
         MenuItem item;
         // TRANSLATOR: Item of a message's menu, while the message is being edited in the input field.
