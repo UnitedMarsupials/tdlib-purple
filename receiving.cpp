@@ -1336,7 +1336,8 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
         // TRANSLATOR: After the text of a message edited where it stands, in Pidgin's conversation window.
         editNote = formatMessage(" <font size=\"2\"><i>({})</i></font>", std::string(_("edited")));
     MessageMarkScope markScope(messageInfo.id, getMessagePrefix(account, chat, messageInfo),
-                               fullMessage.replacing ? editNote.c_str() : nullptr, true);
+                               fullMessage.replacing ? editNote.c_str() : nullptr, true,
+                               message.content_->get_id() == td::td_api::messageText::ID);
     FileInfo fileInfo;
     getFileFromMessage(fullMessage, fileInfo);
     if (fileInfo.secret) {

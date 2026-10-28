@@ -68,6 +68,9 @@ std::string linkToMessage(PurpleAccount *account, ChatId chatId, MessageId messa
                           const std::string &markup);
 // The link before each message, which opens its menu, or nothing where it cannot work
 std::string makeMenuLink(PurpleAccount *account, ChatId chatId, MessageId messageId);
+// The new version of an edited message's text, its words compared with those of the previous one
+// (plain text), as wdiff does: removed words struck out where they were, added ones underlined
+std::string markChanges(const std::string &previous, const std::string &html);
 // A jump, unless the link opens the message's menu
 bool        parseJumpLink(const char *link, std::string &accountName, ChatId &chatId,
                           MessageId &messageId, bool &menu);

@@ -49,6 +49,9 @@ FRONT_END_FUNCTION(g_signal_handler_disconnect);
 FRONT_END_FUNCTION(gtk_text_buffer_apply_tag_by_name);
 FRONT_END_FUNCTION(gtk_text_iter_forward_search);
 FRONT_END_FUNCTION(gtk_text_iter_compare);
+FRONT_END_FUNCTION(gtk_text_buffer_get_text);
+FRONT_END_FUNCTION(g_object_get_data);
+FRONT_END_FUNCTION(g_object_set_data_full);
 
 static bool g_pidginUi = false;
 
@@ -61,6 +64,7 @@ struct MessageBeingWritten {
     bool                replacing = false;
     bool                anew      = false; // the whole message, not a part coming later
     std::string         editNote;
+    bool                markChanges = false; // its text, words added and removed marked
     bool                bodyMarked = false;
 };
 static MessageBeingWritten *g_messageBeingWritten = nullptr;
@@ -147,6 +151,39 @@ static void insertAtMark(GtkIMHtml *imhtml, GtkTextMark *mark, const char *html)
     p_gtk_text_buffer_delete_mark(buffer, after);
 }
 
+static char *getPlainText(const char *html)
+{
+    char *stripped = purple_markup_strip_html(html);
+    char *text     = purple_unescape_html(stripped);
+    g_free(stripped);
+    return text;
+}
+
+// The new version of an edited message's text, the change from the previous one marked. That is
+// what the tab shows, unless kept since the last such change (the tab then shows the marks too).
+static std::string markChanges(GtkTextBuffer *buffer, const GtkTextIter &body, const GtkTextIter &end,
+                               const char *html)
+{
+    GObject    *object = reinterpret_cast<GObject *>(buffer);
+    std::string key    = "tdlib-message-text-" + std::to_string(g_messageBeingWritten->messageId.value());
+    std::string previous;
+    if (const char *kept = static_cast<const char *>(p_g_object_get_data(object, key.c_str())))
+        previous = kept;
+    else {
+        char *shown = p_gtk_text_buffer_get_text(buffer, &body, &end, FALSE);
+        char *note  = getPlainText(g_messageBeingWritten->editNote.c_str());
+        previous = shown;
+        // Written after an earlier change, by a version without these marks
+        if ((previous.size() >= strlen(note)) &&
+            (previous.compare(previous.size() - strlen(note), std::string::npos, note) == 0))
+            previous.resize(previous.size() - strlen(note));
+        g_free(note);
+        g_free(shown);
+    }
+    p_g_object_set_data_full(object, key.c_str(), getPlainText(html), g_free);
+    return markChanges(previous, html);
+}
+
 // A part of the message written over its earlier version: the first replaces all of its text,
 // header aside; the next ones follow it
 static void replaceBody(PurpleConversation *conv, const char *html)
@@ -160,9 +197,10 @@ static void replaceBody(PurpleConversation *conv, const char *html)
         GtkTextIter body, end;
         if (!getBody(buffer, id, body, end))
             return;
+        text = g_messageBeingWritten->markChanges ? markChanges(buffer, body, end, html) : std::string(html);
         p_gtk_imhtml_delete(imhtml, &body, &end);
         g_messageBeingWritten->bodyMarked = true;
-        text = std::string(html) + g_messageBeingWritten->editNote;
+        text += g_messageBeingWritten->editNote;
     } else
         text = std::string("<br>") + html;
     insertAtMark(imhtml, endMark, text.c_str());
@@ -326,7 +364,8 @@ void pidginUiLoad(PurplePlugin *plugin)
                  LOOK_UP(gtk_text_iter_compare) && LOOK_UP(gtk_imhtml_get_markup) &&
                  LOOK_UP(gtk_imhtml_delete) && LOOK_UP(gtk_imhtml_append_text_with_images) &&
                  LOOK_UP(gtk_widget_modify_base) && LOOK_UP(gtk_widget_grab_focus) &&
-                 LOOK_UP(g_signal_handler_disconnect);
+                 LOOK_UP(g_signal_handler_disconnect) && LOOK_UP(gtk_text_buffer_get_text) &&
+                 LOOK_UP(g_object_get_data) && LOOK_UP(g_object_set_data_full);
     purple_debug_info(config::pluginId, "Pidgin's conversation window: %s\n",
                       g_pidginUi ? "found" : "not found");
     if (!g_pidginUi)
@@ -351,7 +390,8 @@ bool pidginUiFound()
     return g_pidginUi;
 }
 
-MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &prefix, const char *editNote, bool anew)
+MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &prefix, const char *editNote, bool anew,
+                                   bool markChanges)
 {
     if (g_pidginUi && messageId.valid() && !g_messageBeingWritten) {
         g_messageBeingWritten = new MessageBeingWritten;
@@ -361,6 +401,7 @@ MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &prefi
         if (editNote) {
             g_messageBeingWritten->replacing = true;
             g_messageBeingWritten->editNote  = editNote;
+            g_messageBeingWritten->markChanges = markChanges;
         }
         m_active = true;
     }
@@ -741,7 +782,8 @@ bool pidginUiFound()
     return false;
 }
 
-MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &prefix, const char *editNote, bool anew)
+MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &prefix, const char *editNote, bool anew,
+                                   bool markChanges)
 {
 }
 

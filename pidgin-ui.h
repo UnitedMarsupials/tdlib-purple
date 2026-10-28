@@ -40,10 +40,12 @@ bool pidginUiFound();
 // the message is written over its earlier version, where that is shown, its header kept, and the
 // note after its text; elsewhere it is written anew. A message written anew, all of it, takes its
 // marks and prefix from an earlier showing; otherwise what is written extends what was, if any.
+// Marking changes, the first part of an edited message shows how its text differs from before.
 class MessageMarkScope {
 public:
     explicit MessageMarkScope(MessageId messageId, const std::string &prefix = std::string(),
-                              const char *editNote = nullptr, bool anew = false);
+                              const char *editNote = nullptr, bool anew = false,
+                              bool markChanges = false);
     ~MessageMarkScope();
     MessageMarkScope(const MessageMarkScope &) = delete;
     MessageMarkScope &operator=(const MessageMarkScope &) = delete;

@@ -1170,6 +1170,117 @@ std::string makeMenuLink(PurpleAccount *account, ChatId chatId, MessageId messag
            MENU_LINK_SUFFIX + "\" title=\"" + title + "\" style=\"color: LinkText\"> \xe2\x96\xbc </a>";
 }
 
+static bool isSpace(char c)
+{
+    return (c == ' ') || (c == '\n') || (c == '\t') || (c == '\r');
+}
+
+std::string markChanges(const std::string &previous, const std::string &html)
+{
+    // The new text as words, and tags and spaces between them, all kept as they are
+    struct Token {
+        std::string text;
+        bool        word;
+    };
+    std::vector<Token>       tokens;
+    std::vector<std::string> newWords; // unescaped, to compare
+    for (size_t i = 0; i < html.size();) {
+        size_t end = i;
+        if (html[i] == '<') {
+            end = html.find('>', i);
+            end = (end == std::string::npos) ? html.size() : end + 1;
+        } else if (isSpace(html[i]))
+            while ((end < html.size()) && isSpace(html[end]))
+                end++;
+        else
+            while ((end < html.size()) && (html[end] != '<') && !isSpace(html[end]))
+                end++;
+        tokens.push_back({html.substr(i, end - i), (html[i] != '<') && !isSpace(html[i])});
+        if (tokens.back().word) {
+            char *word = purple_unescape_html(tokens.back().text.c_str());
+            newWords.push_back(word);
+            g_free(word);
+        }
+        i = end;
+    }
+    std::vector<std::string> oldWords;
+    for (size_t i = 0; i < previous.size();) {
+        size_t end = i;
+        while ((end < previous.size()) && !isSpace(previous[end]))
+            end++;
+        if (end > i)
+            oldWords.push_back(previous.substr(i, end - i));
+        i = end + 1;
+    }
+
+    // Words alike at either end need no comparing
+    size_t oldCount = oldWords.size(), newCount = newWords.size();
+    size_t head = 0, tail = 0;
+    while ((head < oldCount) && (head < newCount) && (oldWords[head] == newWords[head]))
+        head++;
+    while ((tail < oldCount - head) && (tail < newCount - head) &&
+           (oldWords[oldCount - 1 - tail] == newWords[newCount - 1 - tail]))
+        tail++;
+    size_t n = oldCount - head - tail, m = newCount - head - tail;
+    // Nothing but formatting or spacing changed, or too long to compare
+    if (((n == 0) && (m == 0)) || ((n + 1) * (m + 1) > 4000000))
+        return html;
+
+    // The longest common subsequence of the words between, from each pair of places on
+    std::vector<unsigned> common((n + 1) * (m + 1), 0);
+    auto at = [m](size_t i, size_t j) { return i * (m + 1) + j; };
+    for (size_t i = n; i-- > 0; )
+        for (size_t j = m; j-- > 0; )
+            common[at(i, j)] = (oldWords[head + i] == newWords[head + j])
+                               ? common[at(i + 1, j + 1)] + 1
+                               : std::max(common[at(i + 1, j)], common[at(i, j + 1)]);
+    // Which new words are added, and which old ones are removed before each new one (or at the end)
+    std::vector<bool>        added(newCount, false);
+    std::vector<std::string> removed(newCount + 1);
+    for (size_t i = 0, j = 0; (i < n) || (j < m); ) {
+        if ((i < n) && (j < m) && (oldWords[head + i] == newWords[head + j])) {
+            i++;
+            j++;
+        } else if ((i < n) && ((j == m) || (common[at(i + 1, j)] >= common[at(i, j + 1)]))) {
+            // Removed words go before added ones in their place
+            std::string &before = removed[head + j];
+            if (!before.empty())
+                before += ' ';
+            before += oldWords[head + i++];
+        } else
+            added[head + j++] = true;
+    }
+
+    auto strikeOut = [](const std::string &words) {
+        gchar      *escaped = g_markup_escape_text(words.c_str(), -1);
+        std::string result  = std::string("<s>") + escaped + "</s>";
+        g_free(escaped);
+        return result;
+    };
+    std::string result;
+    if (newCount == 0)
+        result = strikeOut(removed[0]) + ' ';
+    // Removed words go outside the formatting of the words around them: before the tags opening the
+    // next word, after those closing the previous one
+    size_t outside = 0;
+    for (size_t i = 0, word = 0; i < tokens.size(); i++) {
+        if (!tokens[i].word) {
+            result += tokens[i].text;
+            if ((tokens[i].text[0] != '<') || (tokens[i].text.compare(0, 2, "</") == 0))
+                outside = result.size();
+            continue;
+        }
+        if (!removed[word].empty())
+            result.insert(outside, strikeOut(removed[word]) + ' ');
+        result += added[word] ? "<u>" + tokens[i].text + "</u>" : tokens[i].text;
+        outside = result.size();
+        word++;
+    }
+    if ((newCount > 0) && !removed[newCount].empty())
+        result.insert(outside, (isSpace(result[outside - 1]) ? "" : " ") + strikeOut(removed[newCount]));
+    return result;
+}
+
 bool parseJumpLink(const char *link, std::string &accountName, ChatId &chatId, MessageId &messageId,
                    bool &menu)
 {

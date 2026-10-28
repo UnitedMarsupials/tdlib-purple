@@ -1548,6 +1548,10 @@ char *purple_unescape_html(const char *html)
         s.replace(pos, 4, "<");
     while ((pos = s.find("&gt;")) != std::string::npos)
         s.replace(pos, 4, ">");
+    while ((pos = s.find("&quot;")) != std::string::npos)
+        s.replace(pos, 6, "\"");
+    for (pos = 0; (pos = s.find("&amp;", pos)) != std::string::npos; pos++)
+        s.replace(pos, 5, "&");
     return g_strdup(s.c_str());
 }
 

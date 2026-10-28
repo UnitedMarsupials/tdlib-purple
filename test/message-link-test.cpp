@@ -523,3 +523,19 @@ TEST(JumpLink, OnlyWhereEnabled)
     ASSERT_EQ(std::string(), makeMenuLink(account, ChatId::fromString("-100"), MessageId::fromString("5")));
     purple_account_destroy(account);
 }
+
+TEST(MarkChanges, Words)
+{
+    // A word changed, one added, one removed
+    ASSERT_EQ(std::string("the <s>quick</s> <u>slow</u> brown fox <u>gladly</u> jumps over the dog"),
+              markChanges("the quick brown fox jumps over the dog", "the slow brown fox gladly jumps over the dog"));
+    ASSERT_EQ(std::string("over the <s>lazy</s> dog"), markChanges("over the lazy\ndog", "over the dog"));
+    // Formatting of the new text is kept; entities compare as the characters they stand for
+    ASSERT_EQ(std::string("<b>Tom</b> &amp; <s>Spike</s> <i><u>Jerry</u></i>"),
+              markChanges("Tom & Spike", "<b>Tom</b> &amp; <i>Jerry</i>"));
+    // Removed at either end, and all of it
+    ASSERT_EQ(std::string("<s>Well,</s> yes <s>&lt;indeed&gt;</s>"), markChanges("Well, yes <indeed>", "yes"));
+    ASSERT_EQ(std::string("<s>gone</s> "), markChanges("gone", ""));
+    // Only spacing or formatting changed
+    ASSERT_EQ(std::string("a<br><b>b</b>"), markChanges("a b", "a<br><b>b</b>"));
+}
