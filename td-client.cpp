@@ -1675,7 +1675,9 @@ bool PurpleTdClient::fillConversation(PurpleConversation *conv)
     const td::td_api::chat *chat = findConversationChat(m_data, conv);
     if ((days <= 0) || !chat)
         return true;
-    return fillChat(m_data, getId(*chat), time(NULL) - time_t(days) * 24 * 60 * 60);
+    // Counted back from the latest message, however long ago that was
+    time_t latest = chat->last_message_ ? time_t(chat->last_message_->date_) : time(NULL);
+    return fillChat(m_data, getId(*chat), latest - time_t(days) * 24 * 60 * 60);
 }
 
 static bool isLeavingOf(const td::td_api::message &message, int64_t userId)

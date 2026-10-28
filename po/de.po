@@ -1445,9 +1445,13 @@ msgstr "Letzte Version zeigen"
 msgid "Show the latest edit"
 msgstr "Letzte Bearbeitung zeigen"
 
-#. TRANSLATOR: Account settings, key (number). 0 leaves the conversation window as Pidgin opens it.
+#. TRANSLATOR: Account settings, key (number): days counted back from the conversation's latest message. 0 leaves the conversation window as Pidgin opens it.
 msgid "Days of messages to show on opening a conversation, in Pidgin"
 msgstr "Tage an Nachrichten, die beim Öffnen einer Unterhaltung in Pidgin gezeigt werden"
+
+#. TRANSLATOR: At the end of a conversation window while it is being filled, followed by a turning character.
+msgid "Fetching messages from Telegram"
+msgstr "Nachrichten werden von Telegram abgerufen"
 
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091

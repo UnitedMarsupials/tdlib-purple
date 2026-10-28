@@ -50,6 +50,7 @@ FRONT_END_FUNCTION(gtk_text_buffer_apply_tag_by_name);
 FRONT_END_FUNCTION(gtk_text_iter_forward_search);
 FRONT_END_FUNCTION(gtk_text_iter_compare);
 FRONT_END_FUNCTION(gtk_text_buffer_get_text);
+FRONT_END_FUNCTION(gtk_text_iter_get_offset);
 FRONT_END_FUNCTION(g_object_get_data);
 FRONT_END_FUNCTION(g_object_set_data_full);
 
@@ -414,7 +415,7 @@ void pidginUiLoad(PurplePlugin *plugin)
                  LOOK_UP(gtk_text_iter_compare) && LOOK_UP(gtk_imhtml_get_markup) &&
                  LOOK_UP(gtk_imhtml_delete) && LOOK_UP(gtk_imhtml_append_text_with_images) &&
                  LOOK_UP(gtk_widget_modify_base) && LOOK_UP(gtk_widget_grab_focus) &&
-                 LOOK_UP(g_signal_handler_disconnect) && LOOK_UP(gtk_text_buffer_get_text) &&
+                 LOOK_UP(g_signal_handler_disconnect) && LOOK_UP(gtk_text_buffer_get_text) && LOOK_UP(gtk_text_iter_get_offset) &&
                  LOOK_UP(g_object_get_data) && LOOK_UP(g_object_set_data_full);
     purple_debug_info(config::pluginId, "Pidgin's conversation window: %s\n",
                       g_pidginUi ? "found" : "not found");
@@ -499,6 +500,108 @@ void showMessageReactions(PurpleConversation *conv, MessageId messageId, const s
 bool canRedrawConversation(PurpleConversation *conv)
 {
     return getIMHtml(conv) != nullptr;
+}
+
+// A line at the end of the tab, its last character turning, and the marks around it and that
+// character
+static const char PROGRESS_KEY[]        = "tdlib-progress";
+static const char PROGRESS_START[]      = "tdlib-progress-start";
+static const char PROGRESS_SPINNER[]    = "tdlib-progress-spinner";
+static const char PROGRESS_END[]        = "tdlib-progress-end";
+static const char *const SPINNER_FRAMES[] = {"\xc2\xb7", "\xe2\x9c\xa2", "\xe2\x9c\xb3", "\xe2\x9c\xb6",
+                                             "\xe2\x9c\xbb", "\xe2\x9c\xbd"};
+enum { SPINNER_FRAME_COUNT = sizeof(SPINNER_FRAMES) / sizeof(SPINNER_FRAMES[0]), SPINNER_MS = 120 };
+
+struct Progress {
+    PurpleConversation *conv;
+    guint               timer = 0;
+    unsigned            step  = 0;
+};
+
+static GtkTextMark *getProgressMark(GtkTextBuffer *buffer, const char *name)
+{
+    return p_gtk_text_buffer_get_mark(buffer, name);
+}
+
+// Back and forth through the frames, as Claude Code's
+static const char *getSpinnerFrame(unsigned step)
+{
+    unsigned position = step % (2 * SPINNER_FRAME_COUNT - 2);
+    return SPINNER_FRAMES[(position < SPINNER_FRAME_COUNT) ? position : 2 * SPINNER_FRAME_COUNT - 2 - position];
+}
+
+static gboolean turnSpinner(gpointer data)
+{
+    Progress *progress = static_cast<Progress *>(data);
+    GtkIMHtml *imhtml  = g_list_find(purple_get_conversations(), progress->conv) ? getIMHtml(progress->conv)
+                                                                                 : nullptr;
+    GtkTextMark *spinner = imhtml ? getProgressMark(imhtml->text_buffer, PROGRESS_SPINNER) : nullptr;
+    GtkTextMark *end     = imhtml ? getProgressMark(imhtml->text_buffer, PROGRESS_END) : nullptr;
+    if (!spinner || !end) {
+        // The tab is gone
+        progress->timer = 0;
+        if (imhtml)
+            purple_conversation_set_data(progress->conv, PROGRESS_KEY, nullptr);
+        delete progress;
+        return G_SOURCE_REMOVE;
+    }
+    GtkTextIter from, to;
+    p_gtk_text_buffer_get_iter_at_mark(imhtml->text_buffer, &from, spinner);
+    p_gtk_text_buffer_get_iter_at_mark(imhtml->text_buffer, &to, end);
+    p_gtk_imhtml_delete(imhtml, &from, &to);
+    p_gtk_text_buffer_get_iter_at_mark(imhtml->text_buffer, &from, spinner);
+    p_gtk_imhtml_insert_html_at_iter(imhtml, getSpinnerFrame(++progress->step), GTK_IMHTML_NO_SCROLL, &from);
+    return G_SOURCE_CONTINUE;
+}
+
+void startProgress(PurpleConversation *conv, const std::string &html)
+{
+    GtkIMHtml *imhtml = getIMHtml(conv);
+    if (!imhtml || purple_conversation_get_data(conv, PROGRESS_KEY))
+        return;
+    GtkTextBuffer *buffer = imhtml->text_buffer;
+    GtkTextIter    where;
+    p_gtk_text_buffer_get_end_iter(buffer, &where);
+    // Left gravity, so as to stay before what is inserted at it
+    p_gtk_text_buffer_create_mark(buffer, PROGRESS_START, &where, TRUE);
+    std::string line = (p_gtk_text_iter_get_offset(&where) ? "<br>" : "") +
+                       std::string("<font color=\"#777777\">") + html + " </font>";
+    p_gtk_imhtml_insert_html_at_iter(imhtml, line.c_str(), GtkIMHtmlOptions(0), &where);
+    p_gtk_text_buffer_get_end_iter(buffer, &where);
+    p_gtk_text_buffer_create_mark(buffer, PROGRESS_SPINNER, &where, TRUE);
+    p_gtk_imhtml_insert_html_at_iter(imhtml, getSpinnerFrame(0), GtkIMHtmlOptions(0), &where);
+    p_gtk_text_buffer_get_end_iter(buffer, &where);
+    p_gtk_text_buffer_create_mark(buffer, PROGRESS_END, &where, FALSE);
+
+    Progress *progress = new Progress;
+    progress->conv  = conv;
+    progress->timer = g_timeout_add(SPINNER_MS, turnSpinner, progress);
+    purple_conversation_set_data(conv, PROGRESS_KEY, progress);
+}
+
+void stopProgress(PurpleConversation *conv)
+{
+    Progress *progress = conv ? static_cast<Progress *>(purple_conversation_get_data(conv, PROGRESS_KEY)) : nullptr;
+    if (!progress)
+        return;
+    purple_conversation_set_data(conv, PROGRESS_KEY, nullptr);
+    g_source_remove(progress->timer);
+    delete progress;
+    GtkIMHtml *imhtml = getIMHtml(conv);
+    if (!imhtml)
+        return;
+    GtkTextBuffer *buffer = imhtml->text_buffer;
+    GtkTextMark   *start  = getProgressMark(buffer, PROGRESS_START);
+    GtkTextMark   *end    = getProgressMark(buffer, PROGRESS_END);
+    if (start && end) {
+        GtkTextIter from, to;
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &from, start);
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &to, end);
+        p_gtk_imhtml_delete(imhtml, &from, &to);
+    }
+    for (const char *name: {PROGRESS_START, PROGRESS_SPINNER, PROGRESS_END})
+        if (GtkTextMark *mark = getProgressMark(buffer, name))
+            p_gtk_text_buffer_delete_mark(buffer, mark);
 }
 
 // The edit in progress in a conversation's input field, and what the field held before
@@ -890,6 +993,14 @@ bool isEntryEditing(PurpleConversation *conv, MessageId messageId)
 bool canRedrawConversation(PurpleConversation *conv)
 {
     return false;
+}
+
+void startProgress(PurpleConversation *conv, const std::string &html)
+{
+}
+
+void stopProgress(PurpleConversation *conv)
+{
 }
 
 bool canReplaceMessage(PurpleConversation *conv, MessageId messageId)

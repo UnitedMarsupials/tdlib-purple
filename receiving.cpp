@@ -2533,11 +2533,18 @@ static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw
 // Messages found too far back for their tab once, which they are no nearer to since
 static std::set<std::pair<int64_t, int64_t>> g_redrawTooFar;
 
+static void stopRedrawProgress(TdAccountData &account, ChatId chatId)
+{
+    const td::td_api::chat *chat = account.getChat(chatId);
+    stopProgress(chat ? findMessageConversation(account, *chat) : nullptr);
+}
+
 // Empties the tab and has the messages shown in it, oldest first, ahead of any that came meanwhile
 static void redrawShow(TdAccountData &account, Redraw &redraw)
 {
     const td::td_api::chat *chat = account.getChat(redraw.chatId);
     PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+    stopProgress(conv);
     if (conv) {
         purple_debug_misc(config::pluginId, "Redrawing chat %" G_GINT64_FORMAT " from message %" G_GINT64_FORMAT
                           " or time %" G_GINT64_FORMAT ": %zu messages\n", redraw.chatId.value(),
@@ -2592,6 +2599,7 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
         purple_debug_warning(config::pluginId, "Cannot fetch chat %" G_GINT64_FORMAT " to redraw it: %s\n",
                              redraw->chatId.value(), getDisplayedError(response).c_str());
     // Left as it is
+    stopRedrawProgress(account, redraw->chatId);
     std::vector<IncomingMessage> readyMessages;
     account.pendingMessages.setChatReady(redraw->chatId, readyMessages);
     showMessages(readyMessages, account);
@@ -2624,6 +2632,8 @@ static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earlies
         return false;
     }
     account.pendingMessages.setChatNotReady(chatId);
+    // TRANSLATOR: At the end of a conversation window while it is being filled, followed by a turning character.
+    startProgress(conv, escapeForDisplay(_("Fetching messages from Telegram")));
     auto redraw = std::make_shared<Redraw>();
     redraw->chatId   = chatId;
     redraw->earliest = earliest;

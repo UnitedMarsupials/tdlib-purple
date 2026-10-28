@@ -79,6 +79,10 @@ bool isEntryEditing(PurpleConversation *conv, MessageId messageId);
 
 // Whether Pidgin shows the conversation, so that it can be emptied and filled anew
 bool canRedrawConversation(PurpleConversation *conv);
+// A line at the end of the tab saying what is under way, with a turning character after it, until
+// stopped; in Pidgin only
+void startProgress(PurpleConversation *conv, const std::string &html);
+void stopProgress(PurpleConversation *conv);
 
 // Whether the message's text is in the conversation's tab, to be written over
 bool canReplaceMessage(PurpleConversation *conv, MessageId messageId);
