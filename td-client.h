@@ -24,6 +24,9 @@ public:
     int  sendMessage(const char *buddyName, const char *message);
     void sendTyping(const char *buddyName, bool isTyping);
     void sendReadReceipts(PurpleConversation *conversation);
+    // Fills a tab just opened with the chat's latest messages, as set; false if it is to be tried
+    // again later
+    bool fillConversation(PurpleConversation *conv);
 
     void addContact(const std::string &purpleName, const std::string &alias, const std::string &groupName);
     void renameContact(const char *buddyName, const char *newAlias);

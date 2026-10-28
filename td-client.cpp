@@ -1669,6 +1669,15 @@ void PurpleTdClient::sendReadReceipts(PurpleConversation *conversation)
     }
 }
 
+bool PurpleTdClient::fillConversation(PurpleConversation *conv)
+{
+    int days = purple_account_get_int(m_account, AccountOptions::HistoryDays, AccountOptions::HistoryDaysDefault);
+    const td::td_api::chat *chat = findConversationChat(m_data, conv);
+    if ((days <= 0) || !chat)
+        return true;
+    return fillChat(m_data, getId(*chat), time(NULL) - time_t(days) * 24 * 60 * 60);
+}
+
 static bool isLeavingOf(const td::td_api::message &message, int64_t userId)
 {
     return userId && message.content_ &&

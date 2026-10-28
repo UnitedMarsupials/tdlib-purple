@@ -377,28 +377,33 @@ static PurpleMessageFlags getNotificationFlags(PurpleMessageFlags extraFlags)
     return (PurpleMessageFlags)flags;
 }
 
-void sendConversationReadReceipts(TdAccountData &account, PurpleConversation *conv)
+const td::td_api::chat *findConversationChat(TdAccountData &account, PurpleConversation *conv)
 {
-    if (!conversationHasFocus(conv))
-        return;
-    ChatId chatId;
     PurpleConversationType convType = purple_conversation_get_type(conv);
     const char            *convName = purple_conversation_get_name(conv);
 
     if (convType == PURPLE_CONV_TYPE_IM) {
         UserId       privateChatUserId = purpleBuddyNameToUserId(convName);
         SecretChatId secretChatId      = purpleBuddyNameToSecretChatId(convName);
-        const td::td_api::chat *tdlibChat = nullptr;
 
         if (privateChatUserId.valid())
-            tdlibChat = account.getPrivateChatByUserId(privateChatUserId);
+            return account.getPrivateChatByUserId(privateChatUserId);
         else if (secretChatId.valid())
-            tdlibChat = account.getChatBySecretChat(secretChatId);
-
-        if (tdlibChat)
-            chatId = getId(*tdlibChat);
+            return account.getChatBySecretChat(secretChatId);
     } else if (convType == PURPLE_CONV_TYPE_CHAT)
-        chatId = getTdlibChatId(convName);
+        return account.getChat(getTdlibChatId(convName));
+    return nullptr;
+}
+
+void sendConversationReadReceipts(TdAccountData &account, PurpleConversation *conv)
+{
+    if (!conversationHasFocus(conv))
+        return;
+    ChatId chatId;
+    if (purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_CHAT)
+        chatId = getTdlibChatId(purple_conversation_get_name(conv));
+    else if (const td::td_api::chat *tdlibChat = findConversationChat(account, conv))
+        chatId = getId(*tdlibChat);
 
     std::vector<ReadReceipt> receipts;
     account.extractPendingReadReceipts(chatId, receipts);
@@ -2505,7 +2510,8 @@ static unsigned getRedrawLimit()
 namespace {
 struct Redraw {
     ChatId                                                  chatId;
-    MessageId                                               earliest;
+    MessageId                                               earliest; // or
+    time_t                                                  since = 0;
     unsigned                                                limit;
     // Newest first, as TDLib gives them
     std::vector<td::td_api::object_ptr<td::td_api::message>> messages;
@@ -2524,7 +2530,8 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
     PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
     if (conv) {
         purple_debug_misc(config::pluginId, "Redrawing chat %" G_GINT64_FORMAT " from message %" G_GINT64_FORMAT
-                          ": %zu messages\n", redraw.chatId.value(), redraw.earliest.value(), redraw.messages.size());
+                          " or time %" G_GINT64_FORMAT ": %zu messages\n", redraw.chatId.value(),
+                          redraw.earliest.value(), int64_t(redraw.since), redraw.messages.size());
         purple_conversation_clear_message_history(conv);
         for (auto &message: redraw.messages)
             if (message && !account.pendingMessages.findPendingMessage(redraw.chatId, getId(*message)))
@@ -2540,29 +2547,37 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
 {
     MessageId more;
     bool      found = false;
+    bool      older = false; // than the tab is filled from
     if (response && (response->get_id() == td::td_api::messages::ID)) {
         auto &messages = static_cast<td::td_api::messages &>(*response);
         for (auto &message: messages.messages_) {
             // The message a batch goes back from may come again, starting it
             if (!message || (!redraw->messages.empty() && (getId(*message) == getId(*redraw->messages.back()))))
                 continue;
+            older = redraw->since && (message->date_ < redraw->since);
+            if (older)
+                break;
             more = getId(*message);
             found = (more == redraw->earliest);
             redraw->messages.push_back(std::move(message));
             if (found || (redraw->messages.size() >= redraw->limit))
                 break;
         }
-        if (found) {
-            redrawShow(account, *redraw);
-            return;
-        }
-        if ((redraw->messages.size() < redraw->limit) && !messages.messages_.empty()) {
+        bool full = redraw->messages.size() >= redraw->limit;
+        // Filling it from a time, all there is since, or as much as fits, is enough
+        if (found || (redraw->since && (older || full || messages.messages_.empty()))) {
+            if (!redraw->messages.empty()) {
+                redrawShow(account, *redraw);
+                return;
+            }
+        } else if (!full && !messages.messages_.empty()) {
             redrawRequest(account, redraw, more);
             return;
+        } else {
+            purple_debug_misc(config::pluginId, "Message %" G_GINT64_FORMAT " is further back than the tab holds\n",
+                              redraw->earliest.value());
+            g_redrawTooFar.insert({redraw->chatId.value(), redraw->earliest.value()});
         }
-        purple_debug_misc(config::pluginId, "Message %" G_GINT64_FORMAT " is further back than the tab holds\n",
-                          redraw->earliest.value());
-        g_redrawTooFar.insert({redraw->chatId.value(), redraw->earliest.value()});
     } else
         purple_debug_warning(config::pluginId, "Cannot fetch chat %" G_GINT64_FORMAT " to redraw it: %s\n",
                              redraw->chatId.value(), getDisplayedError(response).c_str());
@@ -2586,25 +2601,37 @@ static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw
         });
 }
 
-void redrawChat(TdAccountData &account, ChatId chatId, MessageId earliest)
+// False if the chat is busy
+static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earliest, time_t since)
 {
-    if (g_redrawTooFar.count({chatId.value(), earliest.value()}))
-        return;
     const td::td_api::chat *chat = account.getChat(chatId);
     PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
     if (!conv || !canRedrawConversation(conv))
-        return;
+        return true;
     // Not while history is being fetched, or the tab redrawn already
     if (!account.pendingMessages.isChatReady(chatId)) {
         purple_debug_misc(config::pluginId, "Chat %" G_GINT64_FORMAT " is busy, not redrawn\n", chatId.value());
-        return;
+        return false;
     }
     account.pendingMessages.setChatNotReady(chatId);
     auto redraw = std::make_shared<Redraw>();
     redraw->chatId   = chatId;
     redraw->earliest = earliest;
+    redraw->since    = since;
     redraw->limit    = getRedrawLimit();
     redrawRequest(account, redraw, MessageId::invalid);
+    return true;
+}
+
+void redrawChat(TdAccountData &account, ChatId chatId, MessageId earliest)
+{
+    if (!g_redrawTooFar.count({chatId.value(), earliest.value()}))
+        startRedraw(account, chatId, earliest, 0);
+}
+
+bool fillChat(TdAccountData &account, ChatId chatId, time_t since)
+{
+    return startRedraw(account, chatId, MessageId::invalid, since);
 }
 
 // While a message waits to be shown, its reactions would come before it, and are part of what it

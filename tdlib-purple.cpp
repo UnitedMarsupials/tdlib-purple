@@ -325,6 +325,38 @@ conversation_updated_cb(PurpleConversation *conv, PurpleConvUpdateType type)
     }
 }
 
+// A conversation just opened, filled once Pidgin has set it up, or the chat is no longer busy
+struct ConversationToFill: PurpleConversationInfo {
+    unsigned tries = 0;
+};
+
+static gboolean fillConversation(void *arg)
+{
+    std::unique_ptr<ConversationToFill> info(static_cast<ConversationToFill *>(arg));
+    PurpleAccount      *account  = purple_accounts_find(info->accountName.c_str(), config::pluginId);
+    PurpleTdClient     *tdClient = account ? getTdClient(account) : nullptr;
+    PurpleConversation *conv     = tdClient ? purple_find_conversation_with_account(info->type, info->convName.c_str(),
+                                                                                    account)
+                                            : nullptr;
+    // Busy for so long, it is fetching more than the tab would hold anyway
+    enum { RETRY_MS = 1000, MAX_TRIES = 60 };
+    if (conv && !tdClient->fillConversation(conv) && (++info->tries < MAX_TRIES))
+        g_timeout_add(RETRY_MS, fillConversation, info.release());
+    return G_SOURCE_REMOVE;
+}
+
+static void conversationCreated(PurpleConversation *conv, void *data)
+{
+    PurpleAccount *account = purple_conversation_get_account(conv);
+    if ((account != data) || !canRedrawConversation(conv))
+        return;
+    ConversationToFill *info = new ConversationToFill;
+    info->accountName = purple_account_get_username(account);
+    info->convName    = purple_conversation_get_name(conv);
+    info->type        = purple_conversation_get_type(conv);
+    g_idle_add(fillConversation, info);
+}
+
 static void tgprpl_login (PurpleAccount *acct)
 {
     purple_debug_misc(config::pluginId, "version %s\n", config::versionString);
@@ -337,10 +369,18 @@ static void tgprpl_login (PurpleAccount *acct)
 
     purple_signal_connect(purple_conversations_get_handle(), "conversation-updated",
                           acct, PURPLE_CALLBACK(conversation_updated_cb), NULL);
+    purple_signal_connect(purple_conversations_get_handle(), "conversation-created",
+                          acct, PURPLE_CALLBACK(conversationCreated), acct);
 }
 
 static void tgprpl_close (PurpleConnection *gc)
 {
+    // Connected again at the next login
+    PurpleAccount *account = purple_connection_get_account(gc);
+    purple_signal_disconnect(purple_conversations_get_handle(), "conversation-updated",
+                             account, PURPLE_CALLBACK(conversation_updated_cb));
+    purple_signal_disconnect(purple_conversations_get_handle(), "conversation-created",
+                             account, PURPLE_CALLBACK(conversationCreated));
     delete static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
     purple_connection_set_protocol_data(gc, NULL);
 }
@@ -1312,6 +1352,11 @@ static void tgprpl_init (PurplePlugin *plugin)
     // TRANSLATOR: Account settings, key (boolean)
     opt = purple_account_option_bool_new(_("Strike out deleted messages in Pidgin, rather than remove them"),
                                          AccountOptions::StrikeOutDeleted, AccountOptions::StrikeOutDeletedDefault);
+    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+
+    // TRANSLATOR: Account settings, key (number). 0 leaves the conversation window as Pidgin opens it.
+    opt = purple_account_option_int_new(_("Days of messages to show on opening a conversation, in Pidgin"),
+                                        AccountOptions::HistoryDays, AccountOptions::HistoryDaysDefault);
     prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
 
     // TRANSLATOR: Account settings, key (boolean)

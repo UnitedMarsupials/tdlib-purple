@@ -1436,6 +1436,10 @@ msgstr "Shfaq versionin e fundit"
 msgid "Show the latest edit"
 msgstr "Shfaq redaktimin e fundit"
 
+#. TRANSLATOR: Account settings, key (number). 0 leaves the conversation window as Pidgin opens it.
+msgid "Days of messages to show on opening a conversation, in Pidgin"
+msgstr "Ditë mesazhesh për t'u shfaqur kur hapet një bisedë, në Pidgin"
+
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091
 msgid "Needs Telegram Premium"

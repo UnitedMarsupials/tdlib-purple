@@ -1398,6 +1398,10 @@ msgstr "Показати останню версію"
 msgid "Show the latest edit"
 msgstr "Показати останнє редагування"
 
+#. TRANSLATOR: Account settings, key (number). 0 leaves the conversation window as Pidgin opens it.
+msgid "Days of messages to show on opening a conversation, in Pidgin"
+msgstr "Скільки днів повідомлень показувати, відкриваючи розмову в Pidgin"
+
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091
 msgid "Needs Telegram Premium"

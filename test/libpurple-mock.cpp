@@ -1685,6 +1685,12 @@ PurpleAccountOption *purple_account_option_bool_new(const char *text,
     return NULL;
 }
 
+PurpleAccountOption *purple_account_option_int_new(const char *text,
+	const char *pref_name, int default_value)
+{
+    return NULL;
+}
+
 PurpleAccountOption *purple_account_option_list_new(const char *text,
 	const char *pref_name, GList *list)
 {
@@ -1731,6 +1737,11 @@ gboolean purple_account_get_bool(const PurpleAccount *account, const char *name,
 							   gboolean default_value)
 {
     return *purple_account_get_string(account, name, default_value ? "true" : "");
+}
+
+int purple_account_get_int(const PurpleAccount *account, const char *name, int default_value)
+{
+    return atoi(purple_account_get_string(account, name, std::to_string(default_value).c_str()));
 }
 
 void purple_account_set_bool(PurpleAccount *account, const char *name,
@@ -1821,6 +1832,11 @@ gulong purple_signal_connect(void *instance, const char *signal,
 	void *handle, PurpleCallback func, void *data)
 {
     return 0;
+}
+
+void purple_signal_disconnect(void *instance, const char *signal,
+	void *handle, PurpleCallback func)
+{
 }
 
 // As libpurple's, which Pidgin calls whenever it updates a tab
