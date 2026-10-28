@@ -542,3 +542,4 @@ TEST(MarkChanges, Words)
     // Only spacing or formatting changed
     ASSERT_EQ(std::string("a<br><b>b</b>"), changes("a b", "a<br><b>b</b>"));
 }
+

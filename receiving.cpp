@@ -328,32 +328,153 @@ std::string makeNoticeWithSender(const td::td_api::chat &chat, const TgMessageIn
     return prefix + noticeText;
 }
 
+namespace {
+// Markup for a stretch of the text: around it, or in place of it
+struct TextMarkup {
+    size_t      start;
+    size_t      end;
+    std::string open;
+    std::string close;
+    bool        replaces = false; // open goes in place of the text
+    bool        quote    = false; // each line of it starts with a bar
+};
+}
+
+// The bar a quoted line starts with, as the phone app draws one beside the quote
+static const char QUOTE_BAR[] = "<font color=\"#808080\">\xe2\x96\x8e</font> ";
+
+// Telegram's formatting as the markup Pidgin's conversation window draws; what it has no markup
+// for is left plain: mentions, hashtags, addresses (which Pidgin links itself) and the like
+static bool getEntityMarkup(const td::td_api::TextEntityType &type, TextMarkup &markup)
+{
+    switch (type.get_id()) {
+    case td::td_api::textEntityTypeBold::ID:
+        markup.open = "<b>";
+        markup.close = "</b>";
+        return true;
+    case td::td_api::textEntityTypeItalic::ID:
+        markup.open = "<i>";
+        markup.close = "</i>";
+        return true;
+    case td::td_api::textEntityTypeUnderline::ID:
+        markup.open = "<u>";
+        markup.close = "</u>";
+        return true;
+    case td::td_api::textEntityTypeStrikethrough::ID:
+        markup.open = "<s>";
+        markup.close = "</s>";
+        return true;
+    case td::td_api::textEntityTypeCode::ID:
+        markup.open = "<font face=\"monospace\">";
+        markup.close = "</font>";
+        return true;
+    case td::td_api::textEntityTypePre::ID:
+    case td::td_api::textEntityTypePreCode::ID:
+        markup.open = "<pre>";
+        markup.close = "</pre>";
+        return true;
+    case td::td_api::textEntityTypeTextUrl::ID:
+        markup.open = "<a href=\"" +
+                      escapeForDisplay(static_cast<const td::td_api::textEntityTypeTextUrl &>(type).url_) + "\">";
+        markup.close = "</a>";
+        return true;
+    case td::td_api::textEntityTypeSpoiler::ID:
+        // Hidden until selected, which shows it in the selection's colors
+        markup.open = "<font color=\"#808080\" back=\"#808080\">";
+        markup.close = "</font>";
+        return true;
+    case td::td_api::textEntityTypeBlockQuote::ID:
+    case td::td_api::textEntityTypeExpandableBlockQuote::ID:
+        markup.open = QUOTE_BAR;
+        markup.quote = true;
+        return true;
+    default:
+        return false;
+    }
+}
+
 std::string getMessageText(const td::td_api::formattedText &text,
                            const std::map<int64_t, std::string> *smileys)
 {
-    // The stretches of text that custom emoji cover, and what goes there instead
-    std::vector<std::tuple<size_t, size_t, std::string>> replaced;
-    if (smileys)
-        for (const auto &entity: text.entities_)
-            if (entity && entity->type_ && (entity->type_->get_id() == td::td_api::textEntityTypeCustomEmoji::ID)) {
-                auto it = smileys->find(static_cast<const td::td_api::textEntityTypeCustomEmoji &>(*entity->type_).custom_emoji_id_);
-                if (it != smileys->end())
-                    replaced.emplace_back(utf16OffsetToBytes(text.text_, entity->offset_),
-                                          utf16OffsetToBytes(text.text_, entity->offset_ + entity->length_),
-                                          it->second);
-            }
-    std::sort(replaced.begin(), replaced.end());
+    std::vector<TextMarkup> markups;
+    for (const auto &entity: text.entities_) {
+        if (!entity || !entity->type_ || (entity->length_ <= 0))
+            continue;
+        TextMarkup markup;
+        markup.start = utf16OffsetToBytes(text.text_, entity->offset_);
+        markup.end   = utf16OffsetToBytes(text.text_, entity->offset_ + entity->length_);
+        if (entity->type_->get_id() == td::td_api::textEntityTypeCustomEmoji::ID) {
+            // The stretch a custom emoji covers is its code instead, if it has one
+            auto it = smileys ? smileys->find(static_cast<const td::td_api::textEntityTypeCustomEmoji &>(*entity->type_).custom_emoji_id_)
+                              : std::map<int64_t, std::string>::const_iterator();
+            if (!smileys || (it == smileys->end()))
+                continue;
+            markup.open     = escapeForDisplay(it->second);
+            markup.replaces = true;
+        } else if (!getEntityMarkup(*entity->type_, markup))
+            continue;
+        if (markup.start < markup.end)
+            markups.push_back(std::move(markup));
+    }
+
+    // Where markup opens and closes: closing before opening at the same place, the inner first;
+    // opening, the outer first. Telegram nests its entities, never crossing them.
+    struct Edge {
+        size_t   position;
+        bool     opens;
+        size_t   index;
+    };
+    std::vector<Edge> edges;
+    for (size_t i = 0; i < markups.size(); i++) {
+        edges.push_back({markups[i].start, true, i});
+        edges.push_back({markups[i].end, false, i});
+    }
+    std::sort(edges.begin(), edges.end(), [&markups](const Edge &a, const Edge &b) {
+        if (a.position != b.position)
+            return a.position < b.position;
+        if (a.opens != b.opens)
+            return !a.opens;
+        const TextMarkup &x = markups[a.index], &y = markups[b.index];
+        if (a.opens)
+            return (x.end != y.end) ? (x.end > y.end) : (a.index < b.index);
+        return (x.start != y.start) ? (x.start > y.start) : (a.index > b.index);
+    });
 
     std::string result;
     size_t      position = 0;
-    for (const auto &item: replaced) {
-        if (std::get<0>(item) < position)
-            continue;
-        result  += escapeForDisplay(text.text_.substr(position, std::get<0>(item) - position));
-        result  += escapeForDisplay(std::get<2>(item));
-        position = std::get<1>(item);
+    size_t      skipTo   = 0; // past the text a custom emoji's code replaces
+    unsigned    quotes   = 0;
+    auto addText = [&](size_t end) {
+        size_t from = std::max(position, skipTo);
+        if (end > from) {
+            std::string escaped = escapeForDisplay(text.text_.substr(from, end - from));
+            if (quotes)
+                for (size_t newline = escaped.find('\n'); newline != std::string::npos;
+                     newline = escaped.find('\n', newline + 1))
+                {
+                    escaped.insert(newline + 1, QUOTE_BAR);
+                    newline += sizeof(QUOTE_BAR) - 1;
+                }
+            result += escaped;
+        }
+        position = std::max(position, end);
+    };
+    for (const Edge &edge: edges) {
+        addText(edge.position);
+        const TextMarkup &markup = markups[edge.index];
+        if (edge.opens) {
+            result += markup.open;
+            if (markup.replaces)
+                skipTo = std::max(skipTo, markup.end);
+            if (markup.quote)
+                quotes++;
+        } else {
+            result += markup.close;
+            if (markup.quote)
+                quotes--;
+        }
     }
-    result += escapeForDisplay(text.text_.substr(position));
+    addText(text.text_.size());
     return result;
 }
 
@@ -527,8 +648,9 @@ static std::string quoteMessage(const td::td_api::message *message, TdAccountDat
     } else switch (message->content_->get_id()) {
         case td::td_api::messageText::ID: {
             const td::td_api::messageText &messageText = static_cast<const td::td_api::messageText &>(*message->content_);
+            // Plain, as the quote's one line has no room for formatting, and escaped below
             if (messageText.text_)
-                text = getMessageText(*messageText.text_);
+                text = messageText.text_->text_;
             else
                 text = "";
             break;

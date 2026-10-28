@@ -21,6 +21,7 @@ add_executable(tests EXCLUDE_FROM_ALL
     reaction-test.cpp
     message-link-test.cpp
     custom-emoji-test.cpp
+    formatted-text-test.cpp
     test-transceiver.cpp
     libpurple-mock.cpp
     printout.cpp
