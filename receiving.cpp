@@ -1491,8 +1491,12 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
     // goes over the earlier version, saying it was edited.
     std::string editNote;
     if (fullMessage.replacing)
-        // TRANSLATOR: After the text of a message edited where it stands, in Pidgin's conversation window.
-        editNote = formatMessage(" <font size=\"2\"><i>({})</i></font>", std::string(_("edited")));
+        editNote = formatMessage(" <font size=\"2\"><i>({})</i></font>",
+                                 std::string(fullMessage.formattingOnly ?
+                                             // TRANSLATOR: After the text of a message edited where it stands, in Pidgin's conversation window, when only the formatting of its words (bold, italic and the like) changed.
+                                             _("formatting edited") :
+                                             // TRANSLATOR: After the text of a message edited where it stands, in Pidgin's conversation window.
+                                             _("edited")));
     MessageMarkScope markScope(messageInfo.id, getMessagePrefix(account, chat, messageInfo),
                                fullMessage.replacing ? editNote.c_str() : nullptr, true,
                                message.content_->get_id() == td::td_api::messageText::ID);
@@ -2455,6 +2459,7 @@ static void editedMessageResponse(TdAccountData &account, const PendingEdit &edi
     fullMessage.editedMessageTime     = edit.messageTime;
     fullMessage.captionOnly           = edit.captionOnly;
     fullMessage.replacing             = replacing;
+    fullMessage.formattingOnly        = edit.formattingOnly;
     fullMessage.messageInfo.timestamp = editDate;
     queueMessage(account, *chat, std::move(fullMessage), PendingMessageQueue::Append);
 }
@@ -2503,6 +2508,8 @@ void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messa
     edit.messageId   = messageId;
     edit.messageTime = shownMessage->timestamp;
     edit.captionOnly = !editedMessage.file.empty() && (editedMessage.file == shownMessage->file);
+    edit.formattingOnly = (editedMessage.file == shownMessage->file) &&
+                          (editedMessage.content == shownMessage->content);
     edit.previous    = *shownMessage;
     editedMessage.timestamp = shownMessage->timestamp;
     // Edits leave reactions be

@@ -278,6 +278,8 @@ struct IncomingMessage {
     bool     captionOnly       = false;
     // Written over its earlier version, where Pidgin's tab still shows it
     bool     replacing         = false;
+    // Its words the same, only their formatting changed
+    bool     formattingOnly    = false;
     // Deleted while waiting to be shown, which it then never is
     bool     deleted           = false;
 };
@@ -350,6 +352,7 @@ struct PendingEdit {
     MessageId    messageId;
     time_t       messageTime;
     bool         captionOnly;
+    bool         formattingOnly = false;
     ShownMessage previous;    // as shown before, to go back to if the edit cannot be fetched...
     ShownMessage installed;   // ...unless a later edit has replaced this one's since
 };

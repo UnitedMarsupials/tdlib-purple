@@ -1117,6 +1117,7 @@ void TdAccountData::addPendingEdit(const PendingEdit &edit)
         // One showing will do for both, and the file is new if either brought one. Should it fail,
         // what was shown before the first comes back, but only over what the last put in place
         it->captionOnly = it->captionOnly && edit.captionOnly;
+        it->formattingOnly = it->formattingOnly && edit.formattingOnly;
         it->installed   = edit.installed;
     }
 }
