@@ -625,6 +625,27 @@ static void compare(const deleteMessages &actual, const deleteMessages &expected
     COMPARE(revoke_);
 }
 
+static void compare(const getUserFullInfo &actual, const getUserFullInfo &expected)
+{
+    COMPARE(user_id_);
+}
+
+static void compare(const setMessageSenderBlockList &actual, const setMessageSenderBlockList &expected)
+{
+    ASSERT_EQ(messageSenderUser::ID, actual.sender_id_->get_id());
+    ASSERT_EQ(static_cast<const messageSenderUser &>(*expected.sender_id_).user_id_,
+              static_cast<const messageSenderUser &>(*actual.sender_id_).user_id_);
+    COMPARE(block_list_ != nullptr);
+}
+
+static void compare(const reportChat &actual, const reportChat &expected)
+{
+    COMPARE(chat_id_);
+    COMPARE(option_id_);
+    COMPARE(message_ids_);
+    COMPARE(text_);
+}
+
 static void compareRequests(const Function &actual, const Function &expected,
                             std::vector<std::string> &m_inputPhotoPaths)
 {
@@ -685,6 +706,9 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(getMessageProperties)
         C(editMessageCaption)
         C(deleteMessages)
+        C(getUserFullInfo)
+        C(setMessageSenderBlockList)
+        C(reportChat)
         case editMessageText::ID:
             compare(static_cast<const editMessageText &>(actual), static_cast<const editMessageText &>(expected),
                     m_inputPhotoPaths);

@@ -68,6 +68,11 @@ UserId getUserId(const td::td_api::secretChat &secretChat)
     return UserId(secretChat.user_id_);
 }
 
+UserId getUserId(const td::td_api::updateUserFullInfo &update)
+{
+    return UserId(update.user_id_);
+}
+
 UserId getUserId(const td::td_api::updateUserStatus &update)
 {
     return UserId(update.user_id_);

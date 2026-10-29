@@ -1460,6 +1460,65 @@ msgstr "Die Nachricht von {0} wurde bearbeitet"
 msgid "{0} edited the message from {1}"
 msgstr "{0} hat die Nachricht von {1} bearbeitet"
 
+msgid "Report the message…"
+msgstr "Nachricht melden…"
+
+#, c++-format
+msgid "Unblock {}"
+msgstr "{} entsperren"
+
+#, c++-format
+msgid "Block {}…"
+msgstr "{} blockieren…"
+
+#, c++-format
+msgid "Cannot block {}"
+msgstr "{} kann nicht blockiert werden"
+
+#, c++-format
+msgid "Cannot unblock {}"
+msgstr "{} kann nicht entsperrt werden"
+
+#, c++-format
+msgid "Block {}?"
+msgstr "{} blockieren?"
+
+msgid "Block user"
+msgstr "Benutzer blockieren"
+
+msgid "They will not be able to write to you or call you."
+msgstr "Diese Person kann Ihnen dann weder schreiben noch Sie anrufen."
+
+msgid "_Block"
+msgstr "Bl_ockieren"
+
+msgid "Reported to Telegram's moderators."
+msgstr "An die Moderatoren von Telegram gemeldet."
+
+msgid "Report"
+msgstr "Melden"
+
+msgid "_Next"
+msgstr "_Weiter"
+
+msgid "Tell Telegram's moderators more"
+msgstr "Erzählen Sie den Moderatoren von Telegram mehr"
+
+msgid "This may be left empty."
+msgstr "Dies darf leer bleiben."
+
+msgid "_Report"
+msgstr "_Melden"
+
+msgid "Telegram wants messages to go with this report: report one from its menu instead, by right-clicking it."
+msgstr "Telegram möchte zu dieser Meldung Nachrichten: Melden Sie stattdessen eine davon über ihr Menü, per Rechtsklick."
+
+msgid "Cannot send the report"
+msgstr "Die Meldung kann nicht gesendet werden"
+
+msgid "Report…"
+msgstr "Melden…"
+
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091
 msgid "Needs Telegram Premium"

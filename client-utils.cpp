@@ -219,8 +219,13 @@ void setKeepsDeletedMessages(PurpleBlistNode *node, bool keep)
 
 std::string getPurpleBuddyName(const td::td_api::user &user)
 {
+    return getPurpleBuddyName(getId(user));
+}
+
+std::string getPurpleBuddyName(UserId userId)
+{
     // Prepend "id" so it's not accidentally equal to our phone number which is account name
-    return "id" + std::to_string(user.id_);
+    return "id" + std::to_string(userId.value());
 }
 
 std::string getSecretChatBuddyName(SecretChatId secretChatId)

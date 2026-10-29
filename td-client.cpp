@@ -94,6 +94,14 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         break;
     }
 
+    case td::td_api::updateUserFullInfo::ID: {
+        // Blocked or unblocked, maybe from another client
+        auto &fullInfoUpdate = static_cast<const td::td_api::updateUserFullInfo &>(update);
+        if (fullInfoUpdate.user_full_info_)
+            noteUserBlocked(getUserId(fullInfoUpdate), fullInfoUpdate.user_full_info_->block_list_ != nullptr);
+        break;
+    }
+
     case td::td_api::updateNewChat::ID: {
         auto &newChat = static_cast<td::td_api::updateNewChat &>(update);
         purple_debug_misc(config::pluginId, "Incoming update: new chat\n");
@@ -1081,6 +1089,8 @@ void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId, OpenMen
         } else
             menu.isCaption = false;
         menu.date = message.date_;
+        if (!message.is_outgoing_)
+            menu.sender = getSenderUserId(message);
 
         auto properties = td::td_api::make_object<td::td_api::getMessageProperties>(chatId.value(), messageId.value());
         m_transceiver.sendQuery(std::move(properties), [this, chatId, messageId, menu, openMenu,
@@ -1090,18 +1100,39 @@ void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId, OpenMen
                 menu.canEdit          = properties.can_be_edited_ && hasText;
                 menu.canDeleteForSelf = properties.can_be_deleted_only_for_self_;
                 menu.canDeleteForAll  = properties.can_be_deleted_for_all_users_;
+                menu.canReport        = properties.can_report_chat_;
             } else
                 purple_debug_warning(config::pluginId, "What may be done to message %" G_GINT64_FORMAT " unknown: %s\n",
                                      messageId.value(), getDisplayedError(object).c_str());
+            if (!menu.sender.valid()) {
+                requestMessageReactions(chatId, messageId, menu, openMenu);
+                return;
+            }
 
-            auto available = td::td_api::make_object<td::td_api::getMessageAvailableReactions>();
-            available->chat_id_    = chatId.value();
-            available->message_id_ = messageId.value();
-            available->row_size_   = REACTION_MENU_COLUMNS;
-            m_transceiver.sendQuery(std::move(available), [this, chatId, messageId, menu, openMenu](uint64_t, TdObjectPtr object) {
-                showMessageMenuResponse(chatId, messageId, menu, openMenu, std::move(object));
+            // Whether the sender is blocked, which Pidgin's list of blocked users is told too
+            auto fullInfo = td::td_api::make_object<td::td_api::getUserFullInfo>(menu.sender.value());
+            m_transceiver.sendQuery(std::move(fullInfo), [this, chatId, messageId, menu, openMenu](uint64_t, TdObjectPtr object) mutable {
+                if (object && (object->get_id() == td::td_api::userFullInfo::ID)) {
+                    menu.senderBlocked = (static_cast<const td::td_api::userFullInfo &>(*object).block_list_ != nullptr);
+                    noteUserBlocked(menu.sender, menu.senderBlocked);
+                } else
+                    // Not offered then, unknown as it is
+                    menu.sender = UserId();
+                requestMessageReactions(chatId, messageId, menu, openMenu);
             });
         });
+    });
+}
+
+void PurpleTdClient::requestMessageReactions(ChatId chatId, MessageId messageId, const MessageMenu &menu,
+                                             const OpenMenuRef &openMenu)
+{
+    auto available = td::td_api::make_object<td::td_api::getMessageAvailableReactions>();
+    available->chat_id_    = chatId.value();
+    available->message_id_ = messageId.value();
+    available->row_size_   = REACTION_MENU_COLUMNS;
+    m_transceiver.sendQuery(std::move(available), [this, chatId, messageId, menu, openMenu](uint64_t, TdObjectPtr object) {
+        showMessageMenuResponse(chatId, messageId, menu, openMenu, std::move(object));
     });
 }
 
@@ -1253,6 +1284,41 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
             };
             items.push_back(std::move(item));
         }
+    if (menu.canReport) {
+        MenuItem item;
+        // TRANSLATOR: Item of a message's menu; it asks why, in a dialog or more.
+        item.label  = _("Report the message…");
+        item.action = [accountName, chatId, messageId]() {
+            PurpleTdClient *client = findConnected(accountName.c_str());
+            if (client)
+                client->reportChat(chatId, {messageId});
+        };
+        items.push_back(std::move(item));
+    }
+    if (menu.sender.valid()) {
+        MenuItem    item;
+        std::string name = m_data.getDisplayName(menu.sender);
+        UserId      userId = menu.sender;
+        if (menu.senderBlocked) {
+            // TRANSLATOR: Item of a message's menu. Argument is the name of the message's sender.
+            item.label  = formatMessage(_("Unblock {}"), name);
+            item.action = [accountName, userId]() {
+                PurpleAccount *account = purple_accounts_find(accountName.c_str(), config::pluginId);
+                // Through Pidgin's list of blocked users, which tells the server
+                if (account)
+                    purple_privacy_deny_remove(account, getPurpleBuddyName(userId).c_str(), FALSE);
+            };
+        } else {
+            // TRANSLATOR: Item of a message's menu; it asks for confirmation. Argument is the name of the message's sender.
+            item.label  = formatMessage(_("Block {}…"), name);
+            item.action = [accountName, userId]() {
+                PurpleTdClient *client = findConnected(accountName.c_str());
+                if (client)
+                    client->askBlockUser(userId);
+            };
+        }
+        items.push_back(std::move(item));
+    }
     fillOpenMenu(openMenu, items);
 }
 
@@ -3185,4 +3251,202 @@ void PurpleTdClient::createSecretChat(const char* buddyName)
 
     auto request = td::td_api::make_object<td::td_api::createNewSecretChat>(getId(*users[0]).value());
     m_transceiver.sendQuery(std::move(request), nullptr);
+}
+
+void PurpleTdClient::setUserBlocked(UserId userId, bool blocked)
+{
+    purple_debug_misc(config::pluginId, "%s user %" G_GINT64_FORMAT "\n", blocked ? "Blocking" : "Unblocking",
+                      userId.value());
+    auto request = td::td_api::make_object<td::td_api::setMessageSenderBlockList>();
+    request->sender_id_ = td::td_api::make_object<td::td_api::messageSenderUser>(userId.value());
+    if (blocked)
+        request->block_list_ = td::td_api::make_object<td::td_api::blockListMain>();
+    m_transceiver.sendQuery(std::move(request), [this, userId, blocked](uint64_t, TdObjectPtr object) {
+        if (object && (object->get_id() == td::td_api::ok::ID))
+            return;
+        // Pidgin's list goes back to what it was
+        noteUserBlocked(userId, !blocked);
+        std::string name = m_data.getDisplayName(userId);
+        purple_notify_error(NULL, config::pluginName,
+                            blocked ?
+                            // TRANSLATOR: Error dialog, primary content. Argument is a user's name.
+                            formatMessage(_("Cannot block {}"), name).c_str() :
+                            // TRANSLATOR: Error dialog, primary content. Argument is a user's name.
+                            formatMessage(_("Cannot unblock {}"), name).c_str(),
+                            getDisplayedError(object).c_str());
+    });
+}
+
+// Pidgin's list of blocked users follows Telegram's, without telling the server back
+void PurpleTdClient::noteUserBlocked(UserId userId, bool blocked)
+{
+    std::string name = getPurpleBuddyName(userId);
+    if (blocked)
+        purple_privacy_deny_add(m_data.purpleAccount, name.c_str(), TRUE);
+    else
+        purple_privacy_deny_remove(m_data.purpleAccount, name.c_str(), TRUE);
+}
+
+namespace {
+struct UserRequest {
+    std::string accountName;
+    UserId      userId;
+};
+}
+
+void PurpleTdClient::askBlockUser(UserId userId)
+{
+    auto *request = new UserRequest{purple_account_get_username(m_data.purpleAccount), userId};
+    auto  confirmed = [](void *data, int) {
+        std::unique_ptr<UserRequest> request(static_cast<UserRequest *>(data));
+        PurpleAccount *account = purple_accounts_find(request->accountName.c_str(), config::pluginId);
+        // Through Pidgin's list of blocked users, which tells the server
+        if (account)
+            purple_privacy_deny_add(account, getPurpleBuddyName(request->userId).c_str(), FALSE);
+    };
+    auto cancelled = [](void *data, int) { delete static_cast<UserRequest *>(data); };
+    std::string name = m_data.getDisplayName(userId);
+    // TRANSLATOR: Block dialog, primary content. Argument is a user's name.
+    std::string question = formatMessage(_("Block {}?"), name);
+    // TRANSLATOR: Block dialog, title
+    purple_request_action(NULL, _("Block user"), question.c_str(),
+                          // TRANSLATOR: Block dialog, secondary content
+                          _("They will not be able to write to you or call you."),
+                          1, // default: cancel
+                          m_data.purpleAccount,
+                          getPurpleBuddyName(userId).c_str(),
+                          NULL, // conversation
+                          request, 2,
+                          // TRANSLATOR: Block dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
+                          _("_Block"), PURPLE_CALLBACK(+confirmed),
+                          // TRANSLATOR: Block dialog, alternative is "_Block". The underscore marks accelerator keys, they must be different!
+                          _("_Cancel"), PURPLE_CALLBACK(+cancelled));
+}
+
+ChatId PurpleTdClient::getPrivateChatId(UserId userId)
+{
+    const td::td_api::chat *chat = userId.valid() ? m_data.getPrivateChatByUserId(userId) : nullptr;
+    return chat ? getId(*chat) : ChatId();
+}
+
+bool PurpleTdClient::canReportChat(ChatId chatId)
+{
+    const td::td_api::chat *chat = m_data.getChat(chatId);
+    return chat && chat->can_be_reported_;
+}
+
+void PurpleTdClient::reportChat(ChatId chatId, const std::vector<MessageId> &messageIds, const std::string &optionId,
+                                const std::string &text)
+{
+    purple_debug_misc(config::pluginId, "Reporting chat %" G_GINT64_FORMAT " with %zu messages%s\n", chatId.value(),
+                      messageIds.size(), optionId.empty() ? "" : ", a reason chosen");
+    auto request = td::td_api::make_object<td::td_api::reportChat>();
+    request->chat_id_   = chatId.value();
+    request->option_id_ = optionId;
+    request->text_      = text;
+    for (MessageId messageId: messageIds)
+        request->message_ids_.push_back(messageId.value());
+    m_transceiver.sendQuery(std::move(request), [this, chatId, messageIds](uint64_t, TdObjectPtr object) {
+        reportChatResponse(chatId, messageIds, std::move(object));
+    });
+}
+
+namespace {
+// Not tied to the connection: the account is found again once the user answers
+struct ReportRequest {
+    std::string              accountName;
+    ChatId                   chatId;
+    std::vector<MessageId>   messageIds;
+    std::string              optionId;  // chosen already, when details are asked for
+    std::vector<std::string> optionIds; // to choose from, in the order shown
+};
+
+void reportReasonChosen(void *data, PurpleRequestFields *fields)
+{
+    std::unique_ptr<ReportRequest> request(static_cast<ReportRequest *>(data));
+    int             choice = purple_request_fields_get_choice(fields, "reason");
+    PurpleTdClient *client = PurpleTdClient::findConnected(request->accountName.c_str());
+    if (client && (choice >= 0) && (size_t(choice) < request->optionIds.size()))
+        client->reportChat(request->chatId, request->messageIds, request->optionIds[choice]);
+}
+
+void reportDetailsGiven(void *data, const char *text)
+{
+    std::unique_ptr<ReportRequest> request(static_cast<ReportRequest *>(data));
+    PurpleTdClient *client = PurpleTdClient::findConnected(request->accountName.c_str());
+    if (client)
+        client->reportChat(request->chatId, request->messageIds, request->optionId, text ? text : "");
+}
+
+void reportCancelled(void *data)
+{
+    delete static_cast<ReportRequest *>(data);
+}
+}
+
+void PurpleTdClient::reportChatResponse(ChatId chatId, const std::vector<MessageId> &messageIds, TdObjectPtr object)
+{
+    const td::td_api::chat *chat = m_data.getChat(chatId);
+    auto *request = new ReportRequest{purple_account_get_username(m_data.purpleAccount), chatId, messageIds};
+    switch (object ? object->get_id() : td::td_api::error::ID) {
+    case td::td_api::reportChatResultOk::ID:
+        delete request;
+        if (chat)
+            // TRANSLATOR: In-chat notification, after a report was sent.
+            showChatNotification(m_data, *chat, _("Reported to Telegram's moderators."));
+        break;
+    case td::td_api::reportChatResultOptionRequired::ID: {
+        const auto &result = static_cast<const td::td_api::reportChatResultOptionRequired &>(*object);
+        PurpleRequestFields     *fields = purple_request_fields_new();
+        PurpleRequestFieldGroup *group  = purple_request_field_group_new(NULL);
+        PurpleRequestField      *field  = purple_request_field_choice_new("reason", result.title_.c_str(), 0);
+        for (const auto &option: result.options_)
+            if (option) {
+                purple_request_field_choice_add(field, option->text_.c_str());
+                request->optionIds.push_back(option->id_);
+            }
+        purple_request_field_group_add_field(group, field);
+        purple_request_fields_add_group(fields, group);
+        // TRANSLATOR: Report dialog, title
+        purple_request_fields(NULL, _("Report"), result.title_.c_str(), NULL, fields,
+                              // TRANSLATOR: Report dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
+                              _("_Next"), G_CALLBACK(reportReasonChosen),
+                              // TRANSLATOR: Report dialog, alternative is "_Next". The underscore marks accelerator keys, they must be different!
+                              _("_Cancel"), G_CALLBACK(reportCancelled),
+                              m_data.purpleAccount, NULL, NULL, request);
+        break;
+    }
+    case td::td_api::reportChatResultTextRequired::ID: {
+        const auto &result = static_cast<const td::td_api::reportChatResultTextRequired &>(*object);
+        request->optionId = result.option_id_;
+        // TRANSLATOR: Report dialog, title
+        purple_request_input(NULL, _("Report"),
+                             // TRANSLATOR: Report dialog, primary content
+                             _("Tell Telegram's moderators more"),
+                             result.is_optional_ ?
+                             // TRANSLATOR: Report dialog, secondary content, when the details may be left out.
+                             _("This may be left empty.") : NULL,
+                             "",
+                             TRUE,  // multiline input
+                             FALSE, // masked input
+                             NULL,
+                             // TRANSLATOR: Report dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
+                             _("_Report"), G_CALLBACK(reportDetailsGiven),
+                             // TRANSLATOR: Report dialog, alternative is "_Report". The underscore marks accelerator keys, they must be different!
+                             _("_Cancel"), G_CALLBACK(reportCancelled),
+                             m_data.purpleAccount, NULL, NULL, request);
+        break;
+    }
+    case td::td_api::reportChatResultMessagesRequired::ID:
+        delete request;
+        if (chat)
+            // TRANSLATOR: In-chat notification, not logged, after a chat was reported as a whole.
+            showChatNotification(m_data, *chat, _("Telegram wants messages to go with this report: report one from its menu instead, by right-clicking it."),
+                                 PURPLE_MESSAGE_NO_LOG);
+        break;
+    default:
+        delete request;
+        // TRANSLATOR: In-chat error, after a report; followed by the reason.
+        reportMenuError(chatId, _("Cannot send the report"), object);
+    }
 }

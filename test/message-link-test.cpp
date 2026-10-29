@@ -437,13 +437,22 @@ TEST_F(MessageLinkTest, MessageMenu)
     const ChatId    chat    = ChatId::fromString(std::to_string(chatIds[0]).c_str());
     const MessageId message = MessageId::fromString("1");
 
-    // The message for its reactions, then what may be done to it, then the reactions it may have;
-    // without Pidgin, there is no menu to add them to
+    // The message for its reactions, then what may be done to it, then whether its sender is
+    // blocked, then the reactions it may have; without Pidgin, there is no menu to add them to
     client->showMessageMenu(chat, message, nullptr);
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
     tgl.reply(makeDocumentMessage(10000, "", false));
     tgl.verifyRequest(getMessageProperties(chatIds[0], messageId));
     tgl.reply(make_object<messageProperties>());
+    tgl.verifyRequest(getUserFullInfo(userIds[0]));
+    {
+        auto fullInfo = make_object<userFullInfo>();
+        fullInfo->block_list_ = make_object<blockListMain>();
+        tgl.reply(std::move(fullInfo));
+    }
+    // Pidgin's list of blocked users follows
+    ASSERT_EQ(1u, g_slist_length(account->deny));
+    ASSERT_EQ(purpleUserName(0), static_cast<const char *>(account->deny->data));
     tgl.verifyRequest(getMessageAvailableReactions(chatIds[0], messageId, 8));
     tgl.reply(make_object<availableReactions>());
     prpl.verifyNoEvents();
@@ -482,6 +491,61 @@ TEST_F(MessageLinkTest, MessageMenu)
                       ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
                                              "Cannot delete the message: code 400 (MESSAGE_DELETE_FORBIDDEN)",
                                              PURPLE_MESSAGE_ERROR, 0));
+}
+
+TEST_F(MessageLinkTest, BlockUser)
+{
+    loginWithOneContact();
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    // As Telegram has it
+    ASSERT_EQ(PURPLE_PRIVACY_DENY_USERS, account->perm_deny);
+
+    // Pidgin's list told the server; a failure takes the user off it again
+    purple_privacy_deny_add(account, purpleUserName(0).c_str(), TRUE);
+    client->setUserBlocked(UserId::fromString(std::to_string(userIds[0]).c_str()), true);
+    tgl.verifyRequest(setMessageSenderBlockList(make_object<messageSenderUser>(userIds[0]),
+                                                make_object<blockListMain>()));
+    tgl.reply(make_object<ok>());
+    ASSERT_EQ(1u, g_slist_length(account->deny));
+    client->setUserBlocked(UserId::fromString(std::to_string(userIds[0]).c_str()), false);
+    tgl.verifyRequest(setMessageSenderBlockList(make_object<messageSenderUser>(userIds[0]), nullptr));
+    tgl.reply(make_object<error>(400, "FAILED"));
+    ASSERT_EQ(1u, g_slist_length(account->deny));
+    prpl.discardEvents();
+
+    // Another client unblocked
+    auto fullInfo = make_object<userFullInfo>();
+    tgl.update(make_object<updateUserFullInfo>(userIds[0], std::move(fullInfo)));
+    ASSERT_EQ(0u, g_slist_length(account->deny));
+}
+
+TEST_F(MessageLinkTest, ReportMessage)
+{
+    loginWithOneContact();
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    const ChatId    chat    = ChatId::fromString(std::to_string(chatIds[0]).c_str());
+    const MessageId message = MessageId::fromString("1");
+
+    // The reason, chosen in a dialog, then details, then the result
+    client->reportChat(chat, {message});
+    tgl.verifyRequest(reportChat(chatIds[0], "", {messageId}, ""));
+    {
+        std::vector<object_ptr<reportOption>> options;
+        options.push_back(make_object<reportOption>("spam", "Spam"));
+        tgl.reply(make_object<reportChatResultOptionRequired>("Why?", std::move(options)));
+    }
+    client->reportChat(chat, {message}, "spam");
+    tgl.verifyRequest(reportChat(chatIds[0], "spam", {messageId}, ""));
+    tgl.reply(make_object<reportChatResultTextRequired>("spam2", true));
+    prpl.verifyEvents(RequestInputEvent(NULL, account, NULL, NULL));
+    prpl.inputEnter("Sells things");
+    tgl.verifyRequest(reportChat(chatIds[0], "spam2", {messageId}, "Sells things"));
+    tgl.reply(make_object<reportChatResultOk>());
+    prpl.verifyEvents(NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+                      ConversationWriteEvent(purpleUserName(0), purpleUserName(0), "Reported to Telegram's moderators.",
+                                             PURPLE_MESSAGE_SYSTEM, 0));
 }
 
 TEST(JumpLink, Parse)

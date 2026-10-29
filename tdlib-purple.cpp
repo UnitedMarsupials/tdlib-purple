@@ -254,6 +254,59 @@ static char *tgprpl_get_cb_real_name(PurpleConnection *gc, int id, const char *w
     return name.empty() ? NULL : g_strdup(name.c_str());
 }
 
+// Pidgin's list of blocked users is Telegram's
+static void setBlocked(PurpleConnection *gc, const char *name, bool blocked)
+{
+    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    UserId          userId   = purpleBuddyNameToUserId(name);
+    if (tdClient && userId.valid())
+        tdClient->setUserBlocked(userId, blocked);
+}
+
+static void tgprpl_add_deny(PurpleConnection *gc, const char *name)
+{
+    setBlocked(gc, name, true);
+}
+
+static void tgprpl_rem_deny(PurpleConnection *gc, const char *name)
+{
+    setBlocked(gc, name, false);
+}
+
+// The chat of a contact, or of a group, in the contact list
+static ChatId getBlistNodeChatId(PurpleTdClient *tdClient, PurpleBlistNode *node)
+{
+    if (PURPLE_BLIST_NODE_IS_CHAT(node))
+        return getTdlibChatId(getChatName(purple_chat_get_components(PURPLE_CHAT(node))));
+    if (PURPLE_BLIST_NODE_IS_BUDDY(node))
+        return tdClient->getPrivateChatId(purpleBuddyNameToUserId(purple_buddy_get_name(PURPLE_BUDDY(node))));
+    return ChatId();
+}
+
+static PurpleAccount *getBlistNodeAccount(PurpleBlistNode *node)
+{
+    return PURPLE_BLIST_NODE_IS_CHAT(node) ? purple_chat_get_account(PURPLE_CHAT(node))
+                                           : purple_buddy_get_account(PURPLE_BUDDY(node));
+}
+
+static void reportBlistNode(PurpleBlistNode *node, gpointer data)
+{
+    PurpleTdClient *tdClient = getTdClient(getBlistNodeAccount(node));
+    ChatId          chatId   = tdClient ? getBlistNodeChatId(tdClient, node) : ChatId();
+    if (chatId.valid())
+        tdClient->reportChat(chatId, {});
+}
+
+// Where Telegram takes a report about the chat as a whole
+static void addReportAction(GList *&menu, PurpleBlistNode *node)
+{
+    PurpleTdClient *tdClient = getTdClient(getBlistNodeAccount(node));
+    ChatId          chatId   = tdClient ? getBlistNodeChatId(tdClient, node) : ChatId();
+    if (chatId.valid() && tdClient->canReportChat(chatId))
+        // TRANSLATOR: Contact, group and conversation menu item; it asks why, in a dialog or more.
+        menu = g_list_append(menu, purple_menu_action_new(_("Report…"), PURPLE_CALLBACK(reportBlistNode), NULL, NULL));
+}
+
 static GList* tgprpl_blist_node_menu (PurpleBlistNode *node)
 {
     GList *menu = NULL;
@@ -283,6 +336,7 @@ static GList* tgprpl_blist_node_menu (PurpleBlistNode *node)
         menu = g_list_append(menu, action);
 
         menu = g_list_append(menu, makeDeletedMessagesAction(node, purple_chat_get_account(chat)));
+        addReportAction(menu, node);
     } else if ( PURPLE_BLIST_NODE_IS_BUDDY(node) &&
                 purpleBuddyNameToUserId(purple_buddy_get_name(PURPLE_BUDDY(node))).valid() )
     {
@@ -294,6 +348,7 @@ static GList* tgprpl_blist_node_menu (PurpleBlistNode *node)
         menu = g_list_append(menu, action);
 
         menu = g_list_append(menu, makeDeletedMessagesAction(node, purple_buddy_get_account(PURPLE_BUDDY(node))));
+        addReportAction(menu, node);
     }
 
     return menu;
@@ -415,6 +470,9 @@ static void tgprpl_login (PurpleAccount *acct)
     PurpleTdClient   *tdClient = new PurpleTdClient(acct, g_testBackend);
 
     purple_connection_set_protocol_data (gc, tdClient);
+    // As Telegram has it: those listed are blocked, everyone else is not. Pidgin's Block, in another
+    // mode, would first empty the list, unblocking everyone else on the server too.
+    acct->perm_deny = PURPLE_PRIVACY_DENY_USERS;
     // Pidgin's formatting toolbar, but for what Telegram has no formatting for: font faces and colors
     // it cannot be told to leave out, which are dropped from what is sent
     gc->flags = static_cast<PurpleConnectionFlags>(gc->flags | PURPLE_CONNECTION_HTML |
@@ -964,9 +1022,9 @@ static PurplePluginProtocolInfo prpl_info = {
     .remove_buddy             = tgprpl_request_delete_contact,
     .remove_buddies           = NULL,
     .add_permit               = NULL,
-    .add_deny                 = NULL,
+    .add_deny                 = tgprpl_add_deny,
     .rem_permit               = NULL,
-    .rem_deny                 = NULL,
+    .rem_deny                 = tgprpl_rem_deny,
     .set_permit_deny          = NULL,
     .join_chat                = tgprpl_chat_join,
     .reject_chat              = NULL,

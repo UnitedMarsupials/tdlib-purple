@@ -14,6 +14,7 @@ std::string         proxyTypeToString(PurpleProxyType proxyType);
 
 const char *        getPurpleStatusId(const td::td_api::UserStatus &tdStatus);
 std::string         getPurpleBuddyName(const td::td_api::user &user);
+std::string         getPurpleBuddyName(UserId userId);
 std::string         getSecretChatBuddyName(SecretChatId secretChatId);
 // The contact list's entry for a chat, its buddy or its chat entry; none for a chat not there
 PurpleBlistNode    *findChatBlistNode(TdAccountData &account, const td::td_api::chat &chat);

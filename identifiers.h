@@ -62,6 +62,7 @@ DEFINE_ID_CLASS(UserId, int64_t)
     friend UserId getSenderUserId(const td::td_api::message &message);
     friend UserId getSenderUserId(const td::td_api::messageOriginUser &forwardOrigin);
     friend UserId getUserId(const td::td_api::secretChat &secretChat);
+    friend UserId getUserId(const td::td_api::updateUserFullInfo &update);
     friend UserId getUserId(const td::td_api::updateUserStatus &update);
     friend UserId getUserId(const td::td_api::updateChatAction &update);
     friend UserId getUserId(const td::td_api::importedContacts &contacts, unsigned index);
@@ -127,6 +128,7 @@ UserId       getUserId(const td::td_api::call &call);
 UserId       getSenderUserId(const td::td_api::message &message);
 UserId       getSenderUserId(const td::td_api::messageOriginUser &forwardOrigin);
 UserId       getUserId(const td::td_api::secretChat &secretChat);
+UserId       getUserId(const td::td_api::updateUserFullInfo &update);
 UserId       getUserId(const td::td_api::updateUserStatus &update);
 UserId       getUserId(const td::td_api::updateChatAction &update);
 UserId       getUserId(const td::td_api::importedContacts &contacts, unsigned index);

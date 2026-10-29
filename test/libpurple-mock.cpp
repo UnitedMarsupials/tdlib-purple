@@ -1652,6 +1652,41 @@ const char *purple_request_fields_get_string(const PurpleRequestFields *fields,
     return "";
 }
 
+PurpleRequestField *purple_request_field_choice_new(const char *id, const char *text, int default_value)
+{
+    return NULL;
+}
+
+void purple_request_field_choice_add(PurpleRequestField *field, const char *label)
+{
+}
+
+int purple_request_fields_get_choice(const PurpleRequestFields *fields, const char *id)
+{
+    return -1;
+}
+
+// The list only, telling no server
+gboolean purple_privacy_deny_add(PurpleAccount *account, const char *who, gboolean local_only)
+{
+    for (GSList *item = account->deny; item; item = item->next)
+        if (!strcmp(static_cast<const char *>(item->data), who))
+            return FALSE;
+    account->deny = g_slist_append(account->deny, g_strdup(who));
+    return TRUE;
+}
+
+gboolean purple_privacy_deny_remove(PurpleAccount *account, const char *who, gboolean local_only)
+{
+    for (GSList *item = account->deny; item; item = item->next)
+        if (!strcmp(static_cast<const char *>(item->data), who)) {
+            g_free(item->data);
+            account->deny = g_slist_delete_link(account->deny, item);
+            return TRUE;
+        }
+    return FALSE;
+}
+
 void *purple_request_fields(void *handle, const char *title, const char *primary,
 	const char *secondary, PurpleRequestFields *fields,
 	const char *ok_text, GCallback ok_cb,

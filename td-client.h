@@ -80,6 +80,17 @@ public:
     void cancelEntryEdit(ChatId chatId);
     void showEditCancelled(ChatId chatId);
 
+    // Blocks a user, or unblocks, as Pidgin's list of blocked users changes
+    void setUserBlocked(UserId userId, bool blocked);
+    // Whether Telegram takes a report about the chat as a whole, not about its messages
+    bool canReportChat(ChatId chatId);
+    // The private chat with the user, if there is one
+    ChatId getPrivateChatId(UserId userId);
+    // Reports the chat, or messages in it, to Telegram's moderators: the reason is asked for, in as
+    // many steps as Telegram has, and then details, if Telegram wants them
+    void reportChat(ChatId chatId, const std::vector<MessageId> &messageIds,
+                    const std::string &optionId = std::string(), const std::string &text = std::string());
+
     // The client of an account by its name, if it is connected
     static PurpleTdClient *findConnected(const char *accountName);
 private:
@@ -227,7 +238,15 @@ private:
         time_t                     date             = 0;
         bool                       canDeleteForSelf = false;
         bool                       canDeleteForAll  = false;
+        bool                       canReport        = false;
+        UserId                     sender;           // someone else who sent it
+        bool                       senderBlocked    = false;
     };
+    void requestMessageReactions(ChatId chatId, MessageId messageId, const MessageMenu &menu,
+                                 const OpenMenuRef &openMenu);
+    void noteUserBlocked(UserId userId, bool blocked);
+    void askBlockUser(UserId userId);
+    void reportChatResponse(ChatId chatId, const std::vector<MessageId> &messageIds, TdObjectPtr object);
     void showMessageMenuResponse(ChatId chatId, MessageId messageId, const MessageMenu &menu,
                                  const OpenMenuRef &openMenu, TdObjectPtr object);
     void askEditMessage(ChatId chatId, MessageId messageId, const std::string &text, const std::string &html,
