@@ -19,7 +19,8 @@ protected:
         g_free(dir);
         const char *old = getenv("PATH");
         path = old ? old : "";
-        setenv("PATH", directory.c_str(), 1);
+        // Ahead of the real one, if any; the script needs the rest of the path
+        setenv("PATH", (directory + ":" + path).c_str(), 1);
     }
 
     void TearDown() override
