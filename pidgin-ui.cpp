@@ -86,6 +86,7 @@ struct MessageBeingWritten {
     std::string         editNote;
     bool                markChanges = false; // its text, words added and removed marked
     bool                bodyMarked = false;
+    bool                extending  = false; // a part coming after the message was shown
 };
 static MessageBeingWritten *g_messageBeingWritten = nullptr;
 
@@ -156,14 +157,15 @@ static bool getBody(GtkTextBuffer *buffer, MessageId messageId, GtkTextIter &bod
 }
 
 // Inserts HTML at a mark, moving it past what is inserted
-static void insertAtMark(GtkIMHtml *imhtml, GtkTextMark *mark, const char *html)
+static void insertAtMark(GtkIMHtml *imhtml, GtkTextMark *mark, const char *html,
+                         GtkIMHtmlOptions options = GTK_IMHTML_NO_SCROLL)
 {
     GtkTextBuffer *buffer = imhtml->text_buffer;
     GtkTextIter    where;
     p_gtk_text_buffer_get_iter_at_mark(buffer, &where, mark);
     // Right gravity: it stays after what is inserted
     GtkTextMark *after = p_gtk_text_buffer_create_mark(buffer, NULL, &where, FALSE);
-    p_gtk_imhtml_insert_html_at_iter(imhtml, html, GTK_IMHTML_NO_SCROLL, &where);
+    p_gtk_imhtml_insert_html_at_iter(imhtml, html, options, &where);
     p_gtk_text_buffer_get_iter_at_mark(buffer, &where, after);
     p_gtk_text_buffer_move_mark(buffer, mark, &where);
     p_gtk_text_buffer_delete_mark(buffer, after);
@@ -314,9 +316,11 @@ static gboolean displayingMessage(PurpleAccount *account, const char *who, char 
             // Shown as it is now, the change unmarked
             p_g_object_set_data_full(reinterpret_cast<GObject *>(buffer), getEditedTextKey(id).c_str(),
                                      nullptr, nullptr);
-        } else if (start && !g_messageBeingWritten->replacing)
+        } else if (start && !g_messageBeingWritten->replacing) {
             // A part coming later, such as a downloaded picture, extends the message
             g_messageBeingWritten->bodyMarked = true;
+            g_messageBeingWritten->extending  = true;
+        }
         if (!g_messageBeingWritten->replacing && (g_messageBeingWritten->anew || !start)) {
             // A mark, not an offset: Pidgin may yet trim the tab's oldest lines
             p_gtk_text_buffer_get_end_iter(buffer, &end);
@@ -327,6 +331,21 @@ static gboolean displayingMessage(PurpleAccount *account, const char *who, char 
         return FALSE;
     if (g_messageBeingWritten->replacing) {
         replaceBody(conv, *message);
+        return TRUE;
+    }
+    // Where the message ends, before its reactions and what came after it, on a line of its own,
+    // without a header again; the tab scrolled to it, if it is the last
+    GtkTextBuffer *buffer  = g_messageBeingWritten->extending ? getTextBuffer(conv) : nullptr;
+    GtkTextMark   *endMark = buffer ? p_gtk_text_buffer_get_mark(buffer,
+                                          getMarkName(g_messageBeingWritten->messageId, MarkKind::End).c_str())
+                                    : nullptr;
+    if (endMark) {
+        GtkTextIter end, bufferEnd;
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &end, endMark);
+        p_gtk_text_buffer_get_end_iter(buffer, &bufferEnd);
+        bool last = !p_gtk_text_iter_compare(&end, &bufferEnd);
+        insertAtMark(getIMHtml(conv), endMark, (std::string("<br>") + *message).c_str(),
+                     last ? GtkIMHtmlOptions(0) : GTK_IMHTML_NO_SCROLL);
         return TRUE;
     }
     if (!g_messageBeingWritten->bodyMarked) {
