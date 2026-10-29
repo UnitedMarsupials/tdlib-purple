@@ -51,6 +51,19 @@ FRONT_END_FUNCTION(gtk_text_iter_forward_search);
 FRONT_END_FUNCTION(gtk_text_iter_compare);
 FRONT_END_FUNCTION(gtk_text_buffer_get_text);
 FRONT_END_FUNCTION(gtk_text_iter_get_offset);
+// For pasting a picture, without which pasting is as Pidgin has it
+FRONT_END_FUNCTION(gtk_imhtml_get_type);
+FRONT_END_FUNCTION(g_signal_lookup);
+FRONT_END_FUNCTION(g_signal_add_emission_hook);
+FRONT_END_FUNCTION(g_signal_remove_emission_hook);
+FRONT_END_FUNCTION(g_value_get_object);
+FRONT_END_FUNCTION(gtk_widget_get_clipboard);
+FRONT_END_FUNCTION(gtk_clipboard_wait_is_image_available);
+FRONT_END_FUNCTION(gtk_clipboard_wait_for_image);
+FRONT_END_FUNCTION(gdk_pixbuf_save_to_buffer);
+FRONT_END_FUNCTION(g_object_unref);
+FRONT_END_FUNCTION(gtk_imhtml_insert_image_at_iter);
+FRONT_END_FUNCTION(gtk_text_buffer_get_insert);
 FRONT_END_FUNCTION(g_object_get_data);
 FRONT_END_FUNCTION(g_object_set_data_full);
 
@@ -376,6 +389,8 @@ static void insertPrefix(PurpleConversation *conv, MessageId messageId, const st
 static guint g_connectSource = 0;
 
 // Disconnected by libpurple when the plugin is unloaded
+static void connectPaste();
+
 static gboolean connectSignals(gpointer plugin)
 {
     g_connectSource = 0;
@@ -389,6 +404,7 @@ static gboolean connectSignals(gpointer plugin)
                     connected;
     if (!connected)
         purple_debug_warning(config::pluginId, "Cannot follow Pidgin's conversation window\n");
+    connectPaste();
     return FALSE;
 }
 
@@ -427,8 +443,11 @@ void pidginUiLoad(PurplePlugin *plugin)
     g_connectSource = g_idle_add(connectSignals, plugin);
 }
 
+static void disconnectPaste();
+
 void pidginUiUnload()
 {
+    disconnectPaste();
     if (g_connectSource) {
         g_source_remove(g_connectSource);
         g_connectSource = 0;
@@ -620,6 +639,81 @@ static const char ENTRY_EDIT_KEY[] = "tdlib-purple-entry-edit";
 static GtkWidget *getEntry(PurpleConversation *conv)
 {
     return getIMHtml(conv) ? PIDGIN_CONVERSATION(conv)->entry : nullptr;
+}
+
+// Pidgin pastes HTML or text only, a picture on the clipboard into a Telegram conversation's input
+// field going nowhere. Its handler of "paste-clipboard" stops the signal, so the picture is put in
+// by an emission hook, which comes before: at the cursor, as Pidgin's Insert menu has it, and sent
+// as a photo the same way. Pidgin pastes the text, if there is any, after.
+static guint  g_pasteSignal = 0;
+static gulong g_pasteHook   = 0;
+
+static PurpleConversation *findEntryConversation(gpointer entry)
+{
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
+        if (!strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId) &&
+            (getEntry(conv) == entry))
+            return conv;
+    }
+    return nullptr;
+}
+
+static gboolean pastingClipboard(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
+{
+    gpointer   instance = paramCount ? p_g_value_get_object(&params[0]) : nullptr;
+    GtkWidget *entry    = static_cast<GtkWidget *>(instance);
+    if (!entry || !findEntryConversation(entry))
+        return TRUE;
+    GtkClipboard *clipboard = p_gtk_widget_get_clipboard(entry, GDK_SELECTION_CLIPBOARD);
+    if (!clipboard || !p_gtk_clipboard_wait_is_image_available(clipboard))
+        return TRUE;
+    GdkPixbuf *pixbuf = p_gtk_clipboard_wait_for_image(clipboard);
+    gchar     *data   = nullptr;
+    gsize      size   = 0;
+    GError    *error  = nullptr;
+    if (pixbuf && p_gdk_pixbuf_save_to_buffer(pixbuf, &data, &size, "png", &error, NULL)) {
+        // The store takes the data
+        int id = purple_imgstore_add_with_id(data, size, "clipboard.png");
+        GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(entry)->text_buffer;
+        GtkTextIter    cursor;
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &cursor, p_gtk_text_buffer_get_insert(buffer));
+        p_gtk_imhtml_insert_image_at_iter(reinterpret_cast<GtkIMHtml *>(entry), id, &cursor);
+        purple_imgstore_unref_by_id(id);
+        purple_debug_misc(config::pluginId, "Pasted a picture of %zu bytes\n", size_t(size));
+    } else
+        purple_debug_warning(config::pluginId, "Cannot paste the picture: %s\n",
+                             error ? error->message : "none on the clipboard");
+    if (error)
+        g_error_free(error);
+    if (pixbuf)
+        p_g_object_unref(pixbuf);
+    // Kept for the next paste
+    return TRUE;
+}
+
+static void connectPaste()
+{
+    if (!LOOK_UP(gtk_imhtml_get_type) || !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
+        !LOOK_UP(g_signal_remove_emission_hook) || !LOOK_UP(g_value_get_object) ||
+        !LOOK_UP(gtk_widget_get_clipboard) || !LOOK_UP(gtk_clipboard_wait_is_image_available) ||
+        !LOOK_UP(gtk_clipboard_wait_for_image) || !LOOK_UP(gdk_pixbuf_save_to_buffer) ||
+        !LOOK_UP(g_object_unref) || !LOOK_UP(gtk_imhtml_insert_image_at_iter) ||
+        !LOOK_UP(gtk_text_buffer_get_insert))
+    {
+        purple_debug_warning(config::pluginId, "Cannot paste pictures: some of GTK is not found\n");
+        return;
+    }
+    g_pasteSignal = p_g_signal_lookup("paste-clipboard", p_gtk_imhtml_get_type());
+    if (g_pasteSignal)
+        g_pasteHook = p_g_signal_add_emission_hook(g_pasteSignal, 0, pastingClipboard, nullptr, nullptr);
+}
+
+static void disconnectPaste()
+{
+    if (g_pasteHook)
+        p_g_signal_remove_emission_hook(g_pasteSignal, g_pasteHook);
+    g_pasteHook = 0;
 }
 
 static void setEntryText(GtkWidget *entry, const char *html)
