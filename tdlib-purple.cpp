@@ -217,6 +217,25 @@ static void createSecretChat(PurpleBlistNode *node, gpointer data)
         tdClient->createSecretChat(purple_buddy_get_name(buddy));
 }
 
+// Shown in Pidgin's conversation window's Conversation > More menu as well
+static void toggleDeletedMessages(PurpleBlistNode *node, gpointer data)
+{
+    PurpleAccount *account = PURPLE_BLIST_NODE_IS_CHAT(node) ? purple_chat_get_account(PURPLE_CHAT(node))
+                                                             : purple_buddy_get_account(PURPLE_BUDDY(node));
+    setKeepsDeletedMessages(node, !keepsDeletedMessages(account, node));
+}
+
+static PurpleMenuAction *makeDeletedMessagesAction(PurpleBlistNode *node, PurpleAccount *account)
+{
+    // What picking it does, there being no check items here
+    return purple_menu_action_new(keepsDeletedMessages(account, node) ?
+                                  // TRANSLATOR: Contact and conversation menu item, while deleted messages stay in the conversation window, struck out. It has them removed from now on.
+                                  _("Remove deleted messages") :
+                                  // TRANSLATOR: Contact and conversation menu item, while deleted messages are removed from the conversation window. It has them stay, struck out, from now on.
+                                  _("Keep deleted messages, struck out"),
+                                  PURPLE_CALLBACK(toggleDeletedMessages), NULL, NULL);
+}
+
 static GList* tgprpl_blist_node_menu (PurpleBlistNode *node)
 {
     GList *menu = NULL;
@@ -244,6 +263,8 @@ static GList* tgprpl_blist_node_menu (PurpleBlistNode *node)
                                         PURPLE_CALLBACK(showInviteLink),
                                         NULL, NULL);
         menu = g_list_append(menu, action);
+
+        menu = g_list_append(menu, makeDeletedMessagesAction(node, purple_chat_get_account(chat)));
     } else if ( PURPLE_BLIST_NODE_IS_BUDDY(node) &&
                 purpleBuddyNameToUserId(purple_buddy_get_name(PURPLE_BUDDY(node))).valid() )
     {
@@ -253,6 +274,8 @@ static GList* tgprpl_blist_node_menu (PurpleBlistNode *node)
                                         PURPLE_CALLBACK(createSecretChat),
                                         NULL, NULL);
         menu = g_list_append(menu, action);
+
+        menu = g_list_append(menu, makeDeletedMessagesAction(node, purple_buddy_get_account(PURPLE_BUDDY(node))));
     }
 
     return menu;

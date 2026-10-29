@@ -186,6 +186,37 @@ const char *getPurpleStatusId(const td::td_api::UserStatus &tdStatus)
         return purple_primitive_get_id_from_type(PURPLE_STATUS_AWAY);
 }
 
+PurpleBlistNode *findChatBlistNode(TdAccountData &account, const td::td_api::chat &chat)
+{
+    const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
+    if (privateUser) {
+        PurpleBuddy *buddy = purple_find_buddy(account.purpleAccount, getPurpleBuddyName(*privateUser).c_str());
+        return buddy ? PURPLE_BLIST_NODE(buddy) : nullptr;
+    }
+    SecretChatId secretChatId = getSecretChatId(chat);
+    if (secretChatId.valid()) {
+        PurpleBuddy *buddy = purple_find_buddy(account.purpleAccount, getSecretChatBuddyName(secretChatId).c_str());
+        return buddy ? PURPLE_BLIST_NODE(buddy) : nullptr;
+    }
+    PurpleChat *purpleChat = purple_blist_find_chat(account.purpleAccount, getPurpleChatName(chat).c_str());
+    return purpleChat ? PURPLE_BLIST_NODE(purpleChat) : nullptr;
+}
+
+static const char DELETED_MESSAGES_SETTING[] = "tdlib-deleted-messages";
+
+bool keepsDeletedMessages(PurpleAccount *account, PurpleBlistNode *node)
+{
+    const char *chosen = node ? purple_blist_node_get_string(node, DELETED_MESSAGES_SETTING) : nullptr;
+    if (chosen && *chosen)
+        return !strcmp(chosen, "keep");
+    return purple_account_get_bool(account, AccountOptions::StrikeOutDeleted, AccountOptions::StrikeOutDeletedDefault);
+}
+
+void setKeepsDeletedMessages(PurpleBlistNode *node, bool keep)
+{
+    purple_blist_node_set_string(node, DELETED_MESSAGES_SETTING, keep ? "keep" : "remove");
+}
+
 std::string getPurpleBuddyName(const td::td_api::user &user)
 {
     // Prepend "id" so it's not accidentally equal to our phone number which is account name

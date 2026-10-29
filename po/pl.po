@@ -1456,6 +1456,14 @@ msgstr "Pobieranie wiadomości z Telegrama"
 msgid "formatting edited"
 msgstr "edytowano formatowanie"
 
+#. TRANSLATOR: Contact and conversation menu item, while deleted messages stay in the conversation window, struck out. It has them removed from now on.
+msgid "Remove deleted messages"
+msgstr "Usuwaj skasowane wiadomości"
+
+#. TRANSLATOR: Contact and conversation menu item, while deleted messages are removed from the conversation window. It has them stay, struck out, from now on.
+msgid "Keep deleted messages, struck out"
+msgstr "Zostawiaj skasowane wiadomości, przekreślone"
+
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091
 msgid "Needs Telegram Premium"

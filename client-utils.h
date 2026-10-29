@@ -15,6 +15,12 @@ std::string         proxyTypeToString(PurpleProxyType proxyType);
 const char *        getPurpleStatusId(const td::td_api::UserStatus &tdStatus);
 std::string         getPurpleBuddyName(const td::td_api::user &user);
 std::string         getSecretChatBuddyName(SecretChatId secretChatId);
+// The contact list's entry for a chat, its buddy or its chat entry; none for a chat not there
+PurpleBlistNode    *findChatBlistNode(TdAccountData &account, const td::td_api::chat &chat);
+// Whether deleted messages stay in the chat's tab, struck out, rather than go: as chosen for its
+// entry in the contact list, if it has one and that was chosen, otherwise as the account has it
+bool                keepsDeletedMessages(PurpleAccount *account, PurpleBlistNode *node);
+void                setKeepsDeletedMessages(PurpleBlistNode *node, bool keep);
 std::vector<const td::td_api::user *> getUsersByPurpleName(const char *buddyName, TdAccountData &account,
                                                            const char *action);
 PurpleConversation *getImConversation(PurpleAccount *account, const char *username);

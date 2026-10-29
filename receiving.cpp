@@ -2559,8 +2559,7 @@ void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessag
             pendingMessage->deleted = true;
         if ((!pendingMessage || pendingMessage->editedMessageTime) && chat) {
             PurpleConversation *conv = findMessageConversation(account, *chat);
-            if (purple_account_get_bool(account.purpleAccount, AccountOptions::StrikeOutDeleted,
-                                        AccountOptions::StrikeOutDeletedDefault))
+            if (keepsDeletedMessages(account.purpleAccount, findChatBlistNode(account, *chat)))
                 strikeOutMessage(conv, messageId);
             else
                 removeMessage(conv, messageId);
