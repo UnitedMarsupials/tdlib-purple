@@ -1388,13 +1388,11 @@ void PurpleTdClient::askEditMessage(ChatId chatId, MessageId messageId, const st
             client->showEditCancelled(chatId);
     };
     // There with its formatting, in Pidgin's markup, as what is sent from there
-    if (conv && beginEntryEdit(conv, {chatId, messageId, isCaption, html}, html, editCancelled)) {
-        // TRANSLATOR: In-chat notification, not logged. Argument is the time (or date and time) the message was sent at, as the conversation window shows it. "/cancel" must remain verbatim!
-        std::string notice = formatMessage(_("Editing the message from {}: send it to save the change; Esc or /cancel leaves it as it was."),
-                                           linkToMessage(m_data.purpleAccount, chatId, messageId, formatMessageTime(date)));
-        showChatNotification(m_data, *chat, notice.c_str(), PURPLE_MESSAGE_NO_LOG);
+    // TRANSLATOR: In-chat notification, not logged, until the edit ends. Argument is the time (or date and time) the message was sent at, as the conversation window shows it. "/cancel" must remain verbatim!
+    std::string notice = formatMessage(_("Editing the message from {}: send it to save the change; Esc or /cancel leaves it as it was."),
+                                       linkToMessage(m_data.purpleAccount, chatId, messageId, formatMessageTime(date)));
+    if (conv && beginEntryEdit(conv, {chatId, messageId, isCaption, html}, html, notice, editCancelled))
         return;
-    }
 
     // Not tied to the connection: the account is found again once the user answers
     auto *request = new MessageRequest{purple_account_get_username(m_data.purpleAccount), chatId, messageId, isCaption};
@@ -1441,9 +1439,10 @@ void PurpleTdClient::cancelEntryEdit(ChatId chatId)
 void PurpleTdClient::showEditCancelled(ChatId chatId)
 {
     const td::td_api::chat *chat = m_data.getChat(chatId);
-    if (chat)
+    PurpleConversation     *conv = chat ? findMessageConversation(m_data, *chat) : nullptr;
+    if (conv)
         // TRANSLATOR: In-chat notification, not logged, once editing a message was given up.
-        showChatNotification(m_data, *chat, _("The message is left as it was."), PURPLE_MESSAGE_NO_LOG);
+        showEditOutcome(conv, _("The message is left as it was."));
 }
 
 void PurpleTdClient::editMessage(ChatId chatId, MessageId messageId,

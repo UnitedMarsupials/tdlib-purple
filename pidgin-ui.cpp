@@ -66,6 +66,7 @@ FRONT_END_FUNCTION(gtk_text_buffer_get_insert);
 FRONT_END_FUNCTION(g_object_get_data);
 FRONT_END_FUNCTION(g_object_set_data_full);
 FRONT_END_FUNCTION(gtk_widget_get_pointer);
+FRONT_END_FUNCTION(gtk_text_buffer_get_iter_at_offset);
 FRONT_END_FUNCTION(gtk_text_view_window_to_buffer_coords);
 FRONT_END_FUNCTION(gtk_text_view_get_iter_at_location);
 FRONT_END_FUNCTION(gtk_text_iter_get_marks);
@@ -270,17 +271,26 @@ static void replaceBody(PurpleConversation *conv, const char *html)
     insertAtMark(imhtml, endMark, text.c_str());
 }
 
+static const char EDIT_OUTCOME[] = "tdlib-edit-outcome";
+static void removeEditNotice(PurpleConversation *conv, const char *name);
+
 // Emitted by Pidgin just before it writes into a tab, for IM and chat messages alike; returning
 // TRUE stops it from writing
 static gboolean displayingMessage(PurpleAccount *account, const char *who, char **message,
                                   PurpleConversation *conv, PurpleMessageFlags flags)
 {
-    // For the log only, which has it by now
+    // For the log only, which has it by now; nothing is shown if that was all
     std::string html = *message;
-    if (takeLogMarker(html)) {
+    bool        logOnly = takeLogOnly(html);
+    if (takeLogMarker(html) || logOnly) {
         g_free(*message);
         *message = g_strdup(html.c_str());
     }
+    if (logOnly && html.empty())
+        return TRUE;
+    // How an edit ended is of no interest once the conversation goes on
+    if (flags & (PURPLE_MESSAGE_SEND | PURPLE_MESSAGE_RECV))
+        removeEditNotice(conv, EDIT_OUTCOME);
     if (!g_messageBeingWritten)
         return FALSE;
     if (!g_messageBeingWritten->conv) {
@@ -404,7 +414,8 @@ void pidginUiLoad(PurplePlugin *plugin)
                  LOOK_UP(gtk_imhtml_delete) && LOOK_UP(gtk_imhtml_append_text_with_images) &&
                  LOOK_UP(gtk_widget_modify_base) && LOOK_UP(gtk_widget_grab_focus) &&
                  LOOK_UP(g_signal_handler_disconnect) && LOOK_UP(gtk_text_buffer_get_text) && LOOK_UP(gtk_text_iter_get_offset) &&
-                 LOOK_UP(g_object_get_data) && LOOK_UP(g_object_set_data_full);
+                 LOOK_UP(g_object_get_data) && LOOK_UP(g_object_set_data_full) &&
+                 LOOK_UP(gtk_text_buffer_get_iter_at_offset);
     purple_debug_info(config::pluginId, "Pidgin's conversation window: %s\n",
                       g_pidginUi ? "found" : "not found");
     if (!g_pidginUi)
@@ -705,6 +716,55 @@ static void tintEntry(GtkWidget *entry, bool tint)
     p_gtk_widget_modify_base(entry, GTK_STATE_NORMAL, &tinted);
 }
 
+// Lines about an edit, each between its own marks wherever other lines go meanwhile: what is
+// inserted at either of them, such as the line of reactions of the message before it or a message
+// coming after it, stays outside. One tells how to go about the edit while it lasts; the other,
+// that it was given up, until the next one.
+static const char EDIT_NOTICE[]  = "tdlib-edit-notice";
+
+static void removeEditNotice(PurpleConversation *conv, const char *name)
+{
+    GtkIMHtml     *imhtml = getIMHtml(conv);
+    GtkTextBuffer *buffer = imhtml ? imhtml->text_buffer : nullptr;
+    GtkTextMark   *start  = buffer ? p_gtk_text_buffer_get_mark(buffer, (name + std::string("-start")).c_str()) : nullptr;
+    GtkTextMark   *end    = buffer ? p_gtk_text_buffer_get_mark(buffer, (name + std::string("-end")).c_str()) : nullptr;
+    if (start && end) {
+        GtkTextIter from, to;
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &from, start);
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &to, end);
+        if (p_gtk_text_iter_compare(&from, &to) < 0)
+            p_gtk_imhtml_delete(imhtml, &from, &to);
+    }
+    for (GtkTextMark *mark: {start, end})
+        if (mark)
+            p_gtk_text_buffer_delete_mark(buffer, mark);
+}
+
+// At the end of the tab, in grey, with the line break before it; not logged
+static void showEditNotice(PurpleConversation *conv, const std::string &html, const char *name = EDIT_NOTICE)
+{
+    GtkIMHtml     *imhtml = getIMHtml(conv);
+    if (!imhtml)
+        return;
+    removeEditNotice(conv, name);
+    GtkTextBuffer *buffer = imhtml->text_buffer;
+    GtkTextIter    where;
+    p_gtk_text_buffer_get_end_iter(buffer, &where);
+    gint        offset = p_gtk_text_iter_get_offset(&where);
+    std::string line   = (offset ? "<br>" : "") + std::string("<font color=\"#777777\">") + html + "</font>";
+    p_gtk_imhtml_insert_html_at_iter(imhtml, line.c_str(), GtkIMHtmlOptions(0), &where);
+    // Set once it is in, as the start's right gravity would have it go past the line
+    p_gtk_text_buffer_get_iter_at_offset(buffer, &where, offset);
+    p_gtk_text_buffer_create_mark(buffer, (name + std::string("-start")).c_str(), &where, FALSE);
+    p_gtk_text_buffer_get_end_iter(buffer, &where);
+    p_gtk_text_buffer_create_mark(buffer, (name + std::string("-end")).c_str(), &where, TRUE);
+}
+
+void showEditOutcome(PurpleConversation *conv, const std::string &html)
+{
+    showEditNotice(conv, html, EDIT_OUTCOME);
+}
+
 static gboolean entryKeyPressed(GtkWidget *entry, GdkEventKey *event, gpointer conv)
 {
     auto *state = static_cast<EntryEditState *>(purple_conversation_get_data(static_cast<PurpleConversation *>(conv),
@@ -719,7 +779,7 @@ static gboolean entryKeyPressed(GtkWidget *entry, GdkEventKey *event, gpointer c
 }
 
 bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::string &text,
-                    std::function<void()> cancelled)
+                    const std::string &notice, std::function<void()> cancelled)
 {
     GtkWidget *entry = getEntry(conv);
     if (!entry)
@@ -737,6 +797,8 @@ bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::
     }
     state->edit      = edit;
     state->cancelled = std::move(cancelled);
+    removeEditNotice(conv, EDIT_OUTCOME);
+    showEditNotice(conv, notice);
 
     // Markup already, but for its line breaks
     std::string html;
@@ -783,6 +845,7 @@ bool endEntryEdit(PurpleConversation *conv, EntryEdit *edit)
     if (edit)
         *edit = state->edit;
     purple_conversation_set_data(conv, ENTRY_EDIT_KEY, NULL);
+    removeEditNotice(conv, EDIT_NOTICE);
     GtkWidget *entry = getEntry(conv);
     if (entry) {
         p_g_signal_handler_disconnect(entry, state->keyHandler);
@@ -1162,7 +1225,7 @@ void showMessageReactions(PurpleConversation *conv, MessageId messageId, const s
 }
 
 bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::string &text,
-                    std::function<void()> cancelled)
+                    const std::string &notice, std::function<void()> cancelled)
 {
     return false;
 }
@@ -1170,6 +1233,10 @@ bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::
 bool endEntryEdit(PurpleConversation *conv, EntryEdit *edit)
 {
     return false;
+}
+
+void showEditOutcome(PurpleConversation *conv, const std::string &html)
+{
 }
 
 bool isEntryEditing(PurpleConversation *conv, MessageId messageId)

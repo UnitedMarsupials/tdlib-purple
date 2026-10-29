@@ -80,6 +80,10 @@ void        setLogMarkersEnabled(bool enabled);
 std::string makeLogMarker(MessageId messageId);
 // Takes the marker out of a message's markup, telling which message it is, if it has one
 bool        takeLogMarker(std::string &html, MessageId *messageId = nullptr);
+// Markup for the log only, which Pidgin's tab leaves out
+std::string makeLogOnly(const std::string &html);
+// Takes what is for the log only out of a message's markup; false if there was none
+bool        takeLogOnly(std::string &html);
 // The new version of an edited message's text, its words compared with those of the previous one
 // (plain text), as wdiff does: removed words put back where they were, on the one background
 // color, and added ones on the other

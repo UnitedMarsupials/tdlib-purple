@@ -84,3 +84,16 @@ TEST(LogMarker, RoundTrip)
     ASSERT_EQ(35577135104, id.value());
     ASSERT_FALSE(takeLogMarker(html, &id));
 }
+
+TEST(LogOnly, Taken)
+{
+    std::string html = makeLogOnly("Meow: <b>new</b>");
+    ASSERT_EQ(std::string("<!--tdlib-log-only-->Meow: <b>new</b><!--/tdlib-log-only-->"), html);
+    ASSERT_TRUE(takeLogOnly(html));
+    ASSERT_EQ(std::string(), html);
+
+    html = "Meow" + makeLogOnly(": new") + " and" + makeLogOnly(" more");
+    ASSERT_TRUE(takeLogOnly(html));
+    ASSERT_EQ(std::string("Meow and"), html);
+    ASSERT_FALSE(takeLogOnly(html));
+}

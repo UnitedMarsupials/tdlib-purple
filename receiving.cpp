@@ -1378,12 +1378,29 @@ static bool showEditNotice(const td::td_api::chat &chat, IncomingMessage &fullMe
             text = static_cast<const td::td_api::messageText *>(&content);
         std::string newText = fullMessage.captionOnly ? fileInfo.caption :
                               (text && text->text_) ? getMessageText(*text->text_) : std::string();
+        if (fullMessage.replacing) {
+            // The tab shows the new text where the message is, so the notice there only says it
+            // was edited, and leaves the new text to the log
+            std::string shown;
+            if (anonymous)
+                // TRANSLATOR: In-chat notification in a channel, not logged, when the message's new text is shown in its place. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
+                shown = formatMessage(_("The message from {0} was edited"), sentAt);
+            else
+                // TRANSLATOR: In-chat notification, not logged, when the message's new text is shown in its place. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
+                shown = formatMessage(_("{0} edited the message from {1}"), {sender, sentAt});
+            bool wasUnlogged = messageInfo.unlogged;
+            fullMessage.messageInfo.unlogged = true;
+            showMessageText(account, chat, messageInfo, NULL, shown.c_str());
+            fullMessage.messageInfo.unlogged = wasUnlogged;
+        }
         if (anonymous)
             // TRANSLATOR: In-chat notification in a channel. Arguments are the time (or date and time) the message was sent at, as the conversation window shows it, and the message's new text.
             notice = formatMessage(_("The message from {0} was edited: {1}"), {sentAt, newText});
         else
             // TRANSLATOR: In-chat notification. Arguments are a username, the time (or date and time) the message was sent at, as the conversation window shows it, and the message's new text.
             notice = formatMessage(_("{0} edited the message from {1}: {2}"), {sender, sentAt, newText});
+        if (fullMessage.replacing)
+            notice = makeLogOnly(notice);
     } else {
         if (anonymous)
             // TRANSLATOR: In-chat notification in a channel, followed by the message as edited. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.

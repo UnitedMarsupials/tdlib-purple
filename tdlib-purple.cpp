@@ -452,8 +452,7 @@ static bool sendEdit(PurpleTdClient *tdClient, PurpleConversation *conv, const c
     auto text = parseFormattedText(message);
     if (isSameFormattedText(*text, *parseFormattedText(edit.original)))
         // TRANSLATOR: In-chat notification, not logged, after a message being edited was sent unchanged.
-        purple_conversation_write(conv, NULL, _("The message is left as it was."),
-                                  (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), time(NULL));
+        showEditOutcome(conv, _("The message is left as it was."));
     else
         tdClient->editMessage(edit.chatId, edit.messageId, std::move(text), edit.isCaption);
     return true;
@@ -909,8 +908,7 @@ static PurpleCmdRet cancelEditCommand(PurpleConversation *conv, const gchar *cmd
         return PURPLE_CMD_RET_FAILED;
     }
     // TRANSLATOR: In-chat notification, not logged, after the /cancel command.
-    purple_conversation_write(conv, NULL, _("The message is left as it was."),
-                              (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), time(NULL));
+    showEditOutcome(conv, _("The message is left as it was."));
     return PURPLE_CMD_RET_OK;
 }
 

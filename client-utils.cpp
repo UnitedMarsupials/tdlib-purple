@@ -1412,6 +1412,24 @@ bool takeLogMarker(std::string &html, MessageId *messageId)
     return true;
 }
 
+static const char LOG_ONLY_START[] = "<!--tdlib-log-only-->";
+static const char LOG_ONLY_END[]   = "<!--/tdlib-log-only-->";
+
+std::string makeLogOnly(const std::string &html)
+{
+    return LOG_ONLY_START + html + LOG_ONLY_END;
+}
+
+bool takeLogOnly(std::string &html)
+{
+    bool taken = false;
+    for (size_t start; (start = html.find(LOG_ONLY_START)) != std::string::npos; taken = true) {
+        size_t end = html.find(LOG_ONLY_END, start);
+        html.erase(start, (end == std::string::npos) ? std::string::npos : end + sizeof(LOG_ONLY_END) - 1 - start);
+    }
+    return taken;
+}
+
 static bool isSpace(char c)
 {
     return (c == ' ') || (c == '\n') || (c == '\t') || (c == '\r');

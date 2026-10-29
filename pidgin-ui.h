@@ -61,6 +61,7 @@ struct MessageMarks {
 
 // A message edited in a conversation's input field, in Pidgin: its text, as markup, takes the place
 // of what the field held, which comes back once the edit is sent or given up, and the field is tinted meanwhile.
+// The notice, HTML, is a line at the end of the tab, not logged, that goes when the edit ends.
 // False where that cannot be done.
 struct EntryEdit {
     ChatId      chatId;
@@ -70,9 +71,11 @@ struct EntryEdit {
 };
 // Esc in the field gives the edit up as well, calling back after.
 bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::string &text,
-                    std::function<void()> cancelled);
+                    const std::string &notice, std::function<void()> cancelled);
 // Ends the edit in progress, if any, telling which it was
 bool endEntryEdit(PurpleConversation *conv, EntryEdit *edit);
+// A line at the end of the tab, not logged, saying how an edit ended, until the next one begins
+void showEditOutcome(PurpleConversation *conv, const std::string &html);
 // Whether that message is being edited in the conversation's input field
 bool isEntryEditing(PurpleConversation *conv, MessageId messageId);
 
