@@ -236,6 +236,19 @@ static PurpleMenuAction *makeDeletedMessagesAction(PurpleBlistNode *node, Purple
                                   PURPLE_CALLBACK(toggleDeletedMessages), NULL, NULL);
 }
 
+// A chat's messages name their senders as they are shown, by display name: the name their
+// conversation and contact list entry go by instead, for Pidgin's IM, Info and the like from the
+// menu of a sender's name. Pidgin uses the shown name if there is none.
+static char *tgprpl_get_cb_real_name(PurpleConnection *gc, int id, const char *who)
+{
+    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    if (!tdClient || !who)
+        return NULL;
+    std::vector<const td::td_api::user *> users;
+    tdClient->getUsers(who, users);
+    return (users.size() == 1) ? g_strdup(getPurpleBuddyName(*users[0]).c_str()) : NULL;
+}
+
 static GList* tgprpl_blist_node_menu (PurpleBlistNode *node)
 {
     GList *menu = NULL;
@@ -971,7 +984,7 @@ static PurplePluginProtocolInfo prpl_info = {
     .normalize                = NULL,
     .set_buddy_icon           = NULL,
     .remove_group             = NULL,
-    .get_cb_real_name         = NULL,
+    .get_cb_real_name         = tgprpl_get_cb_real_name,
     .set_chat_topic           = tgprpl_set_chat_topic,
     .find_blist_chat          = NULL,
     .roomlist_get_list        = tgprpl_roomlist_get_list,
