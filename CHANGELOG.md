@@ -14,7 +14,7 @@
 - **A chat with reactions to our messages not seen yet is marked with ❤️ before its conversation's title and, in Pidgin, its contact's name in the buddy list, as the phone app marks it.** The reactions count as seen once the conversation is, and the mark goes.
 - **Blocking someone in Pidgin blocks them on Telegram, and unblocking unblocks them; Pidgin's list of blocked users follows Telegram's.** A message's menu offers to block or unblock its sender, contact or not. Pidgin's privacy setting for the account becomes "block only the users below", as Telegram has it.
 - **A message can be reported to Telegram's moderators from its menu, and a chat that Telegram takes reports about from the contact list and the conversation's More menu.** The reason is picked in as many steps as Telegram asks for, then details given, if it wants them.
-- **/paste sends the picture on the clipboard as a photo, in Pidgin and also in front-ends without a clipboard of their own, such as Finch, where it is read with xclip, if installed.** If xclip fails, what it says is the command's error.
+- **/paste sends the files copied to the clipboard as documents, several in one message, as an album, up to ten to it; or else the clipboard's picture, as a photo.** In Pidgin, and also in front-ends without a clipboard of their own, such as Finch, where it is read with xclip, if installed; if xclip fails, what it says is the command's error. Each file is uploaded as a file transfer of its own, and those uploaded go together once none is left uploading.
 
 ### Build
 

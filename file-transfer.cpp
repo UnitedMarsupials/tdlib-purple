@@ -7,9 +7,11 @@
 #include "sticker.h"
 #include "purple-info.h"
 #include <unistd.h>
+#include <algorithm>
 
 enum {
     FILE_UPLOAD_PRIORITY = 1,
+    MAX_ALBUM_SIZE       = 10, // as Telegram has it
 };
 
 bool saveImage(int id, char **fileName)
@@ -82,6 +84,84 @@ void uploadResponseError(PurpleXfer *xfer, const std::string &message, TdAccount
     purple_xfer_unref(xfer);
 }
 
+static td::td_api::object_ptr<td::td_api::inputMessageDocument> makeDocument(int32_t fileId)
+{
+    auto content = td::td_api::make_object<td::td_api::inputMessageDocument>();
+    content->caption_ = td::td_api::make_object<td::td_api::formattedText>();
+#if TDLIB_API_INPUT_PHOTO
+    content->document_ = td::td_api::make_object<td::td_api::inputDocument>();
+    content->document_->document_ = td::td_api::make_object<td::td_api::inputFileId>(fileId);
+#else
+    content->document_ = td::td_api::make_object<td::td_api::inputFileId>(fileId);
+#endif
+    return content;
+}
+
+// The files uploaded, as a document or, several, an album of them
+static void sendDocuments(ChatId chatId, const std::vector<int32_t> &fileIds, TdTransceiver &transceiver,
+                          TdAccountData &account, TdTransceiver::ResponseCb sendMessageResponse)
+{
+    uint64_t requestId;
+    if (fileIds.size() == 1) {
+        auto sendMessageRequest = td::td_api::make_object<td::td_api::sendMessage>();
+        sendMessageRequest->input_message_content_ = makeDocument(fileIds[0]);
+        sendMessageRequest->chat_id_ = chatId.value();
+        requestId = transceiver.sendQuery(std::move(sendMessageRequest), sendMessageResponse);
+    } else {
+        auto sendAlbumRequest = td::td_api::make_object<td::td_api::sendMessageAlbum>();
+        for (int32_t fileId: fileIds)
+            sendAlbumRequest->input_message_contents_.push_back(makeDocument(fileId));
+        sendAlbumRequest->chat_id_ = chatId.value();
+        requestId = transceiver.sendQuery(std::move(sendAlbumRequest), sendMessageResponse);
+    }
+    account.addPendingRequest<SendMessageRequest>(requestId, chatId, nullptr);
+}
+
+// Once none of the album is still being uploaded, sends what was, and forgets it
+static bool sendAlbumIfUploaded(std::list<UploadAlbum>::iterator album, TdTransceiver &transceiver,
+                                TdAccountData &account, TdTransceiver::ResponseCb sendMessageResponse)
+{
+    std::vector<int32_t> fileIds;
+    for (size_t i = 0; i < album->uploads.size(); i++) {
+        if (album->fileIds[i])
+            fileIds.push_back(album->fileIds[i]);
+        else if (!purple_xfer_is_canceled(album->uploads[i]))
+            return false;
+    }
+    if (!fileIds.empty())
+        sendDocuments(album->chatId, fileIds, transceiver, account, sendMessageResponse);
+    account.uploadAlbums.erase(album);
+    return true;
+}
+
+void addUploadAlbums(const std::vector<PurpleXfer *> &uploads, TdTransceiver &transceiver, TdAccountData &account,
+                     TdTransceiver::ResponseCb sendMessageResponse)
+{
+    for (size_t start = 0; start < uploads.size(); start += MAX_ALBUM_SIZE) {
+        size_t end = std::min(uploads.size(), start + MAX_ALBUM_SIZE);
+        account.uploadAlbums.emplace_back(std::vector<PurpleXfer *>(uploads.begin() + start, uploads.begin() + end));
+        // Those given up already, if all were
+        sendAlbumIfUploaded(std::prev(account.uploadAlbums.end()), transceiver, account, sendMessageResponse);
+    }
+}
+
+bool uploadOfAlbumEnded(PurpleXfer *xfer, int32_t fileId, ChatId chatId, TdTransceiver &transceiver,
+                        TdAccountData &account, TdTransceiver::ResponseCb sendMessageResponse)
+{
+    for (auto album = account.uploadAlbums.begin(); album != account.uploadAlbums.end(); ++album) {
+        auto upload = std::find(album->uploads.begin(), album->uploads.end(), xfer);
+        if (upload == album->uploads.end())
+            continue;
+        if (fileId) {
+            album->fileIds[upload - album->uploads.begin()] = fileId;
+            album->chatId = chatId;
+        }
+        sendAlbumIfUploaded(album, transceiver, account, sendMessageResponse);
+        return true;
+    }
+    return false;
+}
+
 static void updateDocumentUploadProgress(const td::td_api::file &file, PurpleXfer *upload, ChatId chatId,
                                          TdTransceiver &transceiver, TdAccountData &account,
                                          TdTransceiver::ResponseCb sendMessageResponse)
@@ -104,20 +184,8 @@ static void updateDocumentUploadProgress(const td::td_api::file &file, PurpleXfe
             purple_xfer_end(upload);
             purple_xfer_unref(upload);
             account.removeFileTransfer(file.id_);
-            auto sendMessageRequest = td::td_api::make_object<td::td_api::sendMessage>();
-            auto content = td::td_api::make_object<td::td_api::inputMessageDocument>();
-            content->caption_ = td::td_api::make_object<td::td_api::formattedText>();
-#if TDLIB_API_INPUT_PHOTO
-            content->document_ = td::td_api::make_object<td::td_api::inputDocument>();
-            content->document_->document_ = td::td_api::make_object<td::td_api::inputFileId>(file.id_);
-#else
-            content->document_ = td::td_api::make_object<td::td_api::inputFileId>(file.id_);
-#endif
-            sendMessageRequest->input_message_content_ = std::move(content);
-            sendMessageRequest->chat_id_ = chatId.value();
-
-            uint64_t requestId = transceiver.sendQuery(std::move(sendMessageRequest), sendMessageResponse);
-            account.addPendingRequest<SendMessageRequest>(requestId, chatId, nullptr);
+            if (!uploadOfAlbumEnded(upload, file.id_, chatId, transceiver, account, sendMessageResponse))
+                sendDocuments(chatId, {file.id_}, transceiver, account, sendMessageResponse);
         }
     } else {
         purple_xfer_cancel_remote(upload);

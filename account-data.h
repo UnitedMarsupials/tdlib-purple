@@ -110,6 +110,19 @@ public:
     : PendingRequest(requestId), chatId(chatId), tempFile(tempFile ? tempFile : "") {}
 };
 
+// Files sent at once, as /paste sends them, to go as one album of documents once each is uploaded
+// or given up
+struct UploadAlbum {
+    std::vector<PurpleXfer *> uploads; // each referenced while here
+    std::vector<int32_t>      fileIds; // of those uploaded so far, 0 for the others
+    ChatId                    chatId;  // as the first uploaded says
+
+    explicit UploadAlbum(std::vector<PurpleXfer *> uploads); // takes their references
+    ~UploadAlbum();
+    UploadAlbum(const UploadAlbum &) = delete;
+    UploadAlbum &operator=(const UploadAlbum &) = delete;
+};
+
 // Checking whether TDLib still needs an image file sent in an earlier session
 class TempFileCheckRequest: public PendingRequest {
 public:
@@ -489,6 +502,7 @@ public:
     PendingMessageQueue        pendingMessages;
     // Reactions to our messages not seen yet, by chat
     std::map<ChatId, int32_t>  unreadReactionCounts;
+    std::list<UploadAlbum>     uploadAlbums;
 
     void                       addPendingReadReceipt(ChatId chatId, MessageId messageId);
     void                       extractPendingReadReceipts(ChatId chatId, std::vector<ReadReceipt> &receipts);

@@ -8,6 +8,7 @@
 
 #include "buildopt.h"
 #include "identifiers.h"
+#include "clipboard.h"
 #include <purple.h>
 #include <functional>
 #include <memory>
@@ -79,9 +80,9 @@ void showEditOutcome(PurpleConversation *conv, const std::string &html);
 // Whether that message is being edited in the conversation's input field
 bool isEntryEditing(PurpleConversation *conv, MessageId messageId);
 
-// The picture on the clipboard, as PNG, put into the image store, its reference the caller's; 0 if
-// there is none. Whether the clipboard could be looked at, which only Pidgin's conversation can do.
-int storePidginClipboardPicture(PurpleConversation *conv, bool &canRead);
+// The files copied to the clipboard, or else its picture, as PNG; false if the clipboard cannot be
+// looked at, which only Pidgin's conversation can do
+bool readPidginClipboard(PurpleConversation *conv, ClipboardContent &content);
 
 // Writes the HTML into the tab as a line of its own, at its end, not logged
 void appendTabLine(PurpleConversation *conv, const std::string &html);

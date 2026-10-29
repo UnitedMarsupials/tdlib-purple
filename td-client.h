@@ -61,6 +61,8 @@ public:
     void sendFileToChat(PurpleXfer *xfer, const char *purpleName, PurpleConversationType type,
                         int purpleChatId);
     void cancelUpload(PurpleXfer *xfer);
+    // Uploads begun together, the references taken: their files go as albums
+    void sendFilesAsAlbums(const std::vector<PurpleXfer *> &uploads);
 
     bool startVoiceCall(const char *buddyName);
     bool terminateCall(PurpleConversation *conv);

@@ -298,6 +298,15 @@ static void compare(const sendMessage &actual, const sendMessage &expected,
     compare(actual.input_message_content_, expected.input_message_content_, m_inputPhotoPaths);
 }
 
+static void compare(const sendMessageAlbum &actual, const sendMessageAlbum &expected,
+                    std::vector<std::string> &m_inputPhotoPaths)
+{
+    COMPARE(chat_id_);
+    COMPARE(input_message_contents_.size());
+    for (size_t i = 0; i < actual.input_message_contents_.size(); i++)
+        compare(actual.input_message_contents_[i], expected.input_message_contents_[i], m_inputPhotoPaths);
+}
+
 static void compare(const getBasicGroupFullInfo &actual, const getBasicGroupFullInfo &expected)
 {
     COMPARE(basic_group_id_);
@@ -715,6 +724,10 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(setMessageSenderBlockList)
         C(reportChat)
         C(readAllChatReactions)
+        case sendMessageAlbum::ID:
+            compare(static_cast<const sendMessageAlbum &>(actual), static_cast<const sendMessageAlbum &>(expected),
+                    m_inputPhotoPaths);
+            break;
         case editMessageText::ID:
             compare(static_cast<const editMessageText &>(actual), static_cast<const editMessageText &>(expected),
                     m_inputPhotoPaths);

@@ -891,15 +891,24 @@ static PurpleXfer *newUploadTransfer(PurpleConnection *gc, const char *who)
     return xfer;
 }
 
-static void tgprpl_send_file (PurpleConnection * gc, const char *who, const char *file)
+// Sends the file, or asks which; the transfer, referenced for the caller
+static PurpleXfer *startFileUpload(PurpleConnection *gc, const char *who, UploadData::Type type, int chatId,
+                                   const char *file)
 {
     PurpleXfer *X = newUploadTransfer (gc, who);
-    X->data = new UploadData{purple_connection_get_account(gc), UploadData::Type::User, 0};
+    X->data = new UploadData{purple_connection_get_account(gc), type, chatId};
+    purple_xfer_ref(X);
     if (file) {
         purple_xfer_request_accepted (X, file);
     } else {
         purple_xfer_request (X);
     }
+    return X;
+}
+
+static void tgprpl_send_file (PurpleConnection * gc, const char *who, const char *file)
+{
+    purple_xfer_unref(startFileUpload(gc, who, UploadData::Type::User, 0, file));
 }
 
 static void sendFileToChat(PurpleConnection *gc, int id, const char *filename)
@@ -910,14 +919,8 @@ static void sendFileToChat(PurpleConnection *gc, int id, const char *filename)
         return;
     }
 
-    PurpleXfer *X = newUploadTransfer(gc, purple_conversation_get_title(conv));
-    X->data = new UploadData{purple_connection_get_account(gc), UploadData::Type::Chat, id};
-
-    if (filename) {
-        purple_xfer_request_accepted (X, filename);
-    } else {
-        purple_xfer_request (X);
-    }
+    purple_xfer_unref(startFileUpload(gc, purple_conversation_get_title(conv), UploadData::Type::Chat, id,
+                                      filename));
 }
 
 static GHashTable *tgprpl_get_account_text_table (PurpleAccount *pa)
@@ -998,23 +1001,43 @@ static PurpleCmdRet hangupCommand(PurpleConversation *conv, const gchar *cmd, gc
         return PURPLE_CMD_RET_FAILED;
 }
 
-// The picture on the clipboard, sent as a photo: read by Pidgin, or by xclip where the front-end
-// cannot read the clipboard itself
+// The files copied to the clipboard, sent as albums of documents, or else its picture, as a photo:
+// read by Pidgin, or by xclip where the front-end cannot read the clipboard itself
 static PurpleCmdRet pasteCommand(PurpleConversation *conv, const gchar *cmd, gchar **args, gchar **error, void *data)
 {
-    bool        canRead;
-    std::string problem;
-    int         id = storePidginClipboardPicture(conv, canRead);
-    if (!canRead)
-        id = storeXclipPicture(problem);
-    else if (!id)
-        // TRANSLATOR: Error after the /paste command.
-        problem = _("There is no picture on the clipboard.");
-    if (!id) {
+    ClipboardContent content;
+    std::string      problem;
+    if (readPidginClipboard(conv, content)) {
+        if (content.files.empty() && !content.imageId)
+            // TRANSLATOR: Error after the /paste command.
+            problem = _("There are no files or picture on the clipboard.");
+    } else
+        readXclip(content, problem);
+    if (!problem.empty()) {
         *error = g_strdup(problem.c_str());
         return PURPLE_CMD_RET_FAILED;
     }
 
+    PurpleAccount  *account  = purple_conversation_get_account(conv);
+    PurpleTdClient *tdClient = getTdClient(account);
+    if (!content.files.empty()) {
+        if (!tdClient)
+            return PURPLE_CMD_RET_FAILED;
+        PurpleConnection       *gc = purple_account_get_connection(account);
+        std::vector<PurpleXfer *> uploads;
+        for (const std::string &file: content.files) {
+            if (purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_CHAT)
+                uploads.push_back(startFileUpload(gc, purple_conversation_get_title(conv), UploadData::Type::Chat,
+                                                  purple_conv_chat_get_id(PURPLE_CONV_CHAT(conv)), file.c_str()));
+            else
+                uploads.push_back(startFileUpload(gc, purple_conversation_get_name(conv), UploadData::Type::User,
+                                                  0, file.c_str()));
+        }
+        tdClient->sendFilesAsAlbums(uploads);
+        return PURPLE_CMD_RET_OK;
+    }
+
+    int         id   = content.imageId;
     std::string html = "<img id=\"" + std::to_string(id) + "\">";
     if (purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_IM)
         purple_conv_im_send(PURPLE_CONV_IM(conv), html.c_str());
@@ -1308,7 +1331,7 @@ static gboolean tgprpl_load (PurplePlugin *plugin)
                         (PurpleCmdFlag)(PURPLE_CMD_FLAG_IM | PURPLE_CMD_FLAG_CHAT | PURPLE_CMD_FLAG_PRPL_ONLY),
                         config::pluginId, pasteCommand,
                         // TRANSLATOR: Command description, the initial "paste" must remain verbatim!
-                        _("paste: Send the picture on the clipboard, read with xclip outside Pidgin"), NULL);
+                        _("paste: Send the files copied to the clipboard, or its picture; outside Pidgin, read with xclip"), NULL);
 
     return TRUE;
 }

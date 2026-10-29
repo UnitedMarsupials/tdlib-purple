@@ -2,6 +2,7 @@
 #include "libpurple-mock.h"
 #include "buildopt.h"
 #include "receiving.h"
+#include <glib/gstdio.h>
 
 class FileTransferTest: public CommTest {};
 
@@ -1495,4 +1496,115 @@ TEST_F(FileTransferTest, PhotoSizeWithinLimit)
     const file *selected = selectPhotoSize(account, *content);
     ASSERT_NE(nullptr, selected);
     ASSERT_EQ(2, selected->id_);
+}
+
+// Files copied to the clipboard, as /paste reads them with xclip outside Pidgin
+class PasteTest: public CommTest {
+protected:
+    const char *const PATH1   = "/path/one";
+    const char *const PATH2   = "/path/two";
+    const int32_t     fileId1 = 1234;
+    const int32_t     fileId2 = 1235;
+
+    // The two files are copied, then pasted into the conversation with the contact, and their uploads begin
+    void pasteFiles();
+    void finishUpload(int32_t fileId, const char *path);
+};
+
+void PasteTest::pasteFiles()
+{
+    gchar *dir = g_dir_make_tmp("paste-test-XXXXXX", nullptr);
+    ASSERT_NE(nullptr, dir);
+    std::string script = std::string(dir) + "/xclip";
+    ASSERT_TRUE(g_file_set_contents(script.c_str(),
+                                    "#!/bin/sh\n"
+                                    "case \"$4\" in\n"
+                                    "TARGETS) echo TARGETS; echo text/uri-list;;\n"
+                                    "text/uri-list) printf 'file:///path/one\\r\\nfile:///path/two\\r\\n';;\n"
+                                    "*) exit 1;;\n"
+                                    "esac\n", -1, nullptr));
+    g_chmod(script.c_str(), 0755);
+    std::string path = getenv("PATH") ? getenv("PATH") : "";
+    setenv("PATH", (std::string(dir) + ":" + path).c_str(), 1);
+
+    PurpleConversation *conv = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, purpleUserName(0).c_str());
+    prpl.discardEvents();
+    setFakeFileSize(PATH1, 10000);
+    setFakeFileSize(PATH2, 10000);
+    prpl.runCommand("paste", conv, {});
+
+    setenv("PATH", path.c_str(), 1);
+    g_unlink(script.c_str());
+    g_rmdir(dir);
+    g_free(dir);
+
+    prpl.verifyEvents(XferAcceptedEvent(purpleUserName(0), PATH1), XferAcceptedEvent(purpleUserName(0), PATH2));
+    tgl.verifyRequests({
+        make_object<preliminaryUploadFile>(make_object<inputFileLocal>(PATH1), make_object<fileTypeDocument>(), 1),
+        make_object<preliminaryUploadFile>(make_object<inputFileLocal>(PATH2), make_object<fileTypeDocument>(), 1),
+    });
+}
+
+void PasteTest::finishUpload(int32_t fileId, const char *path)
+{
+    tgl.update(make_object<updateFile>(make_object<file>(
+        fileId, 10000, 10000,
+        make_object<localFile>(path, false, false, false, true, 0, 10000, 10000),
+        make_object<remoteFile>("", "", false, false, 10000)
+    )));
+    prpl.verifyEvents(XferCompletedEvent(path, TRUE, 10000), XferEndEvent(path));
+}
+
+// Each uploaded, then all sent as one album
+TEST_F(PasteTest, Album)
+{
+    loginWithOneContact();
+    pasteFiles();
+
+    int32_t     fileIds[] = {fileId1, fileId2};
+    const char *paths[]   = {PATH1, PATH2};
+    for (int i = 0; i < 2; i++) {
+        tgl.reply(make_object<file>(
+            fileIds[i], 10000, 10000,
+            make_object<localFile>(paths[i], false, false, false, true, 0, 10000, 10000),
+            make_object<remoteFile>("", "", true, false, 0)
+        ));
+        prpl.verifyEvents(XferStartEvent(paths[i]), XferProgressEvent(paths[i], 0));
+    }
+
+    // The first done waits for the second
+    finishUpload(fileId1, PATH1);
+    tgl.verifyNoRequests();
+    finishUpload(fileId2, PATH2);
+
+    auto album = make_object<sendMessageAlbum>();
+    album->chat_id_ = chatIds[0];
+    album->input_message_contents_.push_back(makeInputMessageDocument(make_object<inputFileId>(fileId1), nullptr,
+                                                                      false, make_object<formattedText>()));
+    album->input_message_contents_.push_back(makeInputMessageDocument(make_object<inputFileId>(fileId2), nullptr,
+                                                                      false, make_object<formattedText>()));
+    tgl.verifyRequest(*album);
+}
+
+// One of them failing to upload, the other goes alone
+TEST_F(PasteTest, OneFails)
+{
+    loginWithOneContact();
+    pasteFiles();
+
+    tgl.reply(make_object<file>(
+        fileId1, 10000, 10000,
+        make_object<localFile>(PATH1, false, false, false, true, 0, 10000, 10000),
+        make_object<remoteFile>("", "", true, false, 0)
+    ));
+    prpl.verifyEvents(XferStartEvent(PATH1), XferProgressEvent(PATH1, 0));
+    tgl.reply(make_object<error>(1, "error"));
+    prpl.verifyEvents(XferRemoteCancelEvent(PATH2));
+    tgl.verifyNoRequests();
+
+    finishUpload(fileId1, PATH1);
+    tgl.verifyRequest(*makeSendMessage(
+        chatIds[0], 0, nullptr, nullptr, nullptr,
+        makeInputMessageDocument(make_object<inputFileId>(fileId1), nullptr, false, make_object<formattedText>())
+    ));
 }

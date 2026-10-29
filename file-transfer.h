@@ -19,6 +19,13 @@ void uploadResponseError(PurpleXfer *xfer, const std::string &message, TdAccount
 void startDocumentUploadProgress(ChatId chatId, PurpleXfer *xfer, const td::td_api::file &file,
                                  TdTransceiver &transceiver, TdAccountData &account,
                                  TdTransceiver::ResponseCb sendMessageResponse);
+// The uploads, begun at once, go as albums of up to as many documents as Telegram takes, each once
+// all of its files are uploaded or given up. The album takes the references.
+void addUploadAlbums(const std::vector<PurpleXfer *> &uploads, TdTransceiver &transceiver, TdAccountData &account,
+                     TdTransceiver::ResponseCb sendMessageResponse);
+// An upload ended, the file uploaded or, with no id, given up; false if it is of no album
+bool uploadOfAlbumEnded(PurpleXfer *xfer, int32_t fileId, ChatId chatId, TdTransceiver &transceiver,
+                        TdAccountData &account, TdTransceiver::ResponseCb sendMessageResponse);
 void downloadFileInline(int32_t fileId, ChatId chatId, TgMessageInfo &message,
                         const std::string &fileDescription,
                         td::td_api::object_ptr<td::td_api::file> thumbnail,

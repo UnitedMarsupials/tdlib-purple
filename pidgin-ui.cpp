@@ -62,6 +62,8 @@ FRONT_END_FUNCTION(g_value_get_object);
 FRONT_END_FUNCTION(gtk_widget_get_clipboard);
 FRONT_END_FUNCTION(gtk_clipboard_wait_is_image_available);
 FRONT_END_FUNCTION(gtk_clipboard_wait_for_image);
+// For /paste of files, which then sends a picture only
+FRONT_END_FUNCTION(gtk_clipboard_wait_for_uris);
 FRONT_END_FUNCTION(gdk_pixbuf_save_to_buffer);
 FRONT_END_FUNCTION(g_object_unref);
 FRONT_END_FUNCTION(gtk_imhtml_insert_image_at_iter);
@@ -747,11 +749,21 @@ static gboolean pastingClipboard(GSignalInvocationHint *, guint paramCount, cons
     return TRUE;
 }
 
-int storePidginClipboardPicture(PurpleConversation *conv, bool &canRead)
+bool readPidginClipboard(PurpleConversation *conv, ClipboardContent &content)
 {
     GtkWidget *entry = g_pasteHook ? getEntry(conv) : nullptr;
-    canRead = (entry != nullptr);
-    return entry ? storeClipboardPicture(entry) : 0;
+    if (!entry)
+        return false;
+    GtkClipboard *clipboard = p_gtk_clipboard_wait_for_uris ?
+                              p_gtk_widget_get_clipboard(entry, GDK_SELECTION_CLIPBOARD) : nullptr;
+    gchar **uris = clipboard ? p_gtk_clipboard_wait_for_uris(clipboard) : nullptr;
+    if (uris) {
+        content.files = getLocalPaths(uris);
+        g_strfreev(uris);
+    }
+    if (content.files.empty())
+        content.imageId = storeClipboardPicture(entry);
+    return true;
 }
 
 static void connectPaste()
@@ -766,6 +778,7 @@ static void connectPaste()
         purple_debug_warning(config::pluginId, "Cannot paste pictures: some of GTK is not found\n");
         return;
     }
+    LOOK_UP(gtk_clipboard_wait_for_uris);
     g_pasteSignal = p_g_signal_lookup("paste-clipboard", p_gtk_imhtml_get_type());
     if (g_pasteSignal)
         g_pasteHook = p_g_signal_add_emission_hook(g_pasteSignal, 0, pastingClipboard, nullptr, nullptr);
@@ -1439,10 +1452,9 @@ void showMessageReactions(PurpleConversation *conv, MessageId messageId, const s
 {
 }
 
-int storePidginClipboardPicture(PurpleConversation *conv, bool &canRead)
+bool readPidginClipboard(PurpleConversation *conv, ClipboardContent &content)
 {
-    canRead = false;
-    return 0;
+    return false;
 }
 
 bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::string &text,

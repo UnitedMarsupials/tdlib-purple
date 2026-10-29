@@ -13,6 +13,26 @@
 
 static const char XCLIP[] = "xclip";
 
+std::vector<std::string> getLocalPaths(char **uris)
+{
+    std::vector<std::string> paths;
+    for (gchar **uri = uris; uri && *uri; uri++) {
+        gchar *path = g_filename_from_uri(*uri, nullptr, nullptr);
+        if (path)
+            paths.push_back(path);
+        g_free(path);
+    }
+    return paths;
+}
+
+std::vector<std::string> parseUriList(const std::string &list)
+{
+    gchar                  **uris  = g_uri_list_extract_uris(list.c_str());
+    std::vector<std::string> paths = getLocalPaths(uris);
+    g_strfreev(uris);
+    return paths;
+}
+
 #ifndef _WIN32
 // Runs the command, taking what it writes; false, with the error, if it cannot be started
 static bool runCommand(const std::vector<const char *> &args, std::string &out, std::string &err, int &status,
@@ -58,35 +78,61 @@ static bool runCommand(const std::vector<const char *> &args, std::string &out, 
     return true;
 }
 
-int storeXclipPicture(std::string &error)
+// xclip's output of the type; false, with what failed, if it gives none
+static bool runXclip(const char *type, std::string &data, std::string &error)
 {
-    std::string data, err;
+    std::string err;
     int         status     = 0;
     GError     *spawnError = nullptr;
-    if (!runCommand({XCLIP, "-selection", "clipboard", "-t", "image/png", "-o"}, data, err, status, &spawnError)) {
+    data.clear();
+    if (!runCommand({XCLIP, "-selection", "clipboard", "-t", type, "-o"}, data, err, status, &spawnError)) {
         error = spawnError->message;
         g_error_free(spawnError);
-        return 0;
+        return false;
     }
-    if (!WIFEXITED(status) || WEXITSTATUS(status) || data.empty()) {
-        while (!err.empty() && strchr(" \t\r\n", err.back()))
-            err.pop_back();
-        // TRANSLATOR: Error after the /paste command, when xclip fails without saying why.
-        error = !err.empty() ? err
-                             : formatMessage(_("xclip failed, with status {}"),
-                                             std::to_string(WIFEXITED(status) ? WEXITSTATUS(status) : status));
-        return 0;
+    if (WIFEXITED(status) && !WEXITSTATUS(status) && !data.empty())
+        return true;
+    while (!err.empty() && strchr(" \t\r\n", err.back()))
+        err.pop_back();
+    // TRANSLATOR: Error after the /paste command, when xclip fails without saying why.
+    error = !err.empty() ? err
+                         : formatMessage(_("xclip failed, with status {}"),
+                                         std::to_string(WIFEXITED(status) ? WEXITSTATUS(status) : status));
+    return false;
+}
+
+bool readXclip(ClipboardContent &content, std::string &error)
+{
+    std::string data;
+    if (!runXclip("TARGETS", data, error))
+        return false;
+    bool    haveFiles = false;
+    gchar **targets   = g_strsplit(data.c_str(), "\n", -1);
+    for (gchar **target = targets; *target; target++)
+        if (!strcmp(g_strstrip(*target), "text/uri-list"))
+            haveFiles = true;
+    g_strfreev(targets);
+
+    if (haveFiles) {
+        if (!runXclip("text/uri-list", data, error))
+            return false;
+        content.files = parseUriList(data);
+        if (!content.files.empty())
+            return true;
     }
+    if (!runXclip("image/png", data, error))
+        return false;
     purple_debug_misc(config::pluginId, "Read a picture of %zu bytes with xclip\n", data.size());
     // The store takes the copy
     gpointer copy = g_malloc(data.size());
     memcpy(copy, data.data(), data.size());
-    return purple_imgstore_add_with_id(copy, data.size(), "clipboard.png");
+    content.imageId = purple_imgstore_add_with_id(copy, data.size(), "clipboard.png");
+    return true;
 }
 #else
-int storeXclipPicture(std::string &error)
+bool readXclip(ClipboardContent &content, std::string &error)
 {
     error = "xclip cannot be run on Windows";
-    return 0;
+    return false;
 }
 #endif

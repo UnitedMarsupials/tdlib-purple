@@ -43,18 +43,39 @@ protected:
 TEST_F(ClipboardTest, FailingSaysWhy)
 {
     installXclip("echo 'Error: Can'\"'\"'t open display: (null)' >&2\nexit 1\n");
-    std::string error;
-    EXPECT_EQ(0, storeXclipPicture(error));
+    ClipboardContent content;
+    std::string      error;
+    EXPECT_FALSE(readXclip(content, error));
     EXPECT_EQ("Error: Can't open display: (null)", error);
+}
+
+// Copied from a file manager, local files only
+TEST_F(ClipboardTest, ReadsFiles)
+{
+    installXclip("case \"$4\" in\n"
+                 "TARGETS) echo TARGETS; echo text/uri-list; echo image/png;;\n"
+                 "text/uri-list) printf '# a comment\\r\\nfile:///tmp/a%%20b\\r\\nhttp://x/y\\r\\nfile:///c\\r\\n';;\n"
+                 "*) exit 1;;\n"
+                 "esac\n");
+    ClipboardContent content;
+    std::string      error;
+    ASSERT_TRUE(readXclip(content, error)) << error;
+    EXPECT_EQ(std::vector<std::string>({"/tmp/a b", "/c"}), content.files);
+    EXPECT_EQ(0, content.imageId);
 }
 
 TEST_F(ClipboardTest, ReadsPng)
 {
-    installXclip("[ \"$4\" = image/png ] && printf 'PNG\\000data'\n");
-    std::string error;
-    int         id = storeXclipPicture(error);
-    ASSERT_NE(0, id) << error;
-    PurpleStoredImage *image = purple_imgstore_find_by_id(id);
+    installXclip("case \"$4\" in\n"
+                 "TARGETS) echo TARGETS; echo image/png;;\n"
+                 "image/png) printf 'PNG\\000data';;\n"
+                 "*) exit 1;;\n"
+                 "esac\n");
+    ClipboardContent content;
+    std::string      error;
+    ASSERT_TRUE(readXclip(content, error)) << error;
+    EXPECT_TRUE(content.files.empty());
+    PurpleStoredImage *image = purple_imgstore_find_by_id(content.imageId);
     ASSERT_NE(nullptr, image);
     EXPECT_EQ(std::string("PNG\0data", 8),
               std::string(static_cast<const char *>(purple_imgstore_get_data(image)), purple_imgstore_get_size(image)));

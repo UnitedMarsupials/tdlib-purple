@@ -1520,12 +1520,12 @@ msgid "xclip failed, with status {}"
 msgstr "xclip dështoi, me gjendjen {}"
 
 #. TRANSLATOR: Error after the /paste command.
-msgid "There is no picture on the clipboard."
-msgstr "Nuk ka asnjë foto në kujtesën e fragmenteve."
+msgid "There are no files or picture on the clipboard."
+msgstr "Nuk ka skedarë apo foto në kujtesën e fragmenteve."
 
 #. TRANSLATOR: Command description, the initial "paste" must remain verbatim!
-msgid "paste: Send the picture on the clipboard, read with xclip outside Pidgin"
-msgstr "paste: Dërgo foton nga kujtesa e fragmenteve, të lexuar me xclip jashtë Pidgin"
+msgid "paste: Send the files copied to the clipboard, or its picture; outside Pidgin, read with xclip"
+msgstr "paste: Dërgo skedarët e kopjuar në kujtesën e fragmenteve, ose foton e saj; jashtë Pidgin, të lexuar me xclip"
 
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091

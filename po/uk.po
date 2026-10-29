@@ -1482,12 +1482,12 @@ msgid "xclip failed, with status {}"
 msgstr "xclip завершився невдало, зі станом {}"
 
 #. TRANSLATOR: Error after the /paste command.
-msgid "There is no picture on the clipboard."
-msgstr "У буфері обміну немає зображення."
+msgid "There are no files or picture on the clipboard."
+msgstr "У буфері обміну немає ні файлів, ні зображення."
 
 #. TRANSLATOR: Command description, the initial "paste" must remain verbatim!
-msgid "paste: Send the picture on the clipboard, read with xclip outside Pidgin"
-msgstr "paste: Надіслати зображення з буфера обміну, поза Pidgin прочитане за допомогою xclip"
+msgid "paste: Send the files copied to the clipboard, or its picture; outside Pidgin, read with xclip"
+msgstr "paste: Надіслати файли, скопійовані до буфера обміну, або його зображення; поза Pidgin прочитані за допомогою xclip"
 
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091

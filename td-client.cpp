@@ -1912,7 +1912,9 @@ void PurpleTdClient::sendMessageResponse(uint64_t requestId, td::td_api::object_
     std::unique_ptr<SendMessageRequest> request = m_data.getPendingRequest<SendMessageRequest>(requestId);
     if (!request)
         return;
-    if (object && (object->get_id() == td::td_api::message::ID)) {
+    if (object && (object->get_id() == td::td_api::messages::ID)) {
+        // An album
+    } else if (object && (object->get_id() == td::td_api::message::ID)) {
         if (!request->tempFile.empty()) {
             const td::td_api::message &message = static_cast<td::td_api::message &>(*object);
             m_data.addTempFileUpload(request->chatId, message.id_, request->tempFile);
@@ -3213,8 +3215,14 @@ void PurpleTdClient::uploadResponse(uint64_t requestId, td::td_api::object_ptr<t
     }
 }
 
+void PurpleTdClient::sendFilesAsAlbums(const std::vector<PurpleXfer *> &uploads)
+{
+    addUploadAlbums(uploads, m_transceiver, m_data, &PurpleTdClient::sendMessageResponse);
+}
+
 void PurpleTdClient::cancelUpload(PurpleXfer *xfer)
 {
+    uploadOfAlbumEnded(xfer, 0, ChatId(), m_transceiver, m_data, &PurpleTdClient::sendMessageResponse);
     int32_t fileId;
     if (m_data.getFileIdForTransfer(xfer, fileId)) {
         purple_debug_misc(config::pluginId, "Cancelling upload of %s (file id %d)\n",

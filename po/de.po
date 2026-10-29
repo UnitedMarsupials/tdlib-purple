@@ -1529,12 +1529,12 @@ msgid "xclip failed, with status {}"
 msgstr "xclip ist mit Status {} fehlgeschlagen"
 
 #. TRANSLATOR: Error after the /paste command.
-msgid "There is no picture on the clipboard."
-msgstr "In der Zwischenablage ist kein Bild."
+msgid "There are no files or picture on the clipboard."
+msgstr "In der Zwischenablage sind weder Dateien noch ein Bild."
 
 #. TRANSLATOR: Command description, the initial "paste" must remain verbatim!
-msgid "paste: Send the picture on the clipboard, read with xclip outside Pidgin"
-msgstr "paste: Das Bild aus der Zwischenablage senden, außerhalb von Pidgin mit xclip gelesen"
+msgid "paste: Send the files copied to the clipboard, or its picture; outside Pidgin, read with xclip"
+msgstr "paste: Die in die Zwischenablage kopierten Dateien oder ihr Bild senden; außerhalb von Pidgin mit xclip gelesen"
 
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091

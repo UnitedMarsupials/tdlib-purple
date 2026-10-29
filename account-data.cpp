@@ -927,6 +927,17 @@ void TdAccountData::getTempFileUploads(std::vector<std::pair<ChatId, int64_t>> &
         messages.emplace_back(item.chatId, item.messageId);
 }
 
+UploadAlbum::UploadAlbum(std::vector<PurpleXfer *> uploads)
+: uploads(std::move(uploads)), fileIds(this->uploads.size(), 0)
+{
+}
+
+UploadAlbum::~UploadAlbum()
+{
+    for (PurpleXfer *xfer: uploads)
+        purple_xfer_unref(xfer);
+}
+
 void TdAccountData::addFileTransfer(int32_t fileId, PurpleXfer *xfer, ChatId chatId)
 {
     if (std::find_if(m_fileTransfers.begin(), m_fileTransfers.end(),
