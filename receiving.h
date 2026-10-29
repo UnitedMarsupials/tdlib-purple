@@ -91,5 +91,13 @@ void updateMessageReactions(TdAccountData &account, ChatId chatId, MessageId mes
                             const td::td_api::messageInteractionInfo *info);
 void updateUnreadReactions(TdAccountData &account, td::td_api::updateMessageUnreadReactions &update);
 
+// A chat with reactions to our messages not seen yet is marked, as the phone app marks it: its
+// conversation's title, and its contact in the buddy list, begin with a heart
+extern const char UNREAD_REACTIONS_MARK[];
+void setUnreadReactionCount(TdAccountData &account, ChatId chatId, int32_t count);
+bool hasUnreadReactions(TdAccountData &account, PurpleConversation *conv);
+// Marks the title, or takes the mark away, as the chat has reactions unread or not
+void markConversationTitle(TdAccountData &account, PurpleConversation *conv);
+
 #endif
 

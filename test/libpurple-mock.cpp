@@ -1652,6 +1652,17 @@ const char *purple_request_fields_get_string(const PurpleRequestFields *fields,
     return "";
 }
 
+// No buddy list window to draw anew
+PurpleBlistUiOps *purple_blist_get_ui_ops(void)
+{
+    return NULL;
+}
+
+PurpleBuddyList *purple_get_blist(void)
+{
+    return NULL;
+}
+
 // No logs, as the tests' conversations are never filled from them, there being no Pidgin
 GList *purple_log_get_logs(PurpleLogType type, const char *name, PurpleAccount *account)
 {

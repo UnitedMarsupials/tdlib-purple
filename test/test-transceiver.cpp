@@ -646,6 +646,11 @@ static void compare(const reportChat &actual, const reportChat &expected)
     COMPARE(text_);
 }
 
+static void compare(const readAllChatReactions &actual, const readAllChatReactions &expected)
+{
+    COMPARE(chat_id_);
+}
+
 static void compareRequests(const Function &actual, const Function &expected,
                             std::vector<std::string> &m_inputPhotoPaths)
 {
@@ -709,6 +714,7 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(getUserFullInfo)
         C(setMessageSenderBlockList)
         C(reportChat)
+        C(readAllChatReactions)
         case editMessageText::ID:
             compare(static_cast<const editMessageText &>(actual), static_cast<const editMessageText &>(expected),
                     m_inputPhotoPaths);

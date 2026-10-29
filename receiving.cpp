@@ -548,6 +548,11 @@ void sendConversationReadReceipts(TdAccountData &account, PurpleConversation *co
     std::vector<ReadReceipt> receipts;
     account.extractPendingReadReceipts(chatId, receipts);
 
+    // Seen now, as the phone app takes them to be once the chat is opened
+    if (hasUnreadReactions(account, conv)) {
+        purple_debug_misc(config::pluginId, "Reading reactions in chat %" G_GINT64_FORMAT "\n", chatId.value());
+        account.transceiver.sendQuery(td::td_api::make_object<td::td_api::readAllChatReactions>(chatId.value()), nullptr);
+    }
     if (!receipts.empty()) {
         purple_debug_misc(config::pluginId, "Sending %zu read receipts for chat %" G_GINT64_FORMAT "\n",
                           receipts.size(), chatId.value());
@@ -3074,4 +3079,50 @@ void updateUnreadReactions(TdAccountData &account, td::td_api::updateMessageUnre
         [&account, chatId, messageId, reactions](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
             unreadReactionsMessageResponse(account, chatId, messageId, *reactions, std::move(object));
         });
+}
+
+const char UNREAD_REACTIONS_MARK[] = "\xe2\x9d\xa4\xef\xb8\x8f ";
+
+static bool hasUnreadReactions(TdAccountData &account, ChatId chatId)
+{
+    auto it = account.unreadReactionCounts.find(chatId);
+    return (it != account.unreadReactionCounts.end()) && (it->second > 0);
+}
+
+bool hasUnreadReactions(TdAccountData &account, PurpleConversation *conv)
+{
+    const td::td_api::chat *chat = conv ? findConversationChat(account, conv) : nullptr;
+    return chat && hasUnreadReactions(account, getId(*chat));
+}
+
+void markConversationTitle(TdAccountData &account, PurpleConversation *conv)
+{
+    const char *title  = purple_conversation_get_title(conv);
+    bool        marked = title && g_str_has_prefix(title, UNREAD_REACTIONS_MARK);
+    // Setting it says the title changed, which comes back here, marked as it is to be by then
+    if (hasUnreadReactions(account, conv) && !marked) {
+        std::string newTitle = UNREAD_REACTIONS_MARK + std::string(title ? title : purple_conversation_get_name(conv));
+        purple_conversation_set_title(conv, newTitle.c_str());
+    } else if (!hasUnreadReactions(account, conv) && marked)
+        purple_conversation_set_title(conv, title + strlen(UNREAD_REACTIONS_MARK));
+}
+
+void setUnreadReactionCount(TdAccountData &account, ChatId chatId, int32_t count)
+{
+    bool wasUnread = hasUnreadReactions(account, chatId);
+    account.unreadReactionCounts[chatId] = count;
+    if (wasUnread == (count > 0))
+        return;
+    purple_debug_misc(config::pluginId, "Chat %" G_GINT64_FORMAT ": %d reactions unread\n", chatId.value(), int(count));
+    const td::td_api::chat *chat = account.getChat(chatId);
+    PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+    if (conv)
+        markConversationTitle(account, conv);
+    // The buddy list draws its contact anew, asking for the mark
+    const td::td_api::user *user  = chat ? account.getUserByPrivateChat(*chat) : nullptr;
+    PurpleBuddy            *buddy = user ? purple_find_buddy(account.purpleAccount, getPurpleBuddyName(*user).c_str())
+                                         : nullptr;
+    PurpleBlistUiOps       *ops   = purple_blist_get_ui_ops();
+    if (buddy && ops && ops->update)
+        ops->update(purple_get_blist(), PURPLE_BLIST_NODE(buddy));
 }

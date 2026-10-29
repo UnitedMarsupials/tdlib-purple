@@ -487,6 +487,8 @@ public:
     void                       removeActiveCall();
 
     PendingMessageQueue        pendingMessages;
+    // Reactions to our messages not seen yet, by chat
+    std::map<ChatId, int32_t>  unreadReactionCounts;
 
     void                       addPendingReadReceipt(ChatId chatId, MessageId messageId);
     void                       extractPendingReadReceipts(ChatId chatId, std::vector<ReadReceipt> &receipts);

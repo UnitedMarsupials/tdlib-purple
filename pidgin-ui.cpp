@@ -5,6 +5,8 @@
 
 #ifndef NoPidgin
 #include <gtkconv.h>
+// Its header, gtkblist.h, is no C++, naming a parameter "new"
+extern "C" void *pidgin_blist_get_handle(void);
 #include <gdk/gdkkeysyms.h>
 
 // Pidgin's and GTK's functions, looked up by name: their types are those the headers declare
@@ -13,6 +15,7 @@
 
 FRONT_END_FUNCTION(pidgin_conversations_get_handle);
 FRONT_END_FUNCTION(pidgin_conversations_get_conv_ui_ops);
+FRONT_END_FUNCTION(pidgin_blist_get_handle);
 FRONT_END_FUNCTION(gtk_text_buffer_get_end_iter);
 FRONT_END_FUNCTION(gtk_text_iter_get_char);
 FRONT_END_FUNCTION(gtk_text_iter_forward_char);
@@ -386,6 +389,27 @@ static void displayedMessage(PurpleAccount *account, const char *who, char *mess
     }
 }
 
+static BuddyMarkHandler g_buddyMarkHandler = nullptr;
+static std::string      g_buddyMark;
+
+void setBuddyMarkHandler(BuddyMarkHandler handler, const char *mark)
+{
+    g_buddyMarkHandler = handler;
+    g_buddyMark        = mark ? mark : "";
+}
+
+// The name as the buddy list shows it, escaped, Pidgin's own unless it is marked
+static char *drawingBuddy(PurpleBuddy *buddy)
+{
+    if (!g_buddyMarkHandler || !g_buddyMarkHandler(buddy))
+        return NULL;
+    const char *name    = purple_buddy_get_contact_alias(buddy);
+    gchar      *escaped = g_markup_escape_text(name ? name : purple_buddy_get_name(buddy), -1);
+    gchar      *marked  = g_strconcat(g_buddyMark.c_str(), escaped, NULL);
+    g_free(escaped);
+    return marked;
+}
+
 static guint g_connectSource = 0;
 
 // Disconnected by libpurple when the plugin is unloaded
@@ -405,6 +429,9 @@ static gboolean connectSignals(gpointer plugin)
                     connected;
     if (!connected)
         purple_debug_warning(config::pluginId, "Cannot follow Pidgin's conversation window\n");
+    if (!LOOK_UP(pidgin_blist_get_handle) ||
+        !purple_signal_connect(p_pidgin_blist_get_handle(), "drawing-buddy", plugin, PURPLE_CALLBACK(drawingBuddy), NULL))
+        purple_debug_warning(config::pluginId, "Cannot mark contacts in Pidgin's buddy list\n");
     connectPaste();
     connectPopup();
     return FALSE;
@@ -1329,6 +1356,10 @@ bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId)
 }
 
 void setMessagePopupHandler(MessagePopupHandler handler)
+{
+}
+
+void setBuddyMarkHandler(BuddyMarkHandler handler, const char *mark)
 {
 }
 

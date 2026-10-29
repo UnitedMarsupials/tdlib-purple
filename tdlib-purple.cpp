@@ -6,6 +6,7 @@
 #include "format.h"
 #include "buildopt.h"
 #include "pidgin-ui.h"
+#include "receiving.h"
 #include <purple.h>
 
 #include <cstdint>
@@ -406,6 +407,14 @@ conversation_updated_cb(PurpleConversation *conv, PurpleConvUpdateType type)
 {
     PurpleAccount *account = purple_conversation_get_account(conv);
     if (!strcmp(purple_account_get_protocol_id(account), config::pluginId) &&
+        (type == PURPLE_CONV_UPDATE_TITLE))
+    {
+        // Pidgin sets it anew, from an alias, without the mark
+        PurpleTdClient *tdClient = getTdClient(account);
+        if (tdClient)
+            tdClient->markConversation(conv);
+    }
+    if (!strcmp(purple_account_get_protocol_id(account), config::pluginId) &&
         (type == PURPLE_CONV_UPDATE_UNSEEN))
     {
         // With pidgin, when this callback is triggered by conversation window coming into window
@@ -453,7 +462,12 @@ static gboolean fillConversation(void *arg)
 static void conversationCreated(PurpleConversation *conv, void *data)
 {
     PurpleAccount *account = purple_conversation_get_account(conv);
-    if ((account != data) || !canRedrawConversation(conv) || purple_conversation_get_data(conv, FILL_PENDING_KEY))
+    if (account != data)
+        return;
+    PurpleTdClient *tdClient = getTdClient(account);
+    if (tdClient)
+        tdClient->markConversation(conv);
+    if (!canRedrawConversation(conv) || purple_conversation_get_data(conv, FILL_PENDING_KEY))
         return;
     purple_conversation_set_data(conv, FILL_PENDING_KEY, conv);
     ConversationToFill *info = new ConversationToFill;
@@ -1174,6 +1188,15 @@ static gboolean messageLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *l
     return TRUE;
 }
 
+// A contact whose chat has reactions to our messages unread is marked in the buddy list
+static bool buddyMarked(PurpleBuddy *buddy)
+{
+    PurpleAccount  *account  = purple_buddy_get_account(buddy);
+    PurpleTdClient *tdClient = strcmp(purple_account_get_protocol_id(account), config::pluginId) ? nullptr
+                                                                                              : getTdClient(account);
+    return tdClient && tdClient->hasUnreadReactions(buddy);
+}
+
 // The menu of a tab's text, opened on a message
 static bool messagePopupOpened(PurpleConversation *conv, MessageId messageId, const OpenMenuRef &menu)
 {
@@ -1195,6 +1218,7 @@ static void registerMessageLinks()
     // Not where messages go on to other clients, markup and all
     setLogMarkersEnabled(!canDisableReadReceipts());
     setMessagePopupHandler(messagePopupOpened);
+    setBuddyMarkHandler(buddyMarked, UNREAD_REACTIONS_MARK);
 }
 
 static void unregisterMessageLinks()
@@ -1208,6 +1232,7 @@ static void unregisterMessageLinks()
     setMessageLinksEnabled(false);
     setLogMarkersEnabled(false);
     setMessagePopupHandler(nullptr);
+    setBuddyMarkHandler(nullptr, nullptr);
 }
 
 static gboolean tgprpl_unload (PurplePlugin *plugin)

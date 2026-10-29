@@ -28,6 +28,9 @@ public:
     // Fills a tab just opened with the chat's latest messages, as set; false if it is to be tried
     // again later, the chat being busy or not known yet
     bool fillConversation(PurpleConversation *conv);
+    // Its title marked, or not, as its chat has reactions unread
+    void markConversation(PurpleConversation *conv);
+    bool hasUnreadReactions(PurpleBuddy *buddy);
 
     void addContact(const std::string &purpleName, const std::string &alias, const std::string &groupName);
     void renameContact(const char *buddyName, const char *newAlias);

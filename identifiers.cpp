@@ -125,6 +125,11 @@ ChatId getChatId(const td::td_api::message &message)
     return ChatId(message.chat_id_);
 }
 
+ChatId getChatId(const td::td_api::updateChatUnreadReactionCount &update)
+{
+    return ChatId(update.chat_id_);
+}
+
 ChatId getChatId(const td::td_api::updateChatAction &update)
 {
     return ChatId(update.chat_id_);

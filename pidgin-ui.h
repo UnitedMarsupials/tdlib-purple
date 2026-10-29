@@ -135,6 +135,10 @@ using OpenMenuRef = std::shared_ptr<OpenMenu>;
 // Told which message the menu is opened on; false if it has nothing to add
 using MessagePopupHandler = bool (*)(PurpleConversation *conv, MessageId messageId, const OpenMenuRef &menu);
 void setMessagePopupHandler(MessagePopupHandler handler);
+
+// Whether the buddy list shows the contact's name after the mark, which is plain text
+using BuddyMarkHandler = bool (*)(PurpleBuddy *buddy);
+void setBuddyMarkHandler(BuddyMarkHandler handler, const char *mark);
 // The items take the placeholder's place, after a separator; with none, the separator goes too
 void fillOpenMenu(const OpenMenuRef &menu, const std::vector<MenuItem> &items);
 

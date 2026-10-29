@@ -94,6 +94,12 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         break;
     }
 
+    case td::td_api::updateChatUnreadReactionCount::ID: {
+        auto &countUpdate = static_cast<const td::td_api::updateChatUnreadReactionCount &>(update);
+        setUnreadReactionCount(m_data, getChatId(countUpdate), countUpdate.unread_reaction_count_);
+        break;
+    }
+
     case td::td_api::updateUserFullInfo::ID: {
         // Blocked or unblocked, maybe from another client
         auto &fullInfoUpdate = static_cast<const td::td_api::updateUserFullInfo &>(update);
@@ -1746,6 +1752,18 @@ void PurpleTdClient::sendReadReceipts(PurpleConversation *conversation)
     }
 }
 
+void PurpleTdClient::markConversation(PurpleConversation *conv)
+{
+    markConversationTitle(m_data, conv);
+}
+
+bool PurpleTdClient::hasUnreadReactions(PurpleBuddy *buddy)
+{
+    const td::td_api::chat *chat = m_data.getPrivateChatByUserId(purpleBuddyNameToUserId(purple_buddy_get_name(buddy)));
+    auto it = chat ? m_data.unreadReactionCounts.find(getId(*chat)) : m_data.unreadReactionCounts.end();
+    return (it != m_data.unreadReactionCounts.end()) && (it->second > 0);
+}
+
 bool PurpleTdClient::fillConversation(PurpleConversation *conv)
 {
     int days = purple_account_get_int(m_account, AccountOptions::HistoryDays, AccountOptions::HistoryDaysDefault);
@@ -2147,9 +2165,11 @@ void PurpleTdClient::addChat(td::td_api::object_ptr<td::td_api::chat> chat)
     }
 
     purple_debug_misc(config::pluginId, "Add chat: '%s'\n", chat->title_.c_str());
-    ChatId chatId = getId(*chat);
+    ChatId  chatId           = getId(*chat);
+    int32_t unreadReactions  = chat->unread_reaction_count_;
     m_data.addChat(std::move(chat));
     updateChat(m_data.getChat(chatId));
+    setUnreadReactionCount(m_data, chatId, unreadReactions);
 }
 
 void PurpleTdClient::handleUserChatAction(const td::td_api::updateChatAction &updateChatAction)
