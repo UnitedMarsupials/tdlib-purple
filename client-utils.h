@@ -73,7 +73,10 @@ void        setJumpLinksEnabled(bool enabled);
 std::string linkToMessage(PurpleAccount *account, ChatId chatId, MessageId messageId,
                           const std::string &markup);
 // Put after a message's text, for the log to say which message it is: a comment, which Pidgin's
-// log viewer does not show, and which the conversation window is not given
+// log viewer does not show, and which Pidgin's conversation window is not given; Finch shows no
+// markup. Not where it would go on to other clients, as from BitlBee; enabled when the plugin loads.
+bool        logMarkersEnabled();
+void        setLogMarkersEnabled(bool enabled);
 std::string makeLogMarker(MessageId messageId);
 // Takes the marker out of a message's markup, telling which message it is, if it has one
 bool        takeLogMarker(std::string &html, MessageId *messageId = nullptr);

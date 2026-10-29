@@ -1390,6 +1390,18 @@ static const char MENU_LINK_SUFFIX[] = "menu";
 static const char LOG_MARKER_START[] = "<!--tdlib-message ";
 static const char LOG_MARKER_END[]   = "-->";
 
+static bool g_logMarkersEnabled = false;
+
+bool logMarkersEnabled()
+{
+    return g_logMarkersEnabled;
+}
+
+void setLogMarkersEnabled(bool enabled)
+{
+    g_logMarkersEnabled = enabled;
+}
+
 std::string makeLogMarker(MessageId messageId)
 {
     return LOG_MARKER_START + std::to_string(messageId.value()) + LOG_MARKER_END;

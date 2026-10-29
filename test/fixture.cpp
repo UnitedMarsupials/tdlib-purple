@@ -21,6 +21,7 @@ void CommTest::SetUp()
     gdkPixbufGetFileInfoName = "gdk_pixbuf_get_file_info";
     setMessageLinksEnabled(false);
     setJumpLinksEnabled(false);
+    setLogMarkersEnabled(false);
     account = purple_account_new(("+" + selfPhoneNumber).c_str(), NULL);
     connection = new PurpleConnection();
     connection->state = PURPLE_DISCONNECTED;

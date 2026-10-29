@@ -837,10 +837,10 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
     if (!newText.empty())
         text = newText.c_str();
 
-    // Which message it is, for the log, once it has its id for good: for filling Pidgin's tab from
-    // the log, which only Pidgin's tab can be
+    // Which message it is, for the log, once it has its id for good: whatever the front-end now, a
+    // tab of Pidgin's may be filled from the log later
     std::string marked;
-    if (text && message.id.valid() && !message.sentLocally && pidginUiFound()) {
+    if (text && message.id.valid() && !message.sentLocally && logMarkersEnabled()) {
         marked = text + makeLogMarker(message.id);
         text   = marked.c_str();
     }

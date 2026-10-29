@@ -1124,6 +1124,8 @@ static void registerMessageLinks()
     // Only where Pidgin's tab can be scrolled to the message
     setJumpLinksEnabled(messageLinksEnabled() && pidginUiFound() &&
                         g_registerProtocol(JUMP_LINK_SCHEME, jumpLinkClicked, messageLinkContextMenu));
+    // Not where messages go on to other clients, markup and all
+    setLogMarkersEnabled(!canDisableReadReceipts());
 }
 
 static void unregisterMessageLinks()
@@ -1135,6 +1137,7 @@ static void unregisterMessageLinks()
         g_registerProtocol(MESSAGE_LINK_SCHEME, NULL, NULL);
     setJumpLinksEnabled(false);
     setMessageLinksEnabled(false);
+    setLogMarkersEnabled(false);
 }
 
 static gboolean tgprpl_unload (PurplePlugin *plugin)
