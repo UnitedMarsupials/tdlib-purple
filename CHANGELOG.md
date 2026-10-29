@@ -4,7 +4,7 @@
 
 ### Features
 
-- **In Pidgin, a message's reactions are listed in a line under it, kept up to date as they change.** Each with its count, our own in bold; custom-emoji reactions are not listed yet. The notices of reactions stay, and the line is not logged.
+- **In Pidgin, a message's reactions are listed in a line under it, kept up to date as they change.** Each with its count, our own in bold; a custom emoji as its picture, unless the account shows custom emoji as ordinary ones. The notices of reactions stay, and the line is not logged.
 - **In Pidgin, a conversation opened is filled with its latest messages from Telegram, going back as many days as the account's setting says (one by default), and with what Pidgin's log of it has that Telegram does not.** From the log come the notices, such as of edits and reactions, and messages since deleted, struck out or left out as set for the chat; a message the log does not name goes in only if Telegram has none at much the same time. Only logs in HTML are read.
 - **In Pidgin, scrolling a conversation to its top, or turning the mouse wheel up there, fills it anew from 50 more messages before the earliest it showed, which stays at the top.** Until the chat's first message is shown, or the conversation holds as many lines as Pidgin keeps.
 - **In Pidgin, a reaction to one of our messages that the conversation does not show fills the conversation anew, from that message to the latest, as the phone app does.** Up to as many messages as Pidgin's scrollback setting keeps; the messages are taken from TDLib, which has them stored, and are not logged again, nor are big files offered for download again.

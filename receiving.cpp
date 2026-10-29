@@ -1423,23 +1423,69 @@ static bool showEditNotice(const td::td_api::chat &chat, IncomingMessage &fullMe
 
 // The line of a message's reactions, under it in Pidgin's tab: each with its count, ours in bold.
 // Custom-emoji ones are left out, as they would need looking up first.
-static std::string formatReactions(const td::td_api::messageInteractionInfo *info)
+namespace {
+// A reaction as the line of them shows it: its emoji, or a custom one's id
+struct ReactionCount {
+    std::string emoji;
+    int64_t     customEmojiId = 0;
+    int32_t     count         = 0;
+    bool        chosen        = false;
+};
+}
+
+static std::vector<ReactionCount> getReactionCounts(const td::td_api::messageInteractionInfo *info)
 {
-    std::string line;
+    std::vector<ReactionCount> counts;
     if (!info || !info->reactions_)
-        return line;
+        return counts;
     for (const auto &reaction: info->reactions_->reactions_) {
         if (!reaction || !reaction->type_)
             continue;
-        std::string emoji;
+        ReactionCount item;
         if (reaction->type_->get_id() == td::td_api::reactionTypeEmoji::ID)
-            emoji = escapeForDisplay(static_cast<const td::td_api::reactionTypeEmoji &>(*reaction->type_).emoji_);
+            item.emoji = static_cast<const td::td_api::reactionTypeEmoji &>(*reaction->type_).emoji_;
         else if (reaction->type_->get_id() == td::td_api::reactionTypePaid::ID)
-            emoji = "\xe2\xad\x90";
+            item.emoji = "\xe2\xad\x90";
+        else if (reaction->type_->get_id() == td::td_api::reactionTypeCustomEmoji::ID)
+            item.customEmojiId = static_cast<const td::td_api::reactionTypeCustomEmoji &>(*reaction->type_).custom_emoji_id_;
         else
             continue;
-        std::string item = emoji + "&nbsp;" + std::to_string(reaction->total_count_);
-        if (reaction->is_chosen_)
+        item.count  = reaction->total_count_;
+        item.chosen = reaction->is_chosen_;
+        counts.push_back(std::move(item));
+    }
+    return counts;
+}
+
+// Each with its count, ours in bold. A custom emoji is the conversation's custom smiley, its picture
+// fetched unless already there, where the front-end has them; otherwise left out, its ordinary emoji
+// unknown until it is fetched.
+static std::string formatReactions(TdAccountData &account, PurpleConversation *conv,
+                                   const std::vector<ReactionCount> &counts)
+{
+    // Stands for the custom emoji until its picture is in
+    static const char CUSTOM_EMOJI_PLACEHOLDER[] = "\xe2\x97\x8c";
+    std::vector<CustomEmoji> customEmoji;
+    for (const ReactionCount &reaction: counts)
+        if (reaction.customEmojiId)
+            customEmoji.push_back(CustomEmoji{reaction.customEmojiId, CUSTOM_EMOJI_PLACEHOLDER});
+    std::map<int64_t, std::string> smileys;
+    if (!customEmoji.empty())
+        smileys = addCustomEmojiSmileys(account, conv, customEmoji);
+
+    std::string line;
+    for (const ReactionCount &reaction: counts) {
+        std::string emoji;
+        if (!reaction.customEmojiId)
+            emoji = escapeForDisplay(reaction.emoji);
+        else {
+            auto it = smileys.find(reaction.customEmojiId);
+            if (it == smileys.end())
+                continue;
+            emoji = it->second;
+        }
+        std::string item = emoji + "&nbsp;" + std::to_string(reaction.count);
+        if (reaction.chosen)
             item = "<b>" + item + "</b>";
         if (!line.empty())
             line += "&nbsp;&nbsp;&nbsp;";
@@ -1453,17 +1499,22 @@ class ReactionsLine {
 public:
     ReactionsLine(TdAccountData &account, const td::td_api::chat &chat, MessageId messageId,
                   const td::td_api::messageInteractionInfo *info)
-    : m_account(account), m_chat(chat), m_messageId(messageId), m_html(formatReactions(info)) {}
+    : m_account(account), m_chat(chat), m_messageId(messageId), m_counts(getReactionCounts(info)) {}
     ~ReactionsLine()
     {
-        if (!m_html.empty())
-            showMessageReactions(findMessageConversation(m_account, m_chat), m_messageId, m_html);
+        if (m_counts.empty())
+            return;
+        // Not where it would not be shown, nor its custom emoji fetched
+        PurpleConversation *conv = pidginUiFound() ? findMessageConversation(m_account, m_chat) : nullptr;
+        std::string         html = conv ? formatReactions(m_account, conv, m_counts) : std::string();
+        if (!html.empty())
+            showMessageReactions(conv, m_messageId, html);
     }
 private:
-    TdAccountData           &m_account;
-    const td::td_api::chat  &m_chat;
-    MessageId                m_messageId;
-    std::string              m_html;
+    TdAccountData             &m_account;
+    const td::td_api::chat    &m_chat;
+    MessageId                  m_messageId;
+    std::vector<ReactionCount> m_counts;
 };
 
 void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
@@ -3025,8 +3076,11 @@ void updateMessageReactions(TdAccountData &account, ChatId chatId, MessageId mes
             showReaction(account, *chat, messageId, *shownMessage, it->first, it->second, nullptr);
         it = shownMessage->reactions.erase(it);
     }
-    if (show)
-        showMessageReactions(findMessageConversation(account, *chat), messageId, formatReactions(info));
+    if (show) {
+        PurpleConversation *conv = pidginUiFound() ? findMessageConversation(account, *chat) : nullptr;
+        if (conv)
+            showMessageReactions(conv, messageId, formatReactions(account, conv, getReactionCounts(info)));
+    }
 }
 
 using UnreadReactions = std::vector<td::td_api::object_ptr<td::td_api::unreadReaction>>;
