@@ -134,7 +134,8 @@ void purple_account_set_alias(PurpleAccount *account, const char *alias)
 
 PurpleAccount *purple_account_new(const char *username, const char *protocol_id)
 {
-    PurpleAccount *account = new PurpleAccount;
+    // Zeroed, the list of blocked users among the rest
+    PurpleAccount *account = new PurpleAccount();
     account->username = strdup(username);
     account->alias = nullptr;
     account->proxy_info = NULL;
@@ -160,6 +161,7 @@ void purple_account_destroy(PurpleAccount *account)
 {
     free(account->username);
     free(account->alias);
+    g_slist_free_full(account->deny, g_free);
 
     auto it = std::find_if(g_accounts.begin(), g_accounts.end(),
                            [account](const AccountInfo &info) { return (info.account == account); });
@@ -1720,6 +1722,9 @@ void *purple_request_fields(void *handle, const char *title, const char *primary
 	PurpleAccount *account, const char *who, PurpleConversation *conv,
 	void *user_data)
 {
+    // Given up at once, as the dialog is not shown, so that what it holds is let go
+    if (cancel_cb)
+        reinterpret_cast<PurpleRequestFieldsCb>(cancel_cb)(user_data, fields);
     return NULL;
 }
 

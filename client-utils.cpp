@@ -593,7 +593,7 @@ static void updateGroupChat(TdAccountData &account, const td::td_api::chat &chat
             purple_blist_add_chat(purpleChat, NULL, NULL);
         }
         // As saved by an earlier version
-        completeChatComponents(purple_chat_get_components(purpleChat));
+        completeChatComponents(purpleChat);
         const char *oldName = purple_chat_get_name(purpleChat);
         if (chat.title_ != oldName) {
             purple_debug_misc(config::pluginId, "Renaming chat '%s' to '%s'\n", oldName, chat.title_.c_str());

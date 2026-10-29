@@ -3403,7 +3403,12 @@ void reportDetailsGiven(void *data, const char *text)
         client->reportChat(request->chatId, request->messageIds, request->optionId, text ? text : "");
 }
 
-void reportCancelled(void *data)
+void reportReasonCancelled(void *data, PurpleRequestFields *)
+{
+    delete static_cast<ReportRequest *>(data);
+}
+
+void reportDetailsCancelled(void *data, const char *)
 {
     delete static_cast<ReportRequest *>(data);
 }
@@ -3437,7 +3442,7 @@ void PurpleTdClient::reportChatResponse(ChatId chatId, const std::vector<Message
                               // TRANSLATOR: Report dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
                               _("_Next"), G_CALLBACK(reportReasonChosen),
                               // TRANSLATOR: Report dialog, alternative is "_Next". The underscore marks accelerator keys, they must be different!
-                              _("_Cancel"), G_CALLBACK(reportCancelled),
+                              _("_Cancel"), G_CALLBACK(reportReasonCancelled),
                               m_data.purpleAccount, NULL, NULL, request);
         break;
     }
@@ -3458,7 +3463,7 @@ void PurpleTdClient::reportChatResponse(ChatId chatId, const std::vector<Message
                              // TRANSLATOR: Report dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
                              _("_Report"), G_CALLBACK(reportDetailsGiven),
                              // TRANSLATOR: Report dialog, alternative is "_Report". The underscore marks accelerator keys, they must be different!
-                             _("_Cancel"), G_CALLBACK(reportCancelled),
+                             _("_Cancel"), G_CALLBACK(reportDetailsCancelled),
                              m_data.purpleAccount, NULL, NULL, request);
         break;
     }

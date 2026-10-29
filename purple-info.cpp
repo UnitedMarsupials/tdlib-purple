@@ -72,12 +72,29 @@ GHashTable *getChatComponents(const td::td_api::chat &chat)
     return table;
 }
 
-void completeChatComponents(GHashTable *components)
+static void copyComponent(gpointer key, gpointer value, gpointer table)
 {
-    // Keys copied, as the buddy list's own tables, read from its file, free theirs
+    g_hash_table_insert(static_cast<GHashTable *>(table), g_strdup(static_cast<const char *>(key)),
+                        g_strdup(static_cast<const char *>(value)));
+}
+
+void completeChatComponents(PurpleChat *chat)
+{
+    GHashTable *components = purple_chat_get_components(chat);
+    bool        complete   = true;
     for (char *key: {joinStringKey, nameKey, typeKey})
-        if (!g_hash_table_lookup(components, key))
-            g_hash_table_insert(components, g_strdup(key), g_strdup(""));
+        complete = complete && g_hash_table_lookup(components, key);
+    if (complete)
+        return;
+    // A table of its own, which frees all it holds: whether the old one frees its keys, as the
+    // buddy list's tables read from its file do, is not to be told
+    GHashTable *table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    g_hash_table_foreach(components, copyComponent, table);
+    for (char *key: {joinStringKey, nameKey, typeKey})
+        if (!g_hash_table_lookup(table, key))
+            g_hash_table_insert(table, g_strdup(key), g_strdup(""));
+    chat->components = table;
+    g_hash_table_destroy(components);
 }
 
 const char *getChatName(GHashTable *components)
