@@ -1518,6 +1518,10 @@ msgstr "Nie można wysłać zgłoszenia"
 msgid "Report…"
 msgstr "Zgłoś…"
 
+#, c++-format
+msgid "{} joined Telegram"
+msgstr "{} jest teraz na Telegramie"
+
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091
 msgid "Needs Telegram Premium"

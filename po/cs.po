@@ -1507,6 +1507,10 @@ msgstr "Nelze odeslat hlášení"
 msgid "Report…"
 msgstr "Nahlásit…"
 
+#, c++-format
+msgid "{} joined Telegram"
+msgstr "{} je nyní na Telegramu"
+
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091
 msgid "Needs Telegram Premium"

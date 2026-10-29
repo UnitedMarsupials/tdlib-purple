@@ -1577,6 +1577,14 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
             showMessageText(account, chat, messageInfo, NULL, notice.c_str());
             break;
         }
+        case td::td_api::messageContactRegistered::ID: {
+            // TRANSLATOR: In-chat status update. Argument is a username.
+            std::string notice = formatMessage(_("{} joined Telegram"),
+                                               escapeForDisplay(getSenderDisplayName(chat, messageInfo,
+                                                                                     account.purpleAccount)));
+            showMessageText(account, chat, messageInfo, NULL, notice.c_str());
+            break;
+        }
         case td::td_api::messageCall::ID:
             showCallMessage(chat, messageInfo, static_cast<td::td_api::messageCall &>(*message.content_), account);
             break;
