@@ -1435,6 +1435,13 @@ bool takeLogOnly(std::string &html)
     return taken;
 }
 
+void unmarkLogOnly(std::string &html)
+{
+    for (const char *marker: {LOG_ONLY_START, LOG_ONLY_END})
+        for (size_t start; (start = html.find(marker)) != std::string::npos; )
+            html.erase(start, strlen(marker));
+}
+
 static bool isSpace(char c)
 {
     return (c == ' ') || (c == '\n') || (c == '\t') || (c == '\r');

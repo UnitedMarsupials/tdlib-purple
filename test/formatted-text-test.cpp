@@ -1,6 +1,7 @@
 #include "fixture.h"
 #include "receiving.h"
 #include "client-utils.h"
+#include "log-history.h"
 
 // Telegram's formatting, as markup Pidgin draws
 TEST(FormattedText, Entities)
@@ -96,4 +97,46 @@ TEST(LogOnly, Taken)
     ASSERT_TRUE(takeLogOnly(html));
     ASSERT_EQ(std::string("Meow and"), html);
     ASSERT_FALSE(takeLogOnly(html));
+}
+
+TEST(LoggedLines, Parse)
+{
+    // As Pidgin's HTML logger writes them, after the line of the document's head, which reading
+    // leaves out
+    std::string content =
+        "<span style=\"color: #A82F2F\"><span style=\"font-size: smaller\">(23:58:10)</span> <b>Ann:</b></span> Hi<!--tdlib-message 35577135104--><br>\n"
+        "<span style=\"font-size: smaller\">(23:59:00)</span><b> <!--tdlib-log-only-->Ann edited the message from 23:58:10: Hello<!--/tdlib-log-only--></b><br>\n"
+        "<span style=\"color: #16569E\"><span style=\"font-size: smaller\">(00:01:02)</span> <b>Me:</b></span> Bye<br>\n"
+        "</p>\n"
+        "</body>\n"
+        "</html>\n";
+    struct tm start = {};
+    start.tm_year  = 2026 - 1900;
+    start.tm_mon   = 9;
+    start.tm_mday  = 28;
+    start.tm_hour  = 23;
+    start.tm_min   = 50;
+    start.tm_isdst = -1;
+    time_t logStart = mktime(&start);
+
+    std::vector<LoggedLine> lines = parseLoggedLines(content, logStart);
+    ASSERT_EQ(3u, lines.size());
+
+    ASSERT_TRUE(lines[0].message);
+    ASSERT_EQ(35577135104, lines[0].messageId.value());
+    ASSERT_EQ(logStart + 8 * 60 + 10, lines[0].when);
+    ASSERT_EQ(std::string("<span style=\"color: #A82F2F\"><span style=\"font-size: smaller\">(23:58:10)</span> <b>Ann:</b></span> Hi"),
+              lines[0].html);
+    ASSERT_EQ(std::string("Hi"), lines[0].html.substr(lines[0].bodyStart));
+
+    // A notice, which the tab did not show but the log keeps, all of it
+    ASSERT_FALSE(lines[1].message);
+    ASSERT_FALSE(lines[1].messageId.valid());
+    ASSERT_EQ(std::string("<span style=\"font-size: smaller\">(23:59:00)</span><b> Ann edited the message from 23:58:10: Hello</b>"),
+              lines[1].html);
+
+    // Past midnight, on the next day
+    ASSERT_TRUE(lines[2].message);
+    ASSERT_EQ(logStart + 11 * 60 + 2, lines[2].when);
+    ASSERT_EQ(std::string("Bye"), lines[2].html.substr(lines[2].bodyStart));
 }

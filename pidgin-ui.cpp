@@ -557,6 +557,17 @@ static gboolean turnSpinner(gpointer data)
     return G_SOURCE_CONTINUE;
 }
 
+void appendTabLine(PurpleConversation *conv, const std::string &html)
+{
+    GtkIMHtml *imhtml = getIMHtml(conv);
+    if (!imhtml)
+        return;
+    GtkTextIter where;
+    p_gtk_text_buffer_get_end_iter(imhtml->text_buffer, &where);
+    std::string line = (p_gtk_text_iter_get_offset(&where) ? "<br>" : "") + html;
+    p_gtk_imhtml_insert_html_at_iter(imhtml, line.c_str(), GtkIMHtmlOptions(0), &where);
+}
+
 void startProgress(PurpleConversation *conv, const std::string &html)
 {
     GtkIMHtml *imhtml = getIMHtml(conv);
@@ -1247,6 +1258,10 @@ bool isEntryEditing(PurpleConversation *conv, MessageId messageId)
 bool canRedrawConversation(PurpleConversation *conv)
 {
     return false;
+}
+
+void appendTabLine(PurpleConversation *conv, const std::string &html)
+{
 }
 
 void startProgress(PurpleConversation *conv, const std::string &html)

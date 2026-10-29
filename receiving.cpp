@@ -9,6 +9,7 @@
 #include "config.h"
 #include "call.h"
 #include "pidgin-ui.h"
+#include "log-history.h"
 #include <algorithm>
 #include <tuple>
 #include <fmt/format.h>
@@ -1465,6 +1466,12 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
 {
     if (!fullMessage.message) return;
     td::td_api::message &message = *fullMessage.message;
+    if (!fullMessage.loggedHtml.empty()) {
+        appendTabLine(findMessageConversation(account, chat), fullMessage.loggedHtml);
+        for (int id: fullMessage.loggedImageIds)
+            purple_imgstore_unref_by_id(id);
+        return;
+    }
 
     if (!message.content_)
         return;
@@ -2718,7 +2725,88 @@ static void stopRedrawProgress(TdAccountData &account, ChatId chatId)
     stopProgress(chat ? findMessageConversation(account, *chat) : nullptr);
 }
 
-// Empties the tab and has the messages shown in it, oldest first, ahead of any that came meanwhile
+// Whether Pidgin's tab writes TDLib's message as a notice, rather than as someone's message
+static bool isShownAsNotice(const td::td_api::message &message)
+{
+    switch (message.content_ ? message.content_->get_id() : 0) {
+    case td::td_api::messageText::ID:
+    case td::td_api::messagePhoto::ID:
+    case td::td_api::messageVideo::ID:
+    case td::td_api::messageDocument::ID:
+    case td::td_api::messageAudio::ID:
+    case td::td_api::messageAnimation::ID:
+    case td::td_api::messageVoiceNote::ID:
+    case td::td_api::messageVideoNote::ID:
+    case td::td_api::messageSticker::ID:
+        return false;
+    default:
+        return true;
+    }
+}
+
+// What of the log goes into the tab with TDLib's messages: a message the log names that TDLib no
+// longer has was deleted, and is struck out or left out, as set for the chat; one the log does not
+// name, or a notice, is left out if TDLib has a message written the same way at much the same time,
+// as it is that one. Other notices, such as of edits and reactions, go in.
+static std::vector<LoggedLine> getLoggedLines(TdAccountData &account, const td::td_api::chat &chat,
+                                              PurpleConversation *conv, const Redraw &redraw)
+{
+    enum { SAME_TIME = 10 };
+    std::vector<LoggedLine> lines;
+    time_t since = redraw.since;
+    if (!since && !redraw.messages.empty() && redraw.messages.back())
+        since = redraw.messages.back()->date_;
+    if (!since)
+        return lines;
+    std::set<int64_t>           ids;
+    std::multimap<time_t, bool> dates; // whether shown as a notice
+    for (const auto &message: redraw.messages)
+        if (message) {
+            ids.insert(message->id_);
+            dates.emplace(message->date_, isShownAsNotice(*message));
+        }
+    auto hasNear = [&dates](time_t when, bool notice) {
+        for (auto it = dates.lower_bound(when - SAME_TIME); (it != dates.end()) && (it->first <= when + SAME_TIME); ++it)
+            if (it->second == notice)
+                return true;
+        return false;
+    };
+    bool keepDeleted = keepsDeletedMessages(account.purpleAccount, findChatBlistNode(account, chat));
+    for (LoggedLine &line: readLoggedLines(account.purpleAccount, purple_conversation_get_type(conv),
+                                           purple_conversation_get_name(conv), since))
+    {
+        bool keep;
+        if (line.messageId.valid()) {
+            keep = !ids.count(line.messageId.value()) && keepDeleted;
+            if (keep)
+                line.html = line.html.substr(0, line.bodyStart) + "<s>" + line.html.substr(line.bodyStart) + "</s>";
+        } else
+            keep = !hasNear(line.when, !line.message);
+        if (keep)
+            lines.push_back(std::move(line));
+        else
+            for (int id: line.imageIds)
+                purple_imgstore_unref_by_id(id);
+    }
+    return lines;
+}
+
+// Ready to be shown among the messages, ahead of those already queued
+static void queueLoggedLine(TdAccountData &account, ChatId chatId, LoggedLine &line)
+{
+    IncomingMessage item;
+    item.message           = td::td_api::make_object<td::td_api::message>();
+    item.message->chat_id_ = chatId.value();
+    item.message->date_    = line.when;
+    item.loggedHtml        = std::move(line.html);
+    item.loggedImageIds    = std::move(line.imageIds);
+    IncomingMessage left = account.pendingMessages.addReadyMessage(std::move(item), PendingMessageQueue::Prepend);
+    for (int id: left.loggedImageIds)
+        purple_imgstore_unref_by_id(id);
+}
+
+// Empties the tab and has the messages shown in it, oldest first, ahead of any that came meanwhile;
+// with them, by their times, what of Pidgin's log of the conversation TDLib does not have
 static void redrawShow(TdAccountData &account, Redraw &redraw)
 {
     const td::td_api::chat *chat = account.getChat(redraw.chatId);
@@ -2729,9 +2817,19 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
                           " or time %" G_GINT64_FORMAT ": %zu messages\n", redraw.chatId.value(),
                           redraw.earliest.value(), int64_t(redraw.since), redraw.messages.size());
         purple_conversation_clear_message_history(conv);
+        std::vector<LoggedLine> lines = getLoggedLines(account, *chat, conv, redraw);
+        // Newest first, as the messages, each going ahead of what is queued
+        auto line = lines.rbegin();
+        auto queueLinesSince = [&](time_t since) {
+            for (; (line != lines.rend()) && (line->when >= since); ++line)
+                queueLoggedLine(account, redraw.chatId, *line);
+        };
         for (auto &message: redraw.messages)
-            if (message && !account.pendingMessages.findPendingMessage(redraw.chatId, getId(*message)))
+            if (message && !account.pendingMessages.findPendingMessage(redraw.chatId, getId(*message))) {
+                queueLinesSince(message->date_);
                 handleIncomingMessage(account, *chat, std::move(message), PendingMessageQueue::Prepend, true);
+            }
+        queueLinesSince(0);
     }
     std::vector<IncomingMessage> readyMessages;
     account.pendingMessages.setChatReady(redraw.chatId, readyMessages);

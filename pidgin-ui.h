@@ -79,6 +79,9 @@ void showEditOutcome(PurpleConversation *conv, const std::string &html);
 // Whether that message is being edited in the conversation's input field
 bool isEntryEditing(PurpleConversation *conv, MessageId messageId);
 
+// Writes the HTML into the tab as a line of its own, at its end, not logged
+void appendTabLine(PurpleConversation *conv, const std::string &html);
+
 // Whether Pidgin shows the conversation, so that it can be emptied and filled anew
 bool canRedrawConversation(PurpleConversation *conv);
 // A line at the end of the tab saying what is under way, with a turning character after it, until

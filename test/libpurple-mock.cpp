@@ -1652,6 +1652,21 @@ const char *purple_request_fields_get_string(const PurpleRequestFields *fields,
     return "";
 }
 
+// No logs, as the tests' conversations are never filled from them, there being no Pidgin
+GList *purple_log_get_logs(PurpleLogType type, const char *name, PurpleAccount *account)
+{
+    return NULL;
+}
+
+char *purple_log_read(PurpleLog *log, PurpleLogReadFlags *flags)
+{
+    return g_strdup("");
+}
+
+void purple_log_free(PurpleLog *log)
+{
+}
+
 PurpleRequestField *purple_request_field_choice_new(const char *id, const char *text, int default_value)
 {
     return NULL;

@@ -85,6 +85,8 @@ bool        takeLogMarker(std::string &html, MessageId *messageId = nullptr);
 std::string makeLogOnly(const std::string &html);
 // Takes what is for the log only out of a message's markup; false if there was none
 bool        takeLogOnly(std::string &html);
+// Takes the markers of what is for the log only out, leaving what they enclose
+void        unmarkLogOnly(std::string &html);
 // The new version of an edited message's text, its words compared with those of the previous one
 // (plain text), as wdiff does: removed words put back where they were, on the one background
 // color, and added ones on the other

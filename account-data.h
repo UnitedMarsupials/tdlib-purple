@@ -286,6 +286,11 @@ struct IncomingMessage {
     bool     formattingOnly    = false;
     // Deleted while waiting to be shown, which it then never is
     bool     deleted           = false;
+
+    // Not a message but a line of Pidgin's log, as it is, put among them in the tab when it is filled;
+    // with the pictures of the image store it shows, which it holds
+    std::string      loggedHtml;
+    std::vector<int> loggedImageIds;
 };
 
 class PendingMessageQueue {
