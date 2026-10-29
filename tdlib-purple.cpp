@@ -1131,6 +1131,13 @@ static gboolean messageLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *l
     return TRUE;
 }
 
+// The menu of a tab's text, opened on a message
+static bool messagePopupOpened(PurpleConversation *conv, MessageId messageId, const OpenMenuRef &menu)
+{
+    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    return tdClient && tdClient->showMessagePopup(conv, messageId, menu);
+}
+
 static void registerMessageLinks()
 {
     g_registerProtocol = reinterpret_cast<RegisterProtocol>(findFrontEndSymbol("gtk_imhtml_class_register_protocol"));
@@ -1144,6 +1151,7 @@ static void registerMessageLinks()
                         g_registerProtocol(JUMP_LINK_SCHEME, jumpLinkClicked, messageLinkContextMenu));
     // Not where messages go on to other clients, markup and all
     setLogMarkersEnabled(!canDisableReadReceipts());
+    setMessagePopupHandler(messagePopupOpened);
 }
 
 static void unregisterMessageLinks()
@@ -1156,6 +1164,7 @@ static void unregisterMessageLinks()
     setJumpLinksEnabled(false);
     setMessageLinksEnabled(false);
     setLogMarkersEnabled(false);
+    setMessagePopupHandler(nullptr);
 }
 
 static gboolean tgprpl_unload (PurplePlugin *plugin)

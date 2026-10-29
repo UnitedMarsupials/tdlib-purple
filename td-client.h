@@ -4,6 +4,7 @@
 #include "account-data.h"
 #include "buildopt.h"
 #include "client-utils.h"
+#include "pidgin-ui.h"
 #include <td/telegram/Client.h>
 #include <purple.h>
 
@@ -66,7 +67,10 @@ public:
     // if given, names one of the sizes a photo or video comes in
     void openMessageFile(ChatId chatId, MessageId messageId, const std::string &variant = std::string());
     // The link before a message in Pidgin's tab was clicked: pops up its menu
-    void showMessageMenu(ChatId chatId, MessageId messageId);
+    // Pops up the message's menu, or adds its items to a menu already open
+    void showMessageMenu(ChatId chatId, MessageId messageId, OpenMenuRef openMenu = nullptr);
+    // False if the conversation's chat is not known
+    bool showMessagePopup(PurpleConversation *conv, MessageId messageId, const OpenMenuRef &openMenu);
     void setMessageReaction(ChatId chatId, MessageId messageId, const std::string &emoji, bool chosen);
     void askPaidReaction(ChatId chatId, MessageId messageId);
     // What the dialogs of a message's menu do, once answered
@@ -225,7 +229,7 @@ private:
         bool                       canDeleteForAll  = false;
     };
     void showMessageMenuResponse(ChatId chatId, MessageId messageId, const MessageMenu &menu,
-                                 TdObjectPtr object);
+                                 const OpenMenuRef &openMenu, TdObjectPtr object);
     void askEditMessage(ChatId chatId, MessageId messageId, const std::string &text, const std::string &html,
                         bool isCaption, time_t date);
     void askDeleteMessage(ChatId chatId, MessageId messageId, bool forAll);

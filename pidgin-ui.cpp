@@ -66,6 +66,13 @@ FRONT_END_FUNCTION(gtk_imhtml_insert_image_at_iter);
 FRONT_END_FUNCTION(gtk_text_buffer_get_insert);
 FRONT_END_FUNCTION(g_object_get_data);
 FRONT_END_FUNCTION(g_object_set_data_full);
+FRONT_END_FUNCTION(gtk_widget_get_pointer);
+FRONT_END_FUNCTION(gtk_text_view_window_to_buffer_coords);
+FRONT_END_FUNCTION(gtk_text_view_get_iter_at_location);
+FRONT_END_FUNCTION(gtk_text_iter_get_marks);
+FRONT_END_FUNCTION(gtk_text_mark_get_name);
+FRONT_END_FUNCTION(gtk_separator_menu_item_new);
+FRONT_END_FUNCTION(gtk_widget_show);
 
 static bool g_pidginUi = false;
 
@@ -110,9 +117,11 @@ enum class MarkKind {
     Reactions // the end of the line of reactions after the message, if it has one
 };
 
+static const char START_MARK_PREFIX[] = "tdlib-message-start-";
+
 static std::string getMarkName(MessageId messageId, MarkKind kind)
 {
-    const char *prefix = (kind == MarkKind::Start) ? "tdlib-message-start-" :
+    const char *prefix = (kind == MarkKind::Start) ? START_MARK_PREFIX :
                          (kind == MarkKind::Body)  ? "tdlib-message-body-" :
                          (kind == MarkKind::End)   ? "tdlib-message-end-" :
                          (kind == MarkKind::Prefix) ? "tdlib-message-prefix-" :
@@ -396,6 +405,7 @@ static guint g_connectSource = 0;
 
 // Disconnected by libpurple when the plugin is unloaded
 static void connectPaste();
+static void connectPopup();
 
 static gboolean connectSignals(gpointer plugin)
 {
@@ -411,6 +421,7 @@ static gboolean connectSignals(gpointer plugin)
     if (!connected)
         purple_debug_warning(config::pluginId, "Cannot follow Pidgin's conversation window\n");
     connectPaste();
+    connectPopup();
     return FALSE;
 }
 
@@ -450,10 +461,12 @@ void pidginUiLoad(PurplePlugin *plugin)
 }
 
 static void disconnectPaste();
+static void disconnectPopup();
 
 void pidginUiUnload()
 {
     disconnectPaste();
+    disconnectPopup();
     if (g_connectSource) {
         g_source_remove(g_connectSource);
         g_connectSource = 0;
@@ -980,10 +993,11 @@ static void deleteAction(gpointer data, GClosure *closure)
 }
 
 // In a grid of the given number of columns, if any, where an item with a submenu takes a row
-static GtkWidget *makeMenu(const std::vector<MenuItem> &items, unsigned columns)
+static GtkWidget *makeMenu(const std::vector<MenuItem> &items, unsigned columns);
+
+static void addMenuItems(GtkWidget *menu, const std::vector<MenuItem> &items, unsigned columns)
 {
-    GtkWidget *menu   = p_gtk_menu_new();
-    unsigned   column = 0, row = 0;
+    unsigned column = 0, row = 0;
     for (const MenuItem &item: items) {
         GtkWidget *widget = item.checkable ? p_gtk_check_menu_item_new_with_label(item.label.c_str())
                                            : p_gtk_menu_item_new_with_label(item.label.c_str());
@@ -1023,6 +1037,12 @@ static GtkWidget *makeMenu(const std::vector<MenuItem> &items, unsigned columns)
             }
         }
     }
+}
+
+static GtkWidget *makeMenu(const std::vector<MenuItem> &items, unsigned columns)
+{
+    GtkWidget *menu = p_gtk_menu_new();
+    addMenuItems(menu, items, columns);
     return menu;
 }
 
@@ -1047,6 +1067,157 @@ void popUpMenu(const std::vector<MenuItem> &items)
     p_gtk_widget_show_all(menu);
     // Where the pointer is, though no button is pressed by now
     p_gtk_menu_popup(reinterpret_cast<GtkMenu *>(menu), NULL, NULL, NULL, NULL, 0, GDK_CURRENT_TIME);
+}
+
+struct OpenMenu {
+    GtkWidget *menu        = nullptr; // none once GTK destroys it
+    GtkWidget *separator   = nullptr;
+    GtkWidget *placeholder = nullptr;
+    gulong     destroyHandler = 0;
+    ~OpenMenu()
+    {
+        if (menu)
+            p_g_signal_handler_disconnect(menu, destroyHandler);
+    }
+};
+
+static MessagePopupHandler g_messagePopupHandler = nullptr;
+static guint               g_popupSignal = 0;
+static gulong              g_popupHook   = 0;
+
+void setMessagePopupHandler(MessagePopupHandler handler)
+{
+    g_messagePopupHandler = handler;
+}
+
+static void openMenuDestroyed(GtkWidget *, gpointer data)
+{
+    std::shared_ptr<OpenMenu> menu = static_cast<std::weak_ptr<OpenMenu> *>(data)->lock();
+    if (menu)
+        menu->menu = nullptr;
+}
+
+static void deleteOpenMenuRef(gpointer data, GClosure *)
+{
+    delete static_cast<std::weak_ptr<OpenMenu> *>(data);
+}
+
+void fillOpenMenu(const OpenMenuRef &menu, const std::vector<MenuItem> &items)
+{
+    if (!menu || !menu->menu || !menu->placeholder)
+        return;
+    p_gtk_widget_destroy(menu->placeholder);
+    menu->placeholder = nullptr;
+    if (items.empty())
+        p_gtk_widget_destroy(menu->separator);
+    else {
+        addMenuItems(menu->menu, items, 0);
+        p_gtk_widget_show_all(menu->menu);
+    }
+    menu->separator = nullptr;
+}
+
+// The message whose text, header or reactions are there, if any: the nearest start of a message
+// before it, if that message has not ended before it
+static MessageId findMessageAt(GtkTextBuffer *buffer, const GtkTextIter &where)
+{
+    GtkTextIter iter = where;
+    do {
+        MessageId messageId;
+        GSList   *marks = p_gtk_text_iter_get_marks(&iter);
+        for (GSList *item = marks; item && !messageId.valid(); item = item->next) {
+            const char *name = p_gtk_text_mark_get_name(static_cast<GtkTextMark *>(item->data));
+            if (name && g_str_has_prefix(name, START_MARK_PREFIX))
+                messageId = MessageId::fromString(name + strlen(START_MARK_PREFIX));
+        }
+        g_slist_free(marks);
+        if (!messageId.valid())
+            continue;
+        for (MarkKind kind: {MarkKind::Reactions, MarkKind::End}) {
+            GtkTextMark *end = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, kind).c_str());
+            GtkTextIter  endIter;
+            if (end) {
+                p_gtk_text_buffer_get_iter_at_mark(buffer, &endIter, end);
+                return (p_gtk_text_iter_compare(&where, &endIter) < 0) ? messageId : MessageId();
+            }
+        }
+        return MessageId();
+    } while (p_gtk_text_iter_backward_char(&iter));
+    return MessageId();
+}
+
+static PurpleConversation *findTabConversation(gpointer imhtml)
+{
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
+        if (!strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId) &&
+            (getIMHtml(conv) == imhtml))
+            return conv;
+    }
+    return nullptr;
+}
+
+// GTK builds the menu of a tab's text anew each time, before emitting "populate-popup" for others to
+// add to it. The message is the one under the pointer, also when the menu is opened from the
+// keyboard; none if the pointer is elsewhere.
+static gboolean populatingPopup(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
+{
+    GtkWidget          *view = (paramCount > 1) ? static_cast<GtkWidget *>(p_g_value_get_object(&params[0])) : nullptr;
+    GtkWidget          *menu = view ? static_cast<GtkWidget *>(p_g_value_get_object(&params[1])) : nullptr;
+    PurpleConversation *conv = menu ? findTabConversation(view) : nullptr;
+    if (!conv || !g_messagePopupHandler)
+        return TRUE;
+    gint x, y;
+    p_gtk_widget_get_pointer(view, &x, &y);
+    if ((x < 0) || (y < 0) || (x >= view->allocation.width) || (y >= view->allocation.height))
+        return TRUE;
+    GtkTextView *textView = reinterpret_cast<GtkTextView *>(view);
+    GtkTextIter  where;
+    p_gtk_text_view_window_to_buffer_coords(textView, GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
+    p_gtk_text_view_get_iter_at_location(textView, &where, x, y);
+    MessageId messageId = findMessageAt(getTextBuffer(conv), where);
+    if (!messageId.valid())
+        return TRUE;
+
+    OpenMenuRef openMenu = std::make_shared<OpenMenu>();
+    openMenu->menu        = menu;
+    openMenu->separator   = p_gtk_separator_menu_item_new();
+    openMenu->placeholder = p_gtk_menu_item_new_with_label("\xe2\x80\xa6");
+    p_gtk_widget_set_sensitive(openMenu->placeholder, FALSE);
+    for (GtkWidget *item: {openMenu->separator, openMenu->placeholder}) {
+        p_gtk_menu_shell_append(reinterpret_cast<GtkMenuShell *>(menu), item);
+        p_gtk_widget_show(item);
+    }
+    openMenu->destroyHandler = p_g_signal_connect_data(menu, "destroy", G_CALLBACK(openMenuDestroyed),
+                                                       new std::weak_ptr<OpenMenu>(openMenu), deleteOpenMenuRef,
+                                                       GConnectFlags(0));
+    purple_debug_misc(config::pluginId, "Menu opened on message %" G_GINT64_FORMAT "\n", messageId.value());
+    if (!g_messagePopupHandler(conv, messageId, openMenu))
+        fillOpenMenu(openMenu, {});
+    return TRUE;
+}
+
+static void connectPopup()
+{
+    if (!LOOK_UP(gtk_imhtml_get_type) || !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
+        !LOOK_UP(g_signal_remove_emission_hook) || !LOOK_UP(g_value_get_object) ||
+        !LOOK_UP(gtk_widget_get_pointer) || !LOOK_UP(gtk_text_view_window_to_buffer_coords) ||
+        !LOOK_UP(gtk_text_view_get_iter_at_location) || !LOOK_UP(gtk_text_iter_get_marks) ||
+        !LOOK_UP(gtk_text_mark_get_name) || !LOOK_UP(gtk_separator_menu_item_new) || !LOOK_UP(gtk_widget_show))
+    {
+        purple_debug_warning(config::pluginId, "Cannot add to the menu of a tab's text: some of GTK is not found\n");
+        return;
+    }
+    g_popupSignal = p_g_signal_lookup("populate-popup", p_gtk_imhtml_get_type());
+    if (g_popupSignal)
+        g_popupHook = p_g_signal_add_emission_hook(g_popupSignal, 0, populatingPopup, nullptr, nullptr);
+}
+
+static void disconnectPopup()
+{
+    if (g_popupHook)
+        p_g_signal_remove_emission_hook(g_popupSignal, g_popupHook);
+    g_popupHook = 0;
 }
 
 #else
@@ -1143,6 +1314,14 @@ bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId)
 }
 
 void popUpMenu(const std::vector<MenuItem> &items)
+{
+}
+
+void setMessagePopupHandler(MessagePopupHandler handler)
+{
+}
+
+void fillOpenMenu(const OpenMenuRef &menu, const std::vector<MenuItem> &items)
 {
 }
 

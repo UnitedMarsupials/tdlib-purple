@@ -1039,22 +1039,36 @@ static const td::td_api::formattedText *getEditableText(const td::td_api::messag
     }
 }
 
-void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId)
+bool PurpleTdClient::showMessagePopup(PurpleConversation *conv, MessageId messageId, const OpenMenuRef &openMenu)
+{
+    const td::td_api::chat *chat = findConversationChat(m_data, conv);
+    if (!chat)
+        return false;
+    showMessageMenu(getId(*chat), messageId, openMenu);
+    return true;
+}
+
+void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId, OpenMenuRef openMenu)
 {
     // The message for the reactions it has, then what may be done to it, then the reactions it
     // may have
     auto request = td::td_api::make_object<td::td_api::getMessage>();
     request->chat_id_    = chatId.value();
     request->message_id_ = messageId.value();
-    m_transceiver.sendQuery(std::move(request), [this, chatId, messageId](uint64_t, TdObjectPtr object) {
+    m_transceiver.sendQuery(std::move(request), [this, chatId, messageId, openMenu](uint64_t, TdObjectPtr object) {
         if (!object || (object->get_id() != td::td_api::message::ID)) {
             // Deleted since, as far as TDLib knows, whatever the tab shows
             bool gone = object && (object->get_id() == td::td_api::error::ID) &&
                         (static_cast<const td::td_api::error &>(*object).code_ == 404);
-            // TRANSLATOR: Error dialog, primary content, after the menu link before a message was clicked.
-            purple_notify_error(NULL, config::pluginName, _("Cannot open the message's menu"),
-                                // TRANSLATOR: Error dialog, secondary content, when the message has been deleted.
-                                gone ? _("The message has been deleted.") : getDisplayedError(object).c_str());
+            // TRANSLATOR: Error dialog, secondary content, or a disabled item of a message's menu, when the message has been deleted.
+            std::string reason = gone ? _("The message has been deleted.") : getDisplayedError(object);
+            if (openMenu) {
+                MenuItem item;
+                item.label = reason;
+                fillOpenMenu(openMenu, {item});
+            } else
+                // TRANSLATOR: Error dialog, primary content, after the menu link before a message was clicked.
+                purple_notify_error(NULL, config::pluginName, _("Cannot open the message's menu"), reason.c_str());
             return;
         }
         const td::td_api::message &message = static_cast<const td::td_api::message &>(*object);
@@ -1076,7 +1090,8 @@ void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId)
         menu.date = message.date_;
 
         auto properties = td::td_api::make_object<td::td_api::getMessageProperties>(chatId.value(), messageId.value());
-        m_transceiver.sendQuery(std::move(properties), [this, chatId, messageId, menu, hasText = (text != nullptr)](uint64_t, TdObjectPtr object) mutable {
+        m_transceiver.sendQuery(std::move(properties), [this, chatId, messageId, menu, openMenu,
+                                                        hasText = (text != nullptr)](uint64_t, TdObjectPtr object) mutable {
             if (object && (object->get_id() == td::td_api::messageProperties::ID)) {
                 const auto &properties = static_cast<const td::td_api::messageProperties &>(*object);
                 menu.canEdit          = properties.can_be_edited_ && hasText;
@@ -1090,15 +1105,15 @@ void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId)
             available->chat_id_    = chatId.value();
             available->message_id_ = messageId.value();
             available->row_size_   = REACTION_MENU_COLUMNS;
-            m_transceiver.sendQuery(std::move(available), [this, chatId, messageId, menu](uint64_t, TdObjectPtr object) {
-                showMessageMenuResponse(chatId, messageId, menu, std::move(object));
+            m_transceiver.sendQuery(std::move(available), [this, chatId, messageId, menu, openMenu](uint64_t, TdObjectPtr object) {
+                showMessageMenuResponse(chatId, messageId, menu, openMenu, std::move(object));
             });
         });
     });
 }
 
 void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId, const MessageMenu &menu,
-                                             TdObjectPtr object)
+                                             const OpenMenuRef &openMenu, TdObjectPtr object)
 {
     // Picking one finds the account again, as it may be gone by then
     std::string accountName = purple_account_get_username(m_data.purpleAccount);
@@ -1245,7 +1260,10 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
             };
             items.push_back(std::move(item));
         }
-    popUpMenu(items);
+    if (openMenu)
+        fillOpenMenu(openMenu, items);
+    else
+        popUpMenu(items);
 }
 
 void PurpleTdClient::setMessageReaction(ChatId chatId, MessageId messageId, const std::string &emoji, bool chosen)

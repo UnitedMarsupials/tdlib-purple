@@ -10,6 +10,7 @@
 #include "identifiers.h"
 #include <purple.h>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -127,5 +128,15 @@ struct MenuItem {
 
 // Pops up a menu where the pointer is
 void popUpMenu(const std::vector<MenuItem> &items);
+
+// The menu GTK opens on a tab's text, right-clicked within a message: a placeholder at its end
+// waits for the message's items, which are added only if the menu is still there by then
+struct OpenMenu;
+using OpenMenuRef = std::shared_ptr<OpenMenu>;
+// Told which message the menu is opened on; false if it has nothing to add
+using MessagePopupHandler = bool (*)(PurpleConversation *conv, MessageId messageId, const OpenMenuRef &menu);
+void setMessagePopupHandler(MessagePopupHandler handler);
+// The items take the placeholder's place, after a separator; with none, the separator goes too
+void fillOpenMenu(const OpenMenuRef &menu, const std::vector<MenuItem> &items);
 
 #endif
