@@ -3,6 +3,7 @@
 account-data.cpp
 call.cpp
 client-utils.cpp
+clipboard.cpp
 custom-emoji.cpp
 file-transfer.cpp
 format.cpp

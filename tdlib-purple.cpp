@@ -7,6 +7,7 @@
 #include "buildopt.h"
 #include "pidgin-ui.h"
 #include "receiving.h"
+#include "clipboard.h"
 #include <purple.h>
 
 #include <cstdint>
@@ -997,6 +998,32 @@ static PurpleCmdRet hangupCommand(PurpleConversation *conv, const gchar *cmd, gc
         return PURPLE_CMD_RET_FAILED;
 }
 
+// The picture on the clipboard, sent as a photo: read by Pidgin, or by xclip where the front-end
+// cannot read the clipboard itself
+static PurpleCmdRet pasteCommand(PurpleConversation *conv, const gchar *cmd, gchar **args, gchar **error, void *data)
+{
+    bool        canRead;
+    std::string problem;
+    int         id = storePidginClipboardPicture(conv, canRead);
+    if (!canRead)
+        id = storeXclipPicture(problem);
+    else if (!id)
+        // TRANSLATOR: Error after the /paste command.
+        problem = _("There is no picture on the clipboard.");
+    if (!id) {
+        *error = g_strdup(problem.c_str());
+        return PURPLE_CMD_RET_FAILED;
+    }
+
+    std::string html = "<img id=\"" + std::to_string(id) + "\">";
+    if (purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_IM)
+        purple_conv_im_send(PURPLE_CONV_IM(conv), html.c_str());
+    else if (purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_CHAT)
+        purple_conv_chat_send(PURPLE_CONV_CHAT(conv), html.c_str());
+    purple_imgstore_unref_by_id(id);
+    return PURPLE_CMD_RET_OK;
+}
+
 static char png[] = "png";
 
 static PurplePluginProtocolInfo prpl_info = {
@@ -1276,6 +1303,12 @@ static gboolean tgprpl_load (PurplePlugin *plugin)
                         config::pluginId, cancelEditCommand,
                         // TRANSLATOR: Command description, the initial "cancel" must remain verbatim!
                         _("cancel: Leave the message being edited as it was"), NULL);
+
+    purple_cmd_register("paste", "", PURPLE_CMD_P_PLUGIN,
+                        (PurpleCmdFlag)(PURPLE_CMD_FLAG_IM | PURPLE_CMD_FLAG_CHAT | PURPLE_CMD_FLAG_PRPL_ONLY),
+                        config::pluginId, pasteCommand,
+                        // TRANSLATOR: Command description, the initial "paste" must remain verbatim!
+                        _("paste: Send the picture on the clipboard, read with xclip outside Pidgin"), NULL);
 
     return TRUE;
 }

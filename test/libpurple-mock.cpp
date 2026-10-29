@@ -702,6 +702,15 @@ void purple_conv_chat_write(PurpleConvChat *chat, const char *who,
     purple_conversation_write(purple_conv_chat_get_conversation(chat), who, message, flags, mtime);
 }
 
+// Only /paste sends this way, which the tests do not try
+void purple_conv_im_send(PurpleConvIm *im, const char *message)
+{
+}
+
+void purple_conv_chat_send(PurpleConvChat *chat, const char *message)
+{
+}
+
 void purple_conv_chat_set_topic(PurpleConvChat *chat, const char *who,
 							  const char *topic)
 {

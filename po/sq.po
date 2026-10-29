@@ -1514,6 +1514,19 @@ msgstr "Raporto…"
 msgid "{} joined Telegram"
 msgstr "{} tani është në Telegram"
 
+#. TRANSLATOR: Error after the /paste command, when xclip fails without saying why.
+#, c++-format
+msgid "xclip failed, with status {}"
+msgstr "xclip dështoi, me gjendjen {}"
+
+#. TRANSLATOR: Error after the /paste command.
+msgid "There is no picture on the clipboard."
+msgstr "Nuk ka asnjë foto në kujtesën e fragmenteve."
+
+#. TRANSLATOR: Command description, the initial "paste" must remain verbatim!
+msgid "paste: Send the picture on the clipboard, read with xclip outside Pidgin"
+msgstr "paste: Dërgo foton nga kujtesa e fragmenteve, të lexuar me xclip jashtë Pidgin"
+
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091
 msgid "Needs Telegram Premium"

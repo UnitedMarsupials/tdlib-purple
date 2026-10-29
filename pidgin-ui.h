@@ -79,6 +79,10 @@ void showEditOutcome(PurpleConversation *conv, const std::string &html);
 // Whether that message is being edited in the conversation's input field
 bool isEntryEditing(PurpleConversation *conv, MessageId messageId);
 
+// The picture on the clipboard, as PNG, put into the image store, its reference the caller's; 0 if
+// there is none. Whether the clipboard could be looked at, which only Pidgin's conversation can do.
+int storePidginClipboardPicture(PurpleConversation *conv, bool &canRead);
+
 // Writes the HTML into the tab as a line of its own, at its end, not logged
 void appendTabLine(PurpleConversation *conv, const std::string &html);
 

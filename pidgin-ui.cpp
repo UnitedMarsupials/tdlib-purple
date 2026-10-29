@@ -704,27 +704,20 @@ static PurpleConversation *findEntryConversation(gpointer entry)
     return nullptr;
 }
 
-static gboolean pastingClipboard(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
+// The picture on the widget's clipboard, as PNG, put into the image store; 0 if there is none
+static int storeClipboardPicture(GtkWidget *widget)
 {
-    gpointer   instance = paramCount ? p_g_value_get_object(&params[0]) : nullptr;
-    GtkWidget *entry    = static_cast<GtkWidget *>(instance);
-    if (!entry || !findEntryConversation(entry))
-        return TRUE;
-    GtkClipboard *clipboard = p_gtk_widget_get_clipboard(entry, GDK_SELECTION_CLIPBOARD);
+    GtkClipboard *clipboard = p_gtk_widget_get_clipboard(widget, GDK_SELECTION_CLIPBOARD);
     if (!clipboard || !p_gtk_clipboard_wait_is_image_available(clipboard))
-        return TRUE;
+        return 0;
     GdkPixbuf *pixbuf = p_gtk_clipboard_wait_for_image(clipboard);
     gchar     *data   = nullptr;
     gsize      size   = 0;
     GError    *error  = nullptr;
+    int        id     = 0;
     if (pixbuf && p_gdk_pixbuf_save_to_buffer(pixbuf, &data, &size, "png", &error, NULL)) {
         // The store takes the data
-        int id = purple_imgstore_add_with_id(data, size, "clipboard.png");
-        GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(entry)->text_buffer;
-        GtkTextIter    cursor;
-        p_gtk_text_buffer_get_iter_at_mark(buffer, &cursor, p_gtk_text_buffer_get_insert(buffer));
-        p_gtk_imhtml_insert_image_at_iter(reinterpret_cast<GtkIMHtml *>(entry), id, &cursor);
-        purple_imgstore_unref_by_id(id);
+        id = purple_imgstore_add_with_id(data, size, "clipboard.png");
         purple_debug_misc(config::pluginId, "Pasted a picture of %zu bytes\n", size_t(size));
     } else
         purple_debug_warning(config::pluginId, "Cannot paste the picture: %s\n",
@@ -733,8 +726,32 @@ static gboolean pastingClipboard(GSignalInvocationHint *, guint paramCount, cons
         g_error_free(error);
     if (pixbuf)
         p_g_object_unref(pixbuf);
+    return id;
+}
+
+static gboolean pastingClipboard(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
+{
+    gpointer   instance = paramCount ? p_g_value_get_object(&params[0]) : nullptr;
+    GtkWidget *entry    = static_cast<GtkWidget *>(instance);
+    if (!entry || !findEntryConversation(entry))
+        return TRUE;
+    int id = storeClipboardPicture(entry);
+    if (id) {
+        GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(entry)->text_buffer;
+        GtkTextIter    cursor;
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &cursor, p_gtk_text_buffer_get_insert(buffer));
+        p_gtk_imhtml_insert_image_at_iter(reinterpret_cast<GtkIMHtml *>(entry), id, &cursor);
+        purple_imgstore_unref_by_id(id);
+    }
     // Kept for the next paste
     return TRUE;
+}
+
+int storePidginClipboardPicture(PurpleConversation *conv, bool &canRead)
+{
+    GtkWidget *entry = g_pasteHook ? getEntry(conv) : nullptr;
+    canRead = (entry != nullptr);
+    return entry ? storeClipboardPicture(entry) : 0;
 }
 
 static void connectPaste()
@@ -1420,6 +1437,12 @@ MessageMarkScope::~MessageMarkScope()
 
 void showMessageReactions(PurpleConversation *conv, MessageId messageId, const std::string &html)
 {
+}
+
+int storePidginClipboardPicture(PurpleConversation *conv, bool &canRead)
+{
+    canRead = false;
+    return 0;
 }
 
 bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::string &text,

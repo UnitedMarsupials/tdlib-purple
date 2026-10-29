@@ -1476,6 +1476,19 @@ msgstr "Поскаржитися…"
 msgid "{} joined Telegram"
 msgstr "{} тепер у Telegram"
 
+#. TRANSLATOR: Error after the /paste command, when xclip fails without saying why.
+#, c++-format
+msgid "xclip failed, with status {}"
+msgstr "xclip завершився невдало, зі станом {}"
+
+#. TRANSLATOR: Error after the /paste command.
+msgid "There is no picture on the clipboard."
+msgstr "У буфері обміну немає зображення."
+
+#. TRANSLATOR: Command description, the initial "paste" must remain verbatim!
+msgid "paste: Send the picture on the clipboard, read with xclip outside Pidgin"
+msgstr "paste: Надіслати зображення з буфера обміну, поза Pidgin прочитане за допомогою xclip"
+
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091
 msgid "Needs Telegram Premium"

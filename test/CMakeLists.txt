@@ -21,6 +21,7 @@ add_executable(tests EXCLUDE_FROM_ALL
     reaction-test.cpp
     message-link-test.cpp
     custom-emoji-test.cpp
+    clipboard-test.cpp
     formatted-text-test.cpp
     test-transceiver.cpp
     libpurple-mock.cpp
@@ -46,6 +47,7 @@ add_executable(tests EXCLUDE_FROM_ALL
     ../secret-chat.cpp
     ../pidgin-ui.cpp
     ../log-history.cpp
+    ../clipboard.cpp
 )
 
 # C++17, not the plugin's C++14: GoogleTest requires it from 1.17 on.
