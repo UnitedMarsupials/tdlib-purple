@@ -875,19 +875,14 @@ static void setChatMembers(PurpleConvChat *purpleChat,
         if (!user || (user->type_ && (user->type_->get_id() == td::td_api::userTypeDeleted::ID)))
             continue;
 
-        std::string userName    = getPurpleBuddyName(*user);
         const char *phoneNumber = getCanonicalPhoneNumber(user->phone_number_.c_str());
-        if (purple_find_buddy(account.purpleAccount, userName.c_str()))
-            // libpurple will be able to map user name to alias because there is a buddy
-            nameData.emplace_back(userName);
-        else if (!strcmp(getCanonicalPhoneNumber(purple_account_get_username(account.purpleAccount)), phoneNumber))
-            // This is us, so again libpurple will map phone number to alias
+        if (!strcmp(getCanonicalPhoneNumber(purple_account_get_username(account.purpleAccount)), phoneNumber))
+            // This is us, so libpurple will map phone number to alias
             nameData.emplace_back(purple_account_get_username(account.purpleAccount));
-        else {
-            // Use first and last name instead
-            std::string displayName = account.getDisplayName(*user);
-            nameData.emplace_back(displayName);
-        }
+        else
+            // As the user's messages name them: shown by the contact's alias, or the display name the
+            // plugin gives for it
+            nameData.emplace_back(getPurpleBuddyName(*user));
 
         PurpleConvChatBuddyFlags flag;
         if (member->status_->get_id() == td::td_api::chatMemberStatusCreator::ID)

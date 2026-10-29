@@ -236,17 +236,22 @@ static PurpleMenuAction *makeDeletedMessagesAction(PurpleBlistNode *node, Purple
                                   PURPLE_CALLBACK(toggleDeletedMessages), NULL, NULL);
 }
 
-// A chat's messages name their senders as they are shown, by display name: the name their
-// conversation and contact list entry go by instead, for Pidgin's IM, Info and the like from the
-// menu of a sender's name. Pidgin uses the shown name if there is none.
+// A chat names its members, and the senders of its messages, by user id, idNNN, so that two of one
+// display name are told apart: shown by the contact's alias, or failing that, by this
+static char *tgprpl_get_cb_alias(PurpleConnection *gc, int id, const char *who)
+{
+    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    std::string     alias    = (tdClient && who) ? tdClient->getChatMemberAlias(who) : std::string();
+    return alias.empty() ? NULL : g_strdup(alias.c_str());
+}
+
+// The conversation Pidgin's IM opens with a chat member, from the menu of their name, is the one
+// with them the plugin writes to; Pidgin uses the member's name if there is none
 static char *tgprpl_get_cb_real_name(PurpleConnection *gc, int id, const char *who)
 {
     PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
-    if (!tdClient || !who)
-        return NULL;
-    std::vector<const td::td_api::user *> users;
-    tdClient->getUsers(who, users);
-    return (users.size() == 1) ? g_strdup(getPurpleBuddyName(*users[0]).c_str()) : NULL;
+    std::string     name     = (tdClient && who) ? tdClient->getChatMemberImName(who) : std::string();
+    return name.empty() ? NULL : g_strdup(name.c_str());
 }
 
 static GList* tgprpl_blist_node_menu (PurpleBlistNode *node)
@@ -1010,7 +1015,7 @@ static PurplePluginProtocolInfo prpl_info = {
     .add_buddy_with_invite    = NULL,
     .add_buddies_with_invite  = NULL,
 #if PURPLE_VERSION_CHECK(2,14,0)
-    .get_cb_alias             = NULL,
+    .get_cb_alias             = tgprpl_get_cb_alias,
     .chat_can_receive_file    = NULL,
     .chat_send_file           = sendFileToChat,
 #endif

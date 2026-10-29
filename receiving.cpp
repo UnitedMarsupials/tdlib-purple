@@ -610,7 +610,8 @@ static void showMessageTextChat(TdAccountData &account, const td::td_api::chat &
         } else {
             if (purpleId != 0)
                 serv_got_chat_in(purple_account_get_connection(account.purpleAccount), purpleId,
-                                 message.incomingGroupchatSender.empty() ? "someone" : message.incomingGroupchatSender.c_str(),
+                                 !message.incomingGroupchatSenderName.empty() ? message.incomingGroupchatSenderName.c_str() :
+                                 !message.incomingGroupchatSender.empty() ? message.incomingGroupchatSender.c_str() : "someone",
                                  flags, text, message.timestamp);
         }
     }
@@ -1731,6 +1732,10 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
     messageInfo.id               = getId(*message);
     messageInfo.type             = TgMessageInfo::Type::Other;
     messageInfo.incomingGroupchatSender = getIncomingGroupchatSenderPurpleName(chat, *message, account);
+    UserId senderId = getSenderUserId(*message);
+    if (!message->is_outgoing_ && senderId.valid() && account.getUser(senderId) &&
+        (getBasicGroupId(chat).valid() || getSupergroupId(chat).valid()))
+        messageInfo.incomingGroupchatSenderName = getPurpleBuddyName(*account.getUser(senderId));
     messageInfo.anonymousChannelPost    = isAnonymousChannelPost(chat, *message);
     // In Pidgin, links to each size a photo or video comes in, below it; here already, as a download
     // may start, and finish, before the message is shown
@@ -2206,6 +2211,11 @@ static void showReactionText(TdAccountData &account, const td::td_api::chat &cha
     messageInfo.timestamp               = time(NULL);
     messageInfo.outgoing                = self;
     messageInfo.incomingGroupchatSender = getReactionSenderName(account, reactionKey);
+    std::string senderKey = reactionKey.substr(0, reactionKey.find(' '));
+    const td::td_api::user *reactor = ((senderKey.size() > 1) && (senderKey[0] == 'u')) ?
+                                      account.getUser(UserId::fromString(senderKey.c_str() + 1)) : nullptr;
+    if (reactor)
+        messageInfo.incomingGroupchatSenderName = getPurpleBuddyName(*reactor);
     showMessageText(account, chat, messageInfo, text.c_str(), NULL, image ? PURPLE_MESSAGE_IMAGES : 0);
 }
 

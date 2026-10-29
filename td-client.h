@@ -32,6 +32,10 @@ public:
     void renameContact(const char *buddyName, const char *newAlias);
     void removeContactAndPrivateChat(const std::string &buddyName);
     void getUsers(const char *username, std::vector<const td::td_api::user *> &users);
+    // A chat member named idNNN, as chats name them: the display name they are shown by, and the
+    // name of the conversation with them; empty for another name
+    std::string getChatMemberAlias(const char *name);
+    std::string getChatMemberImName(const char *name);
 
     bool joinChat(const char *chatName);
     void joinChatByInviteLink(const char *inviteLink);

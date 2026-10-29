@@ -138,6 +138,9 @@ struct TgMessageInfo {
     MessageId   id;
     Type        type = Type::Other;
     std::string incomingGroupchatSender;
+    // The name the sender goes by in the chat, idNNN, telling users of one display name apart, which
+    // libpurple shows by the display name; empty where the sender is no user
+    std::string incomingGroupchatSenderName;
     time_t      timestamp = 0;
     bool        outgoing = false;
     bool        sentLocally = false; // For outgoing messages, whether sent by this very client
@@ -156,6 +159,7 @@ struct TgMessageInfo {
         id = other.id;
         type = other.type;
         incomingGroupchatSender = other.incomingGroupchatSender;
+        incomingGroupchatSenderName = other.incomingGroupchatSenderName;
         timestamp = other.timestamp;
         outgoing = other.outgoing;
         sentLocally = other.sentLocally;

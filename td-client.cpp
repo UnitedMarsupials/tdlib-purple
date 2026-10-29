@@ -2366,6 +2366,24 @@ void PurpleTdClient::getUsers(const char *username, std::vector<const td::td_api
     users = getUsersByPurpleName(username, m_data, NULL);
 }
 
+std::string PurpleTdClient::getChatMemberAlias(const char *name)
+{
+    UserId                  userId = purpleBuddyNameToUserId(name);
+    const td::td_api::user *user   = userId.valid() ? m_data.getUser(userId) : nullptr;
+    return user ? m_data.getDisplayName(*user) : std::string();
+}
+
+std::string PurpleTdClient::getChatMemberImName(const char *name)
+{
+    UserId                  userId = purpleBuddyNameToUserId(name);
+    const td::td_api::user *user   = userId.valid() ? m_data.getUser(userId) : nullptr;
+    if (!user)
+        return std::string();
+    // As private chats' conversations are named: by the contact, or by the display name without one
+    std::string buddyName = getPurpleBuddyName(*user);
+    return purple_find_buddy(m_account, buddyName.c_str()) ? buddyName : m_data.getDisplayName(*user);
+}
+
 bool PurpleTdClient::joinChat(const char *chatName)
 {
     ChatId                  id       = getTdlibChatId(chatName);
