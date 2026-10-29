@@ -1093,28 +1093,15 @@ static gboolean messageLinkClicked(PidginIMHtml *imhtml, PidginIMHtmlLink *link)
     return TRUE;
 }
 
-// Scrolls the very tab the link is in, as the message it names is shown there, if anywhere; or
-// pops up the message's menu
+// Scrolls the very tab the link is in, as the message it names is shown there, if anywhere
 static gboolean jumpLinkClicked(PidginIMHtml *imhtml, PidginIMHtmlLink *link)
 {
     const char *url = g_linkGetUrl(link);
     std::string accountName;
     ChatId      chatId;
     MessageId   messageId;
-    bool        menu;
-    if (!url || !parseJumpLink(url, accountName, chatId, messageId, menu)) {
+    if (!url || !parseJumpLink(url, accountName, chatId, messageId)) {
         purple_debug_warning(config::pluginId, "Not a link to a message: %s\n", url ? url : "");
-        return TRUE;
-    }
-    if (menu) {
-        PurpleTdClient *client = PurpleTdClient::findConnected(accountName.c_str());
-        if (client)
-            client->showMessageMenu(chatId, messageId);
-        else {
-            // TRANSLATOR: Error dialog, secondary content. Argument is the account's name, its phone number.
-            std::string reason = formatMessage(_("Account {} is not connected."), accountName);
-            purple_notify_error(NULL, config::pluginName, _("Cannot open the message's menu"), reason.c_str());
-        }
         return TRUE;
     }
     if (!scrollToMessage(imhtml, messageId))

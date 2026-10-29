@@ -164,9 +164,7 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
             removeTempFile(getChatId(*sendSucceeded.message_), sendSucceeded.old_message_id_);
             m_data.renameShownMessage(getChatId(*sendSucceeded.message_), getOldMessageId(sendSucceeded),
                                       getId(*sendSucceeded.message_));
-            renameMessageMarks(m_data.purpleAccount, getOldMessageId(sendSucceeded), getId(*sendSucceeded.message_),
-                               makeMenuLink(m_data.purpleAccount, getChatId(*sendSucceeded.message_),
-                                            getId(*sendSucceeded.message_)));
+            renameMessageMarks(m_data.purpleAccount, getOldMessageId(sendSucceeded), getId(*sendSucceeded.message_));
         }
         break;
     }
@@ -1060,15 +1058,10 @@ void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId, OpenMen
             // Deleted since, as far as TDLib knows, whatever the tab shows
             bool gone = object && (object->get_id() == td::td_api::error::ID) &&
                         (static_cast<const td::td_api::error &>(*object).code_ == 404);
-            // TRANSLATOR: Error dialog, secondary content, or a disabled item of a message's menu, when the message has been deleted.
-            std::string reason = gone ? _("The message has been deleted.") : getDisplayedError(object);
-            if (openMenu) {
-                MenuItem item;
-                item.label = reason;
-                fillOpenMenu(openMenu, {item});
-            } else
-                // TRANSLATOR: Error dialog, primary content, after the menu link before a message was clicked.
-                purple_notify_error(NULL, config::pluginName, _("Cannot open the message's menu"), reason.c_str());
+            MenuItem item;
+            // TRANSLATOR: Disabled item of a message's menu, when the message has been deleted.
+            item.label = gone ? _("The message has been deleted.") : getDisplayedError(object);
+            fillOpenMenu(openMenu, {item});
             return;
         }
         const td::td_api::message &message = static_cast<const td::td_api::message &>(*object);
@@ -1260,10 +1253,7 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
             };
             items.push_back(std::move(item));
         }
-    if (openMenu)
-        fillOpenMenu(openMenu, items);
-    else
-        popUpMenu(items);
+    fillOpenMenu(openMenu, items);
 }
 
 void PurpleTdClient::setMessageReaction(ChatId chatId, MessageId messageId, const std::string &emoji, bool chosen)

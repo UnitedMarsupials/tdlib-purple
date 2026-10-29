@@ -1274,11 +1274,6 @@ msgstr "Wiadomość nie jest wyświetlana"
 msgid "It is no longer in this conversation's window."
 msgstr "Nie ma jej już w oknie tej rozmowy."
 
-#. TRANSLATOR: Error dialog, primary content, after the menu link before a message was clicked.
-#: ../td-client.cpp:1019 ../tdlib-purple.cpp:982
-msgid "Cannot open the message's menu"
-msgstr "Nie można otworzyć menu wiadomości"
-
 #. TRANSLATOR: Submenu of reactions, after the most likely ones.
 #: ../td-client.cpp:1083
 msgid "More"
@@ -1319,12 +1314,6 @@ msgstr "Zostaną wydane od razu i nie można ich cofnąć."
 #, c++-format
 msgid "Not a number of Telegram Stars: {}"
 msgstr "To nie jest liczba Telegram Stars: {}"
-
-#. TRANSLATOR: Tooltip of the link that opens a message's menu. Argument is the message's number.
-#: ../client-utils.cpp:1162
-#, c++-format
-msgid "Menu of message #{}"
-msgstr "Menu wiadomości nr {}"
 
 #. TRANSLATOR: Item of a message's menu; it opens a dialog.
 #: ../td-client.cpp:1192

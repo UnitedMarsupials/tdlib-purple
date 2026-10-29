@@ -80,16 +80,14 @@ void        setLogMarkersEnabled(bool enabled);
 std::string makeLogMarker(MessageId messageId);
 // Takes the marker out of a message's markup, telling which message it is, if it has one
 bool        takeLogMarker(std::string &html, MessageId *messageId = nullptr);
-// The link before each message, which opens its menu, or nothing where it cannot work
-std::string makeMenuLink(PurpleAccount *account, ChatId chatId, MessageId messageId);
 // The new version of an edited message's text, its words compared with those of the previous one
 // (plain text), as wdiff does: removed words put back where they were, on the one background
 // color, and added ones on the other
 std::string markChanges(const std::string &previous, const std::string &html,
                         const std::string &removedColor, const std::string &addedColor);
-// A jump, unless the link opens the message's menu
+// Whether the link is a jump to a message, and to which
 bool        parseJumpLink(const char *link, std::string &accountName, ChatId &chatId,
-                          MessageId &messageId, bool &menu);
+                          MessageId &messageId);
 
 std::string getDownloadXferPeerName(ChatId chatId,
                                     const TgMessageInfo &message,

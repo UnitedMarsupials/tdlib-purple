@@ -1266,11 +1266,6 @@ msgstr "Mesazhi nuk shfaqet"
 msgid "It is no longer in this conversation's window."
 msgstr "Nuk ndodhet më në dritaren e kësaj bisede."
 
-#. TRANSLATOR: Error dialog, primary content, after the menu link before a message was clicked.
-#: ../td-client.cpp:1019 ../tdlib-purple.cpp:982
-msgid "Cannot open the message's menu"
-msgstr "Menuja e mesazhit nuk mund të hapet"
-
 #. TRANSLATOR: Submenu of reactions, after the most likely ones.
 #: ../td-client.cpp:1083
 msgid "More"
@@ -1311,12 +1306,6 @@ msgstr "Shpenzohen menjëherë dhe nuk mund të kthehen."
 #, c++-format
 msgid "Not a number of Telegram Stars: {}"
 msgstr "Nuk është numër Telegram Stars: {}"
-
-#. TRANSLATOR: Tooltip of the link that opens a message's menu. Argument is the message's number.
-#: ../client-utils.cpp:1162
-#, c++-format
-msgid "Menu of message #{}"
-msgstr "Menyja e mesazhit #{}"
 
 #. TRANSLATOR: Item of a message's menu; it opens a dialog.
 #: ../td-client.cpp:1192

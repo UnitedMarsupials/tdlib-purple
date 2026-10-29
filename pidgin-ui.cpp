@@ -32,7 +32,6 @@ FRONT_END_FUNCTION(gtk_check_menu_item_set_active);
 FRONT_END_FUNCTION(gtk_menu_item_set_submenu);
 FRONT_END_FUNCTION(gtk_menu_shell_append);
 FRONT_END_FUNCTION(gtk_menu_attach);
-FRONT_END_FUNCTION(gtk_menu_popup);
 FRONT_END_FUNCTION(gtk_widget_set_sensitive);
 FRONT_END_FUNCTION(gtk_widget_set_tooltip_text);
 FRONT_END_FUNCTION(gtk_bin_get_child);
@@ -80,7 +79,6 @@ static bool g_pidginUi = false;
 // earlier version, if replacing, with the note after its first part.
 struct MessageBeingWritten {
     MessageId           messageId;
-    std::string         prefix;
     PurpleConversation *conv = nullptr;
     bool                replacing = false;
     bool                anew      = false; // the whole message, not a part coming later
@@ -106,14 +104,12 @@ static GtkTextBuffer *getTextBuffer(PurpleConversation *conv)
     return imhtml ? imhtml->text_buffer : nullptr;
 }
 
-// Where a message starts, before its header; where its own text starts, after the header; where it
-// ends; and where its prefix went, if it has one
+// Where a message starts, before its header; where its own text starts, after the header; and where it
+// ends
 enum class MarkKind {
     Start,
     Body,
     End,
-    Prefix,
-    PrefixEnd,
     Reactions // the end of the line of reactions after the message, if it has one
 };
 
@@ -123,9 +119,7 @@ static std::string getMarkName(MessageId messageId, MarkKind kind)
 {
     const char *prefix = (kind == MarkKind::Start) ? START_MARK_PREFIX :
                          (kind == MarkKind::Body)  ? "tdlib-message-body-" :
-                         (kind == MarkKind::End)   ? "tdlib-message-end-" :
-                         (kind == MarkKind::Prefix) ? "tdlib-message-prefix-" :
-                         (kind == MarkKind::PrefixEnd) ? "tdlib-message-prefix-end-" : "tdlib-message-reactions-";
+                         (kind == MarkKind::End)   ? "tdlib-message-end-" : "tdlib-message-reactions-";
     return prefix + std::to_string(messageId.value());
 }
 
@@ -302,7 +296,7 @@ static gboolean displayingMessage(PurpleAccount *account, const char *who, char 
         GtkTextMark *start = p_gtk_text_buffer_get_mark(buffer, getMarkName(id, MarkKind::Start).c_str());
         if (g_messageBeingWritten->anew) {
             // What went with an earlier showing goes with this one instead
-            for (MarkKind kind: {MarkKind::Body, MarkKind::Prefix, MarkKind::PrefixEnd, MarkKind::Reactions}) {
+            for (MarkKind kind: {MarkKind::Body, MarkKind::Reactions}) {
                 GtkTextMark *mark = p_gtk_text_buffer_get_mark(buffer, getMarkName(id, kind).c_str());
                 if (mark)
                     p_gtk_text_buffer_delete_mark(buffer, mark);
@@ -363,44 +357,6 @@ static void displayedMessage(PurpleAccount *account, const char *who, char *mess
     }
 }
 
-// Longer than "(Mon, 26 Oct 2026 23:41:54)", as dates go in old messages
-static constexpr unsigned MAX_TIMESTAMP_LENGTH = 48;
-
-// Inserts what precedes a message after its timestamp, once. The start mark stays before it, so the
-// message takes it in.
-static void insertPrefix(PurpleConversation *conv, MessageId messageId, const std::string &prefix)
-{
-    GtkIMHtml     *imhtml = getIMHtml(conv);
-    GtkTextBuffer *buffer = imhtml ? imhtml->text_buffer : nullptr;
-    GtkTextMark   *start  = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, true).c_str()) : nullptr;
-    if (prefix.empty() || !start || p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Prefix).c_str()))
-        return;
-
-    GtkTextIter where;
-    p_gtk_text_buffer_get_iter_at_mark(buffer, &where, start);
-    // Between the timestamp, if Pidgin shows one, and the name, where other plugins put theirs
-    if (p_gtk_text_iter_get_char(&where) == '(') {
-        GtkTextIter after = where;
-        for (unsigned i = 0; (i < MAX_TIMESTAMP_LENGTH) && p_gtk_text_iter_forward_char(&after); i++) {
-            gunichar c = p_gtk_text_iter_get_char(&after);
-            if (c == '\n')
-                break;
-            if (c == ')') {
-                p_gtk_text_iter_forward_char(&after);
-                if (p_gtk_text_iter_get_char(&after) == ' ')
-                    p_gtk_text_iter_forward_char(&after);
-                where = after;
-                break;
-            }
-        }
-    }
-    p_gtk_text_buffer_create_mark(buffer, getMarkName(messageId, MarkKind::Prefix).c_str(), &where, TRUE);
-    // Right gravity: past the prefix once it is in, so that it can be taken out again
-    p_gtk_text_buffer_create_mark(buffer, getMarkName(messageId, MarkKind::PrefixEnd).c_str(), &where, FALSE);
-    // Into the tab only, not the log
-    p_gtk_imhtml_insert_html_at_iter(imhtml, prefix.c_str(), GTK_IMHTML_NO_SCROLL, &where);
-}
-
 static guint g_connectSource = 0;
 
 // Disconnected by libpurple when the plugin is unloaded
@@ -438,7 +394,6 @@ void pidginUiLoad(PurplePlugin *plugin)
                  LOOK_UP(gtk_menu_item_new_with_label) && LOOK_UP(gtk_check_menu_item_new_with_label) &&
                  LOOK_UP(gtk_check_menu_item_set_active) && LOOK_UP(gtk_menu_item_set_submenu) &&
                  LOOK_UP(gtk_menu_shell_append) && LOOK_UP(gtk_menu_attach) &&
-                 LOOK_UP(gtk_menu_popup) &&
                  LOOK_UP(gtk_widget_set_sensitive) && LOOK_UP(gtk_widget_set_tooltip_text) &&
                  LOOK_UP(gtk_bin_get_child) && LOOK_UP(gtk_label_set_markup) &&
                  LOOK_UP(gtk_widget_show_all) &&
@@ -479,13 +434,11 @@ bool pidginUiFound()
     return g_pidginUi;
 }
 
-MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &prefix, const char *editNote, bool anew,
-                                   bool markChanges)
+MessageMarkScope::MessageMarkScope(MessageId messageId, const char *editNote, bool anew, bool markChanges)
 {
     if (g_pidginUi && messageId.valid() && !g_messageBeingWritten) {
         g_messageBeingWritten = new MessageBeingWritten;
         g_messageBeingWritten->messageId = messageId;
-        g_messageBeingWritten->prefix    = prefix;
         g_messageBeingWritten->anew      = anew && !editNote;
         if (editNote) {
             g_messageBeingWritten->replacing = true;
@@ -499,9 +452,6 @@ MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &prefi
 MessageMarkScope::~MessageMarkScope()
 {
     if (m_active) {
-        if (g_messageBeingWritten->conv)
-            insertPrefix(g_messageBeingWritten->conv, g_messageBeingWritten->messageId,
-                         g_messageBeingWritten->prefix);
         delete g_messageBeingWritten;
         g_messageBeingWritten = nullptr;
     }
@@ -885,16 +835,6 @@ void strikeOutMessage(PurpleConversation *conv, MessageId messageId)
     // GtkIMHtml's own, as for <s>: a tag of ours would need a name, as GtkIMHtml compares
     // the names of all tags with strncmp() when it draws, and crashes on one without
     p_gtk_text_buffer_apply_tag_by_name(buffer, "STRIKE", &body, &end);
-
-    // Nothing is left to do to it, so its menu goes
-    GtkTextMark *prefix    = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Prefix).c_str());
-    GtkTextMark *prefixEnd = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::PrefixEnd).c_str());
-    if (prefix && prefixEnd) {
-        GtkTextIter from, to;
-        p_gtk_text_buffer_get_iter_at_mark(buffer, &from, prefix);
-        p_gtk_text_buffer_get_iter_at_mark(buffer, &to, prefixEnd);
-        p_gtk_imhtml_delete(getIMHtml(conv), &from, &to);
-    }
 }
 
 void removeMessage(PurpleConversation *conv, MessageId messageId)
@@ -919,9 +859,7 @@ void removeMessage(PurpleConversation *conv, MessageId messageId)
     if (p_gtk_text_iter_backward_char(&from) && (p_gtk_text_iter_get_char(&from) != '\n'))
         p_gtk_text_iter_forward_char(&from);
     p_gtk_imhtml_delete(imhtml, &from, &to);
-    for (MarkKind kind: {MarkKind::Start, MarkKind::Body, MarkKind::End, MarkKind::Prefix, MarkKind::PrefixEnd,
-                         MarkKind::Reactions})
-    {
+    for (MarkKind kind: {MarkKind::Start, MarkKind::Body, MarkKind::End, MarkKind::Reactions}) {
         GtkTextMark *mark = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, kind).c_str());
         if (mark)
             p_gtk_text_buffer_delete_mark(buffer, mark);
@@ -941,7 +879,7 @@ MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId)
     return marks;
 }
 
-void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId, const std::string &prefix)
+void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId)
 {
     if (!g_pidginUi)
         return;
@@ -961,7 +899,6 @@ void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId
                 p_gtk_text_buffer_delete_mark(buffer, mark);
             }
         }
-        insertPrefix(conv, newId, prefix);
     }
 }
 
@@ -1044,29 +981,6 @@ static GtkWidget *makeMenu(const std::vector<MenuItem> &items, unsigned columns)
     GtkWidget *menu = p_gtk_menu_new();
     addMenuItems(menu, items, columns);
     return menu;
-}
-
-static gboolean destroyMenu(gpointer menu)
-{
-    p_gtk_widget_destroy(static_cast<GtkWidget *>(menu));
-    return FALSE;
-}
-
-// The chosen item is activated after the menu goes away
-static void menuDeactivated(GtkWidget *menu, gpointer data)
-{
-    g_idle_add(destroyMenu, menu);
-}
-
-void popUpMenu(const std::vector<MenuItem> &items)
-{
-    if (!g_pidginUi || items.empty())
-        return;
-    GtkWidget *menu = makeMenu(items, 0);
-    p_g_signal_connect_data(menu, "deactivate", G_CALLBACK(menuDeactivated), NULL, NULL, GConnectFlags(0));
-    p_gtk_widget_show_all(menu);
-    // Where the pointer is, though no button is pressed by now
-    p_gtk_menu_popup(reinterpret_cast<GtkMenu *>(menu), NULL, NULL, NULL, NULL, 0, GDK_CURRENT_TIME);
 }
 
 struct OpenMenu {
@@ -1235,8 +1149,7 @@ bool pidginUiFound()
     return false;
 }
 
-MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &prefix, const char *editNote, bool anew,
-                                   bool markChanges)
+MessageMarkScope::MessageMarkScope(MessageId messageId, const char *editNote, bool anew, bool markChanges)
 {
 }
 
@@ -1304,17 +1217,13 @@ MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId)
     return MessageMarks();
 }
 
-void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId, const std::string &prefix)
+void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId)
 {
 }
 
 bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId)
 {
     return false;
-}
-
-void popUpMenu(const std::vector<MenuItem> &items)
-{
 }
 
 void setMessagePopupHandler(MessagePopupHandler handler)

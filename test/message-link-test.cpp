@@ -438,8 +438,8 @@ TEST_F(MessageLinkTest, MessageMenu)
     const MessageId message = MessageId::fromString("1");
 
     // The message for its reactions, then what may be done to it, then the reactions it may have;
-    // without Pidgin, no menu pops up
-    client->showMessageMenu(chat, message);
+    // without Pidgin, there is no menu to add them to
+    client->showMessageMenu(chat, message, nullptr);
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
     tgl.reply(makeDocumentMessage(10000, "", false));
     tgl.verifyRequest(getMessageProperties(chatIds[0], messageId));
@@ -489,21 +489,15 @@ TEST(JumpLink, Parse)
     std::string accountName;
     ChatId      chatId;
     MessageId   messageId;
-    bool        menu = true;
-    ASSERT_TRUE(parseJumpLink("tdlib-message://%2B1234/-100/5", accountName, chatId, messageId, menu));
+    ASSERT_TRUE(parseJumpLink("tdlib-message://%2B1234/-100/5", accountName, chatId, messageId));
     ASSERT_EQ(std::string("+1234"), accountName);
     ASSERT_EQ(-100, chatId.value());
     ASSERT_EQ(5, messageId.value());
-    ASSERT_FALSE(menu);
-
-    ASSERT_TRUE(parseJumpLink("tdlib-message://%2B1234/-100/6/menu", accountName, chatId, messageId, menu));
-    ASSERT_EQ(6, messageId.value());
-    ASSERT_TRUE(menu);
 
     // A file's link, or one naming a size, is something else
-    ASSERT_FALSE(parseJumpLink("tdlib://%2B1234/-100/5", accountName, chatId, messageId, menu));
-    ASSERT_FALSE(parseJumpLink("tdlib-message://%2B1234/-100/5/original", accountName, chatId, messageId, menu));
-    ASSERT_FALSE(parseJumpLink("tdlib-message://%2B1234/-100", accountName, chatId, messageId, menu));
+    ASSERT_FALSE(parseJumpLink("tdlib://%2B1234/-100/5", accountName, chatId, messageId));
+    ASSERT_FALSE(parseJumpLink("tdlib-message://%2B1234/-100/5/original", accountName, chatId, messageId));
+    ASSERT_FALSE(parseJumpLink("tdlib-message://%2B1234/-100", accountName, chatId, messageId));
 }
 
 TEST(JumpLink, OnlyWhereEnabled)
@@ -515,13 +509,7 @@ TEST(JumpLink, OnlyWhereEnabled)
               linkToMessage(account, ChatId::fromString("-100"), MessageId::fromString("5"), "12:00"));
     // Nothing to link to
     ASSERT_EQ(std::string("12:00"), linkToMessage(account, ChatId::fromString("-100"), MessageId::invalid, "12:00"));
-    ASSERT_EQ(std::string("<a href=\"tdlib-message://%2B1234/-100/5/menu\" title=\"Menu of message #5\" style=\"color: LinkText\"> \xe2\x96\xbc </a>"),
-              makeMenuLink(account, ChatId::fromString("-100"), MessageId::fromString("5")));
-    // A message on the server: numbered as in its t.me link
-    ASSERT_EQ(std::string("<a href=\"tdlib-message://%2B1234/-100/12582912/menu\" title=\"Menu of message #12\" style=\"color: LinkText\"> \xe2\x96\xbc </a>"),
-              makeMenuLink(account, ChatId::fromString("-100"), MessageId::fromString("12582912")));
     setJumpLinksEnabled(false);
-    ASSERT_EQ(std::string(), makeMenuLink(account, ChatId::fromString("-100"), MessageId::fromString("5")));
     purple_account_destroy(account);
 }
 

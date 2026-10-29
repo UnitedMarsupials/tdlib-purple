@@ -36,16 +36,14 @@ bool pidginUiFound();
 
 // Each message shown is bracketed in its tab by two marks, found again by its id; those of a
 // message shown again are moved. While an object of this class lives, what is written into a
-// conversation belongs to the given message. The prefix, HTML for the tab only, goes before the
-// message once it is written, unless an earlier showing of it already has one. With an edit note,
-// the message is written over its earlier version, where that is shown, its header kept, and the
-// note after its text; elsewhere it is written anew. A message written anew, all of it, takes its
-// marks and prefix from an earlier showing; otherwise what is written extends what was, if any.
+// conversation belongs to the given message. With an edit note, the message is written over its
+// earlier version, where that is shown, its header kept, and the note after its text; elsewhere it
+// is written anew. A message written anew, all of it, takes its marks from an earlier showing;
+// otherwise what is written extends what was, if any.
 // Marking changes, the first part of an edited message shows how its text differs from before.
 class MessageMarkScope {
 public:
-    explicit MessageMarkScope(MessageId messageId, const std::string &prefix = std::string(),
-                              const char *editNote = nullptr, bool anew = false,
+    explicit MessageMarkScope(MessageId messageId, const char *editNote = nullptr, bool anew = false,
                               bool markChanges = false);
     ~MessageMarkScope();
     MessageMarkScope(const MessageMarkScope &) = delete;
@@ -97,7 +95,7 @@ bool canMarkChanges(PurpleConversation *conv, MessageId messageId, bool &marked)
 // Writes the message's latest version anew, with or without the change from the one before marked
 void setChangesMarked(PurpleConversation *conv, MessageId messageId, bool marked);
 
-// Strikes out a deleted message's text, where the tab shows it, and takes its menu link away
+// Strikes out a deleted message's text, where the tab shows it
 void strikeOutMessage(PurpleConversation *conv, MessageId messageId);
 // Takes a deleted message out of the tab, its header and reactions with it
 void removeMessage(PurpleConversation *conv, MessageId messageId);
@@ -105,10 +103,8 @@ void removeMessage(PurpleConversation *conv, MessageId messageId);
 // Where the message is in the conversation's tab, if it is there
 MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId);
 
-// A message being sent gets a new id once it is: its marks are renamed with it, and the prefix,
-// which names the new id, is added only then
-void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId,
-                        const std::string &prefix);
+// A message being sent gets a new id once it is: its marks are renamed with it
+void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId);
 
 // Scrolls the tab's text to the message and selects it; false if it is not there
 bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId);
@@ -125,9 +121,6 @@ struct MenuItem {
     std::function<void()>  action;
     std::vector<MenuItem>  submenu;
 };
-
-// Pops up a menu where the pointer is
-void popUpMenu(const std::vector<MenuItem> &items);
 
 // The menu GTK opens on a tab's text, right-clicked within a message: a placeholder at its end
 // waits for the message's items, which are added only if the menu is still there by then

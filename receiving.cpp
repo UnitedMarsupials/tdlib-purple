@@ -793,13 +793,6 @@ PurpleConversation *getMessageConversation(TdAccountData &account, const td::td_
     return NULL;
 }
 
-// The menu's link before the message; not while it is being sent, under an id it is yet to change
-static std::string getMessagePrefix(TdAccountData &account, const td::td_api::chat &chat,
-                                     const TgMessageInfo &message)
-{
-    return message.sentLocally ? std::string() : makeMenuLink(account.purpleAccount, getId(chat), message.id);
-}
-
 void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const TgMessageInfo &message,
                      const char *text, const char *notification, uint32_t extraFlags)
 {
@@ -847,7 +840,7 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
     }
 
     // Marks for the message's own text, not for a notice about it, which carries its id
-    MessageMarkScope markScope(text ? message.id : MessageId::invalid, getMessagePrefix(account, chat, message));
+    MessageMarkScope markScope(text ? message.id : MessageId::invalid);
     const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
     if (privateUser) {
         std::string userName = getPrivateChatPurpleName(account, *privateUser);
@@ -1506,8 +1499,7 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
                                              _("formatting edited") :
                                              // TRANSLATOR: After the text of a message edited where it stands, in Pidgin's conversation window.
                                              _("edited")));
-    MessageMarkScope markScope(messageInfo.id, getMessagePrefix(account, chat, messageInfo),
-                               fullMessage.replacing ? editNote.c_str() : nullptr, true,
+    MessageMarkScope markScope(messageInfo.id, fullMessage.replacing ? editNote.c_str() : nullptr, true,
                                message.content_->get_id() == td::td_api::messageText::ID);
     FileInfo fileInfo;
     getFileFromMessage(fullMessage, fileInfo);

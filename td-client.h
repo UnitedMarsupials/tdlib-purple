@@ -67,8 +67,8 @@ public:
     // if given, names one of the sizes a photo or video comes in
     void openMessageFile(ChatId chatId, MessageId messageId, const std::string &variant = std::string());
     // The link before a message in Pidgin's tab was clicked: pops up its menu
-    // Pops up the message's menu, or adds its items to a menu already open
-    void showMessageMenu(ChatId chatId, MessageId messageId, OpenMenuRef openMenu = nullptr);
+    // Adds the message's items to the menu opened on it
+    void showMessageMenu(ChatId chatId, MessageId messageId, OpenMenuRef openMenu);
     // False if the conversation's chat is not known
     bool showMessagePopup(PurpleConversation *conv, MessageId messageId, const OpenMenuRef &openMenu);
     void setMessageReaction(ChatId chatId, MessageId messageId, const std::string &emoji, bool chosen);

@@ -1379,9 +1379,6 @@ std::string linkToMessage(PurpleAccount *account, ChatId chatId, MessageId messa
     return "<a href=\"" + makeLink(JUMP_LINK_SCHEME, account, chatId, messageId) + "\">" + markup + "</a>";
 }
 
-static const char MENU_LINK_SUFFIX[] = "menu";
-
-// tdlib-message://<account>/<chat id>/<message id>/menu
 static const char LOG_MARKER_START[] = "<!--tdlib-message ";
 static const char LOG_MARKER_END[]   = "-->";
 
@@ -1413,24 +1410,6 @@ bool takeLogMarker(std::string &html, MessageId *messageId)
         *messageId = MessageId::fromString(html.substr(numberStart, end - numberStart).c_str());
     html.erase(start, end + sizeof(LOG_MARKER_END) - 1 - start);
     return true;
-}
-
-std::string makeMenuLink(PurpleAccount *account, ChatId chatId, MessageId messageId)
-{
-    if (!g_jumpLinksEnabled || !chatId.valid() || !messageId.valid())
-        return std::string();
-    // A message's number as in its t.me link; that of one not yet sent is its temporary id
-    int64_t number = ((messageId.value() & 0xFFFFF) == 0) ? (messageId.value() >> 20) : messageId.value();
-    // TRANSLATOR: Tooltip of the link that opens a message's menu. Argument is the message's number.
-    std::string title = formatMessage(_("Menu of message #{}"), std::to_string(number));
-    gchar      *escaped = g_markup_escape_text(title.c_str(), -1);
-    title = escaped;
-    g_free(escaped);
-    // GtkIMHtml ignores the title and the style, for now: it shows the address as the tooltip, and
-    // a clicked link in another color. LinkText, the color of a link not visited, is for both. The
-    // spaces around the triangle are part of the link, a wider target to click.
-    return "<a href=\"" + makeLink(JUMP_LINK_SCHEME, account, chatId, messageId) + '/' +
-           MENU_LINK_SUFFIX + "\" title=\"" + title + "\" style=\"color: LinkText\"> \xe2\x96\xbc </a>";
 }
 
 static bool isSpace(char c)
@@ -1548,14 +1527,10 @@ std::string markChanges(const std::string &previous, const std::string &html,
     return result;
 }
 
-bool parseJumpLink(const char *link, std::string &accountName, ChatId &chatId, MessageId &messageId,
-                   bool &menu)
+bool parseJumpLink(const char *link, std::string &accountName, ChatId &chatId, MessageId &messageId)
 {
     std::string variant;
-    if (!parseLink(JUMP_LINK_SCHEME, link, accountName, chatId, messageId, variant))
-        return false;
-    menu = (variant == MENU_LINK_SUFFIX);
-    return menu || variant.empty();
+    return parseLink(JUMP_LINK_SCHEME, link, accountName, chatId, messageId, variant) && variant.empty();
 }
 
 std::string getDownloadXferPeerName(ChatId chatId,
