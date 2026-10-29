@@ -2721,6 +2721,9 @@ struct Redraw {
     MessageId                                               earliest; // or
     time_t                                                  span  = 0; // back from the latest message
     time_t                                                  since = 0;
+    unsigned                                                extra = 0; // messages wanted before the earliest
+    bool                                                    found  = false; // the earliest
+    unsigned                                                beyond = 0; // found so far
     unsigned                                                limit;
     // Newest first, as TDLib gives them
     std::vector<td::td_api::object_ptr<td::td_api::message>> messages;
@@ -2731,6 +2734,8 @@ static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw
 
 // Messages found too far back for their tab once, which they are no nearer to since
 static std::set<std::pair<int64_t, int64_t>> g_redrawTooFar;
+// Chats whose tabs show their first message
+static std::set<int64_t> g_historyComplete;
 
 static void stopRedrawProgress(TdAccountData &account, ChatId chatId)
 {
@@ -2847,14 +2852,22 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
     std::vector<IncomingMessage> readyMessages;
     account.pendingMessages.setChatReady(redraw.chatId, readyMessages);
     showMessages(readyMessages, account);
+    // Gone further back: what was at the top stays there
+    if (redraw.extra) {
+        if (!redraw.beyond)
+            g_historyComplete.insert(redraw.chatId.value());
+        if (conv)
+            scrollToMessageLater(conv, redraw.earliest);
+    }
 }
 
 static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redraw,
                            td::td_api::object_ptr<td::td_api::Object> response)
 {
     MessageId more;
-    bool      found = false;
+    bool     &found = redraw->found;
     bool      older = false; // than the tab is filled from
+    size_t    added = 0;     // none, once the chat's first message is reached
     if (response && (response->get_id() == td::td_api::messages::ID)) {
         auto &messages = static_cast<td::td_api::messages &>(*response);
         for (auto &message: messages.messages_) {
@@ -2867,19 +2880,25 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
             if (older)
                 break;
             more = getId(*message);
-            found = (more == redraw->earliest);
+            if (more == redraw->earliest)
+                found = true;
+            else if (found)
+                redraw->beyond++;
             redraw->messages.push_back(std::move(message));
-            if (found || (redraw->messages.size() >= redraw->limit))
+            added++;
+            if ((found && (redraw->beyond >= redraw->extra)) || (redraw->messages.size() >= redraw->limit))
                 break;
         }
         bool full = redraw->messages.size() >= redraw->limit;
-        // Filling it from a time, all there is since, or as much as fits, is enough
-        if (found || (redraw->span && (older || full || messages.messages_.empty()))) {
+        // Filling it from a message, and as many before as wanted, or as there are; from a time, all
+        // there is since; or as much as fits: either is enough
+        bool enough = found && ((redraw->beyond >= redraw->extra) || !added || full);
+        if (enough || (redraw->span && (older || full || !added))) {
             if (!redraw->messages.empty()) {
                 redrawShow(account, *redraw);
                 return;
             }
-        } else if (!full && !messages.messages_.empty()) {
+        } else if (!full && added) {
             redrawRequest(account, redraw, more);
             return;
         } else {
@@ -2912,7 +2931,8 @@ static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw
 }
 
 // False if the chat is busy
-static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earliest, time_t span)
+static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earliest, time_t span,
+                        unsigned extra = 0)
 {
     const td::td_api::chat *chat = account.getChat(chatId);
     PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
@@ -2930,6 +2950,7 @@ static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earlies
     redraw->chatId   = chatId;
     redraw->earliest = earliest;
     redraw->span     = span;
+    redraw->extra    = extra;
     redraw->limit    = getRedrawLimit();
     redrawRequest(account, redraw, MessageId::invalid);
     return true;
@@ -2939,6 +2960,19 @@ void redrawChat(TdAccountData &account, ChatId chatId, MessageId earliest)
 {
     if (!g_redrawTooFar.count({chatId.value(), earliest.value()}))
         startRedraw(account, chatId, earliest, 0);
+}
+
+void showEarlierMessages(TdAccountData &account, PurpleConversation *conv)
+{
+    enum { EARLIER_BATCH = 50 };
+    const td::td_api::chat *chat     = findConversationChat(account, conv);
+    MessageId               earliest = chat ? findFirstMessage(conv) : MessageId();
+    if (!earliest.valid() || g_historyComplete.count(getId(*chat).value()) ||
+        g_redrawTooFar.count({getId(*chat).value(), earliest.value()}))
+        return;
+    purple_debug_misc(config::pluginId, "Showing messages before %" G_GINT64_FORMAT " in chat %" G_GINT64_FORMAT "\n",
+                      earliest.value(), getId(*chat).value());
+    startRedraw(account, getId(*chat), earliest, 0, EARLIER_BATCH);
 }
 
 bool fillChat(TdAccountData &account, ChatId chatId, time_t span)

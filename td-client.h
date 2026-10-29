@@ -30,6 +30,7 @@ public:
     bool fillConversation(PurpleConversation *conv);
     // Its title marked, or not, as its chat has reactions unread
     void markConversation(PurpleConversation *conv);
+    void showEarlierMessages(PurpleConversation *conv);
     bool hasUnreadReactions(PurpleBuddy *buddy);
 
     void addContact(const std::string &purpleName, const std::string &alias, const std::string &groupName);

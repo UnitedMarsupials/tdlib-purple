@@ -1197,6 +1197,14 @@ static bool buddyMarked(PurpleBuddy *buddy)
     return tdClient && tdClient->hasUnreadReactions(buddy);
 }
 
+// Scrolled to the top of its tab
+static void topReached(PurpleConversation *conv)
+{
+    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    if (tdClient)
+        tdClient->showEarlierMessages(conv);
+}
+
 // The menu of a tab's text, opened on a message
 static bool messagePopupOpened(PurpleConversation *conv, MessageId messageId, const OpenMenuRef &menu)
 {
@@ -1219,6 +1227,7 @@ static void registerMessageLinks()
     setLogMarkersEnabled(!canDisableReadReceipts());
     setMessagePopupHandler(messagePopupOpened);
     setBuddyMarkHandler(buddyMarked, UNREAD_REACTIONS_MARK);
+    setTopReachedHandler(topReached);
 }
 
 static void unregisterMessageLinks()
@@ -1233,6 +1242,7 @@ static void unregisterMessageLinks()
     setLogMarkersEnabled(false);
     setMessagePopupHandler(nullptr);
     setBuddyMarkHandler(nullptr, nullptr);
+    setTopReachedHandler(nullptr);
 }
 
 static gboolean tgprpl_unload (PurplePlugin *plugin)

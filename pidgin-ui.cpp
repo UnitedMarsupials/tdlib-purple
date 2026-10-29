@@ -69,6 +69,9 @@ FRONT_END_FUNCTION(gtk_text_buffer_get_insert);
 FRONT_END_FUNCTION(g_object_get_data);
 FRONT_END_FUNCTION(g_object_set_data_full);
 FRONT_END_FUNCTION(gtk_widget_get_pointer);
+FRONT_END_FUNCTION(gtk_adjustment_get_type);
+FRONT_END_FUNCTION(gtk_widget_get_type);
+FRONT_END_FUNCTION(g_value_get_boxed);
 FRONT_END_FUNCTION(gtk_text_buffer_get_iter_at_offset);
 FRONT_END_FUNCTION(gtk_text_view_window_to_buffer_coords);
 FRONT_END_FUNCTION(gtk_text_view_get_iter_at_location);
@@ -415,6 +418,7 @@ static guint g_connectSource = 0;
 // Disconnected by libpurple when the plugin is unloaded
 static void connectPaste();
 static void connectPopup();
+static void connectScroll();
 
 static gboolean connectSignals(gpointer plugin)
 {
@@ -434,6 +438,7 @@ static gboolean connectSignals(gpointer plugin)
         purple_debug_warning(config::pluginId, "Cannot mark contacts in Pidgin's buddy list\n");
     connectPaste();
     connectPopup();
+    connectScroll();
     return FALSE;
 }
 
@@ -474,11 +479,13 @@ void pidginUiLoad(PurplePlugin *plugin)
 
 static void disconnectPaste();
 static void disconnectPopup();
+static void disconnectScroll();
 
 void pidginUiUnload()
 {
     disconnectPaste();
     disconnectPopup();
+    disconnectScroll();
     if (g_connectSource) {
         g_source_remove(g_connectSource);
         g_connectSource = 0;
@@ -1232,6 +1239,139 @@ static gboolean populatingPopup(GSignalInvocationHint *, guint paramCount, const
     return TRUE;
 }
 
+MessageId findFirstMessage(PurpleConversation *conv)
+{
+    GtkTextBuffer *buffer = getTextBuffer(conv);
+    GtkTextIter    iter;
+    if (!buffer)
+        return MessageId();
+    p_gtk_text_buffer_get_iter_at_offset(buffer, &iter, 0);
+    do {
+        GSList   *marks = p_gtk_text_iter_get_marks(&iter);
+        MessageId messageId;
+        for (GSList *item = marks; item && !messageId.valid(); item = item->next) {
+            const char *name = p_gtk_text_mark_get_name(static_cast<GtkTextMark *>(item->data));
+            if (name && g_str_has_prefix(name, START_MARK_PREFIX))
+                messageId = MessageId::fromString(name + strlen(START_MARK_PREFIX));
+        }
+        g_slist_free(marks);
+        if (messageId.valid())
+            return messageId;
+    } while (p_gtk_text_iter_forward_char(&iter));
+    return MessageId();
+}
+
+namespace {
+struct ScrollToMessage {
+    PurpleConversation *conv;
+    MessageId           messageId;
+};
+}
+
+static gboolean scrollToMessageTop(gpointer data)
+{
+    std::unique_ptr<ScrollToMessage> scroll(static_cast<ScrollToMessage *>(data));
+    GtkIMHtml     *imhtml = g_list_find(purple_get_conversations(), scroll->conv) ? getIMHtml(scroll->conv) : nullptr;
+    GtkTextBuffer *buffer = imhtml ? imhtml->text_buffer : nullptr;
+    GtkTextMark   *start  = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(scroll->messageId, true).c_str())
+                                   : nullptr;
+    if (start)
+        p_gtk_text_view_scroll_to_mark(reinterpret_cast<GtkTextView *>(imhtml), start, 0.0, TRUE, 0.0, 0.0);
+    return G_SOURCE_REMOVE;
+}
+
+void scrollToMessageLater(PurpleConversation *conv, MessageId messageId)
+{
+    // GtkIMHtml scrolls to the end when idle, smoothly for up to 0.4 s
+    enum { AFTER_SCROLLING_MS = 500 };
+    if (getIMHtml(conv))
+        g_timeout_add_full(G_PRIORITY_LOW, AFTER_SCROLLING_MS, scrollToMessageTop,
+                           new ScrollToMessage{conv, messageId}, NULL);
+}
+
+// A tab's text scrolled to its top: not again until it is scrolled down from there, as filling it
+// anew starts at the top too
+static TopReachedHandler g_topReachedHandler = nullptr;
+static guint             g_scrollSignal = 0;
+static gulong            g_scrollHook   = 0;
+static guint             g_wheelSignal  = 0;
+static gulong            g_wheelHook    = 0;
+static const char        AT_TOP_KEY[]   = "tdlib-purple-at-top";
+
+void setTopReachedHandler(TopReachedHandler handler)
+{
+    g_topReachedHandler = handler;
+}
+
+static gboolean scrolled(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
+{
+    GtkAdjustment *adjustment = paramCount ? static_cast<GtkAdjustment *>(p_g_value_get_object(&params[0])) : nullptr;
+    if (!adjustment || !g_topReachedHandler)
+        return TRUE;
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv   = static_cast<PurpleConversation *>(item->data);
+        GtkIMHtml          *imhtml = strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)),
+                                            config::pluginId) ? nullptr : getIMHtml(conv);
+        if (!imhtml || (reinterpret_cast<GtkTextView *>(imhtml)->vadjustment != adjustment))
+            continue;
+        bool atTop  = (adjustment->value <= adjustment->lower) && (adjustment->upper > adjustment->page_size);
+        bool wasTop = purple_conversation_get_data(conv, AT_TOP_KEY) != nullptr;
+        purple_conversation_set_data(conv, AT_TOP_KEY, atTop ? conv : nullptr);
+        if (atTop && !wasTop)
+            g_topReachedHandler(conv);
+        break;
+    }
+    return TRUE;
+}
+
+// The wheel turned up at the top, or in a tab with no more than fits, where nothing scrolls
+static gboolean wheelTurned(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
+{
+    GtkWidget      *widget = (paramCount > 1) ? static_cast<GtkWidget *>(p_g_value_get_object(&params[0])) : nullptr;
+    GdkEventScroll *event  = widget ? static_cast<GdkEventScroll *>(p_g_value_get_boxed(&params[1])) : nullptr;
+    if (!event || (event->direction != GDK_SCROLL_UP) || !g_topReachedHandler)
+        return TRUE;
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv   = static_cast<PurpleConversation *>(item->data);
+        GtkIMHtml          *imhtml = strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)),
+                                            config::pluginId) ? nullptr : getIMHtml(conv);
+        if (!imhtml || (reinterpret_cast<GtkWidget *>(imhtml) != widget))
+            continue;
+        GtkAdjustment *adjustment = reinterpret_cast<GtkTextView *>(imhtml)->vadjustment;
+        if (adjustment && (adjustment->value <= adjustment->lower))
+            g_topReachedHandler(conv);
+        break;
+    }
+    return TRUE;
+}
+
+static void connectScroll()
+{
+    if (!LOOK_UP(gtk_adjustment_get_type) || !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
+        !LOOK_UP(g_signal_remove_emission_hook) || !LOOK_UP(g_value_get_object) ||
+        !LOOK_UP(gtk_widget_get_type) || !LOOK_UP(g_value_get_boxed))
+    {
+        purple_debug_warning(config::pluginId, "Cannot follow the scrolling of tabs: some of GTK is not found\n");
+        return;
+    }
+    g_scrollSignal = p_g_signal_lookup("value-changed", p_gtk_adjustment_get_type());
+    if (g_scrollSignal)
+        g_scrollHook = p_g_signal_add_emission_hook(g_scrollSignal, 0, scrolled, nullptr, nullptr);
+    g_wheelSignal = p_g_signal_lookup("scroll-event", p_gtk_widget_get_type());
+    if (g_wheelSignal)
+        g_wheelHook = p_g_signal_add_emission_hook(g_wheelSignal, 0, wheelTurned, nullptr, nullptr);
+}
+
+static void disconnectScroll()
+{
+    if (g_scrollHook)
+        p_g_signal_remove_emission_hook(g_scrollSignal, g_scrollHook);
+    if (g_wheelHook)
+        p_g_signal_remove_emission_hook(g_wheelSignal, g_wheelHook);
+    g_scrollHook = 0;
+    g_wheelHook  = 0;
+}
+
 static void connectPopup()
 {
     if (!LOOK_UP(gtk_imhtml_get_type) || !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
@@ -1360,6 +1500,19 @@ void setMessagePopupHandler(MessagePopupHandler handler)
 }
 
 void setBuddyMarkHandler(BuddyMarkHandler handler, const char *mark)
+{
+}
+
+MessageId findFirstMessage(PurpleConversation *conv)
+{
+    return MessageId();
+}
+
+void scrollToMessageLater(PurpleConversation *conv, MessageId messageId)
+{
+}
+
+void setTopReachedHandler(TopReachedHandler handler)
 {
 }
 

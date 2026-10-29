@@ -1752,6 +1752,11 @@ void PurpleTdClient::sendReadReceipts(PurpleConversation *conversation)
     }
 }
 
+void PurpleTdClient::showEarlierMessages(PurpleConversation *conv)
+{
+    ::showEarlierMessages(m_data, conv);
+}
+
 void PurpleTdClient::markConversation(PurpleConversation *conv)
 {
     markConversationTitle(m_data, conv);

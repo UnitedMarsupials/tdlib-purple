@@ -114,6 +114,15 @@ void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId
 
 // Scrolls the tab's text to the message and selects it; false if it is not there
 bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId);
+// The earliest message the tab shows, if any
+MessageId findFirstMessage(PurpleConversation *conv);
+// Once Pidgin is done scrolling to the end as the tab is written, scrolls it back so that the
+// message is at the top, if it is there
+void scrollToMessageLater(PurpleConversation *conv, MessageId messageId);
+
+// Told when a tab's text is scrolled to its top, for earlier messages to be shown
+using TopReachedHandler = void (*)(PurpleConversation *conv);
+void setTopReachedHandler(TopReachedHandler handler);
 
 // An item of a menu: a submenu, if it has items, otherwise disabled if it has no action. The
 // submenu's items are laid out in rows of the given number, if any, rather than in one column.
