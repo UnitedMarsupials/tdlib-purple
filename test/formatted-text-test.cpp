@@ -72,3 +72,15 @@ TEST(FormattedText, FromMarkup)
     ASSERT_TRUE(isSameFormattedText(*parseFormattedText("<b>x</b> y"), *parseFormattedText("<B>x</B> y")));
     ASSERT_FALSE(isSameFormattedText(*parseFormattedText("<b>x</b> y"), *parseFormattedText("x y")));
 }
+
+// Which message a logged line is
+TEST(LogMarker, RoundTrip)
+{
+    std::string html = "Meow" + makeLogMarker(MessageId::fromString("35577135104"));
+    ASSERT_EQ(std::string("Meow<!--tdlib-message 35577135104-->"), html);
+    MessageId id;
+    ASSERT_TRUE(takeLogMarker(html, &id));
+    ASSERT_EQ(std::string("Meow"), html);
+    ASSERT_EQ(35577135104, id.value());
+    ASSERT_FALSE(takeLogMarker(html, &id));
+}

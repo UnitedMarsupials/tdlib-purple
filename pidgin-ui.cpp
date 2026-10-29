@@ -272,6 +272,12 @@ static void replaceBody(PurpleConversation *conv, const char *html)
 static gboolean displayingMessage(PurpleAccount *account, const char *who, char **message,
                                   PurpleConversation *conv, PurpleMessageFlags flags)
 {
+    // For the log only, which has it by now
+    std::string html = *message;
+    if (takeLogMarker(html)) {
+        g_free(*message);
+        *message = g_strdup(html.c_str());
+    }
     if (!g_messageBeingWritten)
         return FALSE;
     if (!g_messageBeingWritten->conv) {

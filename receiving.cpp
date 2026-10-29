@@ -837,6 +837,14 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
     if (!newText.empty())
         text = newText.c_str();
 
+    // Which message it is, for the log, once it has its id for good: for filling Pidgin's tab from
+    // the log, which only Pidgin's tab can be
+    std::string marked;
+    if (text && message.id.valid() && !message.sentLocally && pidginUiFound()) {
+        marked = text + makeLogMarker(message.id);
+        text   = marked.c_str();
+    }
+
     // Marks for the message's own text, not for a notice about it, which carries its id
     MessageMarkScope markScope(text ? message.id : MessageId::invalid, getMessagePrefix(account, chat, message));
     const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);

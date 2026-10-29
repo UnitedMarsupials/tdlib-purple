@@ -1387,6 +1387,27 @@ std::string linkToMessage(PurpleAccount *account, ChatId chatId, MessageId messa
 static const char MENU_LINK_SUFFIX[] = "menu";
 
 // tdlib-message://<account>/<chat id>/<message id>/menu
+static const char LOG_MARKER_START[] = "<!--tdlib-message ";
+static const char LOG_MARKER_END[]   = "-->";
+
+std::string makeLogMarker(MessageId messageId)
+{
+    return LOG_MARKER_START + std::to_string(messageId.value()) + LOG_MARKER_END;
+}
+
+bool takeLogMarker(std::string &html, MessageId *messageId)
+{
+    size_t start = html.find(LOG_MARKER_START);
+    size_t end   = (start == std::string::npos) ? std::string::npos : html.find(LOG_MARKER_END, start);
+    if (end == std::string::npos)
+        return false;
+    size_t numberStart = start + sizeof(LOG_MARKER_START) - 1;
+    if (messageId)
+        *messageId = MessageId::fromString(html.substr(numberStart, end - numberStart).c_str());
+    html.erase(start, end + sizeof(LOG_MARKER_END) - 1 - start);
+    return true;
+}
+
 std::string makeMenuLink(PurpleAccount *account, ChatId chatId, MessageId messageId)
 {
     if (!g_jumpLinksEnabled || !chatId.valid() || !messageId.valid())

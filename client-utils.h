@@ -72,6 +72,11 @@ bool        jumpLinksEnabled();
 void        setJumpLinksEnabled(bool enabled);
 std::string linkToMessage(PurpleAccount *account, ChatId chatId, MessageId messageId,
                           const std::string &markup);
+// Put after a message's text, for the log to say which message it is: a comment, which Pidgin's
+// log viewer does not show, and which the conversation window is not given
+std::string makeLogMarker(MessageId messageId);
+// Takes the marker out of a message's markup, telling which message it is, if it has one
+bool        takeLogMarker(std::string &html, MessageId *messageId = nullptr);
 // The link before each message, which opens its menu, or nothing where it cannot work
 std::string makeMenuLink(PurpleAccount *account, ChatId chatId, MessageId messageId);
 // The new version of an edited message's text, its words compared with those of the previous one
