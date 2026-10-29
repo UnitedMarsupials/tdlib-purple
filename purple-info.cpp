@@ -66,7 +66,18 @@ GHashTable *getChatComponents(const td::td_api::chat &chat)
 
     GHashTable *table = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
     g_hash_table_insert(table, chatNameComponent, g_strdup(name));
+    // The keys are not freed with this table
+    for (char *key: {joinStringKey, nameKey, typeKey})
+        g_hash_table_insert(table, key, g_strdup(""));
     return table;
+}
+
+void completeChatComponents(GHashTable *components)
+{
+    // Keys copied, as the buddy list's own tables, read from its file, free theirs
+    for (char *key: {joinStringKey, nameKey, typeKey})
+        if (!g_hash_table_lookup(components, key))
+            g_hash_table_insert(components, g_strdup(key), g_strdup(""));
 }
 
 const char *getChatName(GHashTable *components)
