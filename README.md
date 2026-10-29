@@ -17,13 +17,20 @@ the conversion can be disabled in account settings, or even at compile time (see
 
 ### Pasting files and pictures
 
-`/paste` in a conversation sends the files copied to the clipboard, as a file
-manager copies them, as documents, up to ten to a message; or else the picture
-on the clipboard, as a photo. Pidgin reads the clipboard itself, and Ctrl+V
-there sends the files as well, a picture going into the input field instead;
-other front-ends, such as
-Finch, need [xclip](https://github.com/astrand/xclip) for it, found in `PATH`,
-which is not otherwise required.
+What is pasted into a message is sent with it, once the message is: the files
+copied to the clipboard, as a file manager copies them, or else its picture.
+Each stands for itself in the message's text as its placeholder, `[Image#1]`,
+`[Video#2]` or, for any other file, its name, such as `[report.pdf]`, the text
+after it being its caption; several in a row go as an album, pictures and
+videos together, documents apart, up to ten in one.
+
+In Pidgin, pasting into a conversation's input field puts a picture there, and
+the files' placeholders. `/paste` does the same everywhere: other front-ends,
+such as Finch, cannot take a picture into their input line, so it says the
+placeholders, to be written into the message where they go. The clipboard is
+read there with [xclip](https://github.com/astrand/xclip), found in `PATH`,
+which is not otherwise required. Placeholders last as long as the account is
+connected.
 
 ## Installation
 

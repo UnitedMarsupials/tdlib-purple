@@ -3215,14 +3215,13 @@ void PurpleTdClient::uploadResponse(uint64_t requestId, td::td_api::object_ptr<t
     }
 }
 
-void PurpleTdClient::sendFilesAsAlbums(const std::vector<PurpleXfer *> &uploads)
+std::vector<std::string> PurpleTdClient::addPasted(const ClipboardContent &content)
 {
-    addUploadAlbums(uploads, m_transceiver, m_data, &PurpleTdClient::sendMessageResponse);
+    return ::addPasted(m_data.pastedAttachments, content);
 }
 
 void PurpleTdClient::cancelUpload(PurpleXfer *xfer)
 {
-    uploadOfAlbumEnded(xfer, 0, ChatId(), m_transceiver, m_data, &PurpleTdClient::sendMessageResponse);
     int32_t fileId;
     if (m_data.getFileIdForTransfer(xfer, fileId)) {
         purple_debug_misc(config::pluginId, "Cancelling upload of %s (file id %d)\n",

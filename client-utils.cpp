@@ -1131,8 +1131,9 @@ bool isSameFormattedText(const td::td_api::formattedText &a, const td::td_api::f
 }
 
 struct MessagePart {
-    bool                    isImage = false;
+    bool                    isImage = false; // or another attachment, with its caption
     int                     imageId = 0;
+    const PastedAttachment *attachment = nullptr;
     std::string             text;
     std::vector<TextFormat> formats; // within text
 };
@@ -1176,6 +1177,19 @@ static size_t splitTextChunk(MessagePart &part, const char *text, size_t length,
 
 static void appendText(std::vector<MessagePart> &parts, const char *s, size_t len, TdAccountData &account)
 {
+    // An attachment's caption starts past the space or line break after its placeholder
+    if (!parts.empty() && parts.back().attachment && parts.back().text.empty())
+        while (len) {
+            size_t skip = 0;
+            if (strchr(" \t\r\n", *s))
+                skip = 1;
+            else if ((len >= 4) && !g_ascii_strncasecmp(s, "<br>", 4))
+                skip = 4;
+            if (!skip)
+                break;
+            s += skip;
+            len -= skip;
+        }
     if (len != 0) {
         if (parts.empty())
             parts.emplace_back();
@@ -1218,6 +1232,32 @@ static void parseMessage(const char *message, std::vector<MessagePart> &parts, T
         long  imageId;
         char *pastImage = NULL;
 
+        const PastedAttachment *attachment = nullptr;
+        size_t                  placeholderLength = 0;
+        if (*s == '[')
+            for (const PastedAttachment &pasted: account.pastedAttachments) {
+                // As written, or escaped, as libpurple has the message
+                gchar *escaped = g_markup_escape_text(pasted.placeholder.c_str(), -1);
+                for (const char *placeholder: {pasted.placeholder.c_str(), (const char *)escaped}) {
+                    size_t length = strlen(placeholder);
+                    if ((length > placeholderLength) && !strncmp(s, placeholder, length)) {
+                        attachment        = &pasted;
+                        placeholderLength = length;
+                    }
+                }
+                g_free(escaped);
+            }
+
+        if (attachment) {
+            appendText(parts, textStart, s-textStart, account);
+            parts.emplace_back();
+            parts.back().isImage    = true;
+            parts.back().attachment = attachment;
+            s += placeholderLength;
+            textStart = s;
+            continue;
+        }
+
         if (!strncasecmp(s, "<img id=\"", 9)) {
             const char *idString = s+9;
 
@@ -1246,6 +1286,62 @@ static void parseMessage(const char *message, std::vector<MessagePart> &parts, T
     appendText(parts, textStart, s-textStart, account);
 }
 
+// A pasted attachment, the part's text its caption
+static td::td_api::object_ptr<td::td_api::InputMessageContent> makeAttachment(const MessagePart &part)
+{
+    auto file    = td::td_api::make_object<td::td_api::inputFileLocal>(part.attachment->path);
+    auto caption = makeFormattedText(part.text, part.formats, 0, part.text.size());
+    purple_debug_misc(config::pluginId, "Sending %s\n", part.attachment->path.c_str());
+    switch (part.attachment->kind) {
+    case AttachmentKind::Photo: {
+        auto content = td::td_api::make_object<td::td_api::inputMessagePhoto>();
+#if TDLIB_API_INPUT_PHOTO
+        content->photo_ = td::td_api::make_object<td::td_api::inputPhoto>();
+        content->photo_->photo_ = std::move(file);
+#else
+        content->photo_ = std::move(file);
+#endif
+        content->caption_ = std::move(caption);
+        return std::move(content);
+    }
+    case AttachmentKind::Video: {
+        auto content = td::td_api::make_object<td::td_api::inputMessageVideo>();
+#if TDLIB_API_INPUT_PHOTO
+        content->video_ = td::td_api::make_object<td::td_api::inputVideo>();
+        content->video_->video_ = std::move(file);
+#else
+        content->video_ = std::move(file);
+#endif
+        content->caption_ = std::move(caption);
+        return std::move(content);
+    }
+    case AttachmentKind::Document:
+        break;
+    }
+    auto content = td::td_api::make_object<td::td_api::inputMessageDocument>();
+#if TDLIB_API_INPUT_PHOTO
+    content->document_ = td::td_api::make_object<td::td_api::inputDocument>();
+    content->document_->document_ = std::move(file);
+#else
+    content->document_ = std::move(file);
+#endif
+    content->caption_ = std::move(caption);
+    return std::move(content);
+}
+
+// How many attachments from the first go together as an album: one after another, captioned only by
+// the last, pictures and videos or documents only, as many as Telegram takes
+static size_t getAlbumSize(const std::vector<MessagePart> &parts, size_t first)
+{
+    enum { MAX_ALBUM_SIZE = 10 };
+    auto isDocument = [](const MessagePart &part) { return part.attachment->kind == AttachmentKind::Document; };
+    size_t size = 1;
+    while (parts[first + size - 1].text.empty() && (first + size < parts.size()) && (size < MAX_ALBUM_SIZE) &&
+           parts[first + size].attachment && (isDocument(parts[first + size]) == isDocument(parts[first])))
+        size++;
+    return size;
+}
+
 int transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiver,
                     TdAccountData &account, TdTransceiver::ResponseCb response)
 {
@@ -1254,7 +1350,28 @@ int transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiv
     if (parts.size() > MAX_MESSAGE_PARTS)
         return -E2BIG;
 
-    for (const MessagePart &input: parts) {
+    for (size_t i = 0; i < parts.size(); i++) {
+        const MessagePart &input = parts[i];
+        if (input.attachment) {
+            size_t   albumSize = getAlbumSize(parts, i);
+            uint64_t requestId;
+            if (albumSize == 1) {
+                auto sendMessageRequest = td::td_api::make_object<td::td_api::sendMessage>();
+                sendMessageRequest->chat_id_ = chatId.value();
+                sendMessageRequest->input_message_content_ = makeAttachment(input);
+                requestId = transceiver.sendQuery(std::move(sendMessageRequest), response);
+            } else {
+                auto sendAlbumRequest = td::td_api::make_object<td::td_api::sendMessageAlbum>();
+                sendAlbumRequest->chat_id_ = chatId.value();
+                for (size_t j = i; j < i + albumSize; j++)
+                    sendAlbumRequest->input_message_contents_.push_back(makeAttachment(parts[j]));
+                requestId = transceiver.sendQuery(std::move(sendAlbumRequest), response);
+            }
+            account.addPendingRequest<SendMessageRequest>(requestId, chatId, nullptr);
+            i += albumSize - 1;
+            continue;
+        }
+
         td::td_api::object_ptr<td::td_api::sendMessage> sendMessageRequest = td::td_api::make_object<td::td_api::sendMessage>();
         sendMessageRequest->chat_id_ = chatId.value();
         char *tempFileName = NULL;

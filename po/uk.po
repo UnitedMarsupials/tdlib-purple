@@ -1486,8 +1486,13 @@ msgid "There are no files or picture on the clipboard."
 msgstr "У буфері обміну немає ні файлів, ні зображення."
 
 #. TRANSLATOR: Command description, the initial "paste" must remain verbatim!
-msgid "paste: Send the files copied to the clipboard, or its picture; outside Pidgin, read with xclip"
-msgstr "paste: Надіслати файли, скопійовані до буфера обміну, або його зображення; поза Pidgin прочитані за допомогою xclip"
+msgid "paste: Attach the files copied to the clipboard, or its picture, to the message being written"
+msgstr "paste: Долучити до повідомлення, що пишеться, файли, скопійовані до буфера обміну, або його зображення"
+
+#. TRANSLATOR: In-chat notification, not logged, after /paste. The argument is the pasted things' placeholders, such as [Image#1] or [report.pdf].
+#, c++-format
+msgid "Pasted {}: write it into the message, where it goes, to send it there."
+msgstr "Вставлено {}: впишіть це в повідомлення там, де воно має бути, щоб надіслати його там."
 
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091

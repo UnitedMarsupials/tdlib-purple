@@ -1532,8 +1532,13 @@ msgid "There are no files or picture on the clipboard."
 msgstr "W schowku nie ma plików ani obrazu."
 
 #. TRANSLATOR: Command description, the initial "paste" must remain verbatim!
-msgid "paste: Send the files copied to the clipboard, or its picture; outside Pidgin, read with xclip"
-msgstr "paste: Wyślij pliki skopiowane do schowka albo jego obraz; poza Pidginem odczytane za pomocą xclip"
+msgid "paste: Attach the files copied to the clipboard, or its picture, to the message being written"
+msgstr "paste: Dołącz pliki skopiowane do schowka albo jego obraz do pisanej wiadomości"
+
+#. TRANSLATOR: In-chat notification, not logged, after /paste. The argument is the pasted things' placeholders, such as [Image#1] or [report.pdf].
+#, c++-format
+msgid "Pasted {}: write it into the message, where it goes, to send it there."
+msgstr "Wklejono {}: wpisz to w wiadomości tam, gdzie ma się znaleźć, aby to tam wysłać."
 
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091

@@ -68,6 +68,7 @@ FRONT_END_FUNCTION(g_signal_handler_find);
 FRONT_END_FUNCTION(g_signal_handler_block);
 FRONT_END_FUNCTION(g_signal_handler_unblock);
 FRONT_END_FUNCTION(g_signal_stop_emission_by_name);
+FRONT_END_FUNCTION(gtk_text_buffer_insert_at_cursor);
 FRONT_END_FUNCTION(gdk_pixbuf_save_to_buffer);
 FRONT_END_FUNCTION(g_object_unref);
 FRONT_END_FUNCTION(gtk_imhtml_insert_image_at_iter);
@@ -735,7 +736,7 @@ static int storeClipboardPicture(GtkWidget *widget)
     return id;
 }
 
-// Files copied to the clipboard are sent rather than pasted as their URIs, which Pidgin's handler of
+// Files copied to the clipboard are pasted as placeholders, rather than as their URIs, which Pidgin's handler of
 // the entry's "paste-clipboard" would do; an emission hook cannot stop the signal, so that handler
 // is blocked for the emission, and one of the plugin's, after it, unblocks it and stops the signal.
 struct PasteBlock {
@@ -794,7 +795,7 @@ static void unwatchPaste(GtkWidget *entry)
     p_g_object_set_data_full(reinterpret_cast<GObject *>(entry), PASTE_BLOCK_KEY, nullptr, nullptr);
 }
 
-// Sends the files copied, if any, the entry's other handlers kept from pasting them
+// Pastes the placeholders of the files copied, if any, the entry's other handlers kept from pasting them
 static bool pasteFiles(GtkWidget *entry, PurpleConversation *conv)
 {
     PasteBlock *block = static_cast<PasteBlock *>(p_g_object_get_data(reinterpret_cast<GObject *>(entry),
@@ -815,8 +816,44 @@ static bool pasteFiles(GtkWidget *entry, PurpleConversation *conv)
         block->blocked.push_back(handler);
     }
     p_g_signal_handler_unblock(entry, block->ownHandler);
-    g_filesPastedHandler(conv, files);
+    for (const std::string &placeholder: g_filesPastedHandler(conv, files))
+        p_gtk_text_buffer_insert_at_cursor(reinterpret_cast<GtkIMHtml *>(entry)->text_buffer,
+                                           (placeholder + " ").c_str(), -1);
     return true;
+}
+
+struct EntryPaste {
+    PurpleConversation *conv;
+    std::string         text;
+    int                 imageId;
+};
+
+static gboolean pasteIntoEntry(gpointer data)
+{
+    std::unique_ptr<EntryPaste> paste(static_cast<EntryPaste *>(data));
+    // Unless the conversation is gone by now
+    GList *item = purple_get_conversations();
+    while (item && (item->data != paste->conv))
+        item = item->next;
+    GtkWidget *entry = item ? getEntry(paste->conv) : nullptr;
+    if (entry) {
+        GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(entry)->text_buffer;
+        if (!paste->text.empty() && p_gtk_text_buffer_insert_at_cursor)
+            p_gtk_text_buffer_insert_at_cursor(buffer, (paste->text + " ").c_str(), -1);
+        if (paste->imageId) {
+            GtkTextIter cursor;
+            p_gtk_text_buffer_get_iter_at_mark(buffer, &cursor, p_gtk_text_buffer_get_insert(buffer));
+            p_gtk_imhtml_insert_image_at_iter(reinterpret_cast<GtkIMHtml *>(entry), paste->imageId, &cursor);
+        }
+    }
+    if (paste->imageId)
+        purple_imgstore_unref_by_id(paste->imageId);
+    return FALSE;
+}
+
+void pasteIntoEntryLater(PurpleConversation *conv, const std::string &text, int imageId)
+{
+    g_idle_add(pasteIntoEntry, new EntryPaste{conv, text, imageId});
 }
 
 static gboolean pastingClipboard(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
@@ -872,7 +909,7 @@ static void connectPaste(gpointer plugin)
         g_pasteHook = p_g_signal_add_emission_hook(g_pasteSignal, 0, pastingClipboard, nullptr, nullptr);
     if (!g_pasteHook || !LOOK_UP(gtk_clipboard_wait_for_uris) || !LOOK_UP(g_signal_handler_find) ||
         !LOOK_UP(g_signal_handler_block) || !LOOK_UP(g_signal_handler_unblock) ||
-        !LOOK_UP(g_signal_stop_emission_by_name))
+        !LOOK_UP(g_signal_stop_emission_by_name) || !LOOK_UP(gtk_text_buffer_insert_at_cursor))
     {
         p_gtk_clipboard_wait_for_uris = nullptr;
         purple_debug_warning(config::pluginId, "Cannot paste files: some of GTK is not found\n");
@@ -1568,6 +1605,12 @@ bool readPidginClipboard(PurpleConversation *conv, ClipboardContent &content)
 
 void setFilesPastedHandler(FilesPastedHandler handler)
 {
+}
+
+void pasteIntoEntryLater(PurpleConversation *conv, const std::string &text, int imageId)
+{
+    if (imageId)
+        purple_imgstore_unref_by_id(imageId);
 }
 
 bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::string &text,

@@ -1,6 +1,7 @@
 #include "clipboard.h"
 #include "config.h"
 #include "format.h"
+#include "file-transfer.h"
 #include "translate.h"
 #include <purple.h>
 #include <string.h>
@@ -12,6 +13,91 @@
 #endif
 
 static const char XCLIP[] = "xclip";
+
+PastedAttachment::~PastedAttachment()
+{
+    if (temporary)
+        remove(path.c_str());
+}
+
+AttachmentKind guessAttachmentKind(const std::string &path)
+{
+    static const char *const photos[] = {"jpg", "jpeg", "png", "webp", "bmp"};
+    static const char *const videos[] = {"mp4", "m4v", "mov", "webm", "mkv", "avi"};
+    size_t dot = path.rfind('.');
+    if ((dot == std::string::npos) || (path.find('/', dot) != std::string::npos))
+        return AttachmentKind::Document;
+    gchar *extension = g_ascii_strdown(path.c_str() + dot + 1, -1);
+    AttachmentKind kind = AttachmentKind::Document;
+    for (const char *photo: photos)
+        if (!strcmp(extension, photo))
+            kind = AttachmentKind::Photo;
+    for (const char *video: videos)
+        if (!strcmp(extension, video))
+            kind = AttachmentKind::Video;
+    g_free(extension);
+    return kind;
+}
+
+static bool isTaken(const PastedAttachments &attachments, const std::string &placeholder)
+{
+    for (const PastedAttachment &attachment: attachments)
+        if (attachment.placeholder == placeholder)
+            return true;
+    return false;
+}
+
+// [Image#1] and on, or [name], [name#2] and on, whichever is not taken yet
+static std::string makePlaceholder(const PastedAttachments &attachments, AttachmentKind kind,
+                                   const std::string &name)
+{
+    std::string prefix = (kind == AttachmentKind::Photo) ? "Image" : (kind == AttachmentKind::Video) ? "Video" : name;
+    if ((kind == AttachmentKind::Document) && !isTaken(attachments, "[" + prefix + "]"))
+        return "[" + prefix + "]";
+    for (unsigned number = (kind == AttachmentKind::Document) ? 2 : 1;; number++) {
+        std::string placeholder = "[" + prefix + "#" + std::to_string(number) + "]";
+        if (!isTaken(attachments, placeholder))
+            return placeholder;
+    }
+}
+
+const std::string &addPastedFile(PastedAttachments &attachments, const std::string &path)
+{
+    for (const PastedAttachment &attachment: attachments)
+        if (!attachment.temporary && (attachment.path == path))
+            return attachment.placeholder;
+    AttachmentKind kind = guessAttachmentKind(path);
+    gchar         *name = g_path_get_basename(path.c_str());
+    attachments.emplace_back(makePlaceholder(attachments, kind, name), kind, path, false);
+    g_free(name);
+    return attachments.back().placeholder;
+}
+
+const std::string &addPastedPicture(PastedAttachments &attachments, int imageId)
+{
+    static const std::string none;
+    char *fileName = nullptr;
+    if (!saveImage(imageId, &fileName))
+        return none;
+    attachments.emplace_back(makePlaceholder(attachments, AttachmentKind::Photo, ""), AttachmentKind::Photo,
+                             fileName, true);
+    g_free(fileName);
+    return attachments.back().placeholder;
+}
+
+std::vector<std::string> addPasted(PastedAttachments &attachments, const ClipboardContent &content)
+{
+    std::vector<std::string> placeholders;
+    for (const std::string &file: content.files)
+        placeholders.push_back(addPastedFile(attachments, file));
+    if (content.imageId) {
+        const std::string &placeholder = addPastedPicture(attachments, content.imageId);
+        if (!placeholder.empty())
+            placeholders.push_back(placeholder);
+        purple_imgstore_unref_by_id(content.imageId);
+    }
+    return placeholders;
+}
 
 std::vector<std::string> getLocalPaths(char **uris)
 {

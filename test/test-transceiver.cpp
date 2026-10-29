@@ -280,6 +280,19 @@ static void compare(const object_ptr<InputMessageContent> &actual,
         case inputMessageDocument::ID:
             compare(static_cast<const inputMessageDocument &>(*actual), static_cast<const inputMessageDocument &>(*expected));
             break;
+        case inputMessageVideo::ID: {
+            const inputMessageVideo &actualVideo   = static_cast<const inputMessageVideo &>(*actual);
+            const inputMessageVideo &expectedVideo = static_cast<const inputMessageVideo &>(*expected);
+#if TDLIB_API_INPUT_PHOTO
+            ASSERT_EQ(expectedVideo.video_ != nullptr, actualVideo.video_ != nullptr);
+            if (actualVideo.video_)
+                compare(actualVideo.video_->video_, expectedVideo.video_->video_);
+#else
+            compare(actualVideo.video_, expectedVideo.video_);
+#endif
+            compare(actualVideo.caption_, expectedVideo.caption_);
+            break;
+        }
         default:
             ASSERT_TRUE(false) << "Unsupported input message content";
     }
@@ -1407,6 +1420,19 @@ object_ptr<inputMessageDocument> makeInputMessageDocument(object_ptr<InputFile> 
     document.document_                       = std::move(document_);
     document.thumbnail_                      = std::move(thumbnail_);
     document.disable_content_type_detection_ = disable_content_type_detection_;
+    result->caption_ = std::move(caption_);
+    return result;
+}
+
+object_ptr<inputMessageVideo> makeInputMessageVideo(object_ptr<InputFile> &&video_, object_ptr<formattedText> &&caption_)
+{
+    auto result = make_object<inputMessageVideo>();
+#if TDLIB_API_INPUT_PHOTO
+    result->video_ = make_object<inputVideo>();
+    result->video_->video_ = std::move(video_);
+#else
+    result->video_ = std::move(video_);
+#endif
     result->caption_ = std::move(caption_);
     return result;
 }

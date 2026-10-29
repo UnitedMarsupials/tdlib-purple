@@ -84,10 +84,13 @@ bool isEntryEditing(PurpleConversation *conv, MessageId messageId);
 // looked at, which only Pidgin's conversation can do
 bool readPidginClipboard(PurpleConversation *conv, ClipboardContent &content);
 
-// Told of files copied to the clipboard and pasted into a conversation's input field, in Pidgin,
-// which are not pasted there
-using FilesPastedHandler = void (*)(PurpleConversation *conv, const std::vector<std::string> &files);
+// Told of files copied to the clipboard and pasted into a conversation's input field, in Pidgin:
+// the field gets the placeholders it gives instead of the files' URIs
+using FilesPastedHandler = std::vector<std::string> (*)(PurpleConversation *conv, const std::vector<std::string> &files);
 void setFilesPastedHandler(FilesPastedHandler handler);
+// Once the main loop is idle, the text and the picture of the image store, if any, its reference
+// taken, go into the conversation's input field at the cursor
+void pasteIntoEntryLater(PurpleConversation *conv, const std::string &text, int imageId);
 
 // Writes the HTML into the tab as a line of its own, at its end, not logged
 void appendTabLine(PurpleConversation *conv, const std::string &html);
