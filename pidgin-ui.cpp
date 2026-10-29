@@ -552,8 +552,8 @@ static gboolean turnSpinner(gpointer data)
     p_gtk_text_buffer_get_iter_at_mark(imhtml->text_buffer, &from, spinner);
     p_gtk_text_buffer_get_iter_at_mark(imhtml->text_buffer, &to, end);
     p_gtk_imhtml_delete(imhtml, &from, &to);
-    p_gtk_text_buffer_get_iter_at_mark(imhtml->text_buffer, &from, spinner);
-    p_gtk_imhtml_insert_html_at_iter(imhtml, getSpinnerFrame(++progress->step), GTK_IMHTML_NO_SCROLL, &from);
+    // The end, which nothing written after the line moves, past the new frame
+    insertAtMark(imhtml, end, getSpinnerFrame(++progress->step));
     return G_SOURCE_CONTINUE;
 }
 
@@ -576,16 +576,17 @@ void startProgress(PurpleConversation *conv, const std::string &html)
     GtkTextBuffer *buffer = imhtml->text_buffer;
     GtkTextIter    where;
     p_gtk_text_buffer_get_end_iter(buffer, &where);
-    // Left gravity, so as to stay before what is inserted at it
-    p_gtk_text_buffer_create_mark(buffer, PROGRESS_START, &where, TRUE);
-    std::string line = (p_gtk_text_iter_get_offset(&where) ? "<br>" : "") +
-                       std::string("<font color=\"#777777\">") + html + " </font>";
+    gint        offset = p_gtk_text_iter_get_offset(&where);
+    std::string line   = (offset ? "<br>" : "") + std::string("<font color=\"#777777\">") + html + " </font>";
     p_gtk_imhtml_insert_html_at_iter(imhtml, line.c_str(), GtkIMHtmlOptions(0), &where);
+    // What is written at either end meanwhile stays outside: the start, set once the line is in, as
+    // its right gravity would have it go past; the end, with the spinner's frame left before it
+    p_gtk_text_buffer_get_iter_at_offset(buffer, &where, offset);
+    p_gtk_text_buffer_create_mark(buffer, PROGRESS_START, &where, FALSE);
     p_gtk_text_buffer_get_end_iter(buffer, &where);
     p_gtk_text_buffer_create_mark(buffer, PROGRESS_SPINNER, &where, TRUE);
-    p_gtk_imhtml_insert_html_at_iter(imhtml, getSpinnerFrame(0), GtkIMHtmlOptions(0), &where);
-    p_gtk_text_buffer_get_end_iter(buffer, &where);
-    p_gtk_text_buffer_create_mark(buffer, PROGRESS_END, &where, FALSE);
+    GtkTextMark *end = p_gtk_text_buffer_create_mark(buffer, PROGRESS_END, &where, TRUE);
+    insertAtMark(imhtml, end, getSpinnerFrame(0));
 
     Progress *progress = new Progress;
     progress->conv  = conv;
