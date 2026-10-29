@@ -1001,6 +1001,32 @@ static PurpleCmdRet hangupCommand(PurpleConversation *conv, const gchar *cmd, gc
         return PURPLE_CMD_RET_FAILED;
 }
 
+// Sent as albums of documents; false if the account is not connected
+static bool sendPastedFiles(PurpleConversation *conv, const std::vector<std::string> &files)
+{
+    PurpleAccount  *account  = purple_conversation_get_account(conv);
+    PurpleTdClient *tdClient = getTdClient(account);
+    if (!tdClient)
+        return false;
+    PurpleConnection         *gc = purple_account_get_connection(account);
+    std::vector<PurpleXfer *> uploads;
+    for (const std::string &file: files) {
+        if (purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_CHAT)
+            uploads.push_back(startFileUpload(gc, purple_conversation_get_title(conv), UploadData::Type::Chat,
+                                              purple_conv_chat_get_id(PURPLE_CONV_CHAT(conv)), file.c_str()));
+        else
+            uploads.push_back(startFileUpload(gc, purple_conversation_get_name(conv), UploadData::Type::User,
+                                              0, file.c_str()));
+    }
+    tdClient->sendFilesAsAlbums(uploads);
+    return true;
+}
+
+static void filesPasted(PurpleConversation *conv, const std::vector<std::string> &files)
+{
+    sendPastedFiles(conv, files);
+}
+
 // The files copied to the clipboard, sent as albums of documents, or else its picture, as a photo:
 // read by Pidgin, or by xclip where the front-end cannot read the clipboard itself
 static PurpleCmdRet pasteCommand(PurpleConversation *conv, const gchar *cmd, gchar **args, gchar **error, void *data)
@@ -1018,24 +1044,8 @@ static PurpleCmdRet pasteCommand(PurpleConversation *conv, const gchar *cmd, gch
         return PURPLE_CMD_RET_FAILED;
     }
 
-    PurpleAccount  *account  = purple_conversation_get_account(conv);
-    PurpleTdClient *tdClient = getTdClient(account);
-    if (!content.files.empty()) {
-        if (!tdClient)
-            return PURPLE_CMD_RET_FAILED;
-        PurpleConnection       *gc = purple_account_get_connection(account);
-        std::vector<PurpleXfer *> uploads;
-        for (const std::string &file: content.files) {
-            if (purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_CHAT)
-                uploads.push_back(startFileUpload(gc, purple_conversation_get_title(conv), UploadData::Type::Chat,
-                                                  purple_conv_chat_get_id(PURPLE_CONV_CHAT(conv)), file.c_str()));
-            else
-                uploads.push_back(startFileUpload(gc, purple_conversation_get_name(conv), UploadData::Type::User,
-                                                  0, file.c_str()));
-        }
-        tdClient->sendFilesAsAlbums(uploads);
-        return PURPLE_CMD_RET_OK;
-    }
+    if (!content.files.empty())
+        return sendPastedFiles(conv, content.files) ? PURPLE_CMD_RET_OK : PURPLE_CMD_RET_FAILED;
 
     int         id   = content.imageId;
     std::string html = "<img id=\"" + std::to_string(id) + "\">";
@@ -1276,6 +1286,7 @@ static void registerMessageLinks()
     // Not where messages go on to other clients, markup and all
     setLogMarkersEnabled(!canDisableReadReceipts());
     setMessagePopupHandler(messagePopupOpened);
+    setFilesPastedHandler(filesPasted);
     setBuddyMarkHandler(buddyMarked, UNREAD_REACTIONS_MARK);
     setTopReachedHandler(topReached);
 }

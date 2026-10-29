@@ -20,7 +20,8 @@ the conversion can be disabled in account settings, or even at compile time (see
 `/paste` in a conversation sends the files copied to the clipboard, as a file
 manager copies them, as documents, up to ten to a message; or else the picture
 on the clipboard, as a photo. Pidgin reads the clipboard itself, and Ctrl+V
-there puts a picture into the input field as well; other front-ends, such as
+there sends the files as well, a picture going into the input field instead;
+other front-ends, such as
 Finch, need [xclip](https://github.com/astrand/xclip) for it, found in `PATH`,
 which is not otherwise required.
 

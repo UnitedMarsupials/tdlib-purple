@@ -64,6 +64,10 @@ FRONT_END_FUNCTION(gtk_clipboard_wait_is_image_available);
 FRONT_END_FUNCTION(gtk_clipboard_wait_for_image);
 // For /paste of files, which then sends a picture only
 FRONT_END_FUNCTION(gtk_clipboard_wait_for_uris);
+FRONT_END_FUNCTION(g_signal_handler_find);
+FRONT_END_FUNCTION(g_signal_handler_block);
+FRONT_END_FUNCTION(g_signal_handler_unblock);
+FRONT_END_FUNCTION(g_signal_stop_emission_by_name);
 FRONT_END_FUNCTION(gdk_pixbuf_save_to_buffer);
 FRONT_END_FUNCTION(g_object_unref);
 FRONT_END_FUNCTION(gtk_imhtml_insert_image_at_iter);
@@ -418,7 +422,7 @@ static char *drawingBuddy(PurpleBuddy *buddy)
 static guint g_connectSource = 0;
 
 // Disconnected by libpurple when the plugin is unloaded
-static void connectPaste();
+static void connectPaste(gpointer plugin);
 static void connectPopup();
 static void connectScroll();
 
@@ -438,7 +442,7 @@ static gboolean connectSignals(gpointer plugin)
     if (!LOOK_UP(pidgin_blist_get_handle) ||
         !purple_signal_connect(p_pidgin_blist_get_handle(), "drawing-buddy", plugin, PURPLE_CALLBACK(drawingBuddy), NULL))
         purple_debug_warning(config::pluginId, "Cannot mark contacts in Pidgin's buddy list\n");
-    connectPaste();
+    connectPaste(plugin);
     connectPopup();
     connectScroll();
     return FALSE;
@@ -731,11 +735,96 @@ static int storeClipboardPicture(GtkWidget *widget)
     return id;
 }
 
+// Files copied to the clipboard are sent rather than pasted as their URIs, which Pidgin's handler of
+// the entry's "paste-clipboard" would do; an emission hook cannot stop the signal, so that handler
+// is blocked for the emission, and one of the plugin's, after it, unblocks it and stops the signal.
+struct PasteBlock {
+    gulong              ownHandler = 0;
+    std::vector<gulong> blocked;
+};
+static const char PASTE_BLOCK_KEY[] = "tdlib-purple-paste-block";
+static FilesPastedHandler g_filesPastedHandler = nullptr;
+
+void setFilesPastedHandler(FilesPastedHandler handler)
+{
+    g_filesPastedHandler = handler;
+}
+
+static void pasteBlocked(GtkWidget *entry, gpointer)
+{
+    PasteBlock *block = static_cast<PasteBlock *>(p_g_object_get_data(reinterpret_cast<GObject *>(entry),
+                                                                       PASTE_BLOCK_KEY));
+    if (!block || block->blocked.empty())
+        return;
+    for (gulong handler: block->blocked)
+        p_g_signal_handler_unblock(entry, handler);
+    block->blocked.clear();
+    p_g_signal_stop_emission_by_name(entry, "paste-clipboard");
+}
+
+static void deletePasteBlock(gpointer data)
+{
+    delete static_cast<PasteBlock *>(data);
+}
+
+static void watchPaste(PidginConversation *gtkconv)
+{
+    GtkWidget *entry = gtkconv ? gtkconv->entry : nullptr;
+    if (!entry || !g_pasteHook || !p_gtk_clipboard_wait_for_uris ||
+        p_g_object_get_data(reinterpret_cast<GObject *>(entry), PASTE_BLOCK_KEY))
+        return;
+    PurpleConversation *conv = gtkconv->active_conv;
+    if (!conv || strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId))
+        return;
+    PasteBlock *block = new PasteBlock;
+    block->ownHandler = p_g_signal_connect_data(entry, "paste-clipboard", G_CALLBACK(pasteBlocked), nullptr,
+                                                nullptr, GConnectFlags(0));
+    p_g_object_set_data_full(reinterpret_cast<GObject *>(entry), PASTE_BLOCK_KEY, block, deletePasteBlock);
+}
+
+static void unwatchPaste(GtkWidget *entry)
+{
+    PasteBlock *block = static_cast<PasteBlock *>(p_g_object_get_data(reinterpret_cast<GObject *>(entry),
+                                                                       PASTE_BLOCK_KEY));
+    if (!block)
+        return;
+    for (gulong handler: block->blocked)
+        p_g_signal_handler_unblock(entry, handler);
+    p_g_signal_handler_disconnect(entry, block->ownHandler);
+    p_g_object_set_data_full(reinterpret_cast<GObject *>(entry), PASTE_BLOCK_KEY, nullptr, nullptr);
+}
+
+// Sends the files copied, if any, the entry's other handlers kept from pasting them
+static bool pasteFiles(GtkWidget *entry, PurpleConversation *conv)
+{
+    PasteBlock *block = static_cast<PasteBlock *>(p_g_object_get_data(reinterpret_cast<GObject *>(entry),
+                                                                       PASTE_BLOCK_KEY));
+    GtkClipboard *clipboard = p_gtk_widget_get_clipboard(entry, GDK_SELECTION_CLIPBOARD);
+    if (!block || !clipboard || !g_filesPastedHandler)
+        return false;
+    gchar **uris = p_gtk_clipboard_wait_for_uris(clipboard);
+    std::vector<std::string> files = getLocalPaths(uris);
+    g_strfreev(uris);
+    if (files.empty())
+        return false;
+
+    p_g_signal_handler_block(entry, block->ownHandler);
+    while (gulong handler = p_g_signal_handler_find(entry, GSignalMatchType(G_SIGNAL_MATCH_ID | G_SIGNAL_MATCH_UNBLOCKED),
+                                                    g_pasteSignal, 0, nullptr, nullptr, nullptr)) {
+        p_g_signal_handler_block(entry, handler);
+        block->blocked.push_back(handler);
+    }
+    p_g_signal_handler_unblock(entry, block->ownHandler);
+    g_filesPastedHandler(conv, files);
+    return true;
+}
+
 static gboolean pastingClipboard(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
 {
     gpointer   instance = paramCount ? p_g_value_get_object(&params[0]) : nullptr;
     GtkWidget *entry    = static_cast<GtkWidget *>(instance);
-    if (!entry || !findEntryConversation(entry))
+    PurpleConversation *conv = entry ? findEntryConversation(entry) : nullptr;
+    if (!conv || pasteFiles(entry, conv))
         return TRUE;
     int id = storeClipboardPicture(entry);
     if (id) {
@@ -766,7 +855,7 @@ bool readPidginClipboard(PurpleConversation *conv, ClipboardContent &content)
     return true;
 }
 
-static void connectPaste()
+static void connectPaste(gpointer plugin)
 {
     if (!LOOK_UP(gtk_imhtml_get_type) || !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
         !LOOK_UP(g_signal_remove_emission_hook) || !LOOK_UP(g_value_get_object) ||
@@ -778,16 +867,36 @@ static void connectPaste()
         purple_debug_warning(config::pluginId, "Cannot paste pictures: some of GTK is not found\n");
         return;
     }
-    LOOK_UP(gtk_clipboard_wait_for_uris);
     g_pasteSignal = p_g_signal_lookup("paste-clipboard", p_gtk_imhtml_get_type());
     if (g_pasteSignal)
         g_pasteHook = p_g_signal_add_emission_hook(g_pasteSignal, 0, pastingClipboard, nullptr, nullptr);
+    if (!g_pasteHook || !LOOK_UP(gtk_clipboard_wait_for_uris) || !LOOK_UP(g_signal_handler_find) ||
+        !LOOK_UP(g_signal_handler_block) || !LOOK_UP(g_signal_handler_unblock) ||
+        !LOOK_UP(g_signal_stop_emission_by_name))
+    {
+        p_gtk_clipboard_wait_for_uris = nullptr;
+        purple_debug_warning(config::pluginId, "Cannot paste files: some of GTK is not found\n");
+        return;
+    }
+    purple_signal_connect(p_pidgin_conversations_get_handle(), "conversation-displayed", plugin,
+                          PURPLE_CALLBACK(watchPaste), NULL);
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
+        if (getIMHtml(conv))
+            watchPaste(PIDGIN_CONVERSATION(conv));
+    }
 }
 
 static void disconnectPaste()
 {
-    if (g_pasteHook)
+    if (g_pasteHook) {
         p_g_signal_remove_emission_hook(g_pasteSignal, g_pasteHook);
+        for (GList *item = purple_get_conversations(); item; item = item->next) {
+            GtkWidget *entry = getEntry(static_cast<PurpleConversation *>(item->data));
+            if (entry)
+                unwatchPaste(entry);
+        }
+    }
     g_pasteHook = 0;
 }
 
@@ -1455,6 +1564,10 @@ void showMessageReactions(PurpleConversation *conv, MessageId messageId, const s
 bool readPidginClipboard(PurpleConversation *conv, ClipboardContent &content)
 {
     return false;
+}
+
+void setFilesPastedHandler(FilesPastedHandler handler)
+{
 }
 
 bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::string &text,
