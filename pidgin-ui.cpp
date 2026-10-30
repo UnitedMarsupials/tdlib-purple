@@ -69,6 +69,17 @@ FRONT_END_FUNCTION(g_signal_handler_block);
 FRONT_END_FUNCTION(g_signal_handler_unblock);
 FRONT_END_FUNCTION(g_signal_stop_emission_by_name);
 FRONT_END_FUNCTION(gtk_text_buffer_insert_at_cursor);
+// For drops
+FRONT_END_FUNCTION(g_value_get_uint);
+FRONT_END_FUNCTION(gdk_atom_intern);
+FRONT_END_FUNCTION(gtk_drag_finish);
+FRONT_END_FUNCTION(gtk_drag_dest_find_target);
+FRONT_END_FUNCTION(gdk_drag_status);
+FRONT_END_FUNCTION(gtk_drag_get_data);
+FRONT_END_FUNCTION(gdk_pixbuf_loader_new);
+FRONT_END_FUNCTION(gdk_pixbuf_loader_write);
+FRONT_END_FUNCTION(gdk_pixbuf_loader_close);
+FRONT_END_FUNCTION(gdk_pixbuf_loader_get_pixbuf);
 FRONT_END_FUNCTION(gdk_pixbuf_save_to_buffer);
 FRONT_END_FUNCTION(g_object_unref);
 FRONT_END_FUNCTION(gtk_imhtml_insert_image_at_iter);
@@ -736,89 +747,108 @@ static int storeClipboardPicture(GtkWidget *widget)
     return id;
 }
 
-// Files copied to the clipboard are pasted as placeholders, rather than as their URIs, which Pidgin's handler of
-// the entry's "paste-clipboard" would do; an emission hook cannot stop the signal, so that handler
-// is blocked for the emission, and one of the plugin's, after it, unblocks it and stops the signal.
-struct PasteBlock {
+// What is pasted or dropped into a Telegram conversation is attached to the message being written,
+// rather than taken as text, as Pidgin's handlers, or GtkTextView's, would take files' URIs. An
+// emission hook cannot stop a signal, so the widget's handlers are blocked for the emission, and one
+// of the plugin's, connected after them, unblocks them and stops the signal.
+struct Takeover {
+    GtkWidget          *widget;
+    guint               signal;
+    const char         *name;
     gulong              ownHandler = 0;
     std::vector<gulong> blocked;
 };
-static const char PASTE_BLOCK_KEY[] = "tdlib-purple-paste-block";
 static FilesPastedHandler g_filesPastedHandler = nullptr;
+static guint              g_dropSignal         = 0;
+static gulong             g_dropHook           = 0;
 
 void setFilesPastedHandler(FilesPastedHandler handler)
 {
     g_filesPastedHandler = handler;
 }
 
-static void pasteBlocked(GtkWidget *entry, gpointer)
+static std::string getTakeoverKey(const char *name)
 {
-    PasteBlock *block = static_cast<PasteBlock *>(p_g_object_get_data(reinterpret_cast<GObject *>(entry),
-                                                                       PASTE_BLOCK_KEY));
-    if (!block || block->blocked.empty())
-        return;
-    for (gulong handler: block->blocked)
-        p_g_signal_handler_unblock(entry, handler);
-    block->blocked.clear();
-    p_g_signal_stop_emission_by_name(entry, "paste-clipboard");
+    return std::string("tdlib-purple-takeover-") + name;
 }
 
-static void deletePasteBlock(gpointer data)
+// Connected swapped, its other arguments, which differ between signals, ignored
+static void takenOver(Takeover *takeover)
 {
-    delete static_cast<PasteBlock *>(data);
+    if (takeover->blocked.empty())
+        return;
+    for (gulong handler: takeover->blocked)
+        p_g_signal_handler_unblock(takeover->widget, handler);
+    takeover->blocked.clear();
+    p_g_signal_stop_emission_by_name(takeover->widget, takeover->name);
 }
 
-static void watchPaste(PidginConversation *gtkconv)
+static void deleteTakeover(gpointer data)
 {
-    GtkWidget *entry = gtkconv ? gtkconv->entry : nullptr;
-    if (!entry || !g_pasteHook || !p_gtk_clipboard_wait_for_uris ||
-        p_g_object_get_data(reinterpret_cast<GObject *>(entry), PASTE_BLOCK_KEY))
-        return;
-    PurpleConversation *conv = gtkconv->active_conv;
-    if (!conv || strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId))
-        return;
-    PasteBlock *block = new PasteBlock;
-    block->ownHandler = p_g_signal_connect_data(entry, "paste-clipboard", G_CALLBACK(pasteBlocked), nullptr,
-                                                nullptr, GConnectFlags(0));
-    p_g_object_set_data_full(reinterpret_cast<GObject *>(entry), PASTE_BLOCK_KEY, block, deletePasteBlock);
+    delete static_cast<Takeover *>(data);
 }
 
-static void unwatchPaste(GtkWidget *entry)
+static void watchSignal(GtkWidget *widget, guint signal, const char *name)
 {
-    PasteBlock *block = static_cast<PasteBlock *>(p_g_object_get_data(reinterpret_cast<GObject *>(entry),
-                                                                       PASTE_BLOCK_KEY));
-    if (!block)
+    std::string key = getTakeoverKey(name);
+    if (p_g_object_get_data(reinterpret_cast<GObject *>(widget), key.c_str()))
         return;
-    for (gulong handler: block->blocked)
-        p_g_signal_handler_unblock(entry, handler);
-    p_g_signal_handler_disconnect(entry, block->ownHandler);
-    p_g_object_set_data_full(reinterpret_cast<GObject *>(entry), PASTE_BLOCK_KEY, nullptr, nullptr);
+    Takeover *takeover   = new Takeover{widget, signal, name};
+    takeover->ownHandler = p_g_signal_connect_data(widget, name, G_CALLBACK(takenOver), takeover, nullptr,
+                                                   G_CONNECT_SWAPPED);
+    p_g_object_set_data_full(reinterpret_cast<GObject *>(widget), key.c_str(), takeover, deleteTakeover);
 }
 
-// Pastes the placeholders of the files copied, if any, the entry's other handlers kept from pasting them
+static void unwatchSignal(GtkWidget *widget, const char *name)
+{
+    std::string key      = getTakeoverKey(name);
+    Takeover   *takeover = static_cast<Takeover *>(p_g_object_get_data(reinterpret_cast<GObject *>(widget),
+                                                                       key.c_str()));
+    if (!takeover)
+        return;
+    for (gulong handler: takeover->blocked)
+        p_g_signal_handler_unblock(widget, handler);
+    p_g_signal_handler_disconnect(widget, takeover->ownHandler);
+    p_g_object_set_data_full(reinterpret_cast<GObject *>(widget), key.c_str(), nullptr, nullptr);
+}
+
+// The emission under way is the plugin's from here on; false if the widget is not watched for it
+static bool takeOver(GtkWidget *widget, const char *name)
+{
+    std::string key      = getTakeoverKey(name);
+    Takeover   *takeover = static_cast<Takeover *>(p_g_object_get_data(reinterpret_cast<GObject *>(widget),
+                                                                       key.c_str()));
+    if (!takeover)
+        return false;
+    p_g_signal_handler_block(widget, takeover->ownHandler);
+    while (gulong handler = p_g_signal_handler_find(widget, GSignalMatchType(G_SIGNAL_MATCH_ID | G_SIGNAL_MATCH_UNBLOCKED),
+                                                    takeover->signal, 0, nullptr, nullptr, nullptr)) {
+        p_g_signal_handler_block(widget, handler);
+        takeover->blocked.push_back(handler);
+    }
+    p_g_signal_handler_unblock(widget, takeover->ownHandler);
+    return true;
+}
+
+static void insertPlaceholders(GtkWidget *entry, PurpleConversation *conv, const std::vector<std::string> &files)
+{
+    for (const std::string &placeholder: g_filesPastedHandler(conv, files))
+        p_gtk_text_buffer_insert_at_cursor(reinterpret_cast<GtkIMHtml *>(entry)->text_buffer,
+                                           (placeholder + " ").c_str(), -1);
+}
+
+// Pastes the placeholders of the files copied, if any
 static bool pasteFiles(GtkWidget *entry, PurpleConversation *conv)
 {
-    PasteBlock *block = static_cast<PasteBlock *>(p_g_object_get_data(reinterpret_cast<GObject *>(entry),
-                                                                       PASTE_BLOCK_KEY));
     GtkClipboard *clipboard = p_gtk_widget_get_clipboard(entry, GDK_SELECTION_CLIPBOARD);
-    if (!block || !clipboard || !g_filesPastedHandler)
+    if (!clipboard || !g_filesPastedHandler)
         return false;
     gchar **uris = p_gtk_clipboard_wait_for_uris(clipboard);
     std::vector<std::string> files = getLocalPaths(uris);
     g_strfreev(uris);
-    if (files.empty())
+    if (files.empty() || !takeOver(entry, "paste-clipboard"))
         return false;
-
-    p_g_signal_handler_block(entry, block->ownHandler);
-    while (gulong handler = p_g_signal_handler_find(entry, GSignalMatchType(G_SIGNAL_MATCH_ID | G_SIGNAL_MATCH_UNBLOCKED),
-                                                    g_pasteSignal, 0, nullptr, nullptr, nullptr)) {
-        p_g_signal_handler_block(entry, handler);
-        block->blocked.push_back(handler);
-    }
-    p_g_signal_handler_unblock(entry, block->ownHandler);
-    for (const std::string &placeholder: g_filesPastedHandler(conv, files))
-        p_gtk_text_buffer_insert_at_cursor(reinterpret_cast<GtkIMHtml *>(entry)->text_buffer,
-                                           (placeholder + " ").c_str(), -1);
+    insertPlaceholders(entry, conv, files);
     return true;
 }
 
@@ -892,6 +922,164 @@ bool readPidginClipboard(PurpleConversation *conv, ClipboardContent &content)
     return true;
 }
 
+// Telegram takes no bigger photo
+enum { MAX_FETCHED_PICTURE = 10 * 1024 * 1024 };
+
+struct PictureFetch {
+    PurpleConversation *conv;
+    std::string         url;
+};
+
+static bool isPicture(const guchar *data, gsize length)
+{
+    GdkPixbufLoader *loader = p_gdk_pixbuf_loader_new();
+    bool picture = p_gdk_pixbuf_loader_write(loader, data, length, nullptr) &&
+                   p_gdk_pixbuf_loader_close(loader, nullptr) && p_gdk_pixbuf_loader_get_pixbuf(loader);
+    if (!picture)
+        p_gdk_pixbuf_loader_close(loader, nullptr);
+    p_g_object_unref(loader);
+    return picture;
+}
+
+// A picture goes into the input field, anything else as its link
+static void pictureFetched(PurpleUtilFetchUrlData *, gpointer data, const gchar *content, gsize length,
+                           const gchar *error)
+{
+    std::unique_ptr<PictureFetch> fetch(static_cast<PictureFetch *>(data));
+    if (content && length && isPicture(reinterpret_cast<const guchar *>(content), length)) {
+        gchar *name = g_path_get_basename(fetch->url.c_str());
+        // The store takes the copy
+        gpointer copy = g_malloc(length);
+        memcpy(copy, content, length);
+        int id = purple_imgstore_add_with_id(copy, length, name);
+        g_free(name);
+        pasteIntoEntry(new EntryPaste{fetch->conv, "", id});
+    } else {
+        purple_debug_misc(config::pluginId, "Dropped %s, not a picture: %s\n", fetch->url.c_str(),
+                          error ? error : "other content");
+        pasteIntoEntry(new EntryPaste{fetch->conv, fetch->url, 0});
+    }
+}
+
+static PurpleConversation *findWidgetConversation(GtkWidget *widget)
+{
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
+        if (!strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId) &&
+            getIMHtml(conv) && ((getEntry(conv) == widget) || (reinterpret_cast<GtkWidget *>(getIMHtml(conv)) == widget)))
+            return conv;
+    }
+    return nullptr;
+}
+
+// Files dropped get their placeholders in the input field, and pictures dropped from elsewhere,
+// such as a browser, as links, are fetched to go there
+static gboolean droppingData(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
+{
+    if (paramCount < 7)
+        return TRUE;
+    GtkWidget          *widget = static_cast<GtkWidget *>(p_g_value_get_object(&params[0]));
+    PurpleConversation *conv   = widget ? findWidgetConversation(widget) : nullptr;
+    GtkSelectionData   *data   = static_cast<GtkSelectionData *>(p_g_value_get_boxed(&params[4]));
+    if (!conv || !data || (data->length <= 0) || !g_filesPastedHandler ||
+        (data->target != p_gdk_atom_intern("text/uri-list", FALSE)))
+        return TRUE;
+
+    std::string              list(reinterpret_cast<const char *>(data->data), data->length);
+    gchar                  **uris = g_uri_list_extract_uris(list.c_str());
+    std::vector<std::string> files = getLocalPaths(uris);
+    std::vector<std::string> urls;
+    for (gchar **uri = uris; uri && *uri; uri++)
+        if (g_str_has_prefix(*uri, "http://") || g_str_has_prefix(*uri, "https://"))
+            urls.push_back(*uri);
+    g_strfreev(uris);
+    if ((files.empty() && urls.empty()) || !takeOver(widget, "drag-data-received"))
+        return TRUE;
+
+    p_gtk_drag_finish(static_cast<GdkDragContext *>(p_g_value_get_object(&params[1])), TRUE, FALSE,
+                      p_g_value_get_uint(&params[6]));
+    GtkWidget *entry = getEntry(conv);
+    if (!files.empty())
+        insertPlaceholders(entry, conv, files);
+    for (const std::string &url: urls) {
+        purple_debug_misc(config::pluginId, "Fetching %s, dropped\n", url.c_str());
+        PictureFetch *fetch = new PictureFetch{conv, url};
+        purple_util_fetch_url_len(url.c_str(), TRUE, nullptr, TRUE, MAX_FETCHED_PICTURE, pictureFetched, fetch);
+    }
+    p_gtk_widget_grab_focus(entry);
+    return TRUE;
+}
+
+// The tab's text, not editable, takes no drop of its own accord: links and files it does take, as
+// the input field does
+static gboolean draggingOverText(GtkWidget *widget, GdkDragContext *context, gint, gint, guint time, gpointer)
+{
+    if (p_gtk_drag_dest_find_target(widget, context, nullptr) != p_gdk_atom_intern("text/uri-list", FALSE))
+        return FALSE;
+    p_gdk_drag_status(context, GDK_ACTION_COPY, time);
+    return TRUE;
+}
+
+static gboolean droppingOnText(GtkWidget *widget, GdkDragContext *context, gint, gint, guint time, gpointer)
+{
+    GdkAtom target = p_gdk_atom_intern("text/uri-list", FALSE);
+    if (p_gtk_drag_dest_find_target(widget, context, nullptr) != target)
+        return FALSE;
+    p_gtk_drag_get_data(widget, context, target, time);
+    return TRUE;
+}
+
+static const char TEXT_DROP_KEY[] = "tdlib-purple-text-drop";
+
+struct TextDrop {
+    gulong motion;
+    gulong drop;
+};
+
+static void deleteTextDrop(gpointer data)
+{
+    delete static_cast<TextDrop *>(data);
+}
+
+static void watchConversation(PidginConversation *gtkconv)
+{
+    PurpleConversation *conv = gtkconv ? gtkconv->active_conv : nullptr;
+    if (!conv || !gtkconv->entry || !gtkconv->imhtml || !g_pasteHook || !p_gtk_clipboard_wait_for_uris ||
+        strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId))
+        return;
+    watchSignal(gtkconv->entry, g_pasteSignal, "paste-clipboard");
+    if (!g_dropHook)
+        return;
+    watchSignal(gtkconv->entry, g_dropSignal, "drag-data-received");
+    watchSignal(gtkconv->imhtml, g_dropSignal, "drag-data-received");
+    if (!p_g_object_get_data(reinterpret_cast<GObject *>(gtkconv->imhtml), TEXT_DROP_KEY)) {
+        TextDrop *drop = new TextDrop;
+        drop->motion   = p_g_signal_connect_data(gtkconv->imhtml, "drag-motion", G_CALLBACK(draggingOverText),
+                                                 nullptr, nullptr, GConnectFlags(0));
+        drop->drop     = p_g_signal_connect_data(gtkconv->imhtml, "drag-drop", G_CALLBACK(droppingOnText),
+                                                 nullptr, nullptr, GConnectFlags(0));
+        p_g_object_set_data_full(reinterpret_cast<GObject *>(gtkconv->imhtml), TEXT_DROP_KEY, drop,
+                                 deleteTextDrop);
+    }
+}
+
+static void unwatchConversation(PurpleConversation *conv)
+{
+    GtkWidget *entry  = getEntry(conv);
+    GtkWidget *imhtml = entry ? reinterpret_cast<GtkWidget *>(getIMHtml(conv)) : nullptr;
+    if (!entry)
+        return;
+    unwatchSignal(entry, "paste-clipboard");
+    unwatchSignal(entry, "drag-data-received");
+    unwatchSignal(imhtml, "drag-data-received");
+    TextDrop *drop = static_cast<TextDrop *>(p_g_object_get_data(reinterpret_cast<GObject *>(imhtml), TEXT_DROP_KEY));
+    if (drop) {
+        p_g_signal_handler_disconnect(imhtml, drop->motion);
+        p_g_signal_handler_disconnect(imhtml, drop->drop);
+        p_g_object_set_data_full(reinterpret_cast<GObject *>(imhtml), TEXT_DROP_KEY, nullptr, nullptr);
+    }
+}
+
 static void connectPaste(gpointer plugin)
 {
     if (!LOOK_UP(gtk_imhtml_get_type) || !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
@@ -915,26 +1103,38 @@ static void connectPaste(gpointer plugin)
         purple_debug_warning(config::pluginId, "Cannot paste files: some of GTK is not found\n");
         return;
     }
+    if (LOOK_UP(gtk_widget_get_type) && LOOK_UP(g_value_get_boxed) && LOOK_UP(g_value_get_uint) &&
+        LOOK_UP(gdk_atom_intern) && LOOK_UP(gtk_drag_finish) && LOOK_UP(gtk_drag_dest_find_target) &&
+        LOOK_UP(gdk_drag_status) && LOOK_UP(gtk_drag_get_data) && LOOK_UP(gdk_pixbuf_loader_new) &&
+        LOOK_UP(gdk_pixbuf_loader_write) && LOOK_UP(gdk_pixbuf_loader_close) &&
+        LOOK_UP(gdk_pixbuf_loader_get_pixbuf))
+    {
+        g_dropSignal = p_g_signal_lookup("drag-data-received", p_gtk_widget_get_type());
+        if (g_dropSignal)
+            g_dropHook = p_g_signal_add_emission_hook(g_dropSignal, 0, droppingData, nullptr, nullptr);
+    }
+    if (!g_dropHook)
+        purple_debug_warning(config::pluginId, "Cannot take drops: some of GTK is not found\n");
     purple_signal_connect(p_pidgin_conversations_get_handle(), "conversation-displayed", plugin,
-                          PURPLE_CALLBACK(watchPaste), NULL);
+                          PURPLE_CALLBACK(watchConversation), NULL);
     for (GList *item = purple_get_conversations(); item; item = item->next) {
         PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
         if (getIMHtml(conv))
-            watchPaste(PIDGIN_CONVERSATION(conv));
+            watchConversation(PIDGIN_CONVERSATION(conv));
     }
 }
 
 static void disconnectPaste()
 {
+    if (g_dropHook)
+        p_g_signal_remove_emission_hook(g_dropSignal, g_dropHook);
     if (g_pasteHook) {
         p_g_signal_remove_emission_hook(g_pasteSignal, g_pasteHook);
-        for (GList *item = purple_get_conversations(); item; item = item->next) {
-            GtkWidget *entry = getEntry(static_cast<PurpleConversation *>(item->data));
-            if (entry)
-                unwatchPaste(entry);
-        }
+        for (GList *item = purple_get_conversations(); item; item = item->next)
+            unwatchConversation(static_cast<PurpleConversation *>(item->data));
     }
     g_pasteHook = 0;
+    g_dropHook  = 0;
 }
 
 static void setEntryText(GtkWidget *entry, const char *html)

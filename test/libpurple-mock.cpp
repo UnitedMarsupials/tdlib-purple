@@ -702,14 +702,15 @@ void purple_conv_chat_write(PurpleConvChat *chat, const char *who,
     purple_conversation_write(purple_conv_chat_get_conversation(chat), who, message, flags, mtime);
 }
 
-// Only /paste sends this way, which the tests do not try
-void purple_conv_im_send(PurpleConvIm *im, const char *message)
+// Only what is dropped into Pidgin's conversations is fetched, which the tests do not do
+PurpleUtilFetchUrlData *purple_util_fetch_url_request_len(const gchar *url, gboolean full, const gchar *user_agent,
+                                                          gboolean http11, const gchar *request,
+                                                          gboolean include_headers, gssize max_len,
+                                                          PurpleUtilFetchUrlCallback callback, void *data)
 {
+    return NULL;
 }
 
-void purple_conv_chat_send(PurpleConvChat *chat, const char *message)
-{
-}
 
 void purple_conv_chat_set_topic(PurpleConvChat *chat, const char *who,
 							  const char *topic)

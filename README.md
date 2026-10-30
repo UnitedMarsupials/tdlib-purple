@@ -25,7 +25,9 @@ after it being its caption; several in a row go as an album, pictures and
 videos together, documents apart, up to ten in one.
 
 In Pidgin, pasting into a conversation's input field puts a picture there, and
-the files' placeholders. `/paste` does the same everywhere: other front-ends,
+the files' placeholders; so does dropping files onto the conversation, its
+input field or the messages above it, and a picture dropped from a browser is
+fetched to go there, anything else dropped as a link going in as its address. `/paste` does the same everywhere: other front-ends,
 such as Finch, cannot take a picture into their input line, so it says the
 placeholders, to be written into the message where they go. The clipboard is
 read there with [xclip](https://github.com/astrand/xclip), found in `PATH`,
