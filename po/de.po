@@ -1567,6 +1567,28 @@ msgstr "Aus der Nachricht entfernen"
 msgid "The message is not sent: {0} is gone from {1}."
 msgstr "Die Nachricht wird nicht gesendet: {0} ist nicht mehr in {1}."
 
+#. TRANSLATOR: In-chat notification, after an edit Telegram does not allow was sent. The argument is why.
+#, c++-format
+msgid "The message is left as it was: {}"
+msgstr "Die Nachricht bleibt, wie sie war: {}"
+
+#. TRANSLATOR: In-chat notification, after "The message is left as it was:", when a placeholder of something pasted was put into a message of text being edited.
+msgid "Telegram adds no picture, video or file to a message of text."
+msgstr "Telegram fügt einer Textnachricht kein Bild, Video und keine Datei hinzu."
+
+#. TRANSLATOR: In-chat notification, after "The message is left as it was:", when the placeholder of a message's picture, video or file was taken out as it was edited.
+msgid "Telegram takes no picture, video or file out of a message; it can be replaced, or the message deleted."
+msgstr "Telegram entfernt kein Bild, Video und keine Datei aus einer Nachricht; es lässt sich ersetzen, oder die Nachricht löschen."
+
+#. TRANSLATOR: In-chat notification, after "The message is left as it was:", when placeholders of more than one thing were put into a message with a picture, video or file being edited.
+msgid "A message holds one picture, video or file, which can be replaced, but no more."
+msgstr "Eine Nachricht enthält ein Bild, Video oder eine Datei, das sich ersetzen lässt, aber nicht mehr."
+
+#. TRANSLATOR: In-chat notification, after "The message is left as it was:". The arguments are a pasted file's placeholder, such as [report.pdf#3], and where the file was.
+#, c++-format
+msgid "{0} is gone from {1}."
+msgstr "{0} ist nicht mehr in {1}."
+
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091
 msgid "Needs Telegram Premium"

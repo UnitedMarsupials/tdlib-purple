@@ -34,6 +34,13 @@ the time the message is sent keeps the message from being sent. In Pidgin,
 right-clicking a placeholder in the input field offers to send it the other
 way, or to take it out of the message.
 
+A message's picture, video or file, edited, goes by a placeholder too, before
+its caption: kept, only the caption changes; another placeholder put in its
+place, or the same one written as a file, or under another name, replaces it,
+as far as Telegram allows (in an album, a photo or video only by a photo or
+video, a file by a file). Telegram takes nothing out of a message, nor puts
+more into it, and such an edit is refused.
+
 In Pidgin, pasting into a conversation's input field puts a picture there, and
 the files' placeholders; so does dropping files onto the conversation, its
 input field or the messages above it, and a picture dropped from a browser is

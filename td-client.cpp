@@ -1024,6 +1024,68 @@ static constexpr unsigned REACTION_MENU_COLUMNS = 8;
 // Stands for the paid reaction, which has no emoji of its own
 static const char PAID_REACTION[] = "⭐";
 
+// The file of a message with a caption, the largest of a photo's, by what it goes as when replaced
+static void getMessageMedia(const td::td_api::message &message, SentMedia &media)
+{
+    const td::td_api::file *file = nullptr;
+    switch (message.content_ ? message.content_->get_id() : 0) {
+    case td::td_api::messagePhoto::ID: {
+        const auto &photo = static_cast<const td::td_api::messagePhoto &>(*message.content_).photo_;
+        if (photo && !photo->sizes_.empty() && photo->sizes_.back())
+            file = photo->sizes_.back()->photo_.get();
+        media.kind     = AttachmentKind::Photo;
+        media.mimeType = "image/jpeg";
+        break;
+    }
+    case td::td_api::messageVideo::ID: {
+        const auto &video = static_cast<const td::td_api::messageVideo &>(*message.content_).video_;
+        if (video) {
+            file = video->video_.get();
+            media.name     = video->file_name_;
+            media.mimeType = video->mime_type_;
+        }
+        media.kind = AttachmentKind::Video;
+        break;
+    }
+    case td::td_api::messageAnimation::ID: {
+        const auto &animation = static_cast<const td::td_api::messageAnimation &>(*message.content_).animation_;
+        if (animation) {
+            file = animation->animation_.get();
+            media.name     = animation->file_name_;
+            media.mimeType = animation->mime_type_;
+        }
+        media.kind = AttachmentKind::Video;
+        break;
+    }
+    case td::td_api::messageDocument::ID: {
+        const auto &document = static_cast<const td::td_api::messageDocument &>(*message.content_).document_;
+        if (document) {
+            file = document->document_.get();
+            media.name     = document->file_name_;
+            media.mimeType = document->mime_type_;
+        }
+        break;
+    }
+    case td::td_api::messageAudio::ID: {
+        const auto &audio = static_cast<const td::td_api::messageAudio &>(*message.content_).audio_;
+        if (audio) {
+            file = audio->audio_.get();
+            media.name     = audio->file_name_;
+            media.mimeType = audio->mime_type_;
+        }
+        break;
+    }
+    default:
+        return;
+    }
+    if (!file)
+        return;
+    media.present = true;
+    media.fileId  = file->id_;
+    if (file->local_ && file->local_->is_downloading_completed_)
+        media.path = file->local_->path_;
+}
+
 // The text a message's editing changes: its text, or a caption, if it can have one
 static const td::td_api::formattedText *getEditableText(const td::td_api::message &message, bool &isCaption)
 {
@@ -1094,6 +1156,8 @@ void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId, OpenMen
             menu.html = getMessageText(*text, nullptr, true);
         } else
             menu.isCaption = false;
+        if (menu.isCaption)
+            getMessageMedia(message, menu.media);
         menu.date = message.date_;
         if (!message.is_outgoing_)
             menu.sender = getSenderUserId(message);
@@ -1269,10 +1333,10 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
         // TRANSLATOR: Item of a message's menu; it opens a dialog.
         item.label  = _("Edit…");
         item.action = [accountName, chatId, messageId, text = menu.text, html = menu.html,
-                       isCaption = menu.isCaption, date = menu.date]() {
+                       isCaption = menu.isCaption, date = menu.date, media = menu.media]() {
             PurpleTdClient *client = findConnected(accountName.c_str());
             if (client)
-                client->askEditMessage(chatId, messageId, text, html, isCaption, date);
+                client->askEditMessage(chatId, messageId, text, html, isCaption, date, media);
         };
         items.push_back(std::move(item));
     }
@@ -1443,13 +1507,30 @@ struct MessageRequest {
     std::string accountName;
     ChatId      chatId;
     MessageId   messageId;
-    bool        flag; // a caption to edit; deleting for everyone
+    bool        flag;      // a caption to edit; deleting for everyone
+    unsigned    media = 0; // the number the media of a message edited goes by
 };
 }
 
-void PurpleTdClient::askEditMessage(ChatId chatId, MessageId messageId, const std::string &text,
-                                    const std::string &html, bool isCaption, time_t date)
+void PurpleTdClient::askEditMessage(ChatId chatId, MessageId messageId, const std::string &plainText,
+                                    const std::string &captionHtml, bool isCaption, time_t date,
+                                    const SentMedia &media)
 {
+    // The media goes by a placeholder, as pasted things do, before the caption: another put in its
+    // place replaces it
+    std::string text = plainText;
+    std::string html = captionHtml;
+    unsigned    number = 0;
+    if (media.present) {
+        const PastedAttachment &sent = addSentMedia(m_data.pastedAttachments, messageId.value(), media.fileId,
+                                                    media.kind, media.path, media.name, media.mimeType);
+        number = sent.number;
+        gchar *escaped = g_markup_escape_text(sent.placeholder().c_str(), -1);
+        text = sent.placeholder() + (text.empty() ? "" : " ") + text;
+        html = escaped + std::string(html.empty() ? "" : " ") + html;
+        g_free(escaped);
+    }
+
     // In Pidgin, in the conversation's input field, the next message sent being the edit
     const td::td_api::chat *chat = m_data.getChat(chatId);
     PurpleConversation     *conv = chat ? getMessageConversation(m_data, *chat) : nullptr;
@@ -1463,19 +1544,23 @@ void PurpleTdClient::askEditMessage(ChatId chatId, MessageId messageId, const st
     // TRANSLATOR: In-chat notification, not logged, until the edit ends. Argument is the time (or date and time) the message was sent at, as the conversation window shows it. "/cancel" must remain verbatim!
     std::string notice = formatMessage(_("Editing the message from {}: send it to save the change; Esc or /cancel leaves it as it was."),
                                        linkToMessage(m_data.purpleAccount, chatId, messageId, formatMessageTime(date)));
-    if (conv && beginEntryEdit(conv, {chatId, messageId, isCaption, html}, html, notice, editCancelled))
+    if (conv && beginEntryEdit(conv, {chatId, messageId, isCaption, html, number}, html, notice, editCancelled))
         return;
 
     // Not tied to the connection: the account is found again once the user answers
-    auto *request = new MessageRequest{purple_account_get_username(m_data.purpleAccount), chatId, messageId, isCaption};
+    auto *request = new MessageRequest{purple_account_get_username(m_data.purpleAccount), chatId, messageId, isCaption,
+                                       number};
     auto  edited  = [](void *data, const char *text) {
         std::unique_ptr<MessageRequest> request(static_cast<MessageRequest *>(data));
         PurpleTdClient *client = findConnected(request->accountName.c_str());
         if (client) {
-            // Plain text, from the dialog
-            auto formatted = td::td_api::make_object<td::td_api::formattedText>();
-            formatted->text_ = text ? text : "";
-            client->editMessage(request->chatId, request->messageId, std::move(formatted), request->flag);
+            // Plain text, from the dialog, as HTML, its placeholders and all
+            gchar      *escaped = g_markup_escape_text(text ? text : "", -1);
+            std::string html    = escaped;
+            g_free(escaped);
+            for (size_t newline = html.find('\n'); newline != std::string::npos; newline = html.find('\n', newline))
+                html.replace(newline, 1, "<br>");
+            client->sendEdit(request->chatId, request->messageId, request->flag, request->media, html);
         }
     };
     auto cancelled = [](void *data, const char *) { delete static_cast<MessageRequest *>(data); };
@@ -1536,6 +1621,105 @@ void PurpleTdClient::editMessage(ChatId chatId, MessageId messageId,
     m_transceiver.sendQuery(std::move(request), [this, chatId](uint64_t, TdObjectPtr object) {
         if (!object || (object->get_id() != td::td_api::message::ID))
             // TRANSLATOR: In-chat error, after a message was edited from its menu; followed by the reason.
+            reportMenuError(chatId, _("Cannot edit the message"), object);
+    });
+}
+
+void PurpleTdClient::showEditRefused(ChatId chatId, const std::string &reason)
+{
+    // TRANSLATOR: In-chat notification, after an edit Telegram does not allow was sent. The argument is why.
+    std::string             notice = formatMessage(_("The message is left as it was: {}"), reason);
+    const td::td_api::chat *chat   = m_data.getChat(chatId);
+    PurpleConversation     *conv   = chat ? findMessageConversation(m_data, *chat) : nullptr;
+    if (conv && pidginUiFound())
+        showEditOutcome(conv, notice);
+    else if (chat)
+        showChatNotification(m_data, *chat, notice.c_str(), PURPLE_MESSAGE_ERROR);
+}
+
+void PurpleTdClient::sendEdit(ChatId chatId, MessageId messageId, bool isCaption, unsigned media,
+                              const std::string &html)
+{
+    ParsedEdit edit = parseEdit(html.c_str(), m_data);
+    if (!media) {
+        if (edit.attachments.empty())
+            editMessage(chatId, messageId, std::move(edit.text), isCaption);
+        else
+            // TRANSLATOR: In-chat notification, after "The message is left as it was:", when a placeholder of something pasted was put into a message of text being edited.
+            showEditRefused(chatId, _("Telegram adds no picture, video or file to a message of text."));
+        return;
+    }
+    if (edit.attachments.empty()) {
+        // TRANSLATOR: In-chat notification, after "The message is left as it was:", when the placeholder of a message's picture, video or file was taken out as it was edited.
+        showEditRefused(chatId, _("Telegram takes no picture, video or file out of a message; it can be replaced, or the message deleted."));
+        return;
+    }
+    if (edit.attachments.size() > 1) {
+        // TRANSLATOR: In-chat notification, after "The message is left as it was:", when placeholders of more than one thing were put into a message with a picture, video or file being edited.
+        showEditRefused(chatId, _("A message holds one picture, video or file, which can be replaced, but no more."));
+        return;
+    }
+
+    const PlaceholderUse   &use = edit.attachments.front();
+    const PastedAttachment &now = *use.attachment;
+    // The media it has, as it was, even as a file of the same name: only the caption is edited
+    if ((now.number == media) && (use.asFile == (now.kind == AttachmentKind::Document)) &&
+        (!use.asFile || (use.name == now.name)))
+        editMessage(chatId, messageId, std::move(edit.text), true);
+    else
+        replaceMedia(chatId, messageId, use,
+                     std::shared_ptr<td::td_api::formattedText>(edit.text.release()));
+}
+
+void PurpleTdClient::replaceMedia(ChatId chatId, MessageId messageId, const PlaceholderUse &use,
+                                  std::shared_ptr<td::td_api::formattedText> caption)
+{
+    // The media of a message sent, not here yet, is fetched first, to be uploaded anew
+    if (use.attachment->path.empty() && use.attachment->fileId) {
+        purple_debug_misc(config::pluginId, "Fetching file %d, to replace the media of message %" G_GINT64_FORMAT "\n",
+                          (int)use.attachment->fileId, messageId.value());
+        auto     download = td::td_api::make_object<td::td_api::downloadFile>(use.attachment->fileId,
+                                                                               OPEN_DOWNLOAD_PRIORITY, 0, 0, true);
+        unsigned number   = use.attachment->number;
+        PlaceholderUse fetched = use;
+        m_transceiver.sendQuery(std::move(download), [this, chatId, messageId, number, fetched, caption]
+                                                     (uint64_t, TdObjectPtr object) {
+            const td::td_api::file *file = (object && (object->get_id() == td::td_api::file::ID)) ?
+                                           static_cast<const td::td_api::file *>(object.get()) : nullptr;
+            PastedAttachment *attachment = nullptr;
+            for (PastedAttachment &pasted: m_data.pastedAttachments.items)
+                if (pasted.number == number)
+                    attachment = &pasted;
+            if (!attachment || !file || !file->local_ || !file->local_->is_downloading_completed_) {
+                reportMenuError(chatId, _("Cannot edit the message"), object);
+                return;
+            }
+            attachment->path = file->local_->path_;
+            replaceMedia(chatId, messageId, fetched, caption);
+        });
+        return;
+    }
+
+    std::string uploadPath = getUploadPath(m_data.pastedAttachments, use);
+    if (uploadPath.empty()) {
+        // TRANSLATOR: In-chat notification, after "The message is left as it was:". The arguments are a pasted file's placeholder, such as [report.pdf#3], and where the file was.
+        showEditRefused(chatId, formatMessage(_("{0} is gone from {1}."),
+                                              {use.attachment->placeholder(), use.attachment->path}));
+        return;
+    }
+    purple_debug_misc(config::pluginId, "Replacing the media of message %" G_GINT64_FORMAT "\n", messageId.value());
+    auto request = td::td_api::make_object<td::td_api::editMessageMedia>();
+    request->chat_id_    = chatId.value();
+    request->message_id_ = messageId.value();
+    auto text = td::td_api::make_object<td::td_api::formattedText>();
+    if (caption) {
+        text->text_     = caption->text_;
+        text->entities_ = std::move(caption->entities_);
+    }
+    request->input_message_content_ = makeAttachmentContent(use, uploadPath, std::move(text));
+    // The edit comes back as an update, as from any other client
+    m_transceiver.sendQuery(std::move(request), [this, chatId](uint64_t, TdObjectPtr object) {
+        if (!object || (object->get_id() != td::td_api::message::ID))
             reportMenuError(chatId, _("Cannot edit the message"), object);
     });
 }

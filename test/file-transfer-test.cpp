@@ -2,6 +2,8 @@
 #include "libpurple-mock.h"
 #include "buildopt.h"
 #include "receiving.h"
+#include "td-client.h"
+#include "client-utils.h"
 #include <glib/gstdio.h>
 
 class FileTransferTest: public CommTest {};
@@ -1678,4 +1680,91 @@ TEST_F(FileTransferTest, SentPhotoUploaded)
     tgl.update(make_object<td::td_api::updateMessageContent>(chatIds[0], 1, makeContent("bleh", true)));
     prpl.verifyNoEvents();
     tgl.verifyNoRequests();
+}
+
+// A message's media, edited, goes by a placeholder, as pasted things do: kept, the caption alone is
+// edited; another put in its place replaces it; taken out, or with more put in, the edit is refused
+TEST_F(PasteTest, MediaEdited)
+{
+    loginWithOneContact();
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    const ChatId    chat    = ChatId::fromString(std::to_string(chatIds[0]).c_str());
+    const MessageId message = MessageId::fromString("1");
+
+    gchar *dir = g_dir_make_tmp("media-edit-XXXXXX", nullptr);
+    ASSERT_NE(nullptr, dir);
+    std::string photo = std::string(dir) + "/photo.jpg";
+    std::string doc   = std::string(dir) + "/doc.pdf";
+    std::string later = std::string(dir) + "/image-3.jpg";
+    for (const std::string &file: {photo, doc, later})
+        ASSERT_TRUE(g_file_set_contents(file.c_str(), "\xff\xd8\xff\xe0", 4, nullptr));
+    std::string list = "file://" + doc + "\\r\\n";
+    paste("TARGETS\\ntext/uri-list\\n", list.c_str());
+    prpl.discardEvents();
+
+    SentMedia media;
+    media.present  = true;
+    media.kind     = AttachmentKind::Photo;
+    media.fileId   = 99;
+    media.path     = photo;
+    media.mimeType = "image/jpeg";
+    auto edit = [&](const char *text) {
+        client->askEditMessage(chat, message, "caption", "caption", true, 0, media);
+        prpl.verifyEvents(RequestInputEvent(nullptr, account, NULL, NULL));
+        prpl.inputEnter(text);
+    };
+
+    // The photo kept, which is #2, the document being #1
+    edit("[Image#2] new caption");
+    tgl.verifyRequest(editMessageCaption(chatIds[0], 1, nullptr, makeFormattedText("new caption"), false));
+    tgl.reply(make_object<error>(400, "whatever"));
+    prpl.discardEvents();
+
+    // The document in its place
+    edit("[doc.pdf#1] with the document");
+    {
+        auto request = make_object<editMessageMedia>();
+        request->chat_id_    = chatIds[0];
+        request->message_id_ = 1;
+        request->input_message_content_ = makeInputMessageDocument(make_object<inputFileLocal>(doc), nullptr, false,
+                                                                   makeFormattedText("with the document"));
+        tgl.verifyRequest(*request);
+    }
+
+    // Neither the media taken out, nor more of it
+    for (const char *text: {"just a caption", "[Image#2] [doc.pdf#1] both"}) {
+        edit(text);
+        tgl.verifyNoRequests();
+        prpl.verifyEvents(ConversationWriteEvent(
+            purpleUserName(0), purpleUserName(0),
+            *text == 'j' ? "The message is left as it was: Telegram takes no picture, video or file out of a "
+                           "message; it can be replaced, or the message deleted."
+                         : "The message is left as it was: A message holds one picture, video or file, which can "
+                           "be replaced, but no more.",
+            PURPLE_MESSAGE_ERROR, 0));
+    }
+
+    // Media not here yet is fetched first: as a file of the name made for it, being the fetched one's
+    SentMedia remote = media;
+    remote.fileId = 100;
+    remote.path   = "";
+    client->askEditMessage(chat, MessageId::fromString("2"), "", "", true, 0, remote);
+    prpl.verifyEvents(RequestInputEvent(nullptr, account, NULL, NULL));
+    prpl.inputEnter("[image-3.jpg#3]");
+    tgl.verifyRequest(downloadFile(100, 32, 0, 0, true));
+    tgl.reply(::makeFile(100, 4, later));
+    {
+        auto request = make_object<editMessageMedia>();
+        request->chat_id_    = chatIds[0];
+        request->message_id_ = 2;
+        request->input_message_content_ = makeInputMessageDocument(make_object<inputFileLocal>(later), nullptr, false,
+                                                                   makeFormattedText(""));
+        tgl.verifyRequest(*request);
+    }
+
+    for (const std::string &file: {photo, doc, later})
+        g_unlink(file.c_str());
+    g_rmdir(dir);
+    g_free(dir);
 }

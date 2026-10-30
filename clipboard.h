@@ -1,6 +1,7 @@
 #ifndef _CLIPBOARD_H
 #define _CLIPBOARD_H
 
+#include <cstdint>
 #include <list>
 #include <string>
 #include <vector>
@@ -22,6 +23,10 @@ struct PastedAttachment {
     std::string    path;
     std::string    name;      // as a file
     bool           temporary; // a picture of the clipboard's, saved for it, removed with it
+    // Of a message sent, its media, as it is being edited: the message, and TDLib's file, which may
+    // not be here yet, its path then empty
+    int64_t        sentIn  = 0;
+    int32_t        fileId  = 0;
 
     PastedAttachment(unsigned number, AttachmentKind kind, std::string path, std::string name, bool temporary)
     : number(number), kind(kind), path(std::move(path)), name(std::move(name)), temporary(temporary) {}
@@ -65,6 +70,11 @@ const PastedAttachment &addPastedFile(PastedAttachments &attachments, const std:
 const PastedAttachment *addPastedPicture(PastedAttachments &attachments, int imageId);
 // What is on the clipboard: its files, or its picture, the image store's reference let go
 std::vector<const PastedAttachment *> addPasted(PastedAttachments &attachments, const ClipboardContent &content);
+// The media of a message sent, numbered as pasted things are, for its placeholder to stand for it
+// while the message is edited; its name, if it has none, made from the MIME type
+PastedAttachment &addSentMedia(PastedAttachments &attachments, int64_t messageId, int32_t fileId,
+                               AttachmentKind kind, const std::string &path, const std::string &name,
+                               const std::string &mimeType);
 // The bracketed text as a placeholder, label and number, the label Image or Video in any letter
 // case, anything else a file's name; nothing if it is none
 PlaceholderUse findPasted(const PastedAttachments &attachments, const std::string &placeholder);

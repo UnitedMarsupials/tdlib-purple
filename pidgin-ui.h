@@ -69,6 +69,7 @@ struct EntryEdit {
     MessageId   messageId;
     bool        isCaption = false;
     std::string original; // sent unchanged, it is no edit
+    unsigned    media     = 0; // the number its picture, video or file goes by while edited, if any
 };
 // Esc in the field gives the edit up as well, calling back after.
 bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::string &text,

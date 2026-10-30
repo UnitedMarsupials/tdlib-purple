@@ -137,6 +137,24 @@ std::vector<const PastedAttachment *> addPasted(PastedAttachments &attachments, 
     return pasted;
 }
 
+PastedAttachment &addSentMedia(PastedAttachments &attachments, int64_t messageId, int32_t fileId,
+                               AttachmentKind kind, const std::string &path, const std::string &name,
+                               const std::string &mimeType)
+{
+    for (PastedAttachment &attachment: attachments.items)
+        if ((attachment.sentIn == messageId) && (attachment.fileId == fileId)) {
+            if (!path.empty())
+                attachment.path = path;
+            return attachment;
+        }
+    unsigned number = ++attachments.lastNumber;
+    attachments.items.emplace_back(number, kind, path, name.empty() ? makeAttachmentName(kind, number, mimeType) : name,
+                                   false);
+    attachments.items.back().sentIn = messageId;
+    attachments.items.back().fileId = fileId;
+    return attachments.items.back();
+}
+
 PlaceholderUse findPasted(const PastedAttachments &attachments, const std::string &placeholder)
 {
     PlaceholderUse use;

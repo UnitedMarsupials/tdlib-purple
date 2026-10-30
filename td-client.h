@@ -14,6 +14,16 @@ enum class BasicGroupMembership: uint8_t {
     NonCreator,
 };
 
+// A message's picture, video or file, to be replaced, as Telegram lets it be, once the message is edited
+struct SentMedia {
+    bool           present = false;
+    AttachmentKind kind    = AttachmentKind::Document;
+    int32_t        fileId  = 0;
+    std::string    path;    // here, if it is here yet
+    std::string    name;
+    std::string    mimeType;
+};
+
 class PurpleTdClient {
 public:
     PurpleTdClient(PurpleAccount *acct, ITransceiverBackend *testBackend);
@@ -63,6 +73,12 @@ public:
     void cancelUpload(PurpleXfer *xfer);
     // Placeholders of what is pasted, which messages sent have it in place of
     std::vector<const PastedAttachment *> addPasted(const ClipboardContent &content);
+    // The edit of a message, as written in its HTML, the number its media went by, if any: the text or
+    // caption changed, or the media replaced, as far as Telegram allows
+    void sendEdit(ChatId chatId, MessageId messageId, bool isCaption, unsigned media, const std::string &html);
+    // In the conversation's input field, in Pidgin, or else a dialog: the media, if any, by its placeholder
+    void askEditMessage(ChatId chatId, MessageId messageId, const std::string &text, const std::string &html,
+                        bool isCaption, time_t date, const SentMedia &media);
     PlaceholderUse                        findPasted(const std::string &placeholder);
 
     bool startVoiceCall(const char *buddyName);
@@ -248,6 +264,7 @@ private:
         bool                       canReport        = false;
         UserId                     sender;           // someone else who sent it
         bool                       senderBlocked    = false;
+        SentMedia                  media;
     };
     void requestMessageReactions(ChatId chatId, MessageId messageId, const MessageMenu &menu,
                                  const OpenMenuRef &openMenu);
@@ -256,9 +273,10 @@ private:
     void reportChatResponse(ChatId chatId, const std::vector<MessageId> &messageIds, TdObjectPtr object);
     void showMessageMenuResponse(ChatId chatId, MessageId messageId, const MessageMenu &menu,
                                  const OpenMenuRef &openMenu, TdObjectPtr object);
-    void askEditMessage(ChatId chatId, MessageId messageId, const std::string &text, const std::string &html,
-                        bool isCaption, time_t date);
     void askDeleteMessage(ChatId chatId, MessageId messageId, bool forAll);
+    void showEditRefused(ChatId chatId, const std::string &reason);
+    void replaceMedia(ChatId chatId, MessageId messageId, const PlaceholderUse &use,
+                      std::shared_ptr<td::td_api::formattedText> caption);
     void openDownloadedFile(ChatId chatId, const std::string &key, const std::string &description,
                             TdObjectPtr object);
     void finishOpeningFile(ChatId chatId, const std::string &key, const std::string &description,

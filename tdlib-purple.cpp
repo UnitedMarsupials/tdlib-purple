@@ -527,7 +527,7 @@ static bool sendEdit(PurpleTdClient *tdClient, PurpleConversation *conv, const c
         // TRANSLATOR: In-chat notification, not logged, after a message being edited was sent unchanged.
         showEditOutcome(conv, _("The message is left as it was."));
     else
-        tdClient->editMessage(edit.chatId, edit.messageId, std::move(text), edit.isCaption);
+        tdClient->sendEdit(edit.chatId, edit.messageId, edit.isCaption, edit.media, message);
     return true;
 }
 

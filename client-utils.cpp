@@ -1283,13 +1283,13 @@ static void parseMessage(const char *message, std::vector<MessagePart> &parts, T
     appendText(parts, textStart, s-textStart, account);
 }
 
-// A pasted attachment, the part's text its caption
-static td::td_api::object_ptr<td::td_api::InputMessageContent> makeAttachment(const MessagePart &part)
+td::td_api::object_ptr<td::td_api::InputMessageContent>
+makeAttachmentContent(const PlaceholderUse &use, const std::string &uploadPath,
+                      td::td_api::object_ptr<td::td_api::formattedText> caption)
 {
-    auto file    = td::td_api::make_object<td::td_api::inputFileLocal>(part.uploadPath);
-    auto caption = makeFormattedText(part.text, part.formats, 0, part.text.size());
-    purple_debug_misc(config::pluginId, "Sending %s\n", part.uploadPath.c_str());
-    switch (part.attachment.asFile ? AttachmentKind::Document : part.attachment.attachment->kind) {
+    auto file = td::td_api::make_object<td::td_api::inputFileLocal>(uploadPath);
+    purple_debug_misc(config::pluginId, "Sending %s\n", uploadPath.c_str());
+    switch (use.asFile ? AttachmentKind::Document : use.attachment->kind) {
     case AttachmentKind::Photo: {
         auto content = td::td_api::make_object<td::td_api::inputMessagePhoto>();
 #if TDLIB_API_INPUT_PHOTO
@@ -1324,6 +1324,38 @@ static td::td_api::object_ptr<td::td_api::InputMessageContent> makeAttachment(co
 #endif
     content->caption_ = std::move(caption);
     return std::move(content);
+}
+
+// A pasted attachment, the part's text its caption
+static td::td_api::object_ptr<td::td_api::InputMessageContent> makeAttachment(const MessagePart &part)
+{
+    return makeAttachmentContent(part.attachment, part.uploadPath,
+                                 makeFormattedText(part.text, part.formats, 0, part.text.size()));
+}
+
+ParsedEdit parseEdit(const char *message, const TdAccountData &account)
+{
+    ParsedEdit  edit;
+    std::string html;
+    for (const char *s = message ? message : ""; *s;) {
+        const char *close = (*s == '[') ? strpbrk(s + 1, "[]\n<") : nullptr;
+        if (close && (*close == ']')) {
+            std::string    bracketed(s, close + 1);
+            char          *written = purple_unescape_html(bracketed.c_str());
+            PlaceholderUse use     = findPasted(account.pastedAttachments, written ? written : bracketed);
+            g_free(written);
+            if (use.attachment) {
+                edit.attachments.push_back(use);
+                // With the space or line break after it, as when sending
+                for (s = close + 1; *s == ' ' || *s == '\n' || !g_ascii_strncasecmp(s, "<br>", 4);)
+                    s += (*s == '<') ? 4 : 1;
+                continue;
+            }
+        }
+        html += *s++;
+    }
+    edit.text = parseFormattedText(html);
+    return edit;
 }
 
 // How many attachments from the first go together as an album: one after another, captioned only by

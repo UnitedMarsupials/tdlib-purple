@@ -111,6 +111,17 @@ void updateSupergroupChatMembers(PurpleConvChat *purpleChat, const td::td_api::c
 // Pidgin's markup as Telegram's formatted text: bold, italic, underline, strikethrough and links;
 // the rest of it dropped
 td::td_api::object_ptr<td::td_api::formattedText> parseFormattedText(const std::string &html);
+
+// What a pasted attachment goes as, from the file uploaded, with its caption
+td::td_api::object_ptr<td::td_api::InputMessageContent>
+makeAttachmentContent(const PlaceholderUse &use, const std::string &uploadPath,
+                      td::td_api::object_ptr<td::td_api::formattedText> caption);
+// An edit of a message sent, as written: the placeholders in it, and its text without them
+struct ParsedEdit {
+    std::vector<PlaceholderUse>                       attachments;
+    td::td_api::object_ptr<td::td_api::formattedText> text;
+};
+ParsedEdit parseEdit(const char *message, const TdAccountData &account);
 bool isSameFormattedText(const td::td_api::formattedText &a, const td::td_api::formattedText &b);
 int  transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiver,
                      TdAccountData &account, TdTransceiver::ResponseCb response);
