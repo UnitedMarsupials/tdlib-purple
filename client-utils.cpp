@@ -1133,8 +1133,8 @@ bool isSameFormattedText(const td::td_api::formattedText &a, const td::td_api::f
 struct MessagePart {
     bool                    isImage = false; // or another attachment, with its caption
     int                     imageId = 0;
-    const PastedAttachment *attachment = nullptr;
-    bool                    asDocument = false; // a picture or video sent as a file
+    PlaceholderUse          attachment; // pasted, its placeholder in the message
+    std::string             uploadPath; // where it is, by the name it goes under
     std::string             text;
     std::vector<TextFormat> formats; // within text
 };
@@ -1179,7 +1179,7 @@ static size_t splitTextChunk(MessagePart &part, const char *text, size_t length,
 static void appendText(std::vector<MessagePart> &parts, const char *s, size_t len, TdAccountData &account)
 {
     // An attachment's caption starts past the space or line break after its placeholder
-    if (!parts.empty() && parts.back().attachment && parts.back().text.empty())
+    if (!parts.empty() && parts.back().attachment.attachment && parts.back().text.empty())
         while (len) {
             size_t skip = 0;
             if (strchr(" \t\r\n", *s))
@@ -1233,33 +1233,23 @@ static void parseMessage(const char *message, std::vector<MessagePart> &parts, T
         long  imageId;
         char *pastImage = NULL;
 
-        const PastedAttachment *attachment = nullptr;
-        bool                    asDocument = false;
-        size_t                  placeholderLength = 0;
-        if (*s == '[')
-            for (const PastedAttachment &pasted: account.pastedAttachments)
-                for (const std::string *form: {&pasted.placeholder, &pasted.asFile}) {
-                    if (form->empty())
-                        continue;
-                    // As written, or escaped, as libpurple has the message
-                    gchar *escaped = g_markup_escape_text(form->c_str(), -1);
-                    for (const char *placeholder: {form->c_str(), (const char *)escaped}) {
-                        size_t length = strlen(placeholder);
-                        if ((length > placeholderLength) && !strncmp(s, placeholder, length)) {
-                            attachment        = &pasted;
-                            asDocument        = (form == &pasted.asFile);
-                            placeholderLength = length;
-                        }
-                    }
-                    g_free(escaped);
-                }
+        PlaceholderUse attachment;
+        size_t         placeholderLength = 0;
+        // Bracketed, within a line, its text as written, unescaped from the message's HTML
+        const char *close = (*s == '[') ? strpbrk(s + 1, "[]\n<") : nullptr;
+        if (close && (*close == ']') && !account.pastedAttachments.items.empty()) {
+            std::string bracketed(s, close + 1);
+            char       *written = purple_unescape_html(bracketed.c_str());
+            attachment = findPasted(account.pastedAttachments, written ? written : bracketed);
+            g_free(written);
+            placeholderLength = bracketed.size();
+        }
 
-        if (attachment) {
+        if (attachment.attachment) {
             appendText(parts, textStart, s-textStart, account);
             parts.emplace_back();
             parts.back().isImage    = true;
             parts.back().attachment = attachment;
-            parts.back().asDocument = asDocument;
             s += placeholderLength;
             textStart = s;
             continue;
@@ -1296,10 +1286,10 @@ static void parseMessage(const char *message, std::vector<MessagePart> &parts, T
 // A pasted attachment, the part's text its caption
 static td::td_api::object_ptr<td::td_api::InputMessageContent> makeAttachment(const MessagePart &part)
 {
-    auto file    = td::td_api::make_object<td::td_api::inputFileLocal>(part.attachment->path);
+    auto file    = td::td_api::make_object<td::td_api::inputFileLocal>(part.uploadPath);
     auto caption = makeFormattedText(part.text, part.formats, 0, part.text.size());
-    purple_debug_misc(config::pluginId, "Sending %s\n", part.attachment->path.c_str());
-    switch (part.asDocument ? AttachmentKind::Document : part.attachment->kind) {
+    purple_debug_misc(config::pluginId, "Sending %s\n", part.uploadPath.c_str());
+    switch (part.attachment.asFile ? AttachmentKind::Document : part.attachment.attachment->kind) {
     case AttachmentKind::Photo: {
         auto content = td::td_api::make_object<td::td_api::inputMessagePhoto>();
 #if TDLIB_API_INPUT_PHOTO
@@ -1342,11 +1332,11 @@ static size_t getAlbumSize(const std::vector<MessagePart> &parts, size_t first)
 {
     enum { MAX_ALBUM_SIZE = 10 };
     auto isDocument = [](const MessagePart &part) {
-        return part.asDocument || (part.attachment->kind == AttachmentKind::Document);
+        return part.attachment.asFile || (part.attachment.attachment->kind == AttachmentKind::Document);
     };
     size_t size = 1;
     while (parts[first + size - 1].text.empty() && (first + size < parts.size()) && (size < MAX_ALBUM_SIZE) &&
-           parts[first + size].attachment && (isDocument(parts[first + size]) == isDocument(parts[first])))
+           parts[first + size].attachment.attachment && (isDocument(parts[first + size]) == isDocument(parts[first])))
         size++;
     return size;
 }
@@ -1359,9 +1349,26 @@ int transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiv
     if (parts.size() > MAX_MESSAGE_PARTS)
         return -E2BIG;
 
+    // Nothing goes, should anything pasted be gone by now
+    for (MessagePart &part: parts) {
+        if (!part.attachment.attachment)
+            continue;
+        part.uploadPath = getUploadPath(account.pastedAttachments, part.attachment);
+        if (part.uploadPath.empty()) {
+            const td::td_api::chat *chat = account.getChat(chatId);
+            // TRANSLATOR: In-chat error message. The arguments are a pasted file's placeholder, such as [report.pdf#3], and where the file was.
+            std::string error = formatMessage(_("The message is not sent: {0} is gone from {1}."),
+                                              {part.attachment.attachment->placeholder(),
+                                               part.attachment.attachment->path});
+            if (chat)
+                showChatNotification(account, *chat, error.c_str());
+            return 0;
+        }
+    }
+
     for (size_t i = 0; i < parts.size(); i++) {
         const MessagePart &input = parts[i];
-        if (input.attachment) {
+        if (input.attachment.attachment) {
             size_t   albumSize = getAlbumSize(parts, i);
             uint64_t requestId;
             if (albumSize == 1) {

@@ -50,80 +50,153 @@ AttachmentKind guessAttachmentKind(const std::string &path)
     return kind;
 }
 
-static bool isTaken(const PastedAttachments &attachments, const std::string &placeholder)
+static const char IMAGE_LABEL[] = "Image";
+static const char VIDEO_LABEL[] = "Video";
+
+std::string PastedAttachment::placeholder() const
 {
-    for (const PastedAttachment &attachment: attachments)
-        if ((attachment.placeholder == placeholder) || (attachment.asFile == placeholder))
-            return true;
-    return false;
+    if (kind == AttachmentKind::Photo)
+        return std::string("[") + IMAGE_LABEL + "#" + std::to_string(number) + "]";
+    if (kind == AttachmentKind::Video)
+        return std::string("[") + VIDEO_LABEL + "#" + std::to_string(number) + "]";
+    return filePlaceholder();
 }
 
-const PastedAttachment *findPasted(const PastedAttachments &attachments, const std::string &placeholder,
-                                   bool &asFile)
+std::string PastedAttachment::filePlaceholder() const
 {
-    for (const PastedAttachment &attachment: attachments)
-        if ((attachment.placeholder == placeholder) || (attachment.asFile == placeholder)) {
-            asFile = (attachment.asFile == placeholder);
-            return &attachment;
+    return "[" + name + "#" + std::to_string(number) + "]";
+}
+
+PastedAttachments::~PastedAttachments()
+{
+    for (const std::string &directory: linkDirectories) {
+        GDir *dir = g_dir_open(directory.c_str(), 0, nullptr);
+        if (dir) {
+            while (const gchar *entry = g_dir_read_name(dir))
+                remove((directory + G_DIR_SEPARATOR_S + entry).c_str());
+            g_dir_close(dir);
         }
-    return nullptr;
-}
-
-// [Image#1] and on, or [name], [name#2] and on, whichever is not taken yet
-static std::string makePlaceholder(const PastedAttachments &attachments, AttachmentKind kind,
-                                   const std::string &name)
-{
-    std::string prefix = (kind == AttachmentKind::Photo) ? "Image" : (kind == AttachmentKind::Video) ? "Video" : name;
-    if ((kind == AttachmentKind::Document) && !isTaken(attachments, "[" + prefix + "]"))
-        return "[" + prefix + "]";
-    for (unsigned number = (kind == AttachmentKind::Document) ? 2 : 1;; number++) {
-        std::string placeholder = "[" + prefix + "#" + std::to_string(number) + "]";
-        if (!isTaken(attachments, placeholder))
-            return placeholder;
+        remove(directory.c_str());
     }
 }
 
-const std::string &addPastedFile(PastedAttachments &attachments, const std::string &path)
+std::string makeAttachmentName(AttachmentKind kind, unsigned number, const std::string &mimeType)
 {
-    for (const PastedAttachment &attachment: attachments)
-        if (!attachment.temporary && (attachment.path == path))
-            return attachment.placeholder;
-    AttachmentKind kind        = guessAttachmentKind(path);
-    gchar         *name        = g_path_get_basename(path.c_str());
-    std::string    placeholder = makePlaceholder(attachments, kind, name);
-    // Not taken by the first, which a picture's or video's is not, being numbered
-    std::string    asFile      = (kind != AttachmentKind::Document) ?
-                                 makePlaceholder(attachments, AttachmentKind::Document, name) : "";
-    attachments.emplace_back(placeholder, asFile, kind, path, false);
-    g_free(name);
-    return attachments.back().placeholder;
+    std::string name = (kind == AttachmentKind::Photo) ? "image" : (kind == AttachmentKind::Video) ? "video"
+                                                                                                  : "document";
+    name += "-" + std::to_string(number);
+    // GIO tells no extension for a type: the subtype gives one, as image/svg+xml does svg, unless it
+    // is a vendor's, or the like
+    size_t slash = mimeType.find('/');
+    if (slash == std::string::npos)
+        return name;
+    std::string subtype = mimeType.substr(slash + 1);
+    subtype = subtype.substr(0, subtype.find('+'));
+    if (g_str_has_prefix(subtype.c_str(), "x-"))
+        subtype.erase(0, 2);
+    if (!subtype.empty() && (subtype.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789") == std::string::npos))
+        name += "." + subtype;
+    return name;
 }
 
-const std::string &addPastedPicture(PastedAttachments &attachments, int imageId)
+const PastedAttachment &addPastedFile(PastedAttachments &attachments, const std::string &path)
 {
-    static const std::string none;
+    for (const PastedAttachment &attachment: attachments.items)
+        if (!attachment.temporary && (attachment.path == path))
+            return attachment;
+    gchar *name = g_path_get_basename(path.c_str());
+    attachments.items.emplace_back(++attachments.lastNumber, guessAttachmentKind(path), path, name, false);
+    g_free(name);
+    return attachments.items.back();
+}
+
+const PastedAttachment *addPastedPicture(PastedAttachments &attachments, int imageId)
+{
     char *fileName = nullptr;
     if (!saveImage(imageId, &fileName))
-        return none;
-    attachments.emplace_back(makePlaceholder(attachments, AttachmentKind::Photo, ""),
-                             makePlaceholder(attachments, AttachmentKind::Document, "clipboard.png"),
-                             AttachmentKind::Photo, fileName, true);
+        return nullptr;
+    unsigned number = ++attachments.lastNumber;
+    // Pictures are put on the clipboard as PNG
+    attachments.items.emplace_back(number, AttachmentKind::Photo, fileName,
+                                   makeAttachmentName(AttachmentKind::Photo, number, "image/png"), true);
     g_free(fileName);
-    return attachments.back().placeholder;
+    return &attachments.items.back();
 }
 
-std::vector<std::string> addPasted(PastedAttachments &attachments, const ClipboardContent &content)
+std::vector<const PastedAttachment *> addPasted(PastedAttachments &attachments, const ClipboardContent &content)
 {
-    std::vector<std::string> placeholders;
+    std::vector<const PastedAttachment *> pasted;
     for (const std::string &file: content.files)
-        placeholders.push_back(addPastedFile(attachments, file));
+        pasted.push_back(&addPastedFile(attachments, file));
     if (content.imageId) {
-        const std::string &placeholder = addPastedPicture(attachments, content.imageId);
-        if (!placeholder.empty())
-            placeholders.push_back(placeholder);
+        const PastedAttachment *picture = addPastedPicture(attachments, content.imageId);
+        if (picture)
+            pasted.push_back(picture);
         purple_imgstore_unref_by_id(content.imageId);
     }
-    return placeholders;
+    return pasted;
+}
+
+PlaceholderUse findPasted(const PastedAttachments &attachments, const std::string &placeholder)
+{
+    PlaceholderUse use;
+    size_t         hash = placeholder.rfind('#');
+    if ((placeholder.size() < 4) || (placeholder.front() != '[') || (placeholder.back() != ']') ||
+        (hash == std::string::npos) || (hash < 2))
+        return use;
+    std::string digits = placeholder.substr(hash + 1, placeholder.size() - hash - 2);
+    if (digits.empty() || (digits.find_first_not_of("0123456789") != std::string::npos))
+        return use;
+    unsigned long number = strtoul(digits.c_str(), nullptr, 10);
+    for (const PastedAttachment &attachment: attachments.items)
+        if (attachment.number == number)
+            use.attachment = &attachment;
+    if (!use.attachment)
+        return use;
+
+    std::string label = placeholder.substr(1, hash - 1);
+    bool        media = (use.attachment->kind != AttachmentKind::Document);
+    if (media && (!g_ascii_strcasecmp(label.c_str(), IMAGE_LABEL) || !g_ascii_strcasecmp(label.c_str(), VIDEO_LABEL)))
+        return use;
+    use.asFile = true;
+    // A name it cannot go under, one of a directory, is its own
+    use.name   = (label.find('/') == std::string::npos) && (label != ".") && (label != "..") ? label
+                                                                                           : use.attachment->name;
+    return use;
+}
+
+std::string getUploadPath(PastedAttachments &attachments, const PlaceholderUse &use)
+{
+    const PastedAttachment &attachment = *use.attachment;
+    if (!g_file_test(attachment.path.c_str(), G_FILE_TEST_IS_REGULAR))
+        return "";
+    gchar *own = g_path_get_basename(attachment.path.c_str());
+    bool   same = !use.asFile || (use.name == own);
+    g_free(own);
+    if (same)
+        return attachment.path;
+
+    // TDLib names the document after the file it uploads
+    gchar *directory = g_dir_make_tmp("tdlib_attachment_XXXXXX", nullptr);
+    if (!directory)
+        return "";
+    attachments.linkDirectories.push_back(directory);
+    std::string link = std::string(directory) + G_DIR_SEPARATOR_S + use.name;
+    g_free(directory);
+#ifndef _WIN32
+    if (symlink(attachment.path.c_str(), link.c_str()))
+        return "";
+#else
+    // Without symbolic links, a copy
+    gchar *content = nullptr;
+    gsize  length  = 0;
+    bool   copied  = g_file_get_contents(attachment.path.c_str(), &content, &length, nullptr) &&
+                     g_file_set_contents(link.c_str(), content, length, nullptr);
+    g_free(content);
+    if (!copied)
+        return "";
+#endif
+    return link;
 }
 
 std::vector<std::string> getLocalPaths(char **uris)

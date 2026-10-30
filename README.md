@@ -19,24 +19,30 @@ the conversion can be disabled in account settings, or even at compile time (see
 
 What is pasted into a message is sent with it, once the message is: the files
 copied to the clipboard, as a file manager copies them, or else its picture.
-Each stands for itself in the message's text as its placeholder, `[Image#1]`,
-`[Video#2]` or, for any other file, its name, such as `[report.pdf]`, the text
-after it being its caption; several in a row go as an album, pictures and
-videos together, documents apart, up to ten in one. A picture or video also
-goes by its file name, `[holiday.jpg]`, which sends it as a file, as it is,
-not made smaller by Telegram; a picture of the clipboard's is
-`[clipboard.png]`. In Pidgin, right-clicking a placeholder in the input field
-offers to send it the other way, or to take it out of the message.
+Each pasted thing is numbered, and stands in the message's text as its
+placeholder, the text after it being its caption:
+
+* `[Image#1]` or `[Video#2]` sends a picture or video as such, nameless, as
+  Telegram shows it in the chat (and makes it smaller);
+* `[name#N]` sends thing N as a file, as it is, under that name: its own, as in
+  `[report.pdf#3]`, or any other, as in `[meow.jpg#1]`. A picture of the
+  clipboard's, having no name, is `image-1.png` and so on.
+
+Several in a row go as an album, pictures and videos together, files apart, up
+to ten in one. Letter case does not matter. Files are not copied: one gone by
+the time the message is sent keeps the message from being sent. In Pidgin,
+right-clicking a placeholder in the input field offers to send it the other
+way, or to take it out of the message.
 
 In Pidgin, pasting into a conversation's input field puts a picture there, and
 the files' placeholders; so does dropping files onto the conversation, its
 input field or the messages above it, and a picture dropped from a browser is
-fetched to go there, anything else dropped as a link going in as its address. `/paste` does the same everywhere: other front-ends,
-such as Finch, cannot take a picture into their input line, so it says the
-placeholders, to be written into the message where they go. The clipboard is
-read there with [xclip](https://github.com/astrand/xclip), found in `PATH`,
-which is not otherwise required. Placeholders last as long as the account is
-connected.
+fetched to go there, anything else dropped as a link going in as its address.
+`/paste` does the same everywhere: other front-ends, such as Finch, cannot
+take a picture into their input line, so it says the placeholders, to be
+written into the message where they go. The clipboard is read there with
+[xclip](https://github.com/astrand/xclip), found in `PATH`, which is not
+otherwise required. Placeholders last as long as the account is connected.
 
 ## Installation
 

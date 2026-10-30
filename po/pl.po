@@ -1561,6 +1561,11 @@ msgstr "Wyślij jako zdjęcie"
 msgid "Remove from the message"
 msgstr "Usuń z wiadomości"
 
+#. TRANSLATOR: In-chat error message. The arguments are a pasted file's placeholder, such as [report.pdf#3], and where the file was.
+#, c++-format
+msgid "The message is not sent: {0} is gone from {1}."
+msgstr "Wiadomość nie została wysłana: {0} zniknął z {1}."
+
 #. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
 #: ../td-client.cpp:1091
 msgid "Needs Telegram Premium"

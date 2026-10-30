@@ -1539,30 +1539,43 @@ void PasteTest::paste(const char *targets, const char *uriList)
 TEST_F(PasteTest, FilesAsAlbum)
 {
     loginWithOneContact();
-    paste("TARGETS\\ntext/uri-list\\n", "file:///path/a.pdf\\r\\nfile:///path/b.pdf\\r\\n");
+    gchar *dir = g_dir_make_tmp("paste-album-XXXXXX", nullptr);
+    ASSERT_NE(nullptr, dir);
+    std::string a = std::string(dir) + "/a.pdf";
+    std::string b = std::string(dir) + "/b.pdf";
+    for (const std::string &file: {a, b})
+        ASSERT_TRUE(g_file_set_contents(file.c_str(), "%PDF-1.4\n", -1, nullptr));
+
+    std::string list = "file://" + a + "\\r\\nfile://" + b + "\\r\\n";
+    paste("TARGETS\\ntext/uri-list\\n", list.c_str());
     prpl.verifyEvents(ConversationWriteEvent(
         purpleUserName(0), "",
-        "Pasted [a.pdf], [b.pdf]: write it into the message, where it goes, to send it there.",
+        "Pasted [a.pdf#1], [b.pdf#2]: write it into the message, where it goes, to send it there.",
         (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), 0
     ));
 
-    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "Here: [a.pdf]\n[b.pdf] Both",
+    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "Here: [a.pdf#1]\n[b.pdf#2] Both",
                                       PURPLE_MESSAGE_SEND));
     auto album = make_object<sendMessageAlbum>();
     album->chat_id_ = chatIds[0];
-    album->input_message_contents_.push_back(makeInputMessageDocument(make_object<inputFileLocal>("/path/a.pdf"),
+    album->input_message_contents_.push_back(makeInputMessageDocument(make_object<inputFileLocal>(a),
                                                                       nullptr, false, make_object<formattedText>()));
     album->input_message_contents_.push_back(makeInputMessageDocument(
-        make_object<inputFileLocal>("/path/b.pdf"), nullptr, false,
+        make_object<inputFileLocal>(b), nullptr, false,
         make_object<formattedText>("Both", std::vector<object_ptr<textEntity>>())));
     tgl.verifyRequests({
         makeSendMessage(chatIds[0], 0, nullptr, nullptr, nullptr, make_object<inputMessageText>(
             make_object<formattedText>("Here: ", std::vector<object_ptr<textEntity>>()), nullptr, false)),
         std::move(album)
     });
+
+    for (const std::string &file: {a, b})
+        g_unlink(file.c_str());
+    g_rmdir(dir);
+    g_free(dir);
 }
 
-// A file pasted again keeps its placeholder, and another of the same name gets one of its own
+// A file pasted again keeps its number, and another of the same name gets one of its own
 TEST_F(PasteTest, SameName)
 {
     loginWithOneContact();
@@ -1571,7 +1584,7 @@ TEST_F(PasteTest, SameName)
     paste("TARGETS\\ntext/uri-list\\n", "file:///path/a.pdf\\r\\nfile:///other/a.pdf\\r\\n");
     prpl.verifyEvents(ConversationWriteEvent(
         purpleUserName(0), "",
-        "Pasted [a.pdf], [a.pdf#2]: write it into the message, where it goes, to send it there.",
+        "Pasted [a.pdf#1], [a.pdf#2]: write it into the message, where it goes, to send it there.",
         (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), 0
     ));
 }
@@ -1596,12 +1609,12 @@ TEST_F(PasteTest, KindsByContent)
     paste("TARGETS\\ntext/uri-list\\n", list.c_str());
     prpl.verifyEvents(ConversationWriteEvent(
         purpleUserName(0), "",
-        "Pasted [Image#1] (or [photo.pdf], as a file), [Video#1] (or [movie.txt], as a file), [notes.png]: "
+        "Pasted [Image#1] (or [photo.pdf#1], as a file), [Video#2] (or [movie.txt#2], as a file), [notes.png#3]: "
         "write it into the message, where it goes, to send it there.",
         (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), 0
     ));
 
-    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "[Image#1] [Video#1] [notes.png]",
+    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "[image#1] [Video#2] [notes.png#3]",
                                       PURPLE_MESSAGE_SEND));
     auto album = make_object<sendMessageAlbum>();
     album->chat_id_ = chatIds[0];
@@ -1618,10 +1631,21 @@ TEST_F(PasteTest, KindsByContent)
     });
 
     // By its name, the picture goes as a file, as it is
-    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "[photo.pdf]", PURPLE_MESSAGE_SEND));
+    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "[photo.pdf#1]", PURPLE_MESSAGE_SEND));
     tgl.verifyRequest(*makeSendMessage(chatIds[0], 0, nullptr, nullptr, nullptr,
                                        makeInputMessageDocument(make_object<inputFileLocal>(photo), nullptr, false,
                                                                 make_object<formattedText>())));
+
+    // A file gone by the time the message is sent: nothing of it is
+    g_unlink(notes.c_str());
+    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "Notes: [notes.png#3]",
+                                      PURPLE_MESSAGE_SEND));
+    tgl.verifyNoRequests();
+    prpl.verifyEvents(ConversationWriteEvent(
+        purpleUserName(0), purpleUserName(0),
+        "The message is not sent: [notes.png#3] is gone from " + notes + ".",
+        PURPLE_MESSAGE_SYSTEM, 0
+    ));
 
     for (const std::string &file: {photo, video, notes})
         g_unlink(file.c_str());

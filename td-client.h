@@ -62,8 +62,8 @@ public:
                         int purpleChatId);
     void cancelUpload(PurpleXfer *xfer);
     // Placeholders of what is pasted, which messages sent have it in place of
-    std::vector<std::string> addPasted(const ClipboardContent &content);
-    const PastedAttachment  *findPasted(const std::string &placeholder, bool &asFile);
+    std::vector<const PastedAttachment *> addPasted(const ClipboardContent &content);
+    PlaceholderUse                        findPasted(const std::string &placeholder);
 
     bool startVoiceCall(const char *buddyName);
     bool terminateCall(PurpleConversation *conv);

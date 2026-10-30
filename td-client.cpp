@@ -3215,14 +3215,14 @@ void PurpleTdClient::uploadResponse(uint64_t requestId, td::td_api::object_ptr<t
     }
 }
 
-std::vector<std::string> PurpleTdClient::addPasted(const ClipboardContent &content)
+std::vector<const PastedAttachment *> PurpleTdClient::addPasted(const ClipboardContent &content)
 {
     return ::addPasted(m_data.pastedAttachments, content);
 }
 
-const PastedAttachment *PurpleTdClient::findPasted(const std::string &placeholder, bool &asFile)
+PlaceholderUse PurpleTdClient::findPasted(const std::string &placeholder)
 {
-    return ::findPasted(m_data.pastedAttachments, placeholder, asFile);
+    return ::findPasted(m_data.pastedAttachments, placeholder);
 }
 
 void PurpleTdClient::cancelUpload(PurpleXfer *xfer)
