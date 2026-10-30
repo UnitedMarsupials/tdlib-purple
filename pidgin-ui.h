@@ -161,6 +161,17 @@ void setMessagePopupHandler(MessagePopupHandler handler);
 // Whether the buddy list shows the contact's name after the mark, which is plain text
 using BuddyMarkHandler = bool (*)(PurpleBuddy *buddy);
 void setBuddyMarkHandler(BuddyMarkHandler handler, const char *mark);
+// A placeholder of something pasted, right-clicked in the input field: its other form, if any, to
+// send it the other way, as a file or not, and the menu's labels for that and for taking it out
+struct PastedForms {
+    std::string other;
+    std::string otherLabel;
+    std::string removeLabel;
+};
+// False if the text is no placeholder
+using PlaceholderHandler = bool (*)(PurpleConversation *conv, const std::string &placeholder, PastedForms &forms);
+void setPlaceholderHandler(PlaceholderHandler handler);
+
 // The items take the placeholder's place, after a separator; with none, the separator goes too
 void fillOpenMenu(const OpenMenuRef &menu, const std::vector<MenuItem> &items);
 

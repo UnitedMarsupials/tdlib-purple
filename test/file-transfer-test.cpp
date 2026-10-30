@@ -1542,7 +1542,7 @@ TEST_F(PasteTest, FilesAsAlbum)
     paste("TARGETS\\ntext/uri-list\\n", "file:///path/a.pdf\\r\\nfile:///path/b.pdf\\r\\n");
     prpl.verifyEvents(ConversationWriteEvent(
         purpleUserName(0), "",
-        "Pasted [a.pdf] [b.pdf]: write it into the message, where it goes, to send it there.",
+        "Pasted [a.pdf], [b.pdf]: write it into the message, where it goes, to send it there.",
         (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), 0
     ));
 
@@ -1571,7 +1571,7 @@ TEST_F(PasteTest, SameName)
     paste("TARGETS\\ntext/uri-list\\n", "file:///path/a.pdf\\r\\nfile:///other/a.pdf\\r\\n");
     prpl.verifyEvents(ConversationWriteEvent(
         purpleUserName(0), "",
-        "Pasted [a.pdf] [a.pdf#2]: write it into the message, where it goes, to send it there.",
+        "Pasted [a.pdf], [a.pdf#2]: write it into the message, where it goes, to send it there.",
         (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), 0
     ));
 }
@@ -1596,7 +1596,8 @@ TEST_F(PasteTest, KindsByContent)
     paste("TARGETS\\ntext/uri-list\\n", list.c_str());
     prpl.verifyEvents(ConversationWriteEvent(
         purpleUserName(0), "",
-        "Pasted [Image#1] [Video#1] [notes.png]: write it into the message, where it goes, to send it there.",
+        "Pasted [Image#1] (or [photo.pdf], as a file), [Video#1] (or [movie.txt], as a file), [notes.png]: "
+        "write it into the message, where it goes, to send it there.",
         (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), 0
     ));
 
@@ -1615,6 +1616,12 @@ TEST_F(PasteTest, KindsByContent)
                         makeInputMessageDocument(make_object<inputFileLocal>(notes), nullptr, false,
                                                  make_object<formattedText>()))
     });
+
+    // By its name, the picture goes as a file, as it is
+    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "[photo.pdf]", PURPLE_MESSAGE_SEND));
+    tgl.verifyRequest(*makeSendMessage(chatIds[0], 0, nullptr, nullptr, nullptr,
+                                       makeInputMessageDocument(make_object<inputFileLocal>(photo), nullptr, false,
+                                                                make_object<formattedText>())));
 
     for (const std::string &file: {photo, video, notes})
         g_unlink(file.c_str());

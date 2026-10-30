@@ -1134,6 +1134,7 @@ struct MessagePart {
     bool                    isImage = false; // or another attachment, with its caption
     int                     imageId = 0;
     const PastedAttachment *attachment = nullptr;
+    bool                    asDocument = false; // a picture or video sent as a file
     std::string             text;
     std::vector<TextFormat> formats; // within text
 };
@@ -1233,26 +1234,32 @@ static void parseMessage(const char *message, std::vector<MessagePart> &parts, T
         char *pastImage = NULL;
 
         const PastedAttachment *attachment = nullptr;
+        bool                    asDocument = false;
         size_t                  placeholderLength = 0;
         if (*s == '[')
-            for (const PastedAttachment &pasted: account.pastedAttachments) {
-                // As written, or escaped, as libpurple has the message
-                gchar *escaped = g_markup_escape_text(pasted.placeholder.c_str(), -1);
-                for (const char *placeholder: {pasted.placeholder.c_str(), (const char *)escaped}) {
-                    size_t length = strlen(placeholder);
-                    if ((length > placeholderLength) && !strncmp(s, placeholder, length)) {
-                        attachment        = &pasted;
-                        placeholderLength = length;
+            for (const PastedAttachment &pasted: account.pastedAttachments)
+                for (const std::string *form: {&pasted.placeholder, &pasted.asFile}) {
+                    if (form->empty())
+                        continue;
+                    // As written, or escaped, as libpurple has the message
+                    gchar *escaped = g_markup_escape_text(form->c_str(), -1);
+                    for (const char *placeholder: {form->c_str(), (const char *)escaped}) {
+                        size_t length = strlen(placeholder);
+                        if ((length > placeholderLength) && !strncmp(s, placeholder, length)) {
+                            attachment        = &pasted;
+                            asDocument        = (form == &pasted.asFile);
+                            placeholderLength = length;
+                        }
                     }
+                    g_free(escaped);
                 }
-                g_free(escaped);
-            }
 
         if (attachment) {
             appendText(parts, textStart, s-textStart, account);
             parts.emplace_back();
             parts.back().isImage    = true;
             parts.back().attachment = attachment;
+            parts.back().asDocument = asDocument;
             s += placeholderLength;
             textStart = s;
             continue;
@@ -1292,7 +1299,7 @@ static td::td_api::object_ptr<td::td_api::InputMessageContent> makeAttachment(co
     auto file    = td::td_api::make_object<td::td_api::inputFileLocal>(part.attachment->path);
     auto caption = makeFormattedText(part.text, part.formats, 0, part.text.size());
     purple_debug_misc(config::pluginId, "Sending %s\n", part.attachment->path.c_str());
-    switch (part.attachment->kind) {
+    switch (part.asDocument ? AttachmentKind::Document : part.attachment->kind) {
     case AttachmentKind::Photo: {
         auto content = td::td_api::make_object<td::td_api::inputMessagePhoto>();
 #if TDLIB_API_INPUT_PHOTO
@@ -1334,7 +1341,9 @@ static td::td_api::object_ptr<td::td_api::InputMessageContent> makeAttachment(co
 static size_t getAlbumSize(const std::vector<MessagePart> &parts, size_t first)
 {
     enum { MAX_ALBUM_SIZE = 10 };
-    auto isDocument = [](const MessagePart &part) { return part.attachment->kind == AttachmentKind::Document; };
+    auto isDocument = [](const MessagePart &part) {
+        return part.asDocument || (part.attachment->kind == AttachmentKind::Document);
+    };
     size_t size = 1;
     while (parts[first + size - 1].text.empty() && (first + size < parts.size()) && (size < MAX_ALBUM_SIZE) &&
            parts[first + size].attachment && (isDocument(parts[first + size]) == isDocument(parts[first])))

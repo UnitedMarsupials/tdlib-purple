@@ -1007,11 +1007,33 @@ static std::vector<std::string> filesPasted(PurpleConversation *conv, const std:
     return tdClient ? tdClient->addPasted(content) : std::vector<std::string>();
 }
 
-static std::string joinPlaceholders(const std::vector<std::string> &placeholders)
+static bool placeholderClicked(PurpleConversation *conv, const std::string &placeholder, PastedForms &forms)
+{
+    PurpleTdClient         *tdClient   = getTdClient(purple_conversation_get_account(conv));
+    bool                    asFile     = false;
+    const PastedAttachment *attachment = tdClient ? tdClient->findPasted(placeholder, asFile) : nullptr;
+    if (!attachment)
+        return false;
+    forms.other = asFile ? attachment->placeholder : attachment->asFile;
+    if (!asFile)
+        // TRANSLATOR: Item of the menu of a pasted picture's or video's placeholder, such as [Image#1], in the message being written.
+        forms.otherLabel = _("Send as a file");
+    else if (attachment->kind == AttachmentKind::Video)
+        // TRANSLATOR: Item of the menu of a pasted video's placeholder by its file name, such as [holiday.mp4], in the message being written.
+        forms.otherLabel = _("Send as a video");
+    else
+        // TRANSLATOR: Item of the menu of a pasted picture's placeholder by its file name, such as [holiday.jpg], in the message being written.
+        forms.otherLabel = _("Send as a photo");
+    // TRANSLATOR: Item of the menu of a pasted thing's placeholder, such as [Image#1] or [report.pdf], in the message being written.
+    forms.removeLabel = _("Remove from the message");
+    return true;
+}
+
+static std::string joinPlaceholders(const std::vector<std::string> &placeholders, const char *separator = " ")
 {
     std::string text;
     for (const std::string &placeholder: placeholders)
-        text += (text.empty() ? "" : " ") + placeholder;
+        text += (text.empty() ? "" : separator) + placeholder;
     return text;
 }
 
@@ -1050,9 +1072,16 @@ static PurpleCmdRet pasteCommand(PurpleConversation *conv, const gchar *cmd, gch
             *error = g_strdup(_("There are no files or picture on the clipboard."));
             return PURPLE_CMD_RET_FAILED;
         }
+        for (std::string &placeholder: placeholders) {
+            bool                    asFile;
+            const PastedAttachment *attachment = tdClient->findPasted(placeholder, asFile);
+            if (attachment && !attachment->asFile.empty())
+                // TRANSLATOR: In-chat notification, of a picture or video pasted, in the list after "Pasted". The arguments are its placeholders, the second its file name, such as [Image#1] and [holiday.jpg].
+                placeholder = formatMessage(_("{0} (or {1}, as a file)"), {placeholder, attachment->asFile});
+        }
         // TRANSLATOR: In-chat notification, not logged, after /paste. The argument is the pasted things' placeholders, such as [Image#1] or [report.pdf].
         std::string notice = formatMessage(_("Pasted {}: write it into the message, where it goes, to send it there."),
-                                           joinPlaceholders(placeholders));
+                                           joinPlaceholders(placeholders, ", "));
         purple_conversation_write(conv, NULL, notice.c_str(),
                                   (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), time(NULL));
     }
@@ -1289,6 +1318,7 @@ static void registerMessageLinks()
     setLogMarkersEnabled(!canDisableReadReceipts());
     setMessagePopupHandler(messagePopupOpened);
     setFilesPastedHandler(filesPasted);
+    setPlaceholderHandler(placeholderClicked);
     setBuddyMarkHandler(buddyMarked, UNREAD_REACTIONS_MARK);
     setTopReachedHandler(topReached);
 }

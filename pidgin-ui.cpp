@@ -69,6 +69,9 @@ FRONT_END_FUNCTION(g_signal_handler_block);
 FRONT_END_FUNCTION(g_signal_handler_unblock);
 FRONT_END_FUNCTION(g_signal_stop_emission_by_name);
 FRONT_END_FUNCTION(gtk_text_buffer_insert_at_cursor);
+// For the menu of a placeholder in the input field
+FRONT_END_FUNCTION(gtk_text_buffer_get_slice);
+FRONT_END_FUNCTION(gtk_text_buffer_insert);
 // For drops
 FRONT_END_FUNCTION(g_value_get_uint);
 FRONT_END_FUNCTION(gdk_atom_intern);
@@ -1575,6 +1578,104 @@ static PurpleConversation *findTabConversation(gpointer imhtml)
     return nullptr;
 }
 
+// A placeholder of something pasted, in a conversation's input field, gets a menu of its own: to
+// send it the other way, as a file or not, or to take it out
+static PlaceholderHandler g_placeholderHandler = nullptr;
+
+void setPlaceholderHandler(PlaceholderHandler handler)
+{
+    g_placeholderHandler = handler;
+}
+
+// The input field's text, images as U+FFFC, so that its offsets are the buffer's
+static std::string getEntrySlice(GtkTextBuffer *buffer)
+{
+    GtkTextIter start, end;
+    p_gtk_text_buffer_get_iter_at_offset(buffer, &start, 0);
+    p_gtk_text_buffer_get_end_iter(buffer, &end);
+    gchar      *slice = p_gtk_text_buffer_get_slice(buffer, &start, &end, TRUE);
+    std::string text  = slice ? slice : "";
+    g_free(slice);
+    return text;
+}
+
+// The bracketed text, on one line, around the character at the offset, and where it starts
+static bool findBracketed(const std::string &text, gint offset, std::string &bracketed, gint &start)
+{
+    if ((offset < 0) || (offset >= g_utf8_strlen(text.c_str(), -1)))
+        return false;
+    const char *at    = g_utf8_offset_to_pointer(text.c_str(), offset);
+    const char *open  = at;
+    while (*open != '[') {
+        if ((open == text.c_str()) || (*open == '\n') || ((*open == ']') && (open != at)))
+            return false;
+        open = g_utf8_prev_char(open);
+    }
+    const char *close = (open == at) ? at + 1 : at;
+    while (*close != ']') {
+        if (!*close || (*close == '\n') || (*close == '['))
+            return false;
+        close++;
+    }
+    bracketed.assign(open, close + 1);
+    start = g_utf8_pointer_to_offset(text.c_str(), open);
+    return true;
+}
+
+// Whatever is at the offset now, should it still be the placeholder, takes its place
+static void replacePlaceholder(GtkWidget *entry, gint start, const std::string &placeholder,
+                               const std::string &replacement)
+{
+    GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(entry)->text_buffer;
+    std::string    text   = getEntrySlice(buffer);
+    gint           length = g_utf8_strlen(placeholder.c_str(), -1);
+    const char    *at     = g_utf8_offset_to_pointer(text.c_str(), start);
+    if ((start + length > g_utf8_strlen(text.c_str(), -1)) || strncmp(at, placeholder.c_str(), placeholder.size()))
+        return;
+    // Taken out, with the space after it, which pasting put there
+    if (replacement.empty() && (at[placeholder.size()] == ' '))
+        length++;
+    GtkTextIter from, to;
+    p_gtk_text_buffer_get_iter_at_offset(buffer, &from, start);
+    p_gtk_text_buffer_get_iter_at_offset(buffer, &to, start + length);
+    p_gtk_imhtml_delete(reinterpret_cast<GtkIMHtml *>(entry), &from, &to);
+    if (!replacement.empty()) {
+        p_gtk_text_buffer_get_iter_at_offset(buffer, &from, start);
+        p_gtk_text_buffer_insert(buffer, &from, replacement.c_str(), -1);
+    }
+}
+
+static void addPlaceholderMenu(PurpleConversation *conv, GtkWidget *entry, GtkWidget *menu, const GtkTextIter &where)
+{
+    std::string placeholder;
+    gint        start;
+    if (!g_placeholderHandler || !p_gtk_text_buffer_get_slice || !p_gtk_text_buffer_insert ||
+        !findBracketed(getEntrySlice(reinterpret_cast<GtkIMHtml *>(entry)->text_buffer),
+                       p_gtk_text_iter_get_offset(&where), placeholder, start))
+        return;
+    PastedForms forms;
+    if (!g_placeholderHandler(conv, placeholder, forms))
+        return;
+
+    std::vector<MenuItem> items;
+    if (!forms.other.empty()) {
+        MenuItem item;
+        item.label  = forms.otherLabel;
+        std::string other = forms.other;
+        item.action = [entry, start, placeholder, other]() { replacePlaceholder(entry, start, placeholder, other); };
+        items.push_back(std::move(item));
+    }
+    MenuItem remove;
+    remove.label  = forms.removeLabel;
+    remove.action = [entry, start, placeholder]() { replacePlaceholder(entry, start, placeholder, ""); };
+    items.push_back(std::move(remove));
+
+    GtkWidget *separator = p_gtk_separator_menu_item_new();
+    p_gtk_menu_shell_append(reinterpret_cast<GtkMenuShell *>(menu), separator);
+    addMenuItems(menu, items, 0);
+    p_gtk_widget_show_all(menu);
+}
+
 // GTK builds the menu of a tab's text anew each time, before emitting "populate-popup" for others to
 // add to it. The message is the one under the pointer, also when the menu is opened from the
 // keyboard; none if the pointer is elsewhere.
@@ -1583,7 +1684,8 @@ static gboolean populatingPopup(GSignalInvocationHint *, guint paramCount, const
     GtkWidget          *view = (paramCount > 1) ? static_cast<GtkWidget *>(p_g_value_get_object(&params[0])) : nullptr;
     GtkWidget          *menu = view ? static_cast<GtkWidget *>(p_g_value_get_object(&params[1])) : nullptr;
     PurpleConversation *conv = menu ? findTabConversation(view) : nullptr;
-    if (!conv || !g_messagePopupHandler)
+    PurpleConversation *entryConv = (menu && !conv) ? findEntryConversation(view) : nullptr;
+    if ((!conv || !g_messagePopupHandler) && !entryConv)
         return TRUE;
     gint x, y;
     p_gtk_widget_get_pointer(view, &x, &y);
@@ -1593,6 +1695,10 @@ static gboolean populatingPopup(GSignalInvocationHint *, guint paramCount, const
     GtkTextIter  where;
     p_gtk_text_view_window_to_buffer_coords(textView, GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
     p_gtk_text_view_get_iter_at_location(textView, &where, x, y);
+    if (entryConv) {
+        addPlaceholderMenu(entryConv, view, menu, where);
+        return TRUE;
+    }
     MessageId messageId = findMessageAt(getTextBuffer(conv), where);
     if (!messageId.valid())
         return TRUE;
@@ -1759,6 +1865,9 @@ static void connectPopup()
         purple_debug_warning(config::pluginId, "Cannot add to the menu of a tab's text: some of GTK is not found\n");
         return;
     }
+    // The placeholders' menu is not added without them
+    LOOK_UP(gtk_text_buffer_get_slice);
+    LOOK_UP(gtk_text_buffer_insert);
     g_popupSignal = p_g_signal_lookup("populate-popup", p_gtk_imhtml_get_type());
     if (g_popupSignal)
         g_popupHook = p_g_signal_add_emission_hook(g_popupSignal, 0, populatingPopup, nullptr, nullptr);
@@ -1908,6 +2017,10 @@ void setTopReachedHandler(TopReachedHandler handler)
 }
 
 void fillOpenMenu(const OpenMenuRef &menu, const std::vector<MenuItem> &items)
+{
+}
+
+void setPlaceholderHandler(PlaceholderHandler handler)
 {
 }
 

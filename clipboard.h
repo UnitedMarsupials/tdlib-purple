@@ -16,12 +16,15 @@ struct ClipboardContent {
 enum class AttachmentKind { Photo, Video, Document };
 struct PastedAttachment {
     std::string    placeholder; // brackets and all: [Image#1], [Video#2], [report.pdf]
+    std::string    asFile;      // of a picture or video, its name, as [holiday.jpg], to send it as a document
     AttachmentKind kind;
     std::string    path;
     bool           temporary;   // a picture of the clipboard's, saved for it, removed with it
 
-    PastedAttachment(std::string placeholder, AttachmentKind kind, std::string path, bool temporary)
-    : placeholder(std::move(placeholder)), kind(kind), path(std::move(path)), temporary(temporary) {}
+    PastedAttachment(std::string placeholder, std::string asFile, AttachmentKind kind, std::string path,
+                     bool temporary)
+    : placeholder(std::move(placeholder)), asFile(std::move(asFile)), kind(kind), path(std::move(path)),
+      temporary(temporary) {}
     ~PastedAttachment();
     PastedAttachment(const PastedAttachment &) = delete;
     PastedAttachment &operator=(const PastedAttachment &) = delete;
@@ -35,6 +38,9 @@ AttachmentKind guessAttachmentKind(const std::string &path);
 const std::string &addPastedFile(PastedAttachments &attachments, const std::string &path);
 // The placeholder of a picture of the image store, saved to a file of its own; empty if it cannot be
 const std::string &addPastedPicture(PastedAttachments &attachments, int imageId);
+// What the placeholder, of either form, stands for, if anything; whether it is the form for a document
+const PastedAttachment *findPasted(const PastedAttachments &attachments, const std::string &placeholder,
+                                   bool &asFile);
 // The placeholders of what is on the clipboard: its files, or its picture, the image store's reference
 // let go
 std::vector<std::string> addPasted(PastedAttachments &attachments, const ClipboardContent &content);

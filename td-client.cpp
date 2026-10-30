@@ -3220,6 +3220,11 @@ std::vector<std::string> PurpleTdClient::addPasted(const ClipboardContent &conte
     return ::addPasted(m_data.pastedAttachments, content);
 }
 
+const PastedAttachment *PurpleTdClient::findPasted(const std::string &placeholder, bool &asFile)
+{
+    return ::findPasted(m_data.pastedAttachments, placeholder, asFile);
+}
+
 void PurpleTdClient::cancelUpload(PurpleXfer *xfer)
 {
     int32_t fileId;

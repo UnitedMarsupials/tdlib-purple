@@ -53,9 +53,20 @@ AttachmentKind guessAttachmentKind(const std::string &path)
 static bool isTaken(const PastedAttachments &attachments, const std::string &placeholder)
 {
     for (const PastedAttachment &attachment: attachments)
-        if (attachment.placeholder == placeholder)
+        if ((attachment.placeholder == placeholder) || (attachment.asFile == placeholder))
             return true;
     return false;
+}
+
+const PastedAttachment *findPasted(const PastedAttachments &attachments, const std::string &placeholder,
+                                   bool &asFile)
+{
+    for (const PastedAttachment &attachment: attachments)
+        if ((attachment.placeholder == placeholder) || (attachment.asFile == placeholder)) {
+            asFile = (attachment.asFile == placeholder);
+            return &attachment;
+        }
+    return nullptr;
 }
 
 // [Image#1] and on, or [name], [name#2] and on, whichever is not taken yet
@@ -77,9 +88,13 @@ const std::string &addPastedFile(PastedAttachments &attachments, const std::stri
     for (const PastedAttachment &attachment: attachments)
         if (!attachment.temporary && (attachment.path == path))
             return attachment.placeholder;
-    AttachmentKind kind = guessAttachmentKind(path);
-    gchar         *name = g_path_get_basename(path.c_str());
-    attachments.emplace_back(makePlaceholder(attachments, kind, name), kind, path, false);
+    AttachmentKind kind        = guessAttachmentKind(path);
+    gchar         *name        = g_path_get_basename(path.c_str());
+    std::string    placeholder = makePlaceholder(attachments, kind, name);
+    // Not taken by the first, which a picture's or video's is not, being numbered
+    std::string    asFile      = (kind != AttachmentKind::Document) ?
+                                 makePlaceholder(attachments, AttachmentKind::Document, name) : "";
+    attachments.emplace_back(placeholder, asFile, kind, path, false);
     g_free(name);
     return attachments.back().placeholder;
 }
@@ -90,8 +105,9 @@ const std::string &addPastedPicture(PastedAttachments &attachments, int imageId)
     char *fileName = nullptr;
     if (!saveImage(imageId, &fileName))
         return none;
-    attachments.emplace_back(makePlaceholder(attachments, AttachmentKind::Photo, ""), AttachmentKind::Photo,
-                             fileName, true);
+    attachments.emplace_back(makePlaceholder(attachments, AttachmentKind::Photo, ""),
+                             makePlaceholder(attachments, AttachmentKind::Document, "clipboard.png"),
+                             AttachmentKind::Photo, fileName, true);
     g_free(fileName);
     return attachments.back().placeholder;
 }

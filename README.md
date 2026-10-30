@@ -22,7 +22,11 @@ copied to the clipboard, as a file manager copies them, or else its picture.
 Each stands for itself in the message's text as its placeholder, `[Image#1]`,
 `[Video#2]` or, for any other file, its name, such as `[report.pdf]`, the text
 after it being its caption; several in a row go as an album, pictures and
-videos together, documents apart, up to ten in one.
+videos together, documents apart, up to ten in one. A picture or video also
+goes by its file name, `[holiday.jpg]`, which sends it as a file, as it is,
+not made smaller by Telegram; a picture of the clipboard's is
+`[clipboard.png]`. In Pidgin, right-clicking a placeholder in the input field
+offers to send it the other way, or to take it out of the message.
 
 In Pidgin, pasting into a conversation's input field puts a picture there, and
 the files' placeholders; so does dropping files onto the conversation, its
