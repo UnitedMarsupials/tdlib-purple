@@ -58,6 +58,8 @@ struct PlaceholderUse {
     std::string             name;      // as a file
 };
 
+// The MIME type of the file's content, as shared-mime-info tells, never its name; empty if it cannot
+std::string guessMimeType(const std::string &path);
 // By the file's content, as shared-mime-info tells, never its name: pictures Telegram takes as photos,
 // and videos, as such, anything else, or what cannot be told, as a document
 AttachmentKind guessAttachmentKind(const std::string &path);

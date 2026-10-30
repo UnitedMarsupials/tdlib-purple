@@ -998,21 +998,21 @@ static PurpleCmdRet hangupCommand(PurpleConversation *conv, const gchar *cmd, gc
         return PURPLE_CMD_RET_FAILED;
 }
 
-static std::vector<std::string> getPlaceholders(const std::vector<const PastedAttachment *> &pasted)
+static std::vector<PastedPlaceholder> getPlaceholders(const std::vector<const PastedAttachment *> &pasted)
 {
-    std::vector<std::string> placeholders;
+    std::vector<PastedPlaceholder> placeholders;
     for (const PastedAttachment *attachment: pasted)
-        placeholders.push_back(attachment->placeholder());
+        placeholders.push_back({attachment->placeholder(), attachment->path, attachment->kind});
     return placeholders;
 }
 
 // Placeholders for the files, typed into the input field where the clipboard is pasted
-static std::vector<std::string> filesPasted(PurpleConversation *conv, const std::vector<std::string> &files)
+static std::vector<PastedPlaceholder> filesPasted(PurpleConversation *conv, const std::vector<std::string> &files)
 {
     PurpleTdClient  *tdClient = getTdClient(purple_conversation_get_account(conv));
     ClipboardContent content;
     content.files = files;
-    return tdClient ? getPlaceholders(tdClient->addPasted(content)) : std::vector<std::string>();
+    return tdClient ? getPlaceholders(tdClient->addPasted(content)) : std::vector<PastedPlaceholder>();
 }
 
 static bool placeholderClicked(PurpleConversation *conv, const std::string &placeholder, PastedForms &forms)
@@ -1074,7 +1074,7 @@ static PurpleCmdRet pasteCommand(PurpleConversation *conv, const gchar *cmd, gch
         int imageId = content.imageId;
         content.imageId = 0;
         // Pidgin empties the field once the command is done
-        pasteIntoEntryLater(conv, joinPlaceholders(getPlaceholders(tdClient->addPasted(content))), imageId);
+        pasteIntoEntryLater(conv, getPlaceholders(tdClient->addPasted(content)), imageId);
     } else {
         std::vector<const PastedAttachment *> pasted = tdClient->addPasted(content);
         if (pasted.empty()) {

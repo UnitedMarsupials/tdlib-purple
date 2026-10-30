@@ -85,13 +85,21 @@ bool isEntryEditing(PurpleConversation *conv, MessageId messageId);
 // looked at, which only Pidgin's conversation can do
 bool readPidginClipboard(PurpleConversation *conv, ClipboardContent &content);
 
+// A placeholder of something pasted, written into the input field, with a thumbnail of its file before
+// it, which is not sent
+struct PastedPlaceholder {
+    std::string    placeholder;
+    std::string    path;
+    AttachmentKind kind;
+};
 // Told of files copied to the clipboard and pasted into a conversation's input field, in Pidgin:
 // the field gets the placeholders it gives instead of the files' URIs
-using FilesPastedHandler = std::vector<std::string> (*)(PurpleConversation *conv, const std::vector<std::string> &files);
+using FilesPastedHandler = std::vector<PastedPlaceholder> (*)(PurpleConversation *conv,
+                                                              const std::vector<std::string> &files);
 void setFilesPastedHandler(FilesPastedHandler handler);
-// Once the main loop is idle, the text and the picture of the image store, if any, its reference
-// taken, go into the conversation's input field at the cursor
-void pasteIntoEntryLater(PurpleConversation *conv, const std::string &text, int imageId);
+// Once the main loop is idle, the placeholders and the picture of the image store, if any, its
+// reference taken, go into the conversation's input field at the cursor
+void pasteIntoEntryLater(PurpleConversation *conv, const std::vector<PastedPlaceholder> &placeholders, int imageId);
 
 // Writes the HTML into the tab as a line of its own, at its end, not logged
 void appendTabLine(PurpleConversation *conv, const std::string &html);

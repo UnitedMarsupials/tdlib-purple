@@ -89,6 +89,7 @@ add_library(telegram-tdlib SHARED
     pidgin-ui.cpp
     log-history.cpp
     clipboard.cpp
+    thumbnail.cpp
 )
 
 #target_compile_options(telegram-tdlib PRIVATE -Wmissing-declarations)

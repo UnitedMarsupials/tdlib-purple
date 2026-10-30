@@ -22,6 +22,7 @@ add_executable(tests EXCLUDE_FROM_ALL
     message-link-test.cpp
     custom-emoji-test.cpp
     clipboard-test.cpp
+    thumbnail-test.cpp
     formatted-text-test.cpp
     test-transceiver.cpp
     libpurple-mock.cpp
@@ -48,6 +49,7 @@ add_executable(tests EXCLUDE_FROM_ALL
     ../pidgin-ui.cpp
     ../log-history.cpp
     ../clipboard.cpp
+    ../thumbnail.cpp
 )
 
 # C++17, not the plugin's C++14: GoogleTest requires it from 1.17 on.

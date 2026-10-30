@@ -15,4 +15,5 @@ secret-chat.cpp
 sticker.cpp
 td-client.cpp
 tdlib-purple.cpp
+thumbnail.cpp
 transceiver.cpp

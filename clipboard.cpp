@@ -21,9 +21,7 @@ PastedAttachment::~PastedAttachment()
         remove(path.c_str());
 }
 
-// By its content alone, its magic as shared-mime-info knows it: GIO, given the name too, would go by
-// that whenever it fits one type
-AttachmentKind guessAttachmentKind(const std::string &path)
+std::string guessMimeType(const std::string &path)
 {
     enum { SNIFFED_LENGTH = 4096 };
     guchar  data[SNIFFED_LENGTH];
@@ -33,20 +31,29 @@ AttachmentKind guessAttachmentKind(const std::string &path)
         length = fread(data, 1, sizeof(data), file);
         fclose(file);
     }
-    gboolean uncertain = TRUE;
-    gchar   *type      = length ? g_content_type_guess(nullptr, data, length, &uncertain) : nullptr;
-    gchar   *mime      = (type && !uncertain) ? g_content_type_get_mime_type(type) : nullptr;
+    // By its content alone, its magic as shared-mime-info knows it: GIO, given the name too, would go by
+    // that whenever it fits one type
+    gboolean    uncertain = TRUE;
+    gchar      *type      = length ? g_content_type_guess(nullptr, data, length, &uncertain) : nullptr;
+    gchar      *mime      = (type && !uncertain) ? g_content_type_get_mime_type(type) : nullptr;
+    std::string result    = mime ? mime : "";
     purple_debug_misc(config::pluginId, "%s is %s\n", path.c_str(), mime ? mime : "of no known type");
+    g_free(mime);
+    g_free(type);
+    return result;
+}
+
+AttachmentKind guessAttachmentKind(const std::string &path)
+{
+    std::string mime = guessMimeType(path);
     // Pictures Telegram takes as photos; others, such as GIF or SVG, go as they are
     static const char *const photos[] = {"image/jpeg", "image/png", "image/webp", "image/bmp"};
     AttachmentKind kind = AttachmentKind::Document;
     for (const char *photo: photos)
-        if (mime && !strcmp(mime, photo))
+        if (mime == photo)
             kind = AttachmentKind::Photo;
-    if (mime && g_str_has_prefix(mime, "video/"))
+    if (g_str_has_prefix(mime.c_str(), "video/"))
         kind = AttachmentKind::Video;
-    g_free(mime);
-    g_free(type);
     return kind;
 }
 

@@ -1,4 +1,6 @@
 #include "pidgin-ui.h"
+#include "thumbnail.h"
+#include <gio/gio.h>
 #include "client-utils.h"
 #include "config.h"
 #include <string>
@@ -72,6 +74,14 @@ FRONT_END_FUNCTION(gtk_text_buffer_insert_at_cursor);
 // For the menu of a placeholder in the input field
 FRONT_END_FUNCTION(gtk_text_buffer_get_slice);
 FRONT_END_FUNCTION(gtk_text_buffer_insert);
+// For the thumbnails before placeholders
+FRONT_END_FUNCTION(gtk_text_buffer_create_child_anchor);
+FRONT_END_FUNCTION(gtk_text_view_add_child_at_anchor);
+FRONT_END_FUNCTION(gtk_text_iter_get_child_anchor);
+FRONT_END_FUNCTION(gtk_image_new_from_icon_name);
+FRONT_END_FUNCTION(gtk_image_set_from_pixbuf);
+FRONT_END_FUNCTION(gdk_pixbuf_new_from_file_at_scale);
+FRONT_END_FUNCTION(g_object_ref);
 // For drops
 FRONT_END_FUNCTION(g_value_get_uint);
 FRONT_END_FUNCTION(gdk_atom_intern);
@@ -833,11 +843,62 @@ static bool takeOver(GtkWidget *widget, const char *name)
     return true;
 }
 
-static void insertPlaceholders(GtkWidget *entry, PurpleConversation *conv, const std::vector<std::string> &files)
+// Shown this big, by the line of text it is in
+enum { THUMBNAIL_SIZE = 48 };
+static const char THUMBNAIL_KEY[] = "tdlib-purple-thumbnail";
+
+static void showThumbnail(GtkWidget *image, const std::string &png)
 {
-    for (const std::string &placeholder: g_filesPastedHandler(conv, files))
+    GdkPixbuf *pixbuf = png.empty() ? nullptr : p_gdk_pixbuf_new_from_file_at_scale(png.c_str(), THUMBNAIL_SIZE,
+                                                                                    THUMBNAIL_SIZE, TRUE, nullptr);
+    if (pixbuf) {
+        p_gtk_image_set_from_pixbuf(reinterpret_cast<GtkImage *>(image), pixbuf);
+        p_g_object_unref(pixbuf);
+    }
+}
+
+// Before the placeholder, a thumbnail of its file: an icon of its type until one is found, its
+// anchor holding no text, so that it is not sent
+static void insertThumbnail(GtkWidget *entry, const PastedPlaceholder &pasted)
+{
+    if (!p_gtk_text_buffer_create_child_anchor || pasted.path.empty())
+        return;
+    GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(entry)->text_buffer;
+    GtkTextIter    cursor;
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &cursor, p_gtk_text_buffer_get_insert(buffer));
+    GtkTextChildAnchor *anchor = p_gtk_text_buffer_create_child_anchor(buffer, &cursor);
+    p_g_object_set_data_full(reinterpret_cast<GObject *>(anchor), THUMBNAIL_KEY, g_strdup(pasted.placeholder.c_str()),
+                             g_free);
+
+    std::string mime  = guessMimeType(pasted.path);
+    gchar      *type  = mime.empty() ? nullptr : g_content_type_from_mime_type(mime.c_str());
+    gchar      *icon  = type ? g_content_type_get_generic_icon_name(type) : nullptr;
+    GtkWidget  *image = p_gtk_image_new_from_icon_name(icon ? icon : "text-x-generic", GTK_ICON_SIZE_DND);
+    g_free(icon);
+    g_free(type);
+    p_gtk_widget_set_tooltip_text(image, pasted.path.c_str());
+    p_gtk_text_view_add_child_at_anchor(reinterpret_cast<GtkTextView *>(entry), image, anchor);
+    p_gtk_widget_show(image);
+
+    // A picture is its own; anything else as file managers have it, or a thumbnailer makes it
+    if (pasted.kind == AttachmentKind::Photo)
+        showThumbnail(image, pasted.path);
+    else {
+        p_g_object_ref(image);
+        findThumbnail(pasted.path, mime, [image](const std::string &png) {
+            showThumbnail(image, png);
+            p_g_object_unref(image);
+        });
+    }
+}
+
+static void insertPlaceholders(GtkWidget *entry, const std::vector<PastedPlaceholder> &placeholders)
+{
+    for (const PastedPlaceholder &pasted: placeholders) {
+        insertThumbnail(entry, pasted);
         p_gtk_text_buffer_insert_at_cursor(reinterpret_cast<GtkIMHtml *>(entry)->text_buffer,
-                                           (placeholder + " ").c_str(), -1);
+                                           (pasted.placeholder + " ").c_str(), -1);
+    }
 }
 
 // Pastes the placeholders of the files copied, if any
@@ -851,14 +912,15 @@ static bool pasteFiles(GtkWidget *entry, PurpleConversation *conv)
     g_strfreev(uris);
     if (files.empty() || !takeOver(entry, "paste-clipboard"))
         return false;
-    insertPlaceholders(entry, conv, files);
+    insertPlaceholders(entry, g_filesPastedHandler(conv, files));
     return true;
 }
 
 struct EntryPaste {
-    PurpleConversation *conv;
-    std::string         text;
-    int                 imageId;
+    PurpleConversation            *conv;
+    std::vector<PastedPlaceholder> placeholders;
+    std::string                    text;
+    int                            imageId;
 };
 
 static gboolean pasteIntoEntry(gpointer data)
@@ -871,8 +933,11 @@ static gboolean pasteIntoEntry(gpointer data)
     GtkWidget *entry = item ? getEntry(paste->conv) : nullptr;
     if (entry) {
         GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(entry)->text_buffer;
-        if (!paste->text.empty() && p_gtk_text_buffer_insert_at_cursor)
-            p_gtk_text_buffer_insert_at_cursor(buffer, (paste->text + " ").c_str(), -1);
+        if (p_gtk_text_buffer_insert_at_cursor) {
+            insertPlaceholders(entry, paste->placeholders);
+            if (!paste->text.empty())
+                p_gtk_text_buffer_insert_at_cursor(buffer, (paste->text + " ").c_str(), -1);
+        }
         if (paste->imageId) {
             GtkTextIter cursor;
             p_gtk_text_buffer_get_iter_at_mark(buffer, &cursor, p_gtk_text_buffer_get_insert(buffer));
@@ -884,9 +949,9 @@ static gboolean pasteIntoEntry(gpointer data)
     return FALSE;
 }
 
-void pasteIntoEntryLater(PurpleConversation *conv, const std::string &text, int imageId)
+void pasteIntoEntryLater(PurpleConversation *conv, const std::vector<PastedPlaceholder> &placeholders, int imageId)
 {
-    g_idle_add(pasteIntoEntry, new EntryPaste{conv, text, imageId});
+    g_idle_add(pasteIntoEntry, new EntryPaste{conv, placeholders, "", imageId});
 }
 
 static gboolean pastingClipboard(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
@@ -956,11 +1021,11 @@ static void pictureFetched(PurpleUtilFetchUrlData *, gpointer data, const gchar 
         memcpy(copy, content, length);
         int id = purple_imgstore_add_with_id(copy, length, name);
         g_free(name);
-        pasteIntoEntry(new EntryPaste{fetch->conv, "", id});
+        pasteIntoEntry(new EntryPaste{fetch->conv, {}, "", id});
     } else {
         purple_debug_misc(config::pluginId, "Dropped %s, not a picture: %s\n", fetch->url.c_str(),
                           error ? error : "other content");
-        pasteIntoEntry(new EntryPaste{fetch->conv, fetch->url, 0});
+        pasteIntoEntry(new EntryPaste{fetch->conv, {}, fetch->url, 0});
     }
 }
 
@@ -1003,7 +1068,7 @@ static gboolean droppingData(GSignalInvocationHint *, guint paramCount, const GV
                       p_g_value_get_uint(&params[6]));
     GtkWidget *entry = getEntry(conv);
     if (!files.empty())
-        insertPlaceholders(entry, conv, files);
+        insertPlaceholders(entry, g_filesPastedHandler(conv, files));
     for (const std::string &url: urls) {
         purple_debug_misc(config::pluginId, "Fetching %s, dropped\n", url.c_str());
         PictureFetch *fetch = new PictureFetch{conv, url};
@@ -1118,6 +1183,14 @@ static void connectPaste(gpointer plugin)
     }
     if (!g_dropHook)
         purple_debug_warning(config::pluginId, "Cannot take drops: some of GTK is not found\n");
+    if (!LOOK_UP(gtk_text_buffer_create_child_anchor) || !LOOK_UP(gtk_text_view_add_child_at_anchor) ||
+        !LOOK_UP(gtk_text_iter_get_child_anchor) || !LOOK_UP(gtk_image_new_from_icon_name) ||
+        !LOOK_UP(gtk_image_set_from_pixbuf) || !LOOK_UP(gdk_pixbuf_new_from_file_at_scale) ||
+        !LOOK_UP(g_object_ref) || !LOOK_UP(gtk_widget_set_tooltip_text) || !LOOK_UP(gtk_widget_show))
+    {
+        p_gtk_text_buffer_create_child_anchor = nullptr;
+        purple_debug_warning(config::pluginId, "Cannot show thumbnails of pasted files: some of GTK is not found\n");
+    }
     purple_signal_connect(p_pidgin_conversations_get_handle(), "conversation-displayed", plugin,
                           PURPLE_CALLBACK(watchConversation), NULL);
     for (GList *item = purple_get_conversations(); item; item = item->next) {
@@ -1632,9 +1705,18 @@ static void replacePlaceholder(GtkWidget *entry, gint start, const std::string &
     const char    *at     = g_utf8_offset_to_pointer(text.c_str(), start);
     if ((start + length > g_utf8_strlen(text.c_str(), -1)) || strncmp(at, placeholder.c_str(), placeholder.size()))
         return;
-    // Taken out, with the space after it, which pasting put there
+    // Taken out, with the space after it, which pasting put there, and its thumbnail before it
     if (replacement.empty() && (at[placeholder.size()] == ' '))
         length++;
+    if (replacement.empty() && (start > 0) && p_gtk_text_iter_get_child_anchor) {
+        GtkTextIter before;
+        p_gtk_text_buffer_get_iter_at_offset(buffer, &before, start - 1);
+        GtkTextChildAnchor *anchor = p_gtk_text_iter_get_child_anchor(&before);
+        if (anchor && p_g_object_get_data(reinterpret_cast<GObject *>(anchor), THUMBNAIL_KEY)) {
+            start--;
+            length++;
+        }
+    }
     GtkTextIter from, to;
     p_gtk_text_buffer_get_iter_at_offset(buffer, &from, start);
     p_gtk_text_buffer_get_iter_at_offset(buffer, &to, start + length);
@@ -1916,7 +1998,7 @@ void setFilesPastedHandler(FilesPastedHandler handler)
 {
 }
 
-void pasteIntoEntryLater(PurpleConversation *conv, const std::string &text, int imageId)
+void pasteIntoEntryLater(PurpleConversation *conv, const std::vector<PastedPlaceholder> &placeholders, int imageId)
 {
     if (imageId)
         purple_imgstore_unref_by_id(imageId);
