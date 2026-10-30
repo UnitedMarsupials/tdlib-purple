@@ -1562,11 +1562,11 @@ TEST_F(PasteTest, FilesAsAlbum)
     });
 }
 
-// A file pasted again keeps its placeholder; one of another kind does not go into the album
-TEST_F(PasteTest, KindsApart)
+// A file pasted again keeps its placeholder, and another of the same name gets one of its own
+TEST_F(PasteTest, SameName)
 {
     loginWithOneContact();
-    paste("TARGETS\\ntext/uri-list\\n", "file:///path/a.pdf\\r\\nfile:///path/movie.MP4\\r\\n");
+    paste("TARGETS\\ntext/uri-list\\n", "file:///path/a.pdf\\r\\n");
     prpl.discardEvents();
     paste("TARGETS\\ntext/uri-list\\n", "file:///path/a.pdf\\r\\nfile:///other/a.pdf\\r\\n");
     prpl.verifyEvents(ConversationWriteEvent(
@@ -1574,17 +1574,52 @@ TEST_F(PasteTest, KindsApart)
         "Pasted [a.pdf] [a.pdf#2]: write it into the message, where it goes, to send it there.",
         (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), 0
     ));
+}
 
-    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "[a.pdf] [Video#1]",
+// Files go as what their content is, whatever their names say: a picture and a video together, as
+// an album, and what is neither as a document, apart
+TEST_F(PasteTest, KindsByContent)
+{
+    loginWithOneContact();
+    gchar *dir = g_dir_make_tmp("paste-kinds-XXXXXX", nullptr);
+    ASSERT_NE(nullptr, dir);
+    std::string photo = std::string(dir) + "/photo.pdf";
+    std::string video = std::string(dir) + "/movie.txt";
+    std::string notes = std::string(dir) + "/notes.png";
+    static const char png[] = "\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
+    static const char mp4[] = "\0\0\0\x20" "ftypisom\0\0\x02\0isomiso2avc1mp41";
+    ASSERT_TRUE(g_file_set_contents(photo.c_str(), png, sizeof(png) - 1, nullptr));
+    ASSERT_TRUE(g_file_set_contents(video.c_str(), mp4, sizeof(mp4) - 1, nullptr));
+    ASSERT_TRUE(g_file_set_contents(notes.c_str(), "Notes, of no picture at all\n", -1, nullptr));
+
+    std::string list = "file://" + photo + "\\r\\nfile://" + video + "\\r\\nfile://" + notes + "\\r\\n";
+    paste("TARGETS\\ntext/uri-list\\n", list.c_str());
+    prpl.verifyEvents(ConversationWriteEvent(
+        purpleUserName(0), "",
+        "Pasted [Image#1] [Video#1] [notes.png]: write it into the message, where it goes, to send it there.",
+        (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), 0
+    ));
+
+    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "[Image#1] [Video#1] [notes.png]",
                                       PURPLE_MESSAGE_SEND));
+    auto album = make_object<sendMessageAlbum>();
+    album->chat_id_ = chatIds[0];
+    album->input_message_contents_.push_back(makeInputMessagePhoto(
+        make_object<inputFileLocal>(photo), nullptr, std::vector<std::int32_t>(), 0, 0,
+        make_object<formattedText>(), false, nullptr, false));
+    album->input_message_contents_.push_back(makeInputMessageVideo(make_object<inputFileLocal>(video),
+                                                                   make_object<formattedText>()));
     tgl.verifyRequests({
+        std::move(album),
         makeSendMessage(chatIds[0], 0, nullptr, nullptr, nullptr,
-                        makeInputMessageDocument(make_object<inputFileLocal>("/path/a.pdf"), nullptr, false,
-                                                 make_object<formattedText>())),
-        makeSendMessage(chatIds[0], 0, nullptr, nullptr, nullptr,
-                        makeInputMessageVideo(make_object<inputFileLocal>("/path/movie.MP4"),
-                                              make_object<formattedText>()))
+                        makeInputMessageDocument(make_object<inputFileLocal>(notes), nullptr, false,
+                                                 make_object<formattedText>()))
     });
+
+    for (const std::string &file: {photo, video, notes})
+        g_unlink(file.c_str());
+    g_rmdir(dir);
+    g_free(dir);
 }
 
 // A photo of ours, shown as it is sent, is uploaded: that is no edit, nor is it shown again

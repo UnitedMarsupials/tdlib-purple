@@ -19,7 +19,7 @@
 ### Build
 
 - **Pidgin's headers are needed to build, for features of its conversation window, and `-DNoPidgin=True` builds without them.**
-- **GIO is linked, for the types of the files pasted, by their content as shared-mime-info tells them.** It comes with GLib; without shared-mime-info's database installed, every file goes as a document.
+- **GIO is linked, for the types of the files pasted, told by their content, never their names, as shared-mime-info's magic has them.** It comes with GLib; without shared-mime-info's database installed, every file goes as a document.
 
 ## 0.9.4 (2026-10-27)
 

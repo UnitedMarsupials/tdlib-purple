@@ -21,7 +21,8 @@ PastedAttachment::~PastedAttachment()
         remove(path.c_str());
 }
 
-// By its content, and its name, as file managers tell, with shared-mime-info's help
+// By its content alone, its magic as shared-mime-info knows it: GIO, given the name too, would go by
+// that whenever it fits one type
 AttachmentKind guessAttachmentKind(const std::string &path)
 {
     enum { SNIFFED_LENGTH = 4096 };
@@ -32,8 +33,9 @@ AttachmentKind guessAttachmentKind(const std::string &path)
         length = fread(data, 1, sizeof(data), file);
         fclose(file);
     }
-    gchar *type = g_content_type_guess(path.c_str(), length ? data : nullptr, length, nullptr);
-    gchar *mime = type ? g_content_type_get_mime_type(type) : nullptr;
+    gboolean uncertain = TRUE;
+    gchar   *type      = length ? g_content_type_guess(nullptr, data, length, &uncertain) : nullptr;
+    gchar   *mime      = (type && !uncertain) ? g_content_type_get_mime_type(type) : nullptr;
     purple_debug_misc(config::pluginId, "%s is %s\n", path.c_str(), mime ? mime : "of no known type");
     // Pictures Telegram takes as photos; others, such as GIF or SVG, go as they are
     static const char *const photos[] = {"image/jpeg", "image/png", "image/webp", "image/bmp"};
