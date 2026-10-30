@@ -89,6 +89,9 @@ std::string formatMessageTime(time_t timestamp)
         return purple_date_format_long(&sent);
 }
 
+// Of a file not uploaded yet, as one we send is until it is
+static const char LOCAL_FILE_KEY[] = "local:";
+
 static std::string getFileKey(const td::td_api::file *file)
 {
     if (!file)
@@ -96,7 +99,7 @@ static std::string getFileKey(const td::td_api::file *file)
     // The same file keeps its remote identifier, while its local one may differ between sessions
     if (file->remote_ && !file->remote_->unique_id_.empty())
         return file->remote_->unique_id_;
-    return std::to_string(file->id_);
+    return LOCAL_FILE_KEY + std::to_string(file->id_);
 }
 
 // A location a message holds: where, and in the case of a venue, what is there. A live one has a
@@ -2593,11 +2596,15 @@ void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messa
 
     ShownMessage editedMessage;
     getShownContent(*content, editedMessage);
-    if ((editedMessage.file == shownMessage->file) && (editedMessage.content == shownMessage->content) &&
+    // A file of ours, uploaded as the message is sent, is the same, only known by its remote
+    // identifier from then on
+    bool uploaded = g_str_has_prefix(shownMessage->file.c_str(), LOCAL_FILE_KEY) && !editedMessage.file.empty();
+    if (((editedMessage.file == shownMessage->file) || uploaded) && (editedMessage.content == shownMessage->content) &&
         (editedMessage.formatting == shownMessage->formatting))
     {
         purple_debug_misc(config::pluginId, "Message %" G_GINT64_FORMAT " changed out of sight\n",
                           messageId.value());
+        shownMessage->file = editedMessage.file;
         return;
     }
 

@@ -1586,3 +1586,30 @@ TEST_F(PasteTest, KindsApart)
                                               make_object<formattedText>()))
     });
 }
+
+// A photo of ours, shown as it is sent, is uploaded: that is no edit, nor is it shown again
+TEST_F(FileTransferTest, SentPhotoUploaded)
+{
+    const int32_t date   = 10001;
+    const int32_t fileId = 1234;
+    loginWithOneContact();
+
+    auto makeContent = [fileId](const char *uniqueId, bool uploaded) {
+        std::vector<object_ptr<photoSize>> sizes;
+        sizes.push_back(makePhotoSize(make_object<file>(
+                fileId, 10000, 10000,
+                make_object<localFile>("/path", true, true, false, true, 0, 10000, 10000),
+                make_object<remoteFile>(uploaded ? "beh" : "", uniqueId, !uploaded, uploaded, uploaded ? 10000 : 0)
+            ), 640, 480));
+        return makeMessagePhoto(make_object<photo>(false, nullptr, std::move(sizes)),
+                                make_object<formattedText>("", std::vector<object_ptr<textEntity>>()),
+                                false, false, false);
+    };
+    tgl.update(make_object<updateNewMessage>(makeMessage(1, selfId, chatIds[0], true, date, makeContent("", false))));
+    prpl.discardEvents();
+    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
+
+    tgl.update(make_object<td::td_api::updateMessageContent>(chatIds[0], 1, makeContent("bleh", true)));
+    prpl.verifyNoEvents();
+    tgl.verifyNoRequests();
+}
