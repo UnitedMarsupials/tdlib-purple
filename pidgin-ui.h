@@ -100,6 +100,8 @@ void setFilesPastedHandler(FilesPastedHandler handler);
 // Once the main loop is idle, the placeholders and the picture of the image store, if any, its
 // reference taken, go into the conversation's input field at the cursor
 void pasteIntoEntryLater(PurpleConversation *conv, const std::vector<PastedPlaceholder> &placeholders, int imageId);
+// A thumbnail at the start of the input field, before the placeholder of a message's media being edited
+void addEntryThumbnail(PurpleConversation *conv, const PastedPlaceholder &pasted);
 
 // Writes the HTML into the tab as a line of its own, at its end, not logged
 void appendTabLine(PurpleConversation *conv, const std::string &html);

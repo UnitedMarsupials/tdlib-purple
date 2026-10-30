@@ -82,6 +82,7 @@ FRONT_END_FUNCTION(gtk_image_new_from_icon_name);
 FRONT_END_FUNCTION(gtk_image_set_from_pixbuf);
 FRONT_END_FUNCTION(gdk_pixbuf_new_from_file_at_scale);
 FRONT_END_FUNCTION(g_object_ref);
+FRONT_END_FUNCTION(gtk_text_buffer_place_cursor);
 // For drops
 FRONT_END_FUNCTION(g_value_get_uint);
 FRONT_END_FUNCTION(gdk_atom_intern);
@@ -892,6 +893,23 @@ static void insertThumbnail(GtkWidget *entry, const PastedPlaceholder &pasted)
     }
 }
 
+void addEntryThumbnail(PurpleConversation *conv, const PastedPlaceholder &pasted)
+{
+    GtkWidget *entry = getEntry(conv);
+    if (!entry || !p_gtk_text_buffer_create_child_anchor)
+        return;
+    // At the start, where an edited message's placeholder is, the cursor kept where it was
+    GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(entry)->text_buffer;
+    GtkTextIter    cursor, start;
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &cursor, p_gtk_text_buffer_get_insert(buffer));
+    gint offset = p_gtk_text_iter_get_offset(&cursor);
+    p_gtk_text_buffer_get_iter_at_offset(buffer, &start, 0);
+    p_gtk_text_buffer_place_cursor(buffer, &start);
+    insertThumbnail(entry, pasted);
+    p_gtk_text_buffer_get_iter_at_offset(buffer, &cursor, offset + 1);
+    p_gtk_text_buffer_place_cursor(buffer, &cursor);
+}
+
 static void insertPlaceholders(GtkWidget *entry, const std::vector<PastedPlaceholder> &placeholders)
 {
     for (const PastedPlaceholder &pasted: placeholders) {
@@ -1186,7 +1204,8 @@ static void connectPaste(gpointer plugin)
     if (!LOOK_UP(gtk_text_buffer_create_child_anchor) || !LOOK_UP(gtk_text_view_add_child_at_anchor) ||
         !LOOK_UP(gtk_text_iter_get_child_anchor) || !LOOK_UP(gtk_image_new_from_icon_name) ||
         !LOOK_UP(gtk_image_set_from_pixbuf) || !LOOK_UP(gdk_pixbuf_new_from_file_at_scale) ||
-        !LOOK_UP(g_object_ref) || !LOOK_UP(gtk_widget_set_tooltip_text) || !LOOK_UP(gtk_widget_show))
+        !LOOK_UP(g_object_ref) || !LOOK_UP(gtk_widget_set_tooltip_text) || !LOOK_UP(gtk_widget_show) ||
+        !LOOK_UP(gtk_text_buffer_place_cursor))
     {
         p_gtk_text_buffer_create_child_anchor = nullptr;
         purple_debug_warning(config::pluginId, "Cannot show thumbnails of pasted files: some of GTK is not found\n");
@@ -2002,6 +2021,10 @@ void pasteIntoEntryLater(PurpleConversation *conv, const std::vector<PastedPlace
 {
     if (imageId)
         purple_imgstore_unref_by_id(imageId);
+}
+
+void addEntryThumbnail(PurpleConversation *conv, const PastedPlaceholder &pasted)
+{
 }
 
 bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::string &text,
