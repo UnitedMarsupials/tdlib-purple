@@ -28,7 +28,8 @@ struct PastedAttachment {
 };
 using PastedAttachments = std::list<PastedAttachment>;
 
-// By the file's name: pictures and videos as such, anything else as a document
+// By the file's content, and its name, as shared-mime-info tells: pictures Telegram takes as photos,
+// and videos, as such, anything else as a document
 AttachmentKind guessAttachmentKind(const std::string &path);
 // The placeholder of the file, which goes with it from then on, a file pasted again keeping its own
 const std::string &addPastedFile(PastedAttachments &attachments, const std::string &path);

@@ -4,6 +4,7 @@
 #include "file-transfer.h"
 #include "translate.h"
 #include <purple.h>
+#include <gio/gio.h>
 #include <string.h>
 #include <vector>
 #ifndef _WIN32
@@ -20,22 +21,30 @@ PastedAttachment::~PastedAttachment()
         remove(path.c_str());
 }
 
+// By its content, and its name, as file managers tell, with shared-mime-info's help
 AttachmentKind guessAttachmentKind(const std::string &path)
 {
-    static const char *const photos[] = {"jpg", "jpeg", "png", "webp", "bmp"};
-    static const char *const videos[] = {"mp4", "m4v", "mov", "webm", "mkv", "avi"};
-    size_t dot = path.rfind('.');
-    if ((dot == std::string::npos) || (path.find('/', dot) != std::string::npos))
-        return AttachmentKind::Document;
-    gchar *extension = g_ascii_strdown(path.c_str() + dot + 1, -1);
+    enum { SNIFFED_LENGTH = 4096 };
+    guchar  data[SNIFFED_LENGTH];
+    gsize   length = 0;
+    FILE   *file   = fopen(path.c_str(), "rb");
+    if (file) {
+        length = fread(data, 1, sizeof(data), file);
+        fclose(file);
+    }
+    gchar *type = g_content_type_guess(path.c_str(), length ? data : nullptr, length, nullptr);
+    gchar *mime = type ? g_content_type_get_mime_type(type) : nullptr;
+    purple_debug_misc(config::pluginId, "%s is %s\n", path.c_str(), mime ? mime : "of no known type");
+    // Pictures Telegram takes as photos; others, such as GIF or SVG, go as they are
+    static const char *const photos[] = {"image/jpeg", "image/png", "image/webp", "image/bmp"};
     AttachmentKind kind = AttachmentKind::Document;
     for (const char *photo: photos)
-        if (!strcmp(extension, photo))
+        if (mime && !strcmp(mime, photo))
             kind = AttachmentKind::Photo;
-    for (const char *video: videos)
-        if (!strcmp(extension, video))
-            kind = AttachmentKind::Video;
-    g_free(extension);
+    if (mime && g_str_has_prefix(mime, "video/"))
+        kind = AttachmentKind::Video;
+    g_free(mime);
+    g_free(type);
     return kind;
 }
 

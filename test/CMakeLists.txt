@@ -58,7 +58,7 @@ target_include_directories(tests PRIVATE ${CMAKE_SOURCE_DIR} ${fmt_INCLUDE_DIRS}
 find_package(ZLIB REQUIRED)
 find_package(Threads REQUIRED)
 target_link_libraries(tests PRIVATE gtest ${fmt_LIBRARIES} Td::TdStatic ${GLIB_LIBRARIES}
-                      ${rlottie_LIBRARIES} ZLIB::ZLIB Threads::Threads ${GModule_LIBRARIES})
+                      ${rlottie_LIBRARIES} ZLIB::ZLIB Threads::Threads ${GModule_LIBRARIES} ${GIO_LIBRARIES})
 # The mock GdkPixbuf has to be found among the program's symbols, as Pidgin's would be
 set_property(TARGET tests PROPERTY ENABLE_EXPORTS ON)
 

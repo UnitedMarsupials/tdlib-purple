@@ -184,7 +184,7 @@ jobs:
           sh .github/annotate.sh Setup apk add --no-cache \
               cmake samurai pkgconf gettext gettext-dev g++ ${{ matrix.compiler }} \
               pidgin-dev telegram-tdlib-dev telegram-tdlib-static openssl-dev zlib-dev \
-              fmt-dev rlottie-dev gtest-dev ${{ matrix.valgrind && 'valgrind' || '' }} \
+              fmt-dev rlottie-dev gtest-dev shared-mime-info ${{ matrix.valgrind && 'valgrind' || '' }} \
               ${{ matrix.sanitize && 'clang compiler-rt' || '' }}
           apk info -v telegram-tdlib-dev
 
@@ -288,7 +288,7 @@ jobs:
             options: ''
             install: >-
               sudo pkg install -y cmake-core ninja pkgconf gettext-tools
-              libpurple pidgin tdlib libfmt rlottie googletest valgrind
+              libpurple pidgin tdlib libfmt rlottie googletest shared-mime-info valgrind
           # Without the pidgin package, so a stray need for its headers fails.
           - name: FreeBSD 15.1 (NoPidgin)
             os: freebsd
@@ -300,7 +300,7 @@ jobs:
             options: -DNoPidgin=1
             install: >-
               sudo pkg install -y cmake-core ninja pkgconf gettext-tools
-              libpurple tdlib libfmt rlottie googletest
+              libpurple tdlib libfmt rlottie googletest shared-mime-info
           - name: FreeBSD 14.4
             os: freebsd
             version: '14.4'
@@ -311,7 +311,7 @@ jobs:
             options: ''
             install: >-
               sudo pkg install -y cmake-core ninja pkgconf gettext-tools
-              libpurple pidgin tdlib libfmt rlottie googletest valgrind
+              libpurple pidgin tdlib libfmt rlottie googletest shared-mime-info valgrind
           # No rlottie package, so no animated stickers; built without Pidgin's
           # headers, so that the build without them is tried somewhere.
           - name: OpenBSD 7.9 (experimental, NoLottie, NoPidgin)
@@ -324,7 +324,7 @@ jobs:
             options: -DNoLottie=1 -DNoPidgin=1
             install: >-
               sudo pkg_add -I cmake ninja gettext-tools libpurple tdlib fmt
-              gtest
+              gtest shared-mime-info
     defaults:
       run:
         shell: cpa.sh {0}
