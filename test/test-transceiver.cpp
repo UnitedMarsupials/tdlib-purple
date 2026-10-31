@@ -167,8 +167,9 @@ static void compare(const object_ptr<formattedText> &actual, const object_ptr<fo
     if (!actual) return;
 
     ASSERT_EQ(expected->text_, actual->text_);
-    ASSERT_TRUE(actual->entities_.empty()) << "not supported";
-    ASSERT_TRUE(expected->entities_.empty()) << "not supported";
+    ASSERT_EQ(expected->entities_.size(), actual->entities_.size());
+    for (size_t i = 0; i < expected->entities_.size(); i++)
+        ASSERT_EQ(to_string(expected->entities_[i]), to_string(actual->entities_[i]));
 }
 
 static void compare(const inputMessageText &actual,
@@ -279,6 +280,19 @@ static void compare(const object_ptr<InputMessageContent> &actual,
         case inputMessageDocument::ID:
             compare(static_cast<const inputMessageDocument &>(*actual), static_cast<const inputMessageDocument &>(*expected));
             break;
+        case inputMessageVideo::ID: {
+            const inputMessageVideo &actualVideo   = static_cast<const inputMessageVideo &>(*actual);
+            const inputMessageVideo &expectedVideo = static_cast<const inputMessageVideo &>(*expected);
+#if TDLIB_API_INPUT_PHOTO
+            ASSERT_EQ(expectedVideo.video_ != nullptr, actualVideo.video_ != nullptr);
+            if (actualVideo.video_)
+                compare(actualVideo.video_->video_, expectedVideo.video_->video_);
+#else
+            compare(actualVideo.video_, expectedVideo.video_);
+#endif
+            compare(actualVideo.caption_, expectedVideo.caption_);
+            break;
+        }
         default:
             ASSERT_TRUE(false) << "Unsupported input message content";
     }
@@ -294,6 +308,23 @@ static void compare(const sendMessage &actual, const sendMessage &expected,
 
     compare(actual.options_,               expected.options_);
     compare(actual.reply_markup_,          expected.reply_markup_);
+    compare(actual.input_message_content_, expected.input_message_content_, m_inputPhotoPaths);
+}
+
+static void compare(const sendMessageAlbum &actual, const sendMessageAlbum &expected,
+                    std::vector<std::string> &m_inputPhotoPaths)
+{
+    COMPARE(chat_id_);
+    COMPARE(input_message_contents_.size());
+    for (size_t i = 0; i < actual.input_message_contents_.size(); i++)
+        compare(actual.input_message_contents_[i], expected.input_message_contents_[i], m_inputPhotoPaths);
+}
+
+static void compare(const editMessageMedia &actual, const editMessageMedia &expected,
+                    std::vector<std::string> &m_inputPhotoPaths)
+{
+    COMPARE(chat_id_);
+    COMPARE(message_id_);
     compare(actual.input_message_content_, expected.input_message_content_, m_inputPhotoPaths);
 }
 
@@ -593,6 +624,63 @@ static void compare(const removeMessageReaction &actual, const removeMessageReac
     compareReaction(actual.reaction_type_, expected.reaction_type_);
 }
 
+static void compare(const getMessageProperties &actual, const getMessageProperties &expected)
+{
+    COMPARE(chat_id_);
+    COMPARE(message_id_);
+}
+
+static void compare(const editMessageText &actual, const editMessageText &expected,
+                    std::vector<std::string> &m_inputPhotoPaths)
+{
+    COMPARE(chat_id_);
+    COMPARE(message_id_);
+    COMPARE(reply_markup_ != nullptr);
+    compare(actual.input_message_content_, expected.input_message_content_, m_inputPhotoPaths);
+}
+
+static void compare(const editMessageCaption &actual, const editMessageCaption &expected)
+{
+    COMPARE(chat_id_);
+    COMPARE(message_id_);
+    COMPARE(reply_markup_ != nullptr);
+    compare(actual.caption_, expected.caption_);
+    COMPARE(show_caption_above_media_);
+}
+
+static void compare(const deleteMessages &actual, const deleteMessages &expected)
+{
+    COMPARE(chat_id_);
+    COMPARE(message_ids_);
+    COMPARE(revoke_);
+}
+
+static void compare(const getUserFullInfo &actual, const getUserFullInfo &expected)
+{
+    COMPARE(user_id_);
+}
+
+static void compare(const setMessageSenderBlockList &actual, const setMessageSenderBlockList &expected)
+{
+    ASSERT_EQ(messageSenderUser::ID, actual.sender_id_->get_id());
+    ASSERT_EQ(static_cast<const messageSenderUser &>(*expected.sender_id_).user_id_,
+              static_cast<const messageSenderUser &>(*actual.sender_id_).user_id_);
+    COMPARE(block_list_ != nullptr);
+}
+
+static void compare(const reportChat &actual, const reportChat &expected)
+{
+    COMPARE(chat_id_);
+    COMPARE(option_id_);
+    COMPARE(message_ids_);
+    COMPARE(text_);
+}
+
+static void compare(const readAllChatReactions &actual, const readAllChatReactions &expected)
+{
+    COMPARE(chat_id_);
+}
+
 static void compareRequests(const Function &actual, const Function &expected,
                             std::vector<std::string> &m_inputPhotoPaths)
 {
@@ -650,6 +738,25 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(getMessageAvailableReactions)
         C(addMessageReaction)
         C(removeMessageReaction)
+        C(getMessageProperties)
+        C(editMessageCaption)
+        C(deleteMessages)
+        C(getUserFullInfo)
+        C(setMessageSenderBlockList)
+        C(reportChat)
+        C(readAllChatReactions)
+        case editMessageMedia::ID:
+            compare(static_cast<const editMessageMedia &>(actual), static_cast<const editMessageMedia &>(expected),
+                    m_inputPhotoPaths);
+            break;
+        case sendMessageAlbum::ID:
+            compare(static_cast<const sendMessageAlbum &>(actual), static_cast<const sendMessageAlbum &>(expected),
+                    m_inputPhotoPaths);
+            break;
+        case editMessageText::ID:
+            compare(static_cast<const editMessageText &>(actual), static_cast<const editMessageText &>(expected),
+                    m_inputPhotoPaths);
+            break;
         default: ASSERT_TRUE(false) << "Unsupported request " << requestToString(actual);
     }
 }
@@ -1325,6 +1432,19 @@ object_ptr<inputMessageDocument> makeInputMessageDocument(object_ptr<InputFile> 
     document.document_                       = std::move(document_);
     document.thumbnail_                      = std::move(thumbnail_);
     document.disable_content_type_detection_ = disable_content_type_detection_;
+    result->caption_ = std::move(caption_);
+    return result;
+}
+
+object_ptr<inputMessageVideo> makeInputMessageVideo(object_ptr<InputFile> &&video_, object_ptr<formattedText> &&caption_)
+{
+    auto result = make_object<inputMessageVideo>();
+#if TDLIB_API_INPUT_PHOTO
+    result->video_ = make_object<inputVideo>();
+    result->video_->video_ = std::move(video_);
+#else
+    result->video_ = std::move(video_);
+#endif
     result->caption_ = std::move(caption_);
     return result;
 }

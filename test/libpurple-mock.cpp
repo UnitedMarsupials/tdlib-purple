@@ -134,7 +134,8 @@ void purple_account_set_alias(PurpleAccount *account, const char *alias)
 
 PurpleAccount *purple_account_new(const char *username, const char *protocol_id)
 {
-    PurpleAccount *account = new PurpleAccount;
+    // Zeroed, the list of blocked users among the rest
+    PurpleAccount *account = new PurpleAccount();
     account->username = strdup(username);
     account->alias = nullptr;
     account->proxy_info = NULL;
@@ -160,6 +161,7 @@ void purple_account_destroy(PurpleAccount *account)
 {
     free(account->username);
     free(account->alias);
+    g_slist_free_full(account->deny, g_free);
 
     auto it = std::find_if(g_accounts.begin(), g_accounts.end(),
                            [account](const AccountInfo &info) { return (info.account == account); });
@@ -554,6 +556,7 @@ static PurpleConversation *purple_conversation_new_impl(PurpleConversationType t
     conv->name = strdup(name);
     conv->title = NULL;
     conv->ui_ops = NULL;
+    conv->logging = TRUE;
     if (conv->type == PURPLE_CONV_TYPE_IM) {
         conv->u.im = new PurpleConvIm;
         conv->u.im->conv = conv;
@@ -577,6 +580,16 @@ PurpleConversation *purple_conversation_new(PurpleConversationType type,
 {
     EVENT(NewConversationEvent, type, account, name);
     return purple_conversation_new_impl(type, account, name);
+}
+
+void purple_conversation_set_logging(PurpleConversation *conv, gboolean log)
+{
+    conv->logging = log;
+}
+
+gboolean purple_conversation_is_logging(const PurpleConversation *conv)
+{
+    return conv->logging;
 }
 
 void purple_conversation_destroy(PurpleConversation *conv)
@@ -688,6 +701,16 @@ void purple_conv_chat_write(PurpleConvChat *chat, const char *who,
 {
     purple_conversation_write(purple_conv_chat_get_conversation(chat), who, message, flags, mtime);
 }
+
+// Only what is dropped into Pidgin's conversations is fetched, which the tests do not do
+PurpleUtilFetchUrlData *purple_util_fetch_url_request_len(const gchar *url, gboolean full, const gchar *user_agent,
+                                                          gboolean http11, const gchar *request,
+                                                          gboolean include_headers, gssize max_len,
+                                                          PurpleUtilFetchUrlCallback callback, void *data)
+{
+    return NULL;
+}
+
 
 void purple_conv_chat_set_topic(PurpleConvChat *chat, const char *who,
 							  const char *topic)
@@ -893,6 +916,20 @@ void purple_prpl_got_user_status(PurpleAccount *account, const char *name,
 {
     PurpleStatusPrimitive type = (PurpleStatusPrimitive)(unsigned long)status_id;
     EVENT(UserStatusEvent, account, name, type);
+}
+
+gboolean purple_prefs_exists(const char *name)
+{
+    return FALSE;
+}
+
+int purple_prefs_get_int(const char *name)
+{
+    return 0;
+}
+
+void purple_conversation_clear_message_history(PurpleConversation *conv)
+{
 }
 
 void *purple_request_action(void *handle, const char *title, const char *primary,
@@ -1534,6 +1571,10 @@ char *purple_unescape_html(const char *html)
         s.replace(pos, 4, "<");
     while ((pos = s.find("&gt;")) != std::string::npos)
         s.replace(pos, 4, ">");
+    while ((pos = s.find("&quot;")) != std::string::npos)
+        s.replace(pos, 6, "\"");
+    for (pos = 0; (pos = s.find("&amp;", pos)) != std::string::npos; pos++)
+        s.replace(pos, 5, "&");
     return g_strdup(s.c_str());
 }
 
@@ -1623,6 +1664,67 @@ const char *purple_request_fields_get_string(const PurpleRequestFields *fields,
     return "";
 }
 
+// No buddy list window to draw anew
+PurpleBlistUiOps *purple_blist_get_ui_ops(void)
+{
+    return NULL;
+}
+
+PurpleBuddyList *purple_get_blist(void)
+{
+    return NULL;
+}
+
+// No logs, as the tests' conversations are never filled from them, there being no Pidgin
+GList *purple_log_get_logs(PurpleLogType type, const char *name, PurpleAccount *account)
+{
+    return NULL;
+}
+
+char *purple_log_read(PurpleLog *log, PurpleLogReadFlags *flags)
+{
+    return g_strdup("");
+}
+
+void purple_log_free(PurpleLog *log)
+{
+}
+
+PurpleRequestField *purple_request_field_choice_new(const char *id, const char *text, int default_value)
+{
+    return NULL;
+}
+
+void purple_request_field_choice_add(PurpleRequestField *field, const char *label)
+{
+}
+
+int purple_request_fields_get_choice(const PurpleRequestFields *fields, const char *id)
+{
+    return -1;
+}
+
+// The list only, telling no server
+gboolean purple_privacy_deny_add(PurpleAccount *account, const char *who, gboolean local_only)
+{
+    for (GSList *item = account->deny; item; item = item->next)
+        if (!strcmp(static_cast<const char *>(item->data), who))
+            return FALSE;
+    account->deny = g_slist_append(account->deny, g_strdup(who));
+    return TRUE;
+}
+
+gboolean purple_privacy_deny_remove(PurpleAccount *account, const char *who, gboolean local_only)
+{
+    for (GSList *item = account->deny; item; item = item->next)
+        if (!strcmp(static_cast<const char *>(item->data), who)) {
+            g_free(item->data);
+            account->deny = g_slist_delete_link(account->deny, item);
+            return TRUE;
+        }
+    return FALSE;
+}
+
 void *purple_request_fields(void *handle, const char *title, const char *primary,
 	const char *secondary, PurpleRequestFields *fields,
 	const char *ok_text, GCallback ok_cb,
@@ -1630,6 +1732,9 @@ void *purple_request_fields(void *handle, const char *title, const char *primary
 	PurpleAccount *account, const char *who, PurpleConversation *conv,
 	void *user_data)
 {
+    // Given up at once, as the dialog is not shown, so that what it holds is let go
+    if (cancel_cb)
+        reinterpret_cast<PurpleRequestFieldsCb>(cancel_cb)(user_data, fields);
     return NULL;
 }
 
@@ -1663,6 +1768,12 @@ PurpleAccountOption *purple_account_option_string_new(const char *text,
 
 PurpleAccountOption *purple_account_option_bool_new(const char *text,
 	const char *pref_name, gboolean default_value)
+{
+    return NULL;
+}
+
+PurpleAccountOption *purple_account_option_int_new(const char *text,
+	const char *pref_name, int default_value)
 {
     return NULL;
 }
@@ -1713,6 +1824,11 @@ gboolean purple_account_get_bool(const PurpleAccount *account, const char *name,
 							   gboolean default_value)
 {
     return *purple_account_get_string(account, name, default_value ? "true" : "");
+}
+
+int purple_account_get_int(const PurpleAccount *account, const char *name, int default_value)
+{
+    return atoi(purple_account_get_string(account, name, std::to_string(default_value).c_str()));
 }
 
 void purple_account_set_bool(PurpleAccount *account, const char *name,
@@ -1803,6 +1919,11 @@ gulong purple_signal_connect(void *instance, const char *signal,
 	void *handle, PurpleCallback func, void *data)
 {
     return 0;
+}
+
+void purple_signal_disconnect(void *instance, const char *signal,
+	void *handle, PurpleCallback func)
+{
 }
 
 // As libpurple's, which Pidgin calls whenever it updates a tab

@@ -6,6 +6,8 @@
 #include "format.h"
 #include "buildopt.h"
 #include "pidgin-ui.h"
+#include "receiving.h"
+#include "clipboard.h"
 #include <purple.h>
 
 #include <cstdint>
@@ -217,6 +219,96 @@ static void createSecretChat(PurpleBlistNode *node, gpointer data)
         tdClient->createSecretChat(purple_buddy_get_name(buddy));
 }
 
+// Shown in Pidgin's conversation window's Conversation > More menu as well
+static void toggleDeletedMessages(PurpleBlistNode *node, gpointer data)
+{
+    PurpleAccount *account = PURPLE_BLIST_NODE_IS_CHAT(node) ? purple_chat_get_account(PURPLE_CHAT(node))
+                                                             : purple_buddy_get_account(PURPLE_BUDDY(node));
+    setKeepsDeletedMessages(node, !keepsDeletedMessages(account, node));
+}
+
+static PurpleMenuAction *makeDeletedMessagesAction(PurpleBlistNode *node, PurpleAccount *account)
+{
+    // What picking it does, there being no check items here
+    return purple_menu_action_new(keepsDeletedMessages(account, node) ?
+                                  // TRANSLATOR: Contact and conversation menu item, while deleted messages stay in the conversation window, struck out. It has them removed from now on.
+                                  _("Remove deleted messages") :
+                                  // TRANSLATOR: Contact and conversation menu item, while deleted messages are removed from the conversation window. It has them stay, struck out, from now on.
+                                  _("Keep deleted messages, struck out"),
+                                  PURPLE_CALLBACK(toggleDeletedMessages), NULL, NULL);
+}
+
+// A chat names its members, and the senders of its messages, by user id, idNNN, so that two of one
+// display name are told apart: shown by the contact's alias, or failing that, by this
+static char *tgprpl_get_cb_alias(PurpleConnection *gc, int id, const char *who)
+{
+    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    std::string     alias    = (tdClient && who) ? tdClient->getChatMemberAlias(who) : std::string();
+    return alias.empty() ? NULL : g_strdup(alias.c_str());
+}
+
+// The conversation Pidgin's IM opens with a chat member, from the menu of their name, is the one
+// with them the plugin writes to; Pidgin uses the member's name if there is none
+static char *tgprpl_get_cb_real_name(PurpleConnection *gc, int id, const char *who)
+{
+    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    std::string     name     = (tdClient && who) ? tdClient->getChatMemberImName(who) : std::string();
+    return name.empty() ? NULL : g_strdup(name.c_str());
+}
+
+// Pidgin's list of blocked users is Telegram's
+static void setBlocked(PurpleConnection *gc, const char *name, bool blocked)
+{
+    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    UserId          userId   = purpleBuddyNameToUserId(name);
+    if (tdClient && userId.valid())
+        tdClient->setUserBlocked(userId, blocked);
+}
+
+static void tgprpl_add_deny(PurpleConnection *gc, const char *name)
+{
+    setBlocked(gc, name, true);
+}
+
+static void tgprpl_rem_deny(PurpleConnection *gc, const char *name)
+{
+    setBlocked(gc, name, false);
+}
+
+// The chat of a contact, or of a group, in the contact list
+static ChatId getBlistNodeChatId(PurpleTdClient *tdClient, PurpleBlistNode *node)
+{
+    if (PURPLE_BLIST_NODE_IS_CHAT(node))
+        return getTdlibChatId(getChatName(purple_chat_get_components(PURPLE_CHAT(node))));
+    if (PURPLE_BLIST_NODE_IS_BUDDY(node))
+        return tdClient->getPrivateChatId(purpleBuddyNameToUserId(purple_buddy_get_name(PURPLE_BUDDY(node))));
+    return ChatId();
+}
+
+static PurpleAccount *getBlistNodeAccount(PurpleBlistNode *node)
+{
+    return PURPLE_BLIST_NODE_IS_CHAT(node) ? purple_chat_get_account(PURPLE_CHAT(node))
+                                           : purple_buddy_get_account(PURPLE_BUDDY(node));
+}
+
+static void reportBlistNode(PurpleBlistNode *node, gpointer data)
+{
+    PurpleTdClient *tdClient = getTdClient(getBlistNodeAccount(node));
+    ChatId          chatId   = tdClient ? getBlistNodeChatId(tdClient, node) : ChatId();
+    if (chatId.valid())
+        tdClient->reportChat(chatId, {});
+}
+
+// Where Telegram takes a report about the chat as a whole
+static void addReportAction(GList *&menu, PurpleBlistNode *node)
+{
+    PurpleTdClient *tdClient = getTdClient(getBlistNodeAccount(node));
+    ChatId          chatId   = tdClient ? getBlistNodeChatId(tdClient, node) : ChatId();
+    if (chatId.valid() && tdClient->canReportChat(chatId))
+        // TRANSLATOR: Contact, group and conversation menu item; it asks why, in a dialog or more.
+        menu = g_list_append(menu, purple_menu_action_new(_("Report…"), PURPLE_CALLBACK(reportBlistNode), NULL, NULL));
+}
+
 static GList* tgprpl_blist_node_menu (PurpleBlistNode *node)
 {
     GList *menu = NULL;
@@ -244,6 +336,9 @@ static GList* tgprpl_blist_node_menu (PurpleBlistNode *node)
                                         PURPLE_CALLBACK(showInviteLink),
                                         NULL, NULL);
         menu = g_list_append(menu, action);
+
+        menu = g_list_append(menu, makeDeletedMessagesAction(node, purple_chat_get_account(chat)));
+        addReportAction(menu, node);
     } else if ( PURPLE_BLIST_NODE_IS_BUDDY(node) &&
                 purpleBuddyNameToUserId(purple_buddy_get_name(PURPLE_BUDDY(node))).valid() )
     {
@@ -253,6 +348,9 @@ static GList* tgprpl_blist_node_menu (PurpleBlistNode *node)
                                         PURPLE_CALLBACK(createSecretChat),
                                         NULL, NULL);
         menu = g_list_append(menu, action);
+
+        menu = g_list_append(menu, makeDeletedMessagesAction(node, purple_buddy_get_account(PURPLE_BUDDY(node))));
+        addReportAction(menu, node);
     }
 
     return menu;
@@ -310,6 +408,14 @@ conversation_updated_cb(PurpleConversation *conv, PurpleConvUpdateType type)
 {
     PurpleAccount *account = purple_conversation_get_account(conv);
     if (!strcmp(purple_account_get_protocol_id(account), config::pluginId) &&
+        (type == PURPLE_CONV_UPDATE_TITLE))
+    {
+        // Pidgin sets it anew, from an alias, without the mark
+        PurpleTdClient *tdClient = getTdClient(account);
+        if (tdClient)
+            tdClient->markConversation(conv);
+    }
+    if (!strcmp(purple_account_get_protocol_id(account), config::pluginId) &&
         (type == PURPLE_CONV_UPDATE_UNSEEN))
     {
         // With pidgin, when this callback is triggered by conversation window coming into window
@@ -325,6 +431,53 @@ conversation_updated_cb(PurpleConversation *conv, PurpleConvUpdateType type)
     }
 }
 
+// A conversation just opened, or a group chat's joined again, filled once Pidgin has set it up,
+// the account is connected and knows the chat, and the chat is not busy
+struct ConversationToFill: PurpleConversationInfo {
+    unsigned tries = 0;
+};
+
+static const char FILL_PENDING_KEY[] = "tdlib-fill-pending";
+
+static gboolean fillConversation(void *arg)
+{
+    std::unique_ptr<ConversationToFill> info(static_cast<ConversationToFill *>(arg));
+    PurpleAccount      *account  = purple_accounts_find(info->accountName.c_str(), config::pluginId);
+    PurpleConversation *conv     = account ? purple_find_conversation_with_account(info->type, info->convName.c_str(),
+                                                                                   account)
+                                           : nullptr;
+    if (!conv)
+        return G_SOURCE_REMOVE;
+    PurpleTdClient *tdClient = getTdClient(account);
+    // Waiting so long, it is fetching more than the tab would hold anyway, or will never know it
+    enum { RETRY_MS = 1000, MAX_TRIES = 120 };
+    if ((!tdClient || !tdClient->fillConversation(conv)) && (++info->tries < MAX_TRIES))
+        g_timeout_add(RETRY_MS, fillConversation, info.release());
+    else
+        purple_conversation_set_data(conv, FILL_PENDING_KEY, nullptr);
+    return G_SOURCE_REMOVE;
+}
+
+// Both for a conversation just created, and for a group chat's, kept from an earlier connection,
+// joined again: Pidgin may well have opened it before the account knew the chat
+static void conversationCreated(PurpleConversation *conv, void *data)
+{
+    PurpleAccount *account = purple_conversation_get_account(conv);
+    if (account != data)
+        return;
+    PurpleTdClient *tdClient = getTdClient(account);
+    if (tdClient)
+        tdClient->markConversation(conv);
+    if (!canRedrawConversation(conv) || purple_conversation_get_data(conv, FILL_PENDING_KEY))
+        return;
+    purple_conversation_set_data(conv, FILL_PENDING_KEY, conv);
+    ConversationToFill *info = new ConversationToFill;
+    info->accountName = purple_account_get_username(account);
+    info->convName    = purple_conversation_get_name(conv);
+    info->type        = purple_conversation_get_type(conv);
+    g_idle_add(fillConversation, info);
+}
+
 static void tgprpl_login (PurpleAccount *acct)
 {
     purple_debug_misc(config::pluginId, "version %s\n", config::versionString);
@@ -332,23 +485,60 @@ static void tgprpl_login (PurpleAccount *acct)
     PurpleTdClient   *tdClient = new PurpleTdClient(acct, g_testBackend);
 
     purple_connection_set_protocol_data (gc, tdClient);
-    // this would enable formatting buttons in pidgin
-    // gc->flags = static_cast<PurpleConnectionFlags>(gc->flags | PURPLE_CONNECTION_HTML);
+    // As Telegram has it: those listed are blocked, everyone else is not. Pidgin's Block, in another
+    // mode, would first empty the list, unblocking everyone else on the server too.
+    acct->perm_deny = PURPLE_PRIVACY_DENY_USERS;
+    // Pidgin's formatting toolbar, but for what Telegram has no formatting for: font faces and colors
+    // it cannot be told to leave out, which are dropped from what is sent
+    gc->flags = static_cast<PurpleConnectionFlags>(gc->flags | PURPLE_CONNECTION_HTML |
+                                                   PURPLE_CONNECTION_NO_BGCOLOR | PURPLE_CONNECTION_NO_FONTSIZE);
 
     purple_signal_connect(purple_conversations_get_handle(), "conversation-updated",
                           acct, PURPLE_CALLBACK(conversation_updated_cb), NULL);
+    purple_signal_connect(purple_conversations_get_handle(), "conversation-created",
+                          acct, PURPLE_CALLBACK(conversationCreated), acct);
+    purple_signal_connect(purple_conversations_get_handle(), "chat-joined",
+                          acct, PURPLE_CALLBACK(conversationCreated), acct);
 }
 
 static void tgprpl_close (PurpleConnection *gc)
 {
+    // Connected again at the next login
+    PurpleAccount *account = purple_connection_get_account(gc);
+    purple_signal_disconnect(purple_conversations_get_handle(), "conversation-updated",
+                             account, PURPLE_CALLBACK(conversation_updated_cb));
+    purple_signal_disconnect(purple_conversations_get_handle(), "conversation-created",
+                             account, PURPLE_CALLBACK(conversationCreated));
+    purple_signal_disconnect(purple_conversations_get_handle(), "chat-joined",
+                             account, PURPLE_CALLBACK(conversationCreated));
     delete static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
     purple_connection_set_protocol_data(gc, NULL);
+}
+
+// What is sent while a message is being edited in the conversation's input field is the edit
+static bool sendEdit(PurpleTdClient *tdClient, PurpleConversation *conv, const char *message)
+{
+    EntryEdit edit;
+    if (!endEntryEdit(conv, &edit))
+        return false;
+    // With its formatting, as messages are sent; compared so, as Pidgin writes its markup its own way
+    auto text = parseFormattedText(message);
+    if (isSameFormattedText(*text, *parseFormattedText(edit.original)))
+        // TRANSLATOR: In-chat notification, not logged, after a message being edited was sent unchanged.
+        showEditOutcome(conv, _("The message is left as it was."));
+    else
+        tdClient->sendEdit(edit.chatId, edit.messageId, edit.isCaption, edit.media, message);
+    return true;
 }
 
 static int tgprpl_send_im (PurpleConnection *gc, const char *who, const char *message, PurpleMessageFlags flags)
 {
     PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
     purple_debug_misc(config::pluginId, "tgprpl_send_im to '%s' flags=0x%x\n", who, (unsigned)flags);
+    PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, who,
+                                                                     purple_connection_get_account(gc));
+    if (sendEdit(tdClient, conv, message))
+        return 0;
     return tdClient->sendMessage(who, message);
 }
 
@@ -598,6 +788,8 @@ static int tgprpl_send_chat (PurpleConnection *gc, int id, const char *message, 
     purple_debug_misc(config::pluginId, "Sending group chat message: purple chat id %d, flags=0x%x\n",
                       id, (unsigned)flags);
     PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    if (sendEdit(tdClient, purple_find_chat(gc, id), message))
+        return 0;
     return tdClient->sendGroupMessage(id, message);
 }
 
@@ -780,6 +972,19 @@ gboolean initiateMedia(PurpleAccount *account, const char *who, PurpleMediaSessi
 #endif
 }
 
+static PurpleCmdRet cancelEditCommand(PurpleConversation *conv, const gchar *cmd, gchar **args, gchar **error,
+                                      void *data)
+{
+    if (!endEntryEdit(conv, nullptr)) {
+        // TRANSLATOR: Error after the /cancel command.
+        *error = g_strdup(_("No message is being edited."));
+        return PURPLE_CMD_RET_FAILED;
+    }
+    // TRANSLATOR: In-chat notification, not logged, after the /cancel command.
+    showEditOutcome(conv, _("The message is left as it was."));
+    return PURPLE_CMD_RET_OK;
+}
+
 static PurpleCmdRet hangupCommand(PurpleConversation *conv, const gchar *cmd, gchar **args, gchar **error, void *data)
 {
     PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
@@ -791,6 +996,109 @@ static PurpleCmdRet hangupCommand(PurpleConversation *conv, const gchar *cmd, gc
         return PURPLE_CMD_RET_OK;
     else
         return PURPLE_CMD_RET_FAILED;
+}
+
+static std::vector<PastedPlaceholder> getPlaceholders(const std::vector<const PastedAttachment *> &pasted)
+{
+    std::vector<PastedPlaceholder> placeholders;
+    for (const PastedAttachment *attachment: pasted)
+        placeholders.push_back({attachment->placeholder(), attachment->path, attachment->kind});
+    return placeholders;
+}
+
+// Placeholders for the files or picture, typed into the input field where they are pasted or dropped
+static std::vector<PastedPlaceholder> pasted(PurpleConversation *conv, const ClipboardContent &content)
+{
+    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    if (tdClient)
+        return getPlaceholders(tdClient->addPasted(content));
+    if (content.imageId)
+        purple_imgstore_unref_by_id(content.imageId);
+    return {};
+}
+
+static bool placeholderClicked(PurpleConversation *conv, const std::string &placeholder, PastedForms &forms)
+{
+    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    PlaceholderUse  use      = tdClient ? tdClient->findPasted(placeholder) : PlaceholderUse();
+    if (!use.attachment)
+        return false;
+    forms.path = use.attachment->path;
+    forms.kind = use.attachment->kind;
+    if (use.attachment->kind != AttachmentKind::Document) {
+        forms.other = use.asFile ? use.attachment->placeholder() : use.attachment->filePlaceholder();
+        if (!use.asFile)
+            // TRANSLATOR: Item of the menu of a pasted picture's or video's placeholder, such as [Image#1], in the message being written.
+            forms.otherLabel = _("Send as a file");
+        else if (use.attachment->kind == AttachmentKind::Video)
+            // TRANSLATOR: Item of the menu of a pasted video's placeholder by its file name, such as [holiday.mp4#2], in the message being written.
+            forms.otherLabel = _("Send as a video");
+        else
+            // TRANSLATOR: Item of the menu of a pasted picture's placeholder by its file name, such as [holiday.jpg#1], in the message being written.
+            forms.otherLabel = _("Send as a photo");
+    }
+    // TRANSLATOR: Item of the menu of a pasted thing's placeholder, such as [Image#1] or [report.pdf#3], in the message being written.
+    forms.removeLabel = _("Remove from the message");
+    return true;
+}
+
+static std::string joinPlaceholders(const std::vector<std::string> &placeholders, const char *separator = " ")
+{
+    std::string text;
+    for (const std::string &placeholder: placeholders)
+        text += (text.empty() ? "" : separator) + placeholder;
+    return text;
+}
+
+// What is on the clipboard, attached to the message being written: the files copied to it, or else
+// its picture. Pidgin reads the clipboard and puts the placeholders into the input field; elsewhere
+// xclip reads it, and the placeholders, to be written into the message where they go, are said in
+// the conversation.
+static PurpleCmdRet pasteCommand(PurpleConversation *conv, const gchar *cmd, gchar **args, gchar **error, void *data)
+{
+    PurpleTdClient  *tdClient = getTdClient(purple_conversation_get_account(conv));
+    ClipboardContent content;
+    std::string      problem;
+    bool             inPidgin = readPidginClipboard(conv, content);
+    if (inPidgin) {
+        if (content.files.empty() && !content.imageId)
+            // TRANSLATOR: Error after the /paste command.
+            problem = _("There are no files or picture on the clipboard.");
+    } else
+        readXclip(content, problem);
+    if (!problem.empty() || !tdClient) {
+        if (content.imageId)
+            purple_imgstore_unref_by_id(content.imageId);
+        if (!problem.empty())
+            *error = g_strdup(problem.c_str());
+        return PURPLE_CMD_RET_FAILED;
+    }
+
+    if (inPidgin)
+        // Pidgin empties the field once the command is done
+        pasteIntoEntryLater(conv, getPlaceholders(tdClient->addPasted(content)));
+    else {
+        std::vector<const PastedAttachment *> pasted = tdClient->addPasted(content);
+        if (pasted.empty()) {
+            *error = g_strdup(_("There are no files or picture on the clipboard."));
+            return PURPLE_CMD_RET_FAILED;
+        }
+        std::vector<std::string> placeholders;
+        for (const PastedAttachment *attachment: pasted) {
+            if (attachment->kind == AttachmentKind::Document)
+                placeholders.push_back(attachment->placeholder());
+            else
+                // TRANSLATOR: In-chat notification, of a picture or video pasted, in the list after "Pasted". The arguments are its placeholders, the second by a file name, such as [Image#1] and [holiday.jpg#1].
+                placeholders.push_back(formatMessage(_("{0} (or {1}, as a file)"),
+                                                     {attachment->placeholder(), attachment->filePlaceholder()}));
+        }
+        // TRANSLATOR: In-chat notification, not logged, after /paste. The argument is the pasted things' placeholders, such as [Image#1] or [report.pdf].
+        std::string notice = formatMessage(_("Pasted {}: write it into the message, where it goes, to send it there."),
+                                           joinPlaceholders(placeholders, ", "));
+        purple_conversation_write(conv, NULL, notice.c_str(),
+                                  (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), time(NULL));
+    }
+    return PURPLE_CMD_RET_OK;
 }
 
 static char png[] = "png";
@@ -832,9 +1140,9 @@ static PurplePluginProtocolInfo prpl_info = {
     .remove_buddy             = tgprpl_request_delete_contact,
     .remove_buddies           = NULL,
     .add_permit               = NULL,
-    .add_deny                 = NULL,
+    .add_deny                 = tgprpl_add_deny,
     .rem_permit               = NULL,
-    .rem_deny                 = NULL,
+    .rem_deny                 = tgprpl_rem_deny,
     .set_permit_deny          = NULL,
     .join_chat                = tgprpl_chat_join,
     .reject_chat              = NULL,
@@ -855,7 +1163,7 @@ static PurplePluginProtocolInfo prpl_info = {
     .normalize                = NULL,
     .set_buddy_icon           = NULL,
     .remove_group             = NULL,
-    .get_cb_real_name         = NULL,
+    .get_cb_real_name         = tgprpl_get_cb_real_name,
     .set_chat_topic           = tgprpl_set_chat_topic,
     .find_blist_chat          = NULL,
     .roomlist_get_list        = tgprpl_roomlist_get_list,
@@ -881,7 +1189,7 @@ static PurplePluginProtocolInfo prpl_info = {
     .add_buddy_with_invite    = NULL,
     .add_buddies_with_invite  = NULL,
 #if PURPLE_VERSION_CHECK(2,14,0)
-    .get_cb_alias             = NULL,
+    .get_cb_alias             = tgprpl_get_cb_alias,
     .chat_can_receive_file    = NULL,
     .chat_send_file           = sendFileToChat,
 #endif
@@ -959,28 +1267,15 @@ static gboolean messageLinkClicked(PidginIMHtml *imhtml, PidginIMHtmlLink *link)
     return TRUE;
 }
 
-// Scrolls the very tab the link is in, as the message it names is shown there, if anywhere; or
-// pops up the message's menu
+// Scrolls the very tab the link is in, as the message it names is shown there, if anywhere
 static gboolean jumpLinkClicked(PidginIMHtml *imhtml, PidginIMHtmlLink *link)
 {
     const char *url = g_linkGetUrl(link);
     std::string accountName;
     ChatId      chatId;
     MessageId   messageId;
-    bool        menu;
-    if (!url || !parseJumpLink(url, accountName, chatId, messageId, menu)) {
+    if (!url || !parseJumpLink(url, accountName, chatId, messageId)) {
         purple_debug_warning(config::pluginId, "Not a link to a message: %s\n", url ? url : "");
-        return TRUE;
-    }
-    if (menu) {
-        PurpleTdClient *client = PurpleTdClient::findConnected(accountName.c_str());
-        if (client)
-            client->showMessageMenu(chatId, messageId);
-        else {
-            // TRANSLATOR: Error dialog, secondary content. Argument is the account's name, its phone number.
-            std::string reason = formatMessage(_("Account {} is not connected."), accountName);
-            purple_notify_error(NULL, config::pluginName, _("Cannot open the message's menu"), reason.c_str());
-        }
         return TRUE;
     }
     if (!scrollToMessage(imhtml, messageId))
@@ -997,6 +1292,30 @@ static gboolean messageLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *l
     return TRUE;
 }
 
+// A contact whose chat has reactions to our messages unread is marked in the buddy list
+static bool buddyMarked(PurpleBuddy *buddy)
+{
+    PurpleAccount  *account  = purple_buddy_get_account(buddy);
+    PurpleTdClient *tdClient = strcmp(purple_account_get_protocol_id(account), config::pluginId) ? nullptr
+                                                                                              : getTdClient(account);
+    return tdClient && tdClient->hasUnreadReactions(buddy);
+}
+
+// Scrolled to the top of its tab
+static void topReached(PurpleConversation *conv)
+{
+    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    if (tdClient)
+        tdClient->showEarlierMessages(conv);
+}
+
+// The menu of a tab's text, opened on a message
+static bool messagePopupOpened(PurpleConversation *conv, MessageId messageId, const OpenMenuRef &menu)
+{
+    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    return tdClient && tdClient->showMessagePopup(conv, messageId, menu);
+}
+
 static void registerMessageLinks()
 {
     g_registerProtocol = reinterpret_cast<RegisterProtocol>(findFrontEndSymbol("gtk_imhtml_class_register_protocol"));
@@ -1008,6 +1327,13 @@ static void registerMessageLinks()
     // Only where Pidgin's tab can be scrolled to the message
     setJumpLinksEnabled(messageLinksEnabled() && pidginUiFound() &&
                         g_registerProtocol(JUMP_LINK_SCHEME, jumpLinkClicked, messageLinkContextMenu));
+    // Not where messages go on to other clients, markup and all
+    setLogMarkersEnabled(!canDisableReadReceipts());
+    setMessagePopupHandler(messagePopupOpened);
+    setPastedHandler(pasted);
+    setPlaceholderHandler(placeholderClicked);
+    setBuddyMarkHandler(buddyMarked, UNREAD_REACTIONS_MARK);
+    setTopReachedHandler(topReached);
 }
 
 static void unregisterMessageLinks()
@@ -1019,6 +1345,10 @@ static void unregisterMessageLinks()
         g_registerProtocol(MESSAGE_LINK_SCHEME, NULL, NULL);
     setJumpLinksEnabled(false);
     setMessageLinksEnabled(false);
+    setLogMarkersEnabled(false);
+    setMessagePopupHandler(nullptr);
+    setBuddyMarkHandler(nullptr, nullptr);
+    setTopReachedHandler(nullptr);
 }
 
 static gboolean tgprpl_unload (PurplePlugin *plugin)
@@ -1046,6 +1376,18 @@ static gboolean tgprpl_load (PurplePlugin *plugin)
                         config::pluginId, hangupCommand,
                         // TRANSLATOR: Command description, the initial "hangup" must remain verbatim!
                         _("hangup: Terminate any active call (with any user)"), NULL);
+
+    purple_cmd_register("cancel", "", PURPLE_CMD_P_PLUGIN,
+                        (PurpleCmdFlag)(PURPLE_CMD_FLAG_IM | PURPLE_CMD_FLAG_CHAT | PURPLE_CMD_FLAG_PRPL_ONLY),
+                        config::pluginId, cancelEditCommand,
+                        // TRANSLATOR: Command description, the initial "cancel" must remain verbatim!
+                        _("cancel: Leave the message being edited as it was"), NULL);
+
+    purple_cmd_register("paste", "", PURPLE_CMD_P_PLUGIN,
+                        (PurpleCmdFlag)(PURPLE_CMD_FLAG_IM | PURPLE_CMD_FLAG_CHAT | PURPLE_CMD_FLAG_PRPL_ONLY),
+                        config::pluginId, pasteCommand,
+                        // TRANSLATOR: Command description, the initial "paste" must remain verbatim!
+                        _("paste: Attach the files copied to the clipboard, or its picture, to the message being written"), NULL);
 
     return TRUE;
 }
@@ -1261,6 +1603,16 @@ static void tgprpl_init (PurplePlugin *plugin)
     // TRANSLATOR: Account settings, key (boolean)
     opt = purple_account_option_bool_new(_("Show self-destructing messages anyway"), AccountOptions::ShowSelfDestruct,
                                          AccountOptions::ShowSelfDestructDefault);
+    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+
+    // TRANSLATOR: Account settings, key (boolean)
+    opt = purple_account_option_bool_new(_("Strike out deleted messages in Pidgin, rather than remove them"),
+                                         AccountOptions::StrikeOutDeleted, AccountOptions::StrikeOutDeletedDefault);
+    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+
+    // TRANSLATOR: Account settings, key (number): days counted back from the conversation's latest message. 0 leaves the conversation window as Pidgin opens it.
+    opt = purple_account_option_int_new(_("Days of messages to show on opening a conversation, in Pidgin"),
+                                        AccountOptions::HistoryDays, AccountOptions::HistoryDaysDefault);
     prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
 
     // TRANSLATOR: Account settings, key (boolean)

@@ -21,6 +21,9 @@ const char  *getChatNameComponent();
 GList       *getChatJoinInfo();
 std::string  getPurpleChatName(const td::td_api::chat &chat);
 GHashTable  *getChatComponents(const td::td_api::chat &chat);
+// Those only for joining or creating a group, empty: Pidgin's tooltip of a chat lists those a chat
+// has not, escaping their value, which is no string, with a warning
+void         completeChatComponents(PurpleChat *chat);
 
 const char  *getChatName(GHashTable *components);
 const char  *getChatJoinString(GHashTable *components);
@@ -42,6 +45,10 @@ namespace AccountOptions {
     constexpr gboolean    AnimatedStickersDefault    = TRUE;
     constexpr const char *ShowSelfDestruct           = "show-self-destruct";
     constexpr gboolean    ShowSelfDestructDefault    = TRUE;
+    constexpr const char *StrikeOutDeleted           = "strike-out-deleted";
+    constexpr gboolean    StrikeOutDeletedDefault    = FALSE;
+    constexpr const char *HistoryDays                = "history-days";
+    constexpr int         HistoryDaysDefault         = 1;
     constexpr const char *ShowUnjoinedChats          = "show-unjoined-chats";
     constexpr gboolean    ShowUnjoinedChatsDefault   = FALSE;
     constexpr const char *FoldCustomEmoji            = "fold-custom-emoji";

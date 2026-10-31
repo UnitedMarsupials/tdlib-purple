@@ -437,10 +437,22 @@ TEST_F(MessageLinkTest, MessageMenu)
     const ChatId    chat    = ChatId::fromString(std::to_string(chatIds[0]).c_str());
     const MessageId message = MessageId::fromString("1");
 
-    // The message for its reactions, then those it may have; without Pidgin, no menu pops up
-    client->showMessageMenu(chat, message);
+    // The message for its reactions, then what may be done to it, then whether its sender is
+    // blocked, then the reactions it may have; without Pidgin, there is no menu to add them to
+    client->showMessageMenu(chat, message, nullptr);
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
     tgl.reply(makeDocumentMessage(10000, "", false));
+    tgl.verifyRequest(getMessageProperties(chatIds[0], messageId));
+    tgl.reply(make_object<messageProperties>());
+    tgl.verifyRequest(getUserFullInfo(userIds[0]));
+    {
+        auto fullInfo = make_object<userFullInfo>();
+        fullInfo->block_list_ = make_object<blockListMain>();
+        tgl.reply(std::move(fullInfo));
+    }
+    // Pidgin's list of blocked users follows
+    ASSERT_EQ(1u, g_slist_length(account->deny));
+    ASSERT_EQ(purpleUserName(0), static_cast<const char *>(account->deny->data));
     tgl.verifyRequest(getMessageAvailableReactions(chatIds[0], messageId, 8));
     tgl.reply(make_object<availableReactions>());
     prpl.verifyNoEvents();
@@ -453,6 +465,87 @@ TEST_F(MessageLinkTest, MessageMenu)
     tgl.verifyRequest(removeMessageReaction(chatIds[0], messageId, make_object<reactionTypeEmoji>("\xF0\x9F\x91\x8D")));
     tgl.reply(make_object<ok>());
     prpl.verifyNoEvents();
+
+    // Editing and deleting, as the menu's dialogs end
+    client->editMessage(chat, message, parseFormattedText("<b>new</b> text"), false);
+    {
+        auto content = make_object<inputMessageText>();
+        content->text_ = makeFormattedText("new text");
+        content->text_->entities_.push_back(makeTextEntity(0, 3, make_object<textEntityTypeBold>()));
+        tgl.verifyRequest(editMessageText(chatIds[0], messageId, nullptr, std::move(content)));
+    }
+    tgl.reply(makeDocumentMessage(10000, "", false));
+    client->editMessage(chat, message, parseFormattedText("new caption"), true);
+    tgl.verifyRequest(editMessageCaption(chatIds[0], messageId, nullptr, makeFormattedText("new caption"), false));
+    tgl.reply(makeDocumentMessage(10000, "", false));
+    client->deleteMessage(chat, message, true);
+    tgl.verifyRequest(deleteMessages(chatIds[0], {messageId}, true));
+    tgl.reply(make_object<ok>());
+    prpl.verifyNoEvents();
+
+    // A failure is told in the conversation
+    client->deleteMessage(chat, message, false);
+    tgl.verifyRequest(deleteMessages(chatIds[0], {messageId}, false));
+    tgl.reply(make_object<error>(400, "MESSAGE_DELETE_FORBIDDEN"));
+    prpl.verifyEvents(NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+                      ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                                             "Cannot delete the message: code 400 (MESSAGE_DELETE_FORBIDDEN)",
+                                             PURPLE_MESSAGE_ERROR, 0));
+}
+
+TEST_F(MessageLinkTest, BlockUser)
+{
+    loginWithOneContact();
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    // As Telegram has it
+    ASSERT_EQ(PURPLE_PRIVACY_DENY_USERS, account->perm_deny);
+
+    // Pidgin's list told the server; a failure takes the user off it again
+    purple_privacy_deny_add(account, purpleUserName(0).c_str(), TRUE);
+    client->setUserBlocked(UserId::fromString(std::to_string(userIds[0]).c_str()), true);
+    tgl.verifyRequest(setMessageSenderBlockList(make_object<messageSenderUser>(userIds[0]),
+                                                make_object<blockListMain>()));
+    tgl.reply(make_object<ok>());
+    ASSERT_EQ(1u, g_slist_length(account->deny));
+    client->setUserBlocked(UserId::fromString(std::to_string(userIds[0]).c_str()), false);
+    tgl.verifyRequest(setMessageSenderBlockList(make_object<messageSenderUser>(userIds[0]), nullptr));
+    tgl.reply(make_object<error>(400, "FAILED"));
+    ASSERT_EQ(1u, g_slist_length(account->deny));
+    prpl.discardEvents();
+
+    // Another client unblocked
+    auto fullInfo = make_object<userFullInfo>();
+    tgl.update(make_object<updateUserFullInfo>(userIds[0], std::move(fullInfo)));
+    ASSERT_EQ(0u, g_slist_length(account->deny));
+}
+
+TEST_F(MessageLinkTest, ReportMessage)
+{
+    loginWithOneContact();
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    const ChatId    chat    = ChatId::fromString(std::to_string(chatIds[0]).c_str());
+    const MessageId message = MessageId::fromString("1");
+
+    // The reason, chosen in a dialog, then details, then the result
+    client->reportChat(chat, {message});
+    tgl.verifyRequest(reportChat(chatIds[0], "", {messageId}, ""));
+    {
+        std::vector<object_ptr<reportOption>> options;
+        options.push_back(make_object<reportOption>("spam", "Spam"));
+        tgl.reply(make_object<reportChatResultOptionRequired>("Why?", std::move(options)));
+    }
+    client->reportChat(chat, {message}, "spam");
+    tgl.verifyRequest(reportChat(chatIds[0], "spam", {messageId}, ""));
+    tgl.reply(make_object<reportChatResultTextRequired>("spam2", true));
+    prpl.verifyEvents(RequestInputEvent(NULL, account, NULL, NULL));
+    prpl.inputEnter("Sells things");
+    tgl.verifyRequest(reportChat(chatIds[0], "spam2", {messageId}, "Sells things"));
+    tgl.reply(make_object<reportChatResultOk>());
+    prpl.verifyEvents(NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+                      ConversationWriteEvent(purpleUserName(0), purpleUserName(0), "Reported to Telegram's moderators.",
+                                             PURPLE_MESSAGE_SYSTEM, 0));
 }
 
 TEST(JumpLink, Parse)
@@ -460,21 +553,15 @@ TEST(JumpLink, Parse)
     std::string accountName;
     ChatId      chatId;
     MessageId   messageId;
-    bool        menu = true;
-    ASSERT_TRUE(parseJumpLink("tdlib-message://%2B1234/-100/5", accountName, chatId, messageId, menu));
+    ASSERT_TRUE(parseJumpLink("tdlib-message://%2B1234/-100/5", accountName, chatId, messageId));
     ASSERT_EQ(std::string("+1234"), accountName);
     ASSERT_EQ(-100, chatId.value());
     ASSERT_EQ(5, messageId.value());
-    ASSERT_FALSE(menu);
-
-    ASSERT_TRUE(parseJumpLink("tdlib-message://%2B1234/-100/6/menu", accountName, chatId, messageId, menu));
-    ASSERT_EQ(6, messageId.value());
-    ASSERT_TRUE(menu);
 
     // A file's link, or one naming a size, is something else
-    ASSERT_FALSE(parseJumpLink("tdlib://%2B1234/-100/5", accountName, chatId, messageId, menu));
-    ASSERT_FALSE(parseJumpLink("tdlib-message://%2B1234/-100/5/original", accountName, chatId, messageId, menu));
-    ASSERT_FALSE(parseJumpLink("tdlib-message://%2B1234/-100", accountName, chatId, messageId, menu));
+    ASSERT_FALSE(parseJumpLink("tdlib://%2B1234/-100/5", accountName, chatId, messageId));
+    ASSERT_FALSE(parseJumpLink("tdlib-message://%2B1234/-100/5/original", accountName, chatId, messageId));
+    ASSERT_FALSE(parseJumpLink("tdlib-message://%2B1234/-100", accountName, chatId, messageId));
 }
 
 TEST(JumpLink, OnlyWhereEnabled)
@@ -486,9 +573,42 @@ TEST(JumpLink, OnlyWhereEnabled)
               linkToMessage(account, ChatId::fromString("-100"), MessageId::fromString("5"), "12:00"));
     // Nothing to link to
     ASSERT_EQ(std::string("12:00"), linkToMessage(account, ChatId::fromString("-100"), MessageId::invalid, "12:00"));
-    ASSERT_EQ(std::string("&nbsp;<a href=\"tdlib-message://%2B1234/-100/5/menu\">\xe2\x98\xb0</a>"),
-              makeMenuLink(account, ChatId::fromString("-100"), MessageId::fromString("5")));
     setJumpLinksEnabled(false);
-    ASSERT_EQ(std::string(), makeMenuLink(account, ChatId::fromString("-100"), MessageId::fromString("5")));
     purple_account_destroy(account);
+}
+
+TEST(MarkChanges, Words)
+{
+    auto changes = [](const char *previous, const char *html) {
+        return markChanges(previous, html, "red", "green");
+    };
+    // A word changed, one added, one removed
+    ASSERT_EQ(std::string("the <font back=\"red\">quick</font> <font back=\"green\">slow</font> brown fox <font back=\"green\">gladly</font> jumps over the dog"),
+              changes("the quick brown fox jumps over the dog", "the slow brown fox gladly jumps over the dog"));
+    ASSERT_EQ(std::string("over the <font back=\"red\">lazy</font> dog"), changes("over the lazy\ndog", "over the dog"));
+    // Formatting of the new text is kept; entities compare as the characters they stand for
+    ASSERT_EQ(std::string("<b>Tom</b> &amp; <font back=\"red\">Spike</font> <i><font back=\"green\">Jerry</font></i>"),
+              changes("Tom & Spike", "<b>Tom</b> &amp; <i>Jerry</i>"));
+    // Removed at either end, and all of it
+    ASSERT_EQ(std::string("<font back=\"red\">Well,</font> yes <font back=\"red\">&lt;indeed&gt;</font>"), changes("Well, yes <indeed>", "yes"));
+    ASSERT_EQ(std::string("<font back=\"red\">gone</font> "), changes("gone", ""));
+    // Only spacing or formatting changed
+    ASSERT_EQ(std::string("a<br><b>b</b>"), changes("a b", "a<br><b>b</b>"));
+}
+
+TEST_F(MessageLinkTest, SentMessageRenamed)
+{
+    loginWithOneContact();
+    const int64_t sentId = 1000;
+
+    // Shown while being sent, its link names the id it went by then
+    tgl.update(make_object<updateMessageSendSucceeded>(makeDocumentMessage(10000, "/path/video.mp4", true), sentId));
+    tgl.verifyNoRequests();
+
+    std::string sentLink = "tdlib://%2B" + selfPhoneNumber + "/" + std::to_string(chatIds[0]) + "/" +
+                           std::to_string(sentId);
+    tgprpl_open_message_link(sentLink.c_str());
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(makeDocumentMessage(10000, "/path/video.mp4", true));
+    prpl.verifyEvents(NotifyUriEvent("file:///path/video.mp4"));
 }

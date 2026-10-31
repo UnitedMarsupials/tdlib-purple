@@ -22,6 +22,8 @@ if (NOT NoPkgConfig)
     pkg_check_modules(Purple REQUIRED purple)
     # To find what the front-end has loaded, such as Pidgin's GdkPixbuf
     pkg_check_modules(GModule REQUIRED gmodule-2.0)
+    # The types of files pasted, by their content, as file managers tell them
+    pkg_check_modules(GIO REQUIRED gio-2.0)
     if (NOT NoVoip)
         pkg_check_modules(tgvoip tgvoip)
         if ("${tgvoip_LIBRARIES}" STREQUAL "")
@@ -85,13 +87,16 @@ add_library(telegram-tdlib SHARED
     identifiers.cpp
     secret-chat.cpp
     pidgin-ui.cpp
+    log-history.cpp
+    clipboard.cpp
+    thumbnail.cpp
 )
 
 #target_compile_options(telegram-tdlib PRIVATE -Wmissing-declarations)
 
-include_directories(${Purple_INCLUDE_DIRS} ${GModule_INCLUDE_DIRS} ${CMAKE_BINARY_DIR} ${fmt_INCLUDE_DIRS} ${rlottie_INCLUDE_DIRS})
+include_directories(${Purple_INCLUDE_DIRS} ${GModule_INCLUDE_DIRS} ${GIO_INCLUDE_DIRS} ${CMAKE_BINARY_DIR} ${fmt_INCLUDE_DIRS} ${rlottie_INCLUDE_DIRS})
 target_link_libraries(telegram-tdlib PRIVATE Td::TdStatic ${Purple_LIBRARIES} ${fmt_LIBRARIES} ${rlottie_LIBRARIES}
-                      ${GModule_LIBRARIES})
+                      ${GModule_LIBRARIES} ${GIO_LIBRARIES})
 
 set(VERSION_SCRIPT_FLAG "-Wl,--version-script=${CMAKE_SOURCE_DIR}/ld_version_script")
 set(CMAKE_EXE_LINKER_FLAGS ${VERSION_SCRIPT_FLAG})

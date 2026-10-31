@@ -9,6 +9,7 @@
 #include "config.h"
 #include "call.h"
 #include "pidgin-ui.h"
+#include "log-history.h"
 #include <algorithm>
 #include <tuple>
 #include <fmt/format.h>
@@ -75,7 +76,7 @@ std::string escapeForDisplay(const std::string &text)
 
 // Names a message by when it was sent, which is what the conversation window shows of it:
 // the time, and the date as well unless that is today
-static std::string formatMessageTime(time_t timestamp)
+std::string formatMessageTime(time_t timestamp)
 {
     time_t    now = time(NULL);
     struct tm today, sent;
@@ -88,6 +89,9 @@ static std::string formatMessageTime(time_t timestamp)
         return purple_date_format_long(&sent);
 }
 
+// Of a file not uploaded yet, as one we send is until it is
+static const char LOCAL_FILE_KEY[] = "local:";
+
 static std::string getFileKey(const td::td_api::file *file)
 {
     if (!file)
@@ -95,7 +99,7 @@ static std::string getFileKey(const td::td_api::file *file)
     // The same file keeps its remote identifier, while its local one may differ between sessions
     if (file->remote_ && !file->remote_->unique_id_.empty())
         return file->remote_->unique_id_;
-    return std::to_string(file->id_);
+    return LOCAL_FILE_KEY + std::to_string(file->id_);
 }
 
 // A location a message holds: where, and in the case of a venue, what is there. A live one has a
@@ -181,6 +185,16 @@ static std::string makeLocationText(const ShownLocation &shown)
     return text;
 }
 
+// The formatting of a text, to tell whether an edit changed it
+static std::string describeFormatting(const td::td_api::formattedText &text)
+{
+    std::string result;
+    for (const auto &entity: text.entities_)
+        if (entity)
+            result += td::td_api::to_string(entity);
+    return result;
+}
+
 // What the conversation shows of a message's content, as far as its sender can change it.
 // A change to anything else - a poll's tally, a live location's position, a link preview -
 // either shows nowhere or is no edit, and is not reported.
@@ -196,8 +210,10 @@ static void getShownContent(const td::td_api::MessageContent &content, ShownMess
     switch (content.get_id()) {
         case td::td_api::messageText::ID: {
             const auto &text = static_cast<const td::td_api::messageText &>(content);
-            if (text.text_)
-                result.content = text.text_->text_;
+            if (text.text_) {
+                result.content    = text.text_->text_;
+                result.formatting = describeFormatting(*text.text_);
+            }
             result.quotable = true;
             break;
         }
@@ -311,8 +327,9 @@ static void getShownContent(const td::td_api::MessageContent &content, ShownMess
     }
 
     if (caption) {
-        result.content  = caption->text_;
-        result.quotable = true;
+        result.content    = caption->text_;
+        result.formatting = describeFormatting(*caption);
+        result.quotable   = true;
     }
 }
 
@@ -328,32 +345,158 @@ std::string makeNoticeWithSender(const td::td_api::chat &chat, const TgMessageIn
     return prefix + noticeText;
 }
 
-std::string getMessageText(const td::td_api::formattedText &text,
-                           const std::map<int64_t, std::string> *smileys)
+namespace {
+// Markup for a stretch of the text: around it, or in place of it
+struct TextMarkup {
+    size_t      start;
+    size_t      end;
+    std::string open;
+    std::string close;
+    bool        replaces = false; // open goes in place of the text
+    bool        quote    = false; // each line of it starts with a bar
+};
+}
+
+// The bar a quoted line starts with, as the phone app draws one beside the quote
+static const char QUOTE_BAR[] = "<font color=\"#808080\">\xe2\x96\x8e</font> ";
+
+// Telegram's formatting as the markup Pidgin's conversation window draws; what it has no markup
+// for is left plain: mentions, hashtags, addresses (which Pidgin links itself) and the like
+static bool getEntityMarkup(const td::td_api::TextEntityType &type, TextMarkup &markup, bool sendable)
 {
-    // The stretches of text that custom emoji cover, and what goes there instead
-    std::vector<std::tuple<size_t, size_t, std::string>> replaced;
-    if (smileys)
-        for (const auto &entity: text.entities_)
-            if (entity && entity->type_ && (entity->type_->get_id() == td::td_api::textEntityTypeCustomEmoji::ID)) {
-                auto it = smileys->find(static_cast<const td::td_api::textEntityTypeCustomEmoji &>(*entity->type_).custom_emoji_id_);
-                if (it != smileys->end())
-                    replaced.emplace_back(utf16OffsetToBytes(text.text_, entity->offset_),
-                                          utf16OffsetToBytes(text.text_, entity->offset_ + entity->length_),
-                                          it->second);
-            }
-    std::sort(replaced.begin(), replaced.end());
+    switch (type.get_id()) {
+    case td::td_api::textEntityTypeBold::ID:
+        markup.open = "<b>";
+        markup.close = "</b>";
+        return true;
+    case td::td_api::textEntityTypeItalic::ID:
+        markup.open = "<i>";
+        markup.close = "</i>";
+        return true;
+    case td::td_api::textEntityTypeUnderline::ID:
+        markup.open = "<u>";
+        markup.close = "</u>";
+        return true;
+    case td::td_api::textEntityTypeStrikethrough::ID:
+        markup.open = "<s>";
+        markup.close = "</s>";
+        return true;
+    case td::td_api::textEntityTypeTextUrl::ID:
+        markup.open = "<a href=\"" +
+                      escapeForDisplay(static_cast<const td::td_api::textEntityTypeTextUrl &>(type).url_) + "\">";
+        markup.close = "</a>";
+        return true;
+    }
+    // The rest, there being no sending them from Pidgin
+    if (sendable)
+        return false;
+    switch (type.get_id()) {
+    case td::td_api::textEntityTypeCode::ID:
+        markup.open = "<font face=\"monospace\">";
+        markup.close = "</font>";
+        return true;
+    case td::td_api::textEntityTypePre::ID:
+    case td::td_api::textEntityTypePreCode::ID:
+        markup.open = "<pre>";
+        markup.close = "</pre>";
+        return true;
+    case td::td_api::textEntityTypeSpoiler::ID:
+        // Hidden until selected, which shows it in the selection's colors
+        markup.open = "<font color=\"#808080\" back=\"#808080\">";
+        markup.close = "</font>";
+        return true;
+    case td::td_api::textEntityTypeBlockQuote::ID:
+    case td::td_api::textEntityTypeExpandableBlockQuote::ID:
+        markup.open = QUOTE_BAR;
+        markup.quote = true;
+        return true;
+    default:
+        return false;
+    }
+}
+
+std::string getMessageText(const td::td_api::formattedText &text,
+                           const std::map<int64_t, std::string> *smileys, bool sendable)
+{
+    std::vector<TextMarkup> markups;
+    for (const auto &entity: text.entities_) {
+        if (!entity || !entity->type_ || (entity->length_ <= 0))
+            continue;
+        TextMarkup markup;
+        markup.start = utf16OffsetToBytes(text.text_, entity->offset_);
+        markup.end   = utf16OffsetToBytes(text.text_, entity->offset_ + entity->length_);
+        if (entity->type_->get_id() == td::td_api::textEntityTypeCustomEmoji::ID) {
+            // The stretch a custom emoji covers is its code instead, if it has one
+            auto it = smileys ? smileys->find(static_cast<const td::td_api::textEntityTypeCustomEmoji &>(*entity->type_).custom_emoji_id_)
+                              : std::map<int64_t, std::string>::const_iterator();
+            if (!smileys || (it == smileys->end()))
+                continue;
+            markup.open     = escapeForDisplay(it->second);
+            markup.replaces = true;
+        } else if (!getEntityMarkup(*entity->type_, markup, sendable))
+            continue;
+        if (markup.start < markup.end)
+            markups.push_back(std::move(markup));
+    }
+
+    // Where markup opens and closes: closing before opening at the same place, the inner first;
+    // opening, the outer first. Telegram nests its entities, never crossing them.
+    struct Edge {
+        size_t   position;
+        bool     opens;
+        size_t   index;
+    };
+    std::vector<Edge> edges;
+    for (size_t i = 0; i < markups.size(); i++) {
+        edges.push_back({markups[i].start, true, i});
+        edges.push_back({markups[i].end, false, i});
+    }
+    std::sort(edges.begin(), edges.end(), [&markups](const Edge &a, const Edge &b) {
+        if (a.position != b.position)
+            return a.position < b.position;
+        if (a.opens != b.opens)
+            return !a.opens;
+        const TextMarkup &x = markups[a.index], &y = markups[b.index];
+        if (a.opens)
+            return (x.end != y.end) ? (x.end > y.end) : (a.index < b.index);
+        return (x.start != y.start) ? (x.start > y.start) : (a.index > b.index);
+    });
 
     std::string result;
     size_t      position = 0;
-    for (const auto &item: replaced) {
-        if (std::get<0>(item) < position)
-            continue;
-        result  += escapeForDisplay(text.text_.substr(position, std::get<0>(item) - position));
-        result  += escapeForDisplay(std::get<2>(item));
-        position = std::get<1>(item);
+    size_t      skipTo   = 0; // past the text a custom emoji's code replaces
+    unsigned    quotes   = 0;
+    auto addText = [&](size_t end) {
+        size_t from = std::max(position, skipTo);
+        if (end > from) {
+            std::string escaped = escapeForDisplay(text.text_.substr(from, end - from));
+            if (quotes)
+                for (size_t newline = escaped.find('\n'); newline != std::string::npos;
+                     newline = escaped.find('\n', newline + 1))
+                {
+                    escaped.insert(newline + 1, QUOTE_BAR);
+                    newline += sizeof(QUOTE_BAR) - 1;
+                }
+            result += escaped;
+        }
+        position = std::max(position, end);
+    };
+    for (const Edge &edge: edges) {
+        addText(edge.position);
+        const TextMarkup &markup = markups[edge.index];
+        if (edge.opens) {
+            result += markup.open;
+            if (markup.replaces)
+                skipTo = std::max(skipTo, markup.end);
+            if (markup.quote)
+                quotes++;
+        } else {
+            result += markup.close;
+            if (markup.quote)
+                quotes--;
+        }
     }
-    result += escapeForDisplay(text.text_.substr(position));
+    addText(text.text_.size());
     return result;
 }
 
@@ -377,32 +520,42 @@ static PurpleMessageFlags getNotificationFlags(PurpleMessageFlags extraFlags)
     return (PurpleMessageFlags)flags;
 }
 
-void sendConversationReadReceipts(TdAccountData &account, PurpleConversation *conv)
+const td::td_api::chat *findConversationChat(TdAccountData &account, PurpleConversation *conv)
 {
-    if (!conversationHasFocus(conv))
-        return;
-    ChatId chatId;
     PurpleConversationType convType = purple_conversation_get_type(conv);
     const char            *convName = purple_conversation_get_name(conv);
 
     if (convType == PURPLE_CONV_TYPE_IM) {
         UserId       privateChatUserId = purpleBuddyNameToUserId(convName);
         SecretChatId secretChatId      = purpleBuddyNameToSecretChatId(convName);
-        const td::td_api::chat *tdlibChat = nullptr;
 
         if (privateChatUserId.valid())
-            tdlibChat = account.getPrivateChatByUserId(privateChatUserId);
+            return account.getPrivateChatByUserId(privateChatUserId);
         else if (secretChatId.valid())
-            tdlibChat = account.getChatBySecretChat(secretChatId);
-
-        if (tdlibChat)
-            chatId = getId(*tdlibChat);
+            return account.getChatBySecretChat(secretChatId);
     } else if (convType == PURPLE_CONV_TYPE_CHAT)
-        chatId = getTdlibChatId(convName);
+        return account.getChat(getTdlibChatId(convName));
+    return nullptr;
+}
+
+void sendConversationReadReceipts(TdAccountData &account, PurpleConversation *conv)
+{
+    if (!conversationHasFocus(conv))
+        return;
+    ChatId chatId;
+    if (purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_CHAT)
+        chatId = getTdlibChatId(purple_conversation_get_name(conv));
+    else if (const td::td_api::chat *tdlibChat = findConversationChat(account, conv))
+        chatId = getId(*tdlibChat);
 
     std::vector<ReadReceipt> receipts;
     account.extractPendingReadReceipts(chatId, receipts);
 
+    // Seen now, as the phone app takes them to be once the chat is opened
+    if (hasUnreadReactions(account, conv)) {
+        purple_debug_misc(config::pluginId, "Reading reactions in chat %" G_GINT64_FORMAT "\n", chatId.value());
+        account.transceiver.sendQuery(td::td_api::make_object<td::td_api::readAllChatReactions>(chatId.value()), nullptr);
+    }
     if (!receipts.empty()) {
         purple_debug_misc(config::pluginId, "Sending %zu read receipts for chat %" G_GINT64_FORMAT "\n",
                           receipts.size(), chatId.value());
@@ -466,7 +619,8 @@ static void showMessageTextChat(TdAccountData &account, const td::td_api::chat &
         } else {
             if (purpleId != 0)
                 serv_got_chat_in(purple_account_get_connection(account.purpleAccount), purpleId,
-                                 message.incomingGroupchatSender.empty() ? "someone" : message.incomingGroupchatSender.c_str(),
+                                 !message.incomingGroupchatSenderName.empty() ? message.incomingGroupchatSenderName.c_str() :
+                                 !message.incomingGroupchatSender.empty() ? message.incomingGroupchatSender.c_str() : "someone",
                                  flags, text, message.timestamp);
         }
     }
@@ -522,8 +676,9 @@ static std::string quoteMessage(const td::td_api::message *message, TdAccountDat
     } else switch (message->content_->get_id()) {
         case td::td_api::messageText::ID: {
             const td::td_api::messageText &messageText = static_cast<const td::td_api::messageText &>(*message->content_);
+            // Plain, as the quote's one line has no room for formatting, and escaped below
             if (messageText.text_)
-                text = getMessageText(*messageText.text_);
+                text = messageText.text_->text_;
             else
                 text = "";
             break;
@@ -614,6 +769,22 @@ static std::string getPrivateChatPurpleName(TdAccountData &account, const td::td
     return userName;
 }
 
+// The chat's conversation, if it is open; none is opened
+PurpleConversation *findMessageConversation(TdAccountData &account, const td::td_api::chat &chat)
+{
+    const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
+    if (privateUser)
+        return purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM,
+                                                     getPrivateChatPurpleName(account, *privateUser).c_str(),
+                                                     account.purpleAccount);
+    SecretChatId secretChatId = getSecretChatId(chat);
+    if (secretChatId.valid())
+        return purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, getSecretChatBuddyName(secretChatId).c_str(),
+                                                     account.purpleAccount);
+    PurpleConvChat *conv = findChatConversation(account.purpleAccount, chat);
+    return conv ? purple_conv_chat_get_conversation(conv) : NULL;
+}
+
 PurpleConversation *getMessageConversation(TdAccountData &account, const td::td_api::chat &chat)
 {
     const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
@@ -631,20 +802,25 @@ PurpleConversation *getMessageConversation(TdAccountData &account, const td::td_
     return NULL;
 }
 
-// The menu's link after the message; not while it is being sent, under an id it is yet to change
-static std::string getMessageTrailer(TdAccountData &account, const td::td_api::chat &chat,
-                                     const TgMessageInfo &message)
-{
-    return message.sentLocally ? std::string() : makeMenuLink(account.purpleAccount, getId(chat), message.id);
-}
-
 void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const TgMessageInfo &message,
                      const char *text, const char *notification, uint32_t extraFlags)
 {
     PurpleMessageFlags directionFlag = message.outgoing ? PURPLE_MESSAGE_SEND : PURPLE_MESSAGE_RECV;
     PurpleMessageFlags flags = (PurpleMessageFlags) (extraFlags | directionFlag);
+    // Not logged (again): with the conversation's logging off while it is written, as Pidgin shows
+    // a message flagged as not to be logged without its time and sender
+    PurpleConversation *unloggedConv = (message.unlogged || message.redrawn) ? findMessageConversation(account, chat)
+                                                                             : nullptr;
+    bool                logging      = unloggedConv && purple_conversation_is_logging(unloggedConv);
+    if (logging)
+        purple_conversation_set_logging(unloggedConv, FALSE);
+    else if ((message.unlogged || message.redrawn) && !unloggedConv)
+        flags = (PurpleMessageFlags) (flags | PURPLE_MESSAGE_NO_LOG);
     if (message.outgoing && !message.sentLocally)
         flags = (PurpleMessageFlags) (flags | PURPLE_MESSAGE_REMOTE_SEND);
+    // Shown again, nothing new: Pidgin makes no sound for it, nor do notifying plugins
+    if (message.redrawn)
+        flags = (PurpleMessageFlags) (flags | PURPLE_MESSAGE_DELAYED);
 
     std::string newText;
     if (text) {
@@ -664,8 +840,16 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
     if (!newText.empty())
         text = newText.c_str();
 
+    // Which message it is, for the log, once it has its id for good: whatever the front-end now, a
+    // tab of Pidgin's may be filled from the log later
+    std::string marked;
+    if (text && message.id.valid() && !message.sentLocally && logMarkersEnabled()) {
+        marked = text + makeLogMarker(message.id);
+        text   = marked.c_str();
+    }
+
     // Marks for the message's own text, not for a notice about it, which carries its id
-    MessageMarkScope markScope(text ? message.id : MessageId::invalid, getMessageTrailer(account, chat, message));
+    MessageMarkScope markScope(text ? message.id : MessageId::invalid);
     const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
     if (privateUser) {
         std::string userName = getPrivateChatPurpleName(account, *privateUser);
@@ -680,6 +864,9 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
 
     if (getBasicGroupId(chat).valid() || getSupergroupId(chat).valid())
         showMessageTextChat(account, chat, message, text, notification, flags);
+
+    if (logging && g_list_find(purple_get_conversations(), unloggedConv))
+        purple_conversation_set_logging(unloggedConv, TRUE);
 }
 
 void showChatNotification(TdAccountData &account, const td::td_api::chat &chat,
@@ -997,7 +1184,7 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
             notice = formatMessage(_("Downloading {}"), escapeForDisplay(fileDesc));
         }
         autoDownload = true;
-    } else if (!ignoreBigDownloads(account.purpleAccount)) {
+    } else if (!ignoreBigDownloads(account.purpleAccount) && !fullMessage.messageInfo.redrawn) {
         // TRANSLATOR: In-chat notification, appears after a colon (':'). Argument is a file *type*, not a filename.
         notice = formatMessage(_("Requesting {} download"), escapeForDisplay(fileDesc));
         askDownload = true;
@@ -1200,12 +1387,29 @@ static bool showEditNotice(const td::td_api::chat &chat, IncomingMessage &fullMe
             text = static_cast<const td::td_api::messageText *>(&content);
         std::string newText = fullMessage.captionOnly ? fileInfo.caption :
                               (text && text->text_) ? getMessageText(*text->text_) : std::string();
+        if (fullMessage.replacing) {
+            // The tab shows the new text where the message is, so the notice there only says it
+            // was edited, and leaves the new text to the log
+            std::string shown;
+            if (anonymous)
+                // TRANSLATOR: In-chat notification in a channel, not logged, when the message's new text is shown in its place. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
+                shown = formatMessage(_("The message from {0} was edited"), sentAt);
+            else
+                // TRANSLATOR: In-chat notification, not logged, when the message's new text is shown in its place. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
+                shown = formatMessage(_("{0} edited the message from {1}"), {sender, sentAt});
+            bool wasUnlogged = messageInfo.unlogged;
+            fullMessage.messageInfo.unlogged = true;
+            showMessageText(account, chat, messageInfo, NULL, shown.c_str());
+            fullMessage.messageInfo.unlogged = wasUnlogged;
+        }
         if (anonymous)
             // TRANSLATOR: In-chat notification in a channel. Arguments are the time (or date and time) the message was sent at, as the conversation window shows it, and the message's new text.
             notice = formatMessage(_("The message from {0} was edited: {1}"), {sentAt, newText});
         else
             // TRANSLATOR: In-chat notification. Arguments are a username, the time (or date and time) the message was sent at, as the conversation window shows it, and the message's new text.
             notice = formatMessage(_("{0} edited the message from {1}: {2}"), {sender, sentAt, newText});
+        if (fullMessage.replacing)
+            notice = makeLogOnly(notice);
     } else {
         if (anonymous)
             // TRANSLATOR: In-chat notification in a channel, followed by the message as edited. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
@@ -1220,11 +1424,113 @@ static bool showEditNotice(const td::td_api::chat &chat, IncomingMessage &fullMe
     return complete;
 }
 
+// The line of a message's reactions, under it in Pidgin's tab: each with its count, ours in bold.
+// Custom-emoji ones are left out, as they would need looking up first.
+namespace {
+// A reaction as the line of them shows it: its emoji, or a custom one's id
+struct ReactionCount {
+    std::string emoji;
+    int64_t     customEmojiId = 0;
+    int32_t     count         = 0;
+    bool        chosen        = false;
+};
+}
+
+static std::vector<ReactionCount> getReactionCounts(const td::td_api::messageInteractionInfo *info)
+{
+    std::vector<ReactionCount> counts;
+    if (!info || !info->reactions_)
+        return counts;
+    for (const auto &reaction: info->reactions_->reactions_) {
+        if (!reaction || !reaction->type_)
+            continue;
+        ReactionCount item;
+        if (reaction->type_->get_id() == td::td_api::reactionTypeEmoji::ID)
+            item.emoji = static_cast<const td::td_api::reactionTypeEmoji &>(*reaction->type_).emoji_;
+        else if (reaction->type_->get_id() == td::td_api::reactionTypePaid::ID)
+            item.emoji = "\xe2\xad\x90";
+        else if (reaction->type_->get_id() == td::td_api::reactionTypeCustomEmoji::ID)
+            item.customEmojiId = static_cast<const td::td_api::reactionTypeCustomEmoji &>(*reaction->type_).custom_emoji_id_;
+        else
+            continue;
+        item.count  = reaction->total_count_;
+        item.chosen = reaction->is_chosen_;
+        counts.push_back(std::move(item));
+    }
+    return counts;
+}
+
+// Each with its count, ours in bold. A custom emoji is the conversation's custom smiley, its picture
+// fetched unless already there, where the front-end has them; otherwise left out, its ordinary emoji
+// unknown until it is fetched.
+static std::string formatReactions(TdAccountData &account, PurpleConversation *conv,
+                                   const std::vector<ReactionCount> &counts)
+{
+    // Stands for the custom emoji until its picture is in
+    static const char CUSTOM_EMOJI_PLACEHOLDER[] = "\xe2\x97\x8c";
+    std::vector<CustomEmoji> customEmoji;
+    for (const ReactionCount &reaction: counts)
+        if (reaction.customEmojiId)
+            customEmoji.push_back(CustomEmoji{reaction.customEmojiId, CUSTOM_EMOJI_PLACEHOLDER});
+    std::map<int64_t, std::string> smileys;
+    if (!customEmoji.empty())
+        smileys = addCustomEmojiSmileys(account, conv, customEmoji);
+
+    std::string line;
+    for (const ReactionCount &reaction: counts) {
+        std::string emoji;
+        if (!reaction.customEmojiId)
+            emoji = escapeForDisplay(reaction.emoji);
+        else {
+            auto it = smileys.find(reaction.customEmojiId);
+            if (it == smileys.end())
+                continue;
+            emoji = it->second;
+        }
+        std::string item = emoji + "&nbsp;" + std::to_string(reaction.count);
+        if (reaction.chosen)
+            item = "<b>" + item + "</b>";
+        if (!line.empty())
+            line += "&nbsp;&nbsp;&nbsp;";
+        line += item;
+    }
+    return line.empty() ? line : "<font size=\"2\">" + line + "</font>";
+}
+
+// Shows the message's reactions under it once it has been written
+class ReactionsLine {
+public:
+    ReactionsLine(TdAccountData &account, const td::td_api::chat &chat, MessageId messageId,
+                  const td::td_api::messageInteractionInfo *info)
+    : m_account(account), m_chat(chat), m_messageId(messageId), m_counts(getReactionCounts(info)) {}
+    ~ReactionsLine()
+    {
+        if (m_counts.empty())
+            return;
+        // Not where it would not be shown, nor its custom emoji fetched
+        PurpleConversation *conv = pidginUiFound() ? findMessageConversation(m_account, m_chat) : nullptr;
+        std::string         html = conv ? formatReactions(m_account, conv, m_counts) : std::string();
+        if (!html.empty())
+            showMessageReactions(conv, m_messageId, html);
+    }
+private:
+    TdAccountData             &m_account;
+    const td::td_api::chat    &m_chat;
+    MessageId                  m_messageId;
+    std::vector<ReactionCount> m_counts;
+};
+
 void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
                 TdTransceiver &transceiver, TdAccountData &account)
 {
     if (!fullMessage.message) return;
     td::td_api::message &message = *fullMessage.message;
+    if (!fullMessage.loggedHtml.empty()) {
+        appendTabLine(findMessageConversation(account, chat), fullMessage.loggedHtml);
+        for (int id: fullMessage.loggedImageIds)
+            purple_imgstore_unref_by_id(id);
+        return;
+    }
 
     if (!message.content_)
         return;
@@ -1239,8 +1545,13 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
     messageInfo.repliedMessage = std::move(fullMessage.repliedMessage);
 
     if (fullMessage.editedMessageTime && showEditNotice(chat, fullMessage, account)) {
-        showPendingEdit(account, getChatId(message), getId(message));
-        return;
+        // The notice holds all of the edit; the tab gets the message over its earlier version
+        // all the same, but not the log
+        if (!fullMessage.replacing) {
+            showPendingEdit(account, getChatId(message), getId(message));
+            return;
+        }
+        messageInfo.unlogged = true;
     }
 
     // ttl_ field was removed in newer tdlib versions
@@ -1259,8 +1570,20 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
     //     }
     // }
 
-    // All its parts, notices included, are the message, and its menu follows the last
-    MessageMarkScope markScope(messageInfo.id, getMessageTrailer(account, chat, messageInfo));
+    // Under the message, once all of it is written
+    ReactionsLine reactionsLine(account, chat, messageInfo.id, message.interaction_info_.get());
+    // All its parts, notices included, are the message, and its menu goes before the first. An edit
+    // goes over the earlier version, saying it was edited.
+    std::string editNote;
+    if (fullMessage.replacing)
+        editNote = formatMessage(" <font size=\"2\"><i>({})</i></font>",
+                                 std::string(fullMessage.formattingOnly ?
+                                             // TRANSLATOR: After the text of a message edited where it stands, in Pidgin's conversation window, when only the formatting of its words (bold, italic and the like) changed.
+                                             _("formatting edited") :
+                                             // TRANSLATOR: After the text of a message edited where it stands, in Pidgin's conversation window.
+                                             _("edited")));
+    MessageMarkScope markScope(messageInfo.id, fullMessage.replacing ? editNote.c_str() : nullptr, true,
+                               message.content_->get_id() == td::td_api::messageText::ID);
     FileInfo fileInfo;
     getFileFromMessage(fullMessage, fileInfo);
     if (fileInfo.secret) {
@@ -1310,6 +1633,14 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
                                                {escapeForDisplay(getSenderDisplayName(chat, messageInfo,
                                                                                       account.purpleAccount)),
                                                 escapeForDisplay(titleChange.title_)});
+            showMessageText(account, chat, messageInfo, NULL, notice.c_str());
+            break;
+        }
+        case td::td_api::messageContactRegistered::ID: {
+            // TRANSLATOR: In-chat status update. Argument is a username.
+            std::string notice = formatMessage(_("{} joined Telegram"),
+                                               escapeForDisplay(getSenderDisplayName(chat, messageInfo,
+                                                                                     account.purpleAccount)));
             showMessageText(account, chat, messageInfo, NULL, notice.c_str());
             break;
         }
@@ -1484,6 +1815,10 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
     messageInfo.id               = getId(*message);
     messageInfo.type             = TgMessageInfo::Type::Other;
     messageInfo.incomingGroupchatSender = getIncomingGroupchatSenderPurpleName(chat, *message, account);
+    UserId senderId = getSenderUserId(*message);
+    if (!message->is_outgoing_ && senderId.valid() && account.getUser(senderId) &&
+        (getBasicGroupId(chat).valid() || getSupergroupId(chat).valid()))
+        messageInfo.incomingGroupchatSenderName = getPurpleBuddyName(*account.getUser(senderId));
     messageInfo.anonymousChannelPost    = isAnonymousChannelPost(chat, *message);
     // In Pidgin, links to each size a photo or video comes in, below it; here already, as a download
     // may start, and finish, before the message is shown
@@ -1959,6 +2294,11 @@ static void showReactionText(TdAccountData &account, const td::td_api::chat &cha
     messageInfo.timestamp               = time(NULL);
     messageInfo.outgoing                = self;
     messageInfo.incomingGroupchatSender = getReactionSenderName(account, reactionKey);
+    std::string senderKey = reactionKey.substr(0, reactionKey.find(' '));
+    const td::td_api::user *reactor = ((senderKey.size() > 1) && (senderKey[0] == 'u')) ?
+                                      account.getUser(UserId::fromString(senderKey.c_str() + 1)) : nullptr;
+    if (reactor)
+        messageInfo.incomingGroupchatSenderName = getPurpleBuddyName(*reactor);
     showMessageText(account, chat, messageInfo, text.c_str(), NULL, image ? PURPLE_MESSAGE_IMAGES : 0);
 }
 
@@ -2143,7 +2483,7 @@ static void showReaction(TdAccountData &account, const td::td_api::chat &chat, M
 
 void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
     td::td_api::object_ptr<td::td_api::message> message,
-    PendingMessageQueue::MessageAction action)
+    PendingMessageQueue::MessageAction action, bool redrawn)
 {
     if (!message) return;
     ChatId chatId = getId(chat);
@@ -2165,7 +2505,8 @@ void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
 
     IncomingMessage fullMessage;
     makeFullMessage(chat, std::move(message), fullMessage, account);
-    fullMessage.messageInfo.fromHistory = (action == PendingMessageQueue::Prepend);
+    fullMessage.messageInfo.fromHistory = (action == PendingMessageQueue::Prepend) || redrawn;
+    fullMessage.messageInfo.redrawn     = redrawn;
     queueMessage(account, chat, std::move(fullMessage), action);
 }
 
@@ -2205,14 +2546,21 @@ static void editedMessageResponse(TdAccountData &account, const PendingEdit &edi
 
     td::td_api::object_ptr<td::td_api::message> message = td::move_tl_object_as<td::td_api::message>(object);
     time_t editDate = message->edit_date_ ? message->edit_date_ : time(NULL);
-    // Without the reply or forward header, which the original had already
-    message->reply_to_     = nullptr;
-    message->forward_info_ = nullptr;
+    // Written over the original where Pidgin shows it, the reply or forward header included, as
+    // the whole of its text goes; otherwise after the notice, without them, the original having
+    // them already
+    bool replacing = canReplaceMessage(findMessageConversation(account, *chat), edit.messageId);
+    if (!replacing) {
+        message->reply_to_     = nullptr;
+        message->forward_info_ = nullptr;
+    }
 
     IncomingMessage fullMessage;
     makeFullMessage(*chat, std::move(message), fullMessage, account);
     fullMessage.editedMessageTime     = edit.messageTime;
     fullMessage.captionOnly           = edit.captionOnly;
+    fullMessage.replacing             = replacing;
+    fullMessage.formattingOnly        = edit.formattingOnly;
     fullMessage.messageInfo.timestamp = editDate;
     queueMessage(account, *chat, std::move(fullMessage), PendingMessageQueue::Append);
 }
@@ -2248,9 +2596,15 @@ void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messa
 
     ShownMessage editedMessage;
     getShownContent(*content, editedMessage);
-    if ((editedMessage.file == shownMessage->file) && (editedMessage.content == shownMessage->content)) {
+    // A file of ours, uploaded as the message is sent, is the same, only known by its remote
+    // identifier from then on
+    bool uploaded = g_str_has_prefix(shownMessage->file.c_str(), LOCAL_FILE_KEY) && !editedMessage.file.empty();
+    if (((editedMessage.file == shownMessage->file) || uploaded) && (editedMessage.content == shownMessage->content) &&
+        (editedMessage.formatting == shownMessage->formatting))
+    {
         purple_debug_misc(config::pluginId, "Message %" G_GINT64_FORMAT " changed out of sight\n",
                           messageId.value());
+        shownMessage->file = editedMessage.file;
         return;
     }
 
@@ -2259,6 +2613,8 @@ void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messa
     edit.messageId   = messageId;
     edit.messageTime = shownMessage->timestamp;
     edit.captionOnly = !editedMessage.file.empty() && (editedMessage.file == shownMessage->file);
+    edit.formattingOnly = (editedMessage.file == shownMessage->file) &&
+                          (editedMessage.content == shownMessage->content);
     edit.previous    = *shownMessage;
     editedMessage.timestamp = shownMessage->timestamp;
     // Edits leave reactions be
@@ -2307,6 +2663,11 @@ void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessag
         if (pendingMessage)
             pendingMessage->deleted = true;
         if ((!pendingMessage || pendingMessage->editedMessageTime) && chat) {
+            PurpleConversation *conv = findMessageConversation(account, *chat);
+            if (keepsDeletedMessages(account.purpleAccount, findChatBlistNode(account, *chat)))
+                strikeOutMessage(conv, messageId);
+            else
+                removeMessage(conv, messageId);
             // Telegram does not say who deleted it, so the notice cannot either.
             std::string notice = formatMessage(
                 // TRANSLATOR: In-chat notification. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
@@ -2403,6 +2764,280 @@ void fetchHistory(TdAccountData &account, ChatId chatId, MessageId fetchFrom, Me
     fetchHistoryRequest(account, chatId, 0, fetchFrom, stopAt);
 }
 
+// As many messages as Pidgin's tab keeps, at most, it having at least a line for each
+static unsigned getRedrawLimit()
+{
+    static const char SCROLLBACK_PREF[] = "/pidgin/conversations/scrollback_lines";
+    enum { NO_SCROLLBACK_LIMIT = 10000 };
+    int lines = purple_prefs_exists(SCROLLBACK_PREF) ? purple_prefs_get_int(SCROLLBACK_PREF) : 0;
+    return (lines > 0) ? lines : NO_SCROLLBACK_LIMIT;
+}
+
+namespace {
+struct Redraw {
+    ChatId                                                  chatId;
+    MessageId                                               earliest; // or
+    time_t                                                  span  = 0; // back from the latest message
+    time_t                                                  since = 0;
+    unsigned                                                extra = 0; // messages wanted before the earliest
+    bool                                                    found  = false; // the earliest
+    unsigned                                                beyond = 0; // found so far
+    unsigned                                                limit;
+    // Newest first, as TDLib gives them
+    std::vector<td::td_api::object_ptr<td::td_api::message>> messages;
+};
+}
+
+static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw, MessageId from);
+
+// Messages found too far back for their tab once, which they are no nearer to since
+static std::set<std::pair<int64_t, int64_t>> g_redrawTooFar;
+// Chats whose tabs show their first message
+static std::set<int64_t> g_historyComplete;
+
+static void stopRedrawProgress(TdAccountData &account, ChatId chatId)
+{
+    const td::td_api::chat *chat = account.getChat(chatId);
+    stopProgress(chat ? findMessageConversation(account, *chat) : nullptr);
+}
+
+// Whether Pidgin's tab writes TDLib's message as a notice, rather than as someone's message
+static bool isShownAsNotice(const td::td_api::message &message)
+{
+    switch (message.content_ ? message.content_->get_id() : 0) {
+    case td::td_api::messageText::ID:
+    case td::td_api::messagePhoto::ID:
+    case td::td_api::messageVideo::ID:
+    case td::td_api::messageDocument::ID:
+    case td::td_api::messageAudio::ID:
+    case td::td_api::messageAnimation::ID:
+    case td::td_api::messageVoiceNote::ID:
+    case td::td_api::messageVideoNote::ID:
+    case td::td_api::messageSticker::ID:
+        return false;
+    default:
+        return true;
+    }
+}
+
+// What of the log goes into the tab with TDLib's messages: a message the log names that TDLib no
+// longer has was deleted, and is struck out or left out, as set for the chat; one the log does not
+// name, or a notice, is left out if TDLib has a message written the same way at much the same time,
+// as it is that one. Other notices, such as of edits and reactions, go in.
+static std::vector<LoggedLine> getLoggedLines(TdAccountData &account, const td::td_api::chat &chat,
+                                              PurpleConversation *conv, const Redraw &redraw)
+{
+    enum { SAME_TIME = 10 };
+    std::vector<LoggedLine> lines;
+    time_t since = redraw.since;
+    if (!since && !redraw.messages.empty() && redraw.messages.back())
+        since = redraw.messages.back()->date_;
+    if (!since)
+        return lines;
+    std::set<int64_t>           ids;
+    std::multimap<time_t, bool> dates; // whether shown as a notice
+    for (const auto &message: redraw.messages)
+        if (message) {
+            ids.insert(message->id_);
+            dates.emplace(message->date_, isShownAsNotice(*message));
+        }
+    auto hasNear = [&dates](time_t when, bool notice) {
+        for (auto it = dates.lower_bound(when - SAME_TIME); (it != dates.end()) && (it->first <= when + SAME_TIME); ++it)
+            if (it->second == notice)
+                return true;
+        return false;
+    };
+    bool keepDeleted = keepsDeletedMessages(account.purpleAccount, findChatBlistNode(account, chat));
+    for (LoggedLine &line: readLoggedLines(account.purpleAccount, purple_conversation_get_type(conv),
+                                           purple_conversation_get_name(conv), since))
+    {
+        bool keep;
+        if (line.messageId.valid()) {
+            keep = !ids.count(line.messageId.value()) && keepDeleted;
+            if (keep)
+                line.html = line.html.substr(0, line.bodyStart) + "<s>" + line.html.substr(line.bodyStart) + "</s>";
+        } else
+            keep = !hasNear(line.when, !line.message);
+        if (keep)
+            lines.push_back(std::move(line));
+        else
+            for (int id: line.imageIds)
+                purple_imgstore_unref_by_id(id);
+    }
+    return lines;
+}
+
+// Ready to be shown among the messages, ahead of those already queued
+static void queueLoggedLine(TdAccountData &account, ChatId chatId, LoggedLine &line)
+{
+    IncomingMessage item;
+    item.message           = td::td_api::make_object<td::td_api::message>();
+    item.message->chat_id_ = chatId.value();
+    item.message->date_    = line.when;
+    item.loggedHtml        = std::move(line.html);
+    item.loggedImageIds    = std::move(line.imageIds);
+    IncomingMessage left = account.pendingMessages.addReadyMessage(std::move(item), PendingMessageQueue::Prepend);
+    for (int id: left.loggedImageIds)
+        purple_imgstore_unref_by_id(id);
+}
+
+// Empties the tab and has the messages shown in it, oldest first, ahead of any that came meanwhile;
+// with them, by their times, what of Pidgin's log of the conversation TDLib does not have
+static void redrawShow(TdAccountData &account, Redraw &redraw)
+{
+    const td::td_api::chat *chat = account.getChat(redraw.chatId);
+    PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+    stopProgress(conv);
+    if (conv) {
+        purple_debug_misc(config::pluginId, "Redrawing chat %" G_GINT64_FORMAT " from message %" G_GINT64_FORMAT
+                          " or time %" G_GINT64_FORMAT ": %zu messages\n", redraw.chatId.value(),
+                          redraw.earliest.value(), int64_t(redraw.since), redraw.messages.size());
+        purple_conversation_clear_message_history(conv);
+        std::vector<LoggedLine> lines = getLoggedLines(account, *chat, conv, redraw);
+        // Newest first, as the messages, each going ahead of what is queued
+        auto line = lines.rbegin();
+        auto queueLinesSince = [&](time_t since) {
+            for (; (line != lines.rend()) && (line->when >= since); ++line)
+                queueLoggedLine(account, redraw.chatId, *line);
+        };
+        for (auto &message: redraw.messages)
+            if (message && !account.pendingMessages.findPendingMessage(redraw.chatId, getId(*message))) {
+                queueLinesSince(message->date_);
+                handleIncomingMessage(account, *chat, std::move(message), PendingMessageQueue::Prepend, true);
+            }
+        queueLinesSince(0);
+    }
+    std::vector<IncomingMessage> readyMessages;
+    account.pendingMessages.setChatReady(redraw.chatId, readyMessages);
+    showMessages(readyMessages, account);
+    // Gone further back: what was at the top stays there
+    if (redraw.extra) {
+        if (!redraw.beyond)
+            g_historyComplete.insert(redraw.chatId.value());
+        if (conv)
+            scrollToMessageLater(conv, redraw.earliest);
+    }
+}
+
+static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redraw,
+                           td::td_api::object_ptr<td::td_api::Object> response)
+{
+    MessageId more;
+    bool     &found = redraw->found;
+    bool      older = false; // than the tab is filled from
+    size_t    added = 0;     // none, once the chat's first message is reached
+    if (response && (response->get_id() == td::td_api::messages::ID)) {
+        auto &messages = static_cast<td::td_api::messages &>(*response);
+        for (auto &message: messages.messages_) {
+            // The message a batch goes back from may come again, starting it
+            if (!message || (!redraw->messages.empty() && (getId(*message) == getId(*redraw->messages.back()))))
+                continue;
+            if (redraw->span && !redraw->since)
+                redraw->since = std::max<time_t>(message->date_ - redraw->span, 1);
+            older = redraw->since && (message->date_ < redraw->since);
+            if (older)
+                break;
+            more = getId(*message);
+            if (more == redraw->earliest)
+                found = true;
+            else if (found)
+                redraw->beyond++;
+            redraw->messages.push_back(std::move(message));
+            added++;
+            if ((found && (redraw->beyond >= redraw->extra)) || (redraw->messages.size() >= redraw->limit))
+                break;
+        }
+        bool full = redraw->messages.size() >= redraw->limit;
+        // Filling it from a message, and as many before as wanted, or as there are; from a time, all
+        // there is since; or as much as fits: either is enough
+        bool enough = found && ((redraw->beyond >= redraw->extra) || !added || full);
+        if (enough || (redraw->span && (older || full || !added))) {
+            if (!redraw->messages.empty()) {
+                redrawShow(account, *redraw);
+                return;
+            }
+        } else if (!full && added) {
+            redrawRequest(account, redraw, more);
+            return;
+        } else {
+            purple_debug_misc(config::pluginId, "Message %" G_GINT64_FORMAT " is further back than the tab holds\n",
+                              redraw->earliest.value());
+            g_redrawTooFar.insert({redraw->chatId.value(), redraw->earliest.value()});
+        }
+    } else
+        purple_debug_warning(config::pluginId, "Cannot fetch chat %" G_GINT64_FORMAT " to redraw it: %s\n",
+                             redraw->chatId.value(), getDisplayedError(response).c_str());
+    // Left as it is
+    stopRedrawProgress(account, redraw->chatId);
+    std::vector<IncomingMessage> readyMessages;
+    account.pendingMessages.setChatReady(redraw->chatId, readyMessages);
+    showMessages(readyMessages, account);
+}
+
+static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw, MessageId from)
+{
+    auto request = td::td_api::make_object<td::td_api::getChatHistory>();
+    request->chat_id_         = redraw->chatId.value();
+    request->from_message_id_ = from.valid() ? from.value() : 0;
+    request->offset_          = 0;
+    request->limit_           = 100;
+    request->only_local_      = false;
+    account.transceiver.sendQuery(std::move(request),
+        [&account, redraw](uint64_t, td::td_api::object_ptr<td::td_api::Object> response) {
+            redrawResponse(account, redraw, std::move(response));
+        });
+}
+
+// False if the chat is busy
+static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earliest, time_t span,
+                        unsigned extra = 0)
+{
+    const td::td_api::chat *chat = account.getChat(chatId);
+    PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+    if (!conv || !canRedrawConversation(conv))
+        return true;
+    // Not while history is being fetched, or the tab redrawn already
+    if (!account.pendingMessages.isChatReady(chatId)) {
+        purple_debug_misc(config::pluginId, "Chat %" G_GINT64_FORMAT " is busy, not redrawn\n", chatId.value());
+        return false;
+    }
+    account.pendingMessages.setChatNotReady(chatId);
+    // TRANSLATOR: At the end of a conversation window while it is being filled, followed by a turning character.
+    startProgress(conv, escapeForDisplay(_("Fetching messages from Telegram")));
+    auto redraw = std::make_shared<Redraw>();
+    redraw->chatId   = chatId;
+    redraw->earliest = earliest;
+    redraw->span     = span;
+    redraw->extra    = extra;
+    redraw->limit    = getRedrawLimit();
+    redrawRequest(account, redraw, MessageId::invalid);
+    return true;
+}
+
+void redrawChat(TdAccountData &account, ChatId chatId, MessageId earliest)
+{
+    if (!g_redrawTooFar.count({chatId.value(), earliest.value()}))
+        startRedraw(account, chatId, earliest, 0);
+}
+
+void showEarlierMessages(TdAccountData &account, PurpleConversation *conv)
+{
+    enum { EARLIER_BATCH = 50 };
+    const td::td_api::chat *chat     = findConversationChat(account, conv);
+    MessageId               earliest = chat ? findFirstMessage(conv) : MessageId();
+    if (!earliest.valid() || g_historyComplete.count(getId(*chat).value()) ||
+        g_redrawTooFar.count({getId(*chat).value(), earliest.value()}))
+        return;
+    purple_debug_misc(config::pluginId, "Showing messages before %" G_GINT64_FORMAT " in chat %" G_GINT64_FORMAT "\n",
+                      earliest.value(), getId(*chat).value());
+    startRedraw(account, getId(*chat), earliest, 0, EARLIER_BATCH);
+}
+
+bool fillChat(TdAccountData &account, ChatId chatId, time_t span)
+{
+    return startRedraw(account, chatId, MessageId::invalid, span);
+}
+
 // While a message waits to be shown, its reactions would come before it, and are part of what it
 // is once shown; but one waiting to be shown again, as edited, is in the conversation already
 static bool isMessageInConversation(TdAccountData &account, ChatId chatId, MessageId messageId)
@@ -2448,6 +3083,11 @@ void updateMessageReactions(TdAccountData &account, ChatId chatId, MessageId mes
             showReaction(account, *chat, messageId, *shownMessage, it->first, it->second, nullptr);
         it = shownMessage->reactions.erase(it);
     }
+    if (show) {
+        PurpleConversation *conv = pidginUiFound() ? findMessageConversation(account, *chat) : nullptr;
+        if (conv)
+            showMessageReactions(conv, messageId, formatReactions(account, conv, getReactionCounts(info)));
+    }
 }
 
 using UnreadReactions = std::vector<td::td_api::object_ptr<td::td_api::unreadReaction>>;
@@ -2457,8 +3097,14 @@ static void showUnreadReactions(TdAccountData &account, ChatId chatId, MessageId
 {
     ShownMessage *shownMessage = account.findShownMessage(chatId, messageId);
     const td::td_api::chat *chat = account.getChat(chatId);
-    if (!shownMessage || !chat)
+    if (!chat)
         return;
+    if (!shownMessage) {
+        // Shown, reactions and all, by filling its tab anew from it, if it is open
+        if (!reactions.empty())
+            redrawChat(account, chatId, messageId);
+        return;
+    }
     bool show = isMessageInConversation(account, chatId, messageId);
 
     // Unread ones are to our own messages, from others
@@ -2528,4 +3174,50 @@ void updateUnreadReactions(TdAccountData &account, td::td_api::updateMessageUnre
         [&account, chatId, messageId, reactions](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
             unreadReactionsMessageResponse(account, chatId, messageId, *reactions, std::move(object));
         });
+}
+
+const char UNREAD_REACTIONS_MARK[] = "\xe2\x9d\xa4\xef\xb8\x8f ";
+
+static bool hasUnreadReactions(TdAccountData &account, ChatId chatId)
+{
+    auto it = account.unreadReactionCounts.find(chatId);
+    return (it != account.unreadReactionCounts.end()) && (it->second > 0);
+}
+
+bool hasUnreadReactions(TdAccountData &account, PurpleConversation *conv)
+{
+    const td::td_api::chat *chat = conv ? findConversationChat(account, conv) : nullptr;
+    return chat && hasUnreadReactions(account, getId(*chat));
+}
+
+void markConversationTitle(TdAccountData &account, PurpleConversation *conv)
+{
+    const char *title  = purple_conversation_get_title(conv);
+    bool        marked = title && g_str_has_prefix(title, UNREAD_REACTIONS_MARK);
+    // Setting it says the title changed, which comes back here, marked as it is to be by then
+    if (hasUnreadReactions(account, conv) && !marked) {
+        std::string newTitle = UNREAD_REACTIONS_MARK + std::string(title ? title : purple_conversation_get_name(conv));
+        purple_conversation_set_title(conv, newTitle.c_str());
+    } else if (!hasUnreadReactions(account, conv) && marked)
+        purple_conversation_set_title(conv, title + strlen(UNREAD_REACTIONS_MARK));
+}
+
+void setUnreadReactionCount(TdAccountData &account, ChatId chatId, int32_t count)
+{
+    bool wasUnread = hasUnreadReactions(account, chatId);
+    account.unreadReactionCounts[chatId] = count;
+    if (wasUnread == (count > 0))
+        return;
+    purple_debug_misc(config::pluginId, "Chat %" G_GINT64_FORMAT ": %d reactions unread\n", chatId.value(), int(count));
+    const td::td_api::chat *chat = account.getChat(chatId);
+    PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+    if (conv)
+        markConversationTitle(account, conv);
+    // The buddy list draws its contact anew, asking for the mark
+    const td::td_api::user *user  = chat ? account.getUserByPrivateChat(*chat) : nullptr;
+    PurpleBuddy            *buddy = user ? purple_find_buddy(account.purpleAccount, getPurpleBuddyName(*user).c_str())
+                                         : nullptr;
+    PurpleBlistUiOps       *ops   = purple_blist_get_ui_ops();
+    if (buddy && ops && ops->update)
+        ops->update(purple_get_blist(), PURPLE_BLIST_NODE(buddy));
 }

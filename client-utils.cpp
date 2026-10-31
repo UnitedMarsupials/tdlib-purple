@@ -186,10 +186,46 @@ const char *getPurpleStatusId(const td::td_api::UserStatus &tdStatus)
         return purple_primitive_get_id_from_type(PURPLE_STATUS_AWAY);
 }
 
+PurpleBlistNode *findChatBlistNode(TdAccountData &account, const td::td_api::chat &chat)
+{
+    const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
+    if (privateUser) {
+        PurpleBuddy *buddy = purple_find_buddy(account.purpleAccount, getPurpleBuddyName(*privateUser).c_str());
+        return buddy ? PURPLE_BLIST_NODE(buddy) : nullptr;
+    }
+    SecretChatId secretChatId = getSecretChatId(chat);
+    if (secretChatId.valid()) {
+        PurpleBuddy *buddy = purple_find_buddy(account.purpleAccount, getSecretChatBuddyName(secretChatId).c_str());
+        return buddy ? PURPLE_BLIST_NODE(buddy) : nullptr;
+    }
+    PurpleChat *purpleChat = purple_blist_find_chat(account.purpleAccount, getPurpleChatName(chat).c_str());
+    return purpleChat ? PURPLE_BLIST_NODE(purpleChat) : nullptr;
+}
+
+static const char DELETED_MESSAGES_SETTING[] = "tdlib-deleted-messages";
+
+bool keepsDeletedMessages(PurpleAccount *account, PurpleBlistNode *node)
+{
+    const char *chosen = node ? purple_blist_node_get_string(node, DELETED_MESSAGES_SETTING) : nullptr;
+    if (chosen && *chosen)
+        return !strcmp(chosen, "keep");
+    return purple_account_get_bool(account, AccountOptions::StrikeOutDeleted, AccountOptions::StrikeOutDeletedDefault);
+}
+
+void setKeepsDeletedMessages(PurpleBlistNode *node, bool keep)
+{
+    purple_blist_node_set_string(node, DELETED_MESSAGES_SETTING, keep ? "keep" : "remove");
+}
+
 std::string getPurpleBuddyName(const td::td_api::user &user)
 {
+    return getPurpleBuddyName(getId(user));
+}
+
+std::string getPurpleBuddyName(UserId userId)
+{
     // Prepend "id" so it's not accidentally equal to our phone number which is account name
-    return "id" + std::to_string(user.id_);
+    return "id" + std::to_string(userId.value());
 }
 
 std::string getSecretChatBuddyName(SecretChatId secretChatId)
@@ -556,6 +592,8 @@ static void updateGroupChat(TdAccountData &account, const td::td_api::chat &chat
                                                                      ~PURPLE_BLIST_NODE_FLAG_NO_SAVE));
             purple_blist_add_chat(purpleChat, NULL, NULL);
         }
+        // As saved by an earlier version
+        completeChatComponents(purpleChat);
         const char *oldName = purple_chat_get_name(purpleChat);
         if (chat.title_ != oldName) {
             purple_debug_misc(config::pluginId, "Renaming chat '%s' to '%s'\n", oldName, chat.title_.c_str());
@@ -844,19 +882,14 @@ static void setChatMembers(PurpleConvChat *purpleChat,
         if (!user || (user->type_ && (user->type_->get_id() == td::td_api::userTypeDeleted::ID)))
             continue;
 
-        std::string userName    = getPurpleBuddyName(*user);
         const char *phoneNumber = getCanonicalPhoneNumber(user->phone_number_.c_str());
-        if (purple_find_buddy(account.purpleAccount, userName.c_str()))
-            // libpurple will be able to map user name to alias because there is a buddy
-            nameData.emplace_back(userName);
-        else if (!strcmp(getCanonicalPhoneNumber(purple_account_get_username(account.purpleAccount)), phoneNumber))
-            // This is us, so again libpurple will map phone number to alias
+        if (!strcmp(getCanonicalPhoneNumber(purple_account_get_username(account.purpleAccount)), phoneNumber))
+            // This is us, so libpurple will map phone number to alias
             nameData.emplace_back(purple_account_get_username(account.purpleAccount));
-        else {
-            // Use first and last name instead
-            std::string displayName = account.getDisplayName(*user);
-            nameData.emplace_back(displayName);
-        }
+        else
+            // As the user's messages name them: shown by the contact's alias, or the display name the
+            // plugin gives for it
+            nameData.emplace_back(getPurpleBuddyName(*user));
 
         PurpleConvChatBuddyFlags flag;
         if (member->status_->get_id() == td::td_api::chatMemberStatusCreator::ID)
@@ -897,10 +930,213 @@ void updateSupergroupChatMembers(PurpleConvChat* purpleChat, const td::td_api::c
     setChatMembers(purpleChat, members.members_, account);
 }
 
+namespace {
+// A stretch of formatting in plain text, by byte offsets
+struct TextFormat {
+    enum class Kind { Bold, Italic, Underline, Strikethrough, Link };
+    size_t      start;
+    size_t      end;
+    Kind        kind;
+    std::string url;
+};
+}
+
+static void addFormat(std::vector<TextFormat> &formats, size_t start, size_t end, TextFormat::Kind kind,
+                      const std::string &url = std::string())
+{
+    if (start < end)
+        formats.push_back({start, end, kind, url});
+}
+
+// The value of an attribute of a tag, unescaped; empty if it has none
+static std::string getAttribute(const std::string &tag, const char *name)
+{
+    std::string lowered = tag;
+    for (char &c: lowered)
+        c = g_ascii_tolower(c);
+    std::string key = std::string(" ") + name + "=";
+    size_t      at  = lowered.find(key);
+    if (at == std::string::npos)
+        return std::string();
+    at += key.size();
+    size_t end;
+    if ((at < tag.size()) && ((tag[at] == '"') || (tag[at] == '\''))) {
+        end = tag.find(tag[at], at + 1);
+        at++;
+    } else
+        end = tag.find_first_of(" >", at);
+    std::string value = tag.substr(at, (end == std::string::npos) ? std::string::npos : end - at);
+    char       *unescaped = purple_unescape_html(value.c_str());
+    value = unescaped;
+    g_free(unescaped);
+    return value;
+}
+
+// Pidgin's markup as plain text and the formatting Telegram can carry of it; font faces, colors
+// and sizes are dropped
+static void parseMarkup(const std::string &html, std::string &text, std::vector<TextFormat> &formats)
+{
+    struct Open {
+        std::string                   name;
+        size_t                        start;
+        std::vector<TextFormat::Kind> kinds;
+        std::string                   url;
+    };
+    std::vector<Open> open;
+    text.clear();
+    formats.clear();
+    for (size_t i = 0; i < html.size(); ) {
+        if (html[i] != '<') {
+            size_t      end = html.find('<', i);
+            std::string run = html.substr(i, (end == std::string::npos) ? std::string::npos : end - i);
+            char       *unescaped = purple_unescape_html(run.c_str());
+            text += unescaped;
+            g_free(unescaped);
+            i = (end == std::string::npos) ? html.size() : end;
+            continue;
+        }
+        size_t      end     = html.find('>', i);
+        std::string tag     = html.substr(i, (end == std::string::npos) ? std::string::npos : end + 1 - i);
+        i = (end == std::string::npos) ? html.size() : end + 1;
+        bool        closing = (tag.size() > 1) && (tag[1] == '/');
+        size_t      nameAt  = closing ? 2 : 1;
+        size_t      nameEnd = tag.find_first_of(" />", nameAt);
+        std::string name    = tag.substr(nameAt, (nameEnd == std::string::npos) ? std::string::npos : nameEnd - nameAt);
+        for (char &c: name)
+            c = g_ascii_tolower(c);
+
+        if (name == "br") {
+            text += '\n';
+            continue;
+        }
+        if (closing) {
+            // The innermost of that name, and whatever was left open inside it
+            for (size_t j = open.size(); j-- > 0; )
+                if (open[j].name == name) {
+                    for (size_t k = open.size(); k-- > j; )
+                        for (TextFormat::Kind kind: open[k].kinds)
+                            addFormat(formats, open[k].start, text.size(), kind, open[k].url);
+                    open.resize(j);
+                    break;
+                }
+            continue;
+        }
+        if ((tag.size() > 1) && (tag[tag.size() - 2] == '/'))
+            continue;
+
+        Open item{name, text.size(), {}, std::string()};
+        if ((name == "b") || (name == "strong"))
+            item.kinds.push_back(TextFormat::Kind::Bold);
+        else if ((name == "i") || (name == "em"))
+            item.kinds.push_back(TextFormat::Kind::Italic);
+        else if (name == "u")
+            item.kinds.push_back(TextFormat::Kind::Underline);
+        else if ((name == "s") || (name == "strike") || (name == "del"))
+            item.kinds.push_back(TextFormat::Kind::Strikethrough);
+        else if (name == "a") {
+            item.url = getAttribute(tag, "href");
+            if (!item.url.empty())
+                item.kinds.push_back(TextFormat::Kind::Link);
+        } else if (name == "span") {
+            std::string style = getAttribute(tag, "style");
+            for (char &c: style)
+                c = g_ascii_tolower(c);
+            if (style.find("bold") != std::string::npos)
+                item.kinds.push_back(TextFormat::Kind::Bold);
+            if (style.find("italic") != std::string::npos)
+                item.kinds.push_back(TextFormat::Kind::Italic);
+            if (style.find("underline") != std::string::npos)
+                item.kinds.push_back(TextFormat::Kind::Underline);
+            if (style.find("line-through") != std::string::npos)
+                item.kinds.push_back(TextFormat::Kind::Strikethrough);
+        }
+        open.push_back(std::move(item));
+    }
+    for (size_t k = open.size(); k-- > 0; )
+        for (TextFormat::Kind kind: open[k].kinds)
+            addFormat(formats, open[k].start, text.size(), kind, open[k].url);
+
+    // A link that is its own address Telegram finds by itself
+    formats.erase(std::remove_if(formats.begin(), formats.end(), [&text](const TextFormat &format) {
+        return (format.kind == TextFormat::Kind::Link) &&
+               (text.compare(format.start, format.end - format.start, format.url) == 0);
+    }), formats.end());
+    // In the order of the text, the outer first, however Pidgin wrote its tags
+    std::stable_sort(formats.begin(), formats.end(), [](const TextFormat &a, const TextFormat &b) {
+        return (a.start != b.start) ? (a.start < b.start) :
+               (a.end != b.end)     ? (a.end > b.end) : (a.kind < b.kind);
+    });
+}
+
+static int32_t getUtf16Length(const std::string &text, size_t start, size_t end)
+{
+    int32_t length = 0;
+    for (const char *s = text.c_str() + start; s < text.c_str() + end; s = g_utf8_next_char(s))
+        length += (g_utf8_get_char(s) > 0xFFFF) ? 2 : 1;
+    return length;
+}
+
+// The text from start to end, with its formatting as Telegram's entities
+static td::td_api::object_ptr<td::td_api::formattedText>
+makeFormattedText(const std::string &text, const std::vector<TextFormat> &formats, size_t start, size_t end)
+{
+    auto result = td::td_api::make_object<td::td_api::formattedText>();
+    result->text_ = text.substr(start, end - start);
+    for (const TextFormat &format: formats) {
+        size_t from = std::max(format.start, start);
+        size_t to   = std::min(format.end, end);
+        if (from >= to)
+            continue;
+        td::td_api::object_ptr<td::td_api::TextEntityType> type;
+        switch (format.kind) {
+        case TextFormat::Kind::Bold:
+            type = td::td_api::make_object<td::td_api::textEntityTypeBold>();
+            break;
+        case TextFormat::Kind::Italic:
+            type = td::td_api::make_object<td::td_api::textEntityTypeItalic>();
+            break;
+        case TextFormat::Kind::Underline:
+            type = td::td_api::make_object<td::td_api::textEntityTypeUnderline>();
+            break;
+        case TextFormat::Kind::Strikethrough:
+            type = td::td_api::make_object<td::td_api::textEntityTypeStrikethrough>();
+            break;
+        case TextFormat::Kind::Link:
+            type = td::td_api::make_object<td::td_api::textEntityTypeTextUrl>(format.url);
+            break;
+        }
+        result->entities_.push_back(td::td_api::make_object<td::td_api::textEntity>(
+            getUtf16Length(text, start, from), getUtf16Length(text, from, to), std::move(type)));
+    }
+    return result;
+}
+
+td::td_api::object_ptr<td::td_api::formattedText> parseFormattedText(const std::string &html)
+{
+    std::string             text;
+    std::vector<TextFormat> formats;
+    parseMarkup(html, text, formats);
+    return makeFormattedText(text, formats, 0, text.size());
+}
+
+bool isSameFormattedText(const td::td_api::formattedText &a, const td::td_api::formattedText &b)
+{
+    if ((a.text_ != b.text_) || (a.entities_.size() != b.entities_.size()))
+        return false;
+    // Telegram's own serialization compares the types, URLs included
+    for (size_t i = 0; i < a.entities_.size(); i++)
+        if (td::td_api::to_string(a.entities_[i]) != td::td_api::to_string(b.entities_[i]))
+            return false;
+    return true;
+}
+
 struct MessagePart {
-    bool        isImage = false;
-    int         imageId = 0;
-    std::string text;
+    bool                    isImage = false; // or another attachment, with its caption
+    int                     imageId = 0;
+    PlaceholderUse          attachment; // pasted, its placeholder in the message
+    std::string             uploadPath; // where it is, by the name it goes under
+    std::string             text;
+    std::vector<TextFormat> formats; // within text
 };
 
 static size_t splitTextChunk(MessagePart &part, const char *text, size_t length, TdAccountData &account)
@@ -942,26 +1178,44 @@ static size_t splitTextChunk(MessagePart &part, const char *text, size_t length,
 
 static void appendText(std::vector<MessagePart> &parts, const char *s, size_t len, TdAccountData &account)
 {
+    // An attachment's caption starts past the space or line break after its placeholder
+    if (!parts.empty() && parts.back().attachment.attachment && parts.back().text.empty())
+        while (len) {
+            size_t skip = 0;
+            if (strchr(" \t\r\n", *s))
+                skip = 1;
+            else if ((len >= 4) && !g_ascii_strncasecmp(s, "<br>", 4))
+                skip = 4;
+            if (!skip)
+                break;
+            s += skip;
+            len -= skip;
+        }
     if (len != 0) {
         if (parts.empty())
             parts.emplace_back();
 
-        std::string sourceText(s, len);
-        char *halfNewText = purple_markup_strip_html(sourceText.c_str());
-        char *newText = purple_unescape_html(halfNewText);
-        g_free(halfNewText);
+        std::string             newText;
+        std::vector<TextFormat> formats;
+        parseMarkup(std::string(s, len), newText, formats);
 
-        const char *remaining    = newText;
-        size_t      lenRemaining = strlen(newText);
+        const char *remaining    = newText.c_str();
+        size_t      lenRemaining = newText.size();
         while (lenRemaining) {
+            size_t start       = remaining - newText.c_str();
             size_t chunkLength = splitTextChunk(parts.back(), remaining, lenRemaining, account);
+            // The part's share of the formatting
+            for (const TextFormat &format: formats) {
+                size_t from = std::max(format.start, start);
+                size_t to   = std::min(format.end, start + parts.back().text.size());
+                if (from < to)
+                    parts.back().formats.push_back({from - start, to - start, format.kind, format.url});
+            }
             lenRemaining -= chunkLength;
             remaining += chunkLength;
             if (lenRemaining)
                 parts.emplace_back();
         }
-
-        g_free(newText);
     }
 }
 
@@ -978,6 +1232,28 @@ static void parseMessage(const char *message, std::vector<MessagePart> &parts, T
         bool  isImage = false;
         long  imageId;
         char *pastImage = NULL;
+
+        PlaceholderUse attachment;
+        size_t         placeholderLength = 0;
+        // Bracketed, within a line, its text as written, unescaped from the message's HTML
+        const char *close = (*s == '[') ? strpbrk(s + 1, "[]\n<") : nullptr;
+        if (close && (*close == ']') && !account.pastedAttachments.items.empty()) {
+            std::string bracketed(s, close + 1);
+            char       *written = purple_unescape_html(bracketed.c_str());
+            attachment = findPasted(account.pastedAttachments, written ? written : bracketed);
+            g_free(written);
+            placeholderLength = bracketed.size();
+        }
+
+        if (attachment.attachment) {
+            appendText(parts, textStart, s-textStart, account);
+            parts.emplace_back();
+            parts.back().isImage    = true;
+            parts.back().attachment = attachment;
+            s += placeholderLength;
+            textStart = s;
+            continue;
+        }
 
         if (!strncasecmp(s, "<img id=\"", 9)) {
             const char *idString = s+9;
@@ -1007,6 +1283,96 @@ static void parseMessage(const char *message, std::vector<MessagePart> &parts, T
     appendText(parts, textStart, s-textStart, account);
 }
 
+td::td_api::object_ptr<td::td_api::InputMessageContent>
+makeAttachmentContent(const PlaceholderUse &use, const std::string &uploadPath,
+                      td::td_api::object_ptr<td::td_api::formattedText> caption)
+{
+    auto file = td::td_api::make_object<td::td_api::inputFileLocal>(uploadPath);
+    purple_debug_misc(config::pluginId, "Sending %s\n", uploadPath.c_str());
+    switch (use.asFile ? AttachmentKind::Document : use.attachment->kind) {
+    case AttachmentKind::Photo: {
+        auto content = td::td_api::make_object<td::td_api::inputMessagePhoto>();
+#if TDLIB_API_INPUT_PHOTO
+        content->photo_ = td::td_api::make_object<td::td_api::inputPhoto>();
+        content->photo_->photo_ = std::move(file);
+#else
+        content->photo_ = std::move(file);
+#endif
+        content->caption_ = std::move(caption);
+        return std::move(content);
+    }
+    case AttachmentKind::Video: {
+        auto content = td::td_api::make_object<td::td_api::inputMessageVideo>();
+#if TDLIB_API_INPUT_PHOTO
+        content->video_ = td::td_api::make_object<td::td_api::inputVideo>();
+        content->video_->video_ = std::move(file);
+#else
+        content->video_ = std::move(file);
+#endif
+        content->caption_ = std::move(caption);
+        return std::move(content);
+    }
+    case AttachmentKind::Document:
+        break;
+    }
+    auto content = td::td_api::make_object<td::td_api::inputMessageDocument>();
+#if TDLIB_API_INPUT_PHOTO
+    content->document_ = td::td_api::make_object<td::td_api::inputDocument>();
+    content->document_->document_ = std::move(file);
+#else
+    content->document_ = std::move(file);
+#endif
+    content->caption_ = std::move(caption);
+    return std::move(content);
+}
+
+// A pasted attachment, the part's text its caption
+static td::td_api::object_ptr<td::td_api::InputMessageContent> makeAttachment(const MessagePart &part)
+{
+    return makeAttachmentContent(part.attachment, part.uploadPath,
+                                 makeFormattedText(part.text, part.formats, 0, part.text.size()));
+}
+
+ParsedEdit parseEdit(const char *message, const TdAccountData &account)
+{
+    ParsedEdit  edit;
+    std::string html;
+    for (const char *s = message ? message : ""; *s;) {
+        const char *close = (*s == '[') ? strpbrk(s + 1, "[]\n<") : nullptr;
+        if (close && (*close == ']')) {
+            std::string    bracketed(s, close + 1);
+            char          *written = purple_unescape_html(bracketed.c_str());
+            PlaceholderUse use     = findPasted(account.pastedAttachments, written ? written : bracketed);
+            g_free(written);
+            if (use.attachment) {
+                edit.attachments.push_back(use);
+                // With the space or line break after it, as when sending
+                for (s = close + 1; *s == ' ' || *s == '\n' || !g_ascii_strncasecmp(s, "<br>", 4);)
+                    s += (*s == '<') ? 4 : 1;
+                continue;
+            }
+        }
+        html += *s++;
+    }
+    edit.text = parseFormattedText(html);
+    return edit;
+}
+
+// How many attachments from the first go together as an album: one after another, captioned only by
+// the last, pictures and videos or documents only, as many as Telegram takes
+static size_t getAlbumSize(const std::vector<MessagePart> &parts, size_t first)
+{
+    enum { MAX_ALBUM_SIZE = 10 };
+    auto isDocument = [](const MessagePart &part) {
+        return part.attachment.asFile || (part.attachment.attachment->kind == AttachmentKind::Document);
+    };
+    size_t size = 1;
+    while (parts[first + size - 1].text.empty() && (first + size < parts.size()) && (size < MAX_ALBUM_SIZE) &&
+           parts[first + size].attachment.attachment && (isDocument(parts[first + size]) == isDocument(parts[first])))
+        size++;
+    return size;
+}
+
 int transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiver,
                     TdAccountData &account, TdTransceiver::ResponseCb response)
 {
@@ -1015,7 +1381,45 @@ int transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiv
     if (parts.size() > MAX_MESSAGE_PARTS)
         return -E2BIG;
 
-    for (const MessagePart &input: parts) {
+    // Nothing goes, should anything pasted be gone by now
+    for (MessagePart &part: parts) {
+        if (!part.attachment.attachment)
+            continue;
+        part.uploadPath = getUploadPath(account.pastedAttachments, part.attachment);
+        if (part.uploadPath.empty()) {
+            const td::td_api::chat *chat = account.getChat(chatId);
+            // TRANSLATOR: In-chat error message. The arguments are a pasted file's placeholder, such as [report.pdf#3], and where the file was.
+            std::string error = formatMessage(_("The message is not sent: {0} is gone from {1}."),
+                                              {part.attachment.attachment->placeholder(),
+                                               part.attachment.attachment->path});
+            if (chat)
+                showChatNotification(account, *chat, error.c_str());
+            return 0;
+        }
+    }
+
+    for (size_t i = 0; i < parts.size(); i++) {
+        const MessagePart &input = parts[i];
+        if (input.attachment.attachment) {
+            size_t   albumSize = getAlbumSize(parts, i);
+            uint64_t requestId;
+            if (albumSize == 1) {
+                auto sendMessageRequest = td::td_api::make_object<td::td_api::sendMessage>();
+                sendMessageRequest->chat_id_ = chatId.value();
+                sendMessageRequest->input_message_content_ = makeAttachment(input);
+                requestId = transceiver.sendQuery(std::move(sendMessageRequest), response);
+            } else {
+                auto sendAlbumRequest = td::td_api::make_object<td::td_api::sendMessageAlbum>();
+                sendAlbumRequest->chat_id_ = chatId.value();
+                for (size_t j = i; j < i + albumSize; j++)
+                    sendAlbumRequest->input_message_contents_.push_back(makeAttachment(parts[j]));
+                requestId = transceiver.sendQuery(std::move(sendAlbumRequest), response);
+            }
+            account.addPendingRequest<SendMessageRequest>(requestId, chatId, nullptr);
+            i += albumSize - 1;
+            continue;
+        }
+
         td::td_api::object_ptr<td::td_api::sendMessage> sendMessageRequest = td::td_api::make_object<td::td_api::sendMessage>();
         sendMessageRequest->chat_id_ = chatId.value();
         char *tempFileName = NULL;
@@ -1032,15 +1436,13 @@ int transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiv
 #else
             content->photo_ = td::td_api::make_object<td::td_api::inputFileLocal>(tempFileName);
 #endif
-            content->caption_ = td::td_api::make_object<td::td_api::formattedText>();
-            content->caption_->text_ = input.text;
+            content->caption_ = makeFormattedText(input.text, input.formats, 0, input.text.size());
 
             sendMessageRequest->input_message_content_ = std::move(content);
             purple_debug_misc(config::pluginId, "Sending photo %s\n", tempFileName);
         } else {
             td::td_api::object_ptr<td::td_api::inputMessageText> content = td::td_api::make_object<td::td_api::inputMessageText>();
-            content->text_ = td::td_api::make_object<td::td_api::formattedText>();
-            content->text_->text_ = input.text;
+            content->text_ = makeFormattedText(input.text, input.formats, 0, input.text.size());
             sendMessageRequest->input_message_content_ = std::move(content);
         }
 
@@ -1149,25 +1551,183 @@ std::string linkToMessage(PurpleAccount *account, ChatId chatId, MessageId messa
     return "<a href=\"" + makeLink(JUMP_LINK_SCHEME, account, chatId, messageId) + "\">" + markup + "</a>";
 }
 
-static const char MENU_LINK_SUFFIX[] = "menu";
+static const char LOG_MARKER_START[] = "<!--tdlib-message ";
+static const char LOG_MARKER_END[]   = "-->";
 
-// tdlib-message://<account>/<chat id>/<message id>/menu
-std::string makeMenuLink(PurpleAccount *account, ChatId chatId, MessageId messageId)
+static bool g_logMarkersEnabled = false;
+
+bool logMarkersEnabled()
 {
-    if (!g_jumpLinksEnabled || !chatId.valid() || !messageId.valid())
-        return std::string();
-    return "&nbsp;<a href=\"" + makeLink(JUMP_LINK_SCHEME, account, chatId, messageId) + '/' +
-           MENU_LINK_SUFFIX + "\">\xe2\x98\xb0</a>";
+    return g_logMarkersEnabled;
 }
 
-bool parseJumpLink(const char *link, std::string &accountName, ChatId &chatId, MessageId &messageId,
-                   bool &menu)
+void setLogMarkersEnabled(bool enabled)
+{
+    g_logMarkersEnabled = enabled;
+}
+
+std::string makeLogMarker(MessageId messageId)
+{
+    return LOG_MARKER_START + std::to_string(messageId.value()) + LOG_MARKER_END;
+}
+
+bool takeLogMarker(std::string &html, MessageId *messageId)
+{
+    size_t start = html.find(LOG_MARKER_START);
+    size_t end   = (start == std::string::npos) ? std::string::npos : html.find(LOG_MARKER_END, start);
+    if (end == std::string::npos)
+        return false;
+    size_t numberStart = start + sizeof(LOG_MARKER_START) - 1;
+    if (messageId)
+        *messageId = MessageId::fromString(html.substr(numberStart, end - numberStart).c_str());
+    html.erase(start, end + sizeof(LOG_MARKER_END) - 1 - start);
+    return true;
+}
+
+static const char LOG_ONLY_START[] = "<!--tdlib-log-only-->";
+static const char LOG_ONLY_END[]   = "<!--/tdlib-log-only-->";
+
+std::string makeLogOnly(const std::string &html)
+{
+    return LOG_ONLY_START + html + LOG_ONLY_END;
+}
+
+bool takeLogOnly(std::string &html)
+{
+    bool taken = false;
+    for (size_t start; (start = html.find(LOG_ONLY_START)) != std::string::npos; taken = true) {
+        size_t end = html.find(LOG_ONLY_END, start);
+        html.erase(start, (end == std::string::npos) ? std::string::npos : end + sizeof(LOG_ONLY_END) - 1 - start);
+    }
+    return taken;
+}
+
+void unmarkLogOnly(std::string &html)
+{
+    for (const char *marker: {LOG_ONLY_START, LOG_ONLY_END})
+        for (size_t start; (start = html.find(marker)) != std::string::npos; )
+            html.erase(start, strlen(marker));
+}
+
+static bool isSpace(char c)
+{
+    return (c == ' ') || (c == '\n') || (c == '\t') || (c == '\r');
+}
+
+std::string markChanges(const std::string &previous, const std::string &html,
+                        const std::string &removedColor, const std::string &addedColor)
+{
+    // The new text as words, and tags and spaces between them, all kept as they are
+    struct Token {
+        std::string text;
+        bool        word;
+    };
+    std::vector<Token>       tokens;
+    std::vector<std::string> newWords; // unescaped, to compare
+    for (size_t i = 0; i < html.size();) {
+        size_t end = i;
+        if (html[i] == '<') {
+            end = html.find('>', i);
+            end = (end == std::string::npos) ? html.size() : end + 1;
+        } else if (isSpace(html[i]))
+            while ((end < html.size()) && isSpace(html[end]))
+                end++;
+        else
+            while ((end < html.size()) && (html[end] != '<') && !isSpace(html[end]))
+                end++;
+        tokens.push_back({html.substr(i, end - i), (html[i] != '<') && !isSpace(html[i])});
+        if (tokens.back().word) {
+            char *word = purple_unescape_html(tokens.back().text.c_str());
+            newWords.push_back(word);
+            g_free(word);
+        }
+        i = end;
+    }
+    std::vector<std::string> oldWords;
+    for (size_t i = 0; i < previous.size();) {
+        size_t end = i;
+        while ((end < previous.size()) && !isSpace(previous[end]))
+            end++;
+        if (end > i)
+            oldWords.push_back(previous.substr(i, end - i));
+        i = end + 1;
+    }
+
+    // Words alike at either end need no comparing
+    size_t oldCount = oldWords.size(), newCount = newWords.size();
+    size_t head = 0, tail = 0;
+    while ((head < oldCount) && (head < newCount) && (oldWords[head] == newWords[head]))
+        head++;
+    while ((tail < oldCount - head) && (tail < newCount - head) &&
+           (oldWords[oldCount - 1 - tail] == newWords[newCount - 1 - tail]))
+        tail++;
+    size_t n = oldCount - head - tail, m = newCount - head - tail;
+    // Nothing but formatting or spacing changed, or too long to compare
+    if (((n == 0) && (m == 0)) || ((n + 1) * (m + 1) > 4000000))
+        return html;
+
+    // The longest common subsequence of the words between, from each pair of places on
+    std::vector<unsigned> common((n + 1) * (m + 1), 0);
+    auto at = [m](size_t i, size_t j) { return i * (m + 1) + j; };
+    for (size_t i = n; i-- > 0; )
+        for (size_t j = m; j-- > 0; )
+            common[at(i, j)] = (oldWords[head + i] == newWords[head + j])
+                               ? common[at(i + 1, j + 1)] + 1
+                               : std::max(common[at(i + 1, j)], common[at(i, j + 1)]);
+    // Which new words are added, and which old ones are removed before each new one (or at the end)
+    std::vector<bool>        added(newCount, false);
+    std::vector<std::string> removed(newCount + 1);
+    for (size_t i = 0, j = 0; (i < n) || (j < m); ) {
+        if ((i < n) && (j < m) && (oldWords[head + i] == newWords[head + j])) {
+            i++;
+            j++;
+        } else if ((i < n) && ((j == m) || (common[at(i + 1, j)] >= common[at(i, j + 1)]))) {
+            // Removed words go before added ones in their place
+            std::string &before = removed[head + j];
+            if (!before.empty())
+                before += ' ';
+            before += oldWords[head + i++];
+        } else
+            added[head + j++] = true;
+    }
+
+    auto background = [](const std::string &color, const std::string &html) {
+        return "<font back=\"" + color + "\">" + html + "</font>";
+    };
+    auto putBack = [&](const std::string &words) {
+        gchar      *escaped = g_markup_escape_text(words.c_str(), -1);
+        std::string result  = background(removedColor, escaped);
+        g_free(escaped);
+        return result;
+    };
+    std::string result;
+    if (newCount == 0)
+        result = putBack(removed[0]) + ' ';
+    // Removed words go outside the formatting of the words around them: before the tags opening the
+    // next word, after those closing the previous one
+    size_t outside = 0;
+    for (size_t i = 0, word = 0; i < tokens.size(); i++) {
+        if (!tokens[i].word) {
+            result += tokens[i].text;
+            if ((tokens[i].text[0] != '<') || (tokens[i].text.compare(0, 2, "</") == 0))
+                outside = result.size();
+            continue;
+        }
+        if (!removed[word].empty())
+            result.insert(outside, putBack(removed[word]) + ' ');
+        result += added[word] ? background(addedColor, tokens[i].text) : tokens[i].text;
+        outside = result.size();
+        word++;
+    }
+    if ((newCount > 0) && !removed[newCount].empty())
+        result.insert(outside, (isSpace(result[outside - 1]) ? "" : " ") + putBack(removed[newCount]));
+    return result;
+}
+
+bool parseJumpLink(const char *link, std::string &accountName, ChatId &chatId, MessageId &messageId)
 {
     std::string variant;
-    if (!parseLink(JUMP_LINK_SCHEME, link, accountName, chatId, messageId, variant))
-        return false;
-    menu = (variant == MENU_LINK_SUFFIX);
-    return menu || variant.empty();
+    return parseLink(JUMP_LINK_SCHEME, link, accountName, chatId, messageId, variant) && variant.empty();
 }
 
 std::string getDownloadXferPeerName(ChatId chatId,

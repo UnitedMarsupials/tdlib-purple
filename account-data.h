@@ -4,6 +4,7 @@
 #include "buildopt.h"
 #include "identifiers.h"
 #include "transceiver.h"
+#include "clipboard.h"
 #include <td/telegram/td_api.h>
 
 #include <deque>
@@ -138,6 +139,9 @@ struct TgMessageInfo {
     MessageId   id;
     Type        type = Type::Other;
     std::string incomingGroupchatSender;
+    // The name the sender goes by in the chat, idNNN, telling users of one display name apart, which
+    // libpurple shows by the display name; empty where the sender is no user
+    std::string incomingGroupchatSenderName;
     time_t      timestamp = 0;
     bool        outgoing = false;
     bool        sentLocally = false; // For outgoing messages, whether sent by this very client
@@ -148,12 +152,15 @@ struct TgMessageInfo {
     bool        anonymousChannelPost = false; // incomingGroupchatSender is "Channel post", naming nobody
     bool        fromHistory = false; // fetched to catch up with a chat, rather than just sent
     std::string mediaVariantLinks; // markup: links to each size a photo or video comes in
+    bool        unlogged = false; // shown in the tab only, the log having it in an edit's notice
+    bool        redrawn = false; // shown again, as the tab is filled anew: not logged, nothing asked
 
     void assign(const TgMessageInfo &other)
     {
         id = other.id;
         type = other.type;
         incomingGroupchatSender = other.incomingGroupchatSender;
+        incomingGroupchatSenderName = other.incomingGroupchatSenderName;
         timestamp = other.timestamp;
         outgoing = other.outgoing;
         sentLocally = other.sentLocally;
@@ -164,6 +171,8 @@ struct TgMessageInfo {
         anonymousChannelPost = other.anonymousChannelPost;
         fromHistory = other.fromHistory;
         mediaVariantLinks = other.mediaVariantLinks;
+        unlogged = other.unlogged;
+        redrawn = other.redrawn;
     }
 };
 
@@ -272,8 +281,17 @@ struct IncomingMessage {
     // its caption is all that changed, and so all there is to show
     time_t   editedMessageTime = 0;
     bool     captionOnly       = false;
+    // Written over its earlier version, where Pidgin's tab still shows it
+    bool     replacing         = false;
+    // Its words the same, only their formatting changed
+    bool     formattingOnly    = false;
     // Deleted while waiting to be shown, which it then never is
     bool     deleted           = false;
+
+    // Not a message but a line of Pidgin's log, as it is, put among them in the tab when it is filled;
+    // with the pictures of the image store it shows, which it holds
+    std::string      loggedHtml;
+    std::vector<int> loggedImageIds;
 };
 
 class PendingMessageQueue {
@@ -323,6 +341,7 @@ struct ReadReceipt {
 struct ShownMessage {
     std::string file;      // the file the message carries, if any
     std::string content;   // what is shown of it besides: its text, caption or description
+    std::string formatting; // of the text or caption, as an edit may change only that
     bool        quotable = false; // content is the text or caption, as written
     std::string kind;      // what the message is, to name it by where there is no text to quote
     time_t      timestamp;
@@ -332,7 +351,8 @@ struct ShownMessage {
     // As far as an edit changes it
     bool operator==(const ShownMessage &other) const
     {
-        return (file == other.file) && (content == other.content) && (timestamp == other.timestamp);
+        return (file == other.file) && (content == other.content) && (formatting == other.formatting) &&
+               (timestamp == other.timestamp);
     }
 };
 
@@ -342,6 +362,7 @@ struct PendingEdit {
     MessageId    messageId;
     time_t       messageTime;
     bool         captionOnly;
+    bool         formattingOnly = false;
     ShownMessage previous;    // as shown before, to go back to if the edit cannot be fetched...
     ShownMessage installed;   // ...unless a later edit has replaced this one's since
 };
@@ -467,6 +488,10 @@ public:
     void                       removeActiveCall();
 
     PendingMessageQueue        pendingMessages;
+    // Reactions to our messages not seen yet, by chat
+    std::map<ChatId, int32_t>  unreadReactionCounts;
+    // What /paste and pasting in Pidgin gave placeholders for, kept as long as the account is
+    PastedAttachments          pastedAttachments;
 
     void                       addPendingReadReceipt(ChatId chatId, MessageId messageId);
     void                       extractPendingReadReceipts(ChatId chatId, std::vector<ReadReceipt> &receipts);
@@ -475,6 +500,9 @@ public:
     ShownMessage *             findShownMessage(ChatId chatId, MessageId messageId);
     void                       removeShownMessage(ChatId chatId, MessageId messageId);
     void                       renameShownMessage(ChatId chatId, MessageId oldId, MessageId newId);
+    // The id a message sent goes by once it is, where it went by another while being sent, as the
+    // links in its showing do
+    MessageId                  getSentMessageId(ChatId chatId, MessageId messageId) const;
     void                       addPendingEdit(const PendingEdit &edit);
     bool                       extractPendingEdit(ChatId chatId, MessageId messageId, PendingEdit &edit);
 private:
@@ -560,6 +588,7 @@ private:
     // only so many are kept
     using ShownMessageKey = std::pair<ChatId, MessageId>;
     std::map<ShownMessageKey, ShownMessage> m_shownMessages;
+    std::map<ShownMessageKey, MessageId>    m_sentMessageIds;
     std::deque<ShownMessageKey>             m_shownMessageOrder;
     std::vector<PendingEdit>                m_pendingEdits;
 };

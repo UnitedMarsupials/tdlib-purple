@@ -2,6 +2,9 @@
 #include "libpurple-mock.h"
 #include "buildopt.h"
 #include "receiving.h"
+#include "td-client.h"
+#include "client-utils.h"
+#include <glib/gstdio.h>
 
 class FileTransferTest: public CommTest {};
 
@@ -1495,4 +1498,273 @@ TEST_F(FileTransferTest, PhotoSizeWithinLimit)
     const file *selected = selectPhotoSize(account, *content);
     ASSERT_NE(nullptr, selected);
     ASSERT_EQ(2, selected->id_);
+}
+
+// What /paste reads with xclip outside Pidgin, attached to the message written after
+class PasteTest: public CommTest {
+protected:
+    // xclip, answering for the clipboard's types as the script given for them does
+    void paste(const char *targets, const char *uriList);
+};
+
+void PasteTest::paste(const char *targets, const char *uriList)
+{
+    gchar *dir = g_dir_make_tmp("paste-test-XXXXXX", nullptr);
+    ASSERT_NE(nullptr, dir);
+    std::string script = std::string(dir) + "/xclip";
+    std::string text   = std::string("#!/bin/sh\n"
+                                     "case \"$4\" in\n"
+                                     "TARGETS) printf '") + targets + "';;\n"
+                         "text/uri-list) printf '" + uriList + "';;\n"
+                         "*) exit 1;;\n"
+                         "esac\n";
+    ASSERT_TRUE(g_file_set_contents(script.c_str(), text.c_str(), -1, nullptr));
+    g_chmod(script.c_str(), 0755);
+    std::string path = getenv("PATH") ? getenv("PATH") : "";
+    setenv("PATH", (std::string(dir) + ":" + path).c_str(), 1);
+
+    PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, purpleUserName(0).c_str(),
+                                                                     account);
+    if (!conv)
+        conv = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, purpleUserName(0).c_str());
+    prpl.discardEvents();
+    prpl.runCommand("paste", conv, {});
+
+    setenv("PATH", path.c_str(), 1);
+    g_unlink(script.c_str());
+    g_rmdir(dir);
+    g_free(dir);
+}
+
+// Files copied, said by their placeholders; written into the message, they go as an album, captioned
+// by what follows them, after the text before them
+TEST_F(PasteTest, FilesAsAlbum)
+{
+    loginWithOneContact();
+    gchar *dir = g_dir_make_tmp("paste-album-XXXXXX", nullptr);
+    ASSERT_NE(nullptr, dir);
+    std::string a = std::string(dir) + "/a.pdf";
+    std::string b = std::string(dir) + "/b.pdf";
+    for (const std::string &file: {a, b})
+        ASSERT_TRUE(g_file_set_contents(file.c_str(), "%PDF-1.4\n", -1, nullptr));
+
+    std::string list = "file://" + a + "\\r\\nfile://" + b + "\\r\\n";
+    paste("TARGETS\\ntext/uri-list\\n", list.c_str());
+    prpl.verifyEvents(ConversationWriteEvent(
+        purpleUserName(0), "",
+        "Pasted [a.pdf#1], [b.pdf#2]: write it into the message, where it goes, to send it there.",
+        (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), 0
+    ));
+
+    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "Here: [a.pdf#1]\n[b.pdf#2] Both",
+                                      PURPLE_MESSAGE_SEND));
+    auto album = make_object<sendMessageAlbum>();
+    album->chat_id_ = chatIds[0];
+    album->input_message_contents_.push_back(makeInputMessageDocument(make_object<inputFileLocal>(a),
+                                                                      nullptr, false, make_object<formattedText>()));
+    album->input_message_contents_.push_back(makeInputMessageDocument(
+        make_object<inputFileLocal>(b), nullptr, false,
+        make_object<formattedText>("Both", std::vector<object_ptr<textEntity>>())));
+    tgl.verifyRequests({
+        makeSendMessage(chatIds[0], 0, nullptr, nullptr, nullptr, make_object<inputMessageText>(
+            make_object<formattedText>("Here: ", std::vector<object_ptr<textEntity>>()), nullptr, false)),
+        std::move(album)
+    });
+
+    for (const std::string &file: {a, b})
+        g_unlink(file.c_str());
+    g_rmdir(dir);
+    g_free(dir);
+}
+
+// A file pasted again keeps its number, and another of the same name gets one of its own
+TEST_F(PasteTest, SameName)
+{
+    loginWithOneContact();
+    paste("TARGETS\\ntext/uri-list\\n", "file:///path/a.pdf\\r\\n");
+    prpl.discardEvents();
+    paste("TARGETS\\ntext/uri-list\\n", "file:///path/a.pdf\\r\\nfile:///other/a.pdf\\r\\n");
+    prpl.verifyEvents(ConversationWriteEvent(
+        purpleUserName(0), "",
+        "Pasted [a.pdf#1], [a.pdf#2]: write it into the message, where it goes, to send it there.",
+        (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), 0
+    ));
+}
+
+// Files go as what their content is, whatever their names say: a picture and a video together, as
+// an album, and what is neither as a document, apart
+TEST_F(PasteTest, KindsByContent)
+{
+    loginWithOneContact();
+    gchar *dir = g_dir_make_tmp("paste-kinds-XXXXXX", nullptr);
+    ASSERT_NE(nullptr, dir);
+    std::string photo = std::string(dir) + "/photo.pdf";
+    std::string video = std::string(dir) + "/movie.txt";
+    std::string notes = std::string(dir) + "/notes.png";
+    static const char png[] = "\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
+    static const char mp4[] = "\0\0\0\x20" "ftypisom\0\0\x02\0isomiso2avc1mp41";
+    ASSERT_TRUE(g_file_set_contents(photo.c_str(), png, sizeof(png) - 1, nullptr));
+    ASSERT_TRUE(g_file_set_contents(video.c_str(), mp4, sizeof(mp4) - 1, nullptr));
+    ASSERT_TRUE(g_file_set_contents(notes.c_str(), "Notes, of no picture at all\n", -1, nullptr));
+
+    std::string list = "file://" + photo + "\\r\\nfile://" + video + "\\r\\nfile://" + notes + "\\r\\n";
+    paste("TARGETS\\ntext/uri-list\\n", list.c_str());
+    prpl.verifyEvents(ConversationWriteEvent(
+        purpleUserName(0), "",
+        "Pasted [Image#1] (or [photo.pdf#1], as a file), [Video#2] (or [movie.txt#2], as a file), [notes.png#3]: "
+        "write it into the message, where it goes, to send it there.",
+        (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), 0
+    ));
+
+    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "[image#1] [Video#2] [notes.png#3]",
+                                      PURPLE_MESSAGE_SEND));
+    auto album = make_object<sendMessageAlbum>();
+    album->chat_id_ = chatIds[0];
+    album->input_message_contents_.push_back(makeInputMessagePhoto(
+        make_object<inputFileLocal>(photo), nullptr, std::vector<std::int32_t>(), 0, 0,
+        make_object<formattedText>(), false, nullptr, false));
+    album->input_message_contents_.push_back(makeInputMessageVideo(make_object<inputFileLocal>(video),
+                                                                   make_object<formattedText>()));
+    tgl.verifyRequests({
+        std::move(album),
+        makeSendMessage(chatIds[0], 0, nullptr, nullptr, nullptr,
+                        makeInputMessageDocument(make_object<inputFileLocal>(notes), nullptr, false,
+                                                 make_object<formattedText>()))
+    });
+
+    // By its name, the picture goes as a file, as it is
+    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "[photo.pdf#1]", PURPLE_MESSAGE_SEND));
+    tgl.verifyRequest(*makeSendMessage(chatIds[0], 0, nullptr, nullptr, nullptr,
+                                       makeInputMessageDocument(make_object<inputFileLocal>(photo), nullptr, false,
+                                                                make_object<formattedText>())));
+
+    // A file gone by the time the message is sent: nothing of it is
+    g_unlink(notes.c_str());
+    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "Notes: [notes.png#3]",
+                                      PURPLE_MESSAGE_SEND));
+    tgl.verifyNoRequests();
+    prpl.verifyEvents(ConversationWriteEvent(
+        purpleUserName(0), purpleUserName(0),
+        "The message is not sent: [notes.png#3] is gone from " + notes + ".",
+        PURPLE_MESSAGE_SYSTEM, 0
+    ));
+
+    for (const std::string &file: {photo, video, notes})
+        g_unlink(file.c_str());
+    g_rmdir(dir);
+    g_free(dir);
+}
+
+// A photo of ours, shown as it is sent, is uploaded: that is no edit, nor is it shown again
+TEST_F(FileTransferTest, SentPhotoUploaded)
+{
+    const int32_t date   = 10001;
+    const int32_t fileId = 1234;
+    loginWithOneContact();
+
+    auto makeContent = [fileId](const char *uniqueId, bool uploaded) {
+        std::vector<object_ptr<photoSize>> sizes;
+        sizes.push_back(makePhotoSize(make_object<file>(
+                fileId, 10000, 10000,
+                make_object<localFile>("/path", true, true, false, true, 0, 10000, 10000),
+                make_object<remoteFile>(uploaded ? "beh" : "", uniqueId, !uploaded, uploaded, uploaded ? 10000 : 0)
+            ), 640, 480));
+        return makeMessagePhoto(make_object<photo>(false, nullptr, std::move(sizes)),
+                                make_object<formattedText>("", std::vector<object_ptr<textEntity>>()),
+                                false, false, false);
+    };
+    tgl.update(make_object<updateNewMessage>(makeMessage(1, selfId, chatIds[0], true, date, makeContent("", false))));
+    prpl.discardEvents();
+    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
+
+    tgl.update(make_object<td::td_api::updateMessageContent>(chatIds[0], 1, makeContent("bleh", true)));
+    prpl.verifyNoEvents();
+    tgl.verifyNoRequests();
+}
+
+// A message's media, edited, goes by a placeholder, as pasted things do: kept, the caption alone is
+// edited; another put in its place replaces it; taken out, or with more put in, the edit is refused
+TEST_F(PasteTest, MediaEdited)
+{
+    loginWithOneContact();
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    const ChatId    chat    = ChatId::fromString(std::to_string(chatIds[0]).c_str());
+    const MessageId message = MessageId::fromString("1");
+
+    gchar *dir = g_dir_make_tmp("media-edit-XXXXXX", nullptr);
+    ASSERT_NE(nullptr, dir);
+    std::string photo = std::string(dir) + "/photo.jpg";
+    std::string doc   = std::string(dir) + "/doc.pdf";
+    std::string later = std::string(dir) + "/image-3.jpg";
+    for (const std::string &file: {photo, doc, later})
+        ASSERT_TRUE(g_file_set_contents(file.c_str(), "\xff\xd8\xff\xe0", 4, nullptr));
+    std::string list = "file://" + doc + "\\r\\n";
+    paste("TARGETS\\ntext/uri-list\\n", list.c_str());
+    prpl.discardEvents();
+
+    SentMedia media;
+    media.present  = true;
+    media.kind     = AttachmentKind::Photo;
+    media.fileId   = 99;
+    media.path     = photo;
+    media.mimeType = "image/jpeg";
+    auto edit = [&](const char *text) {
+        client->askEditMessage(chat, message, "caption", "caption", true, 0, media);
+        prpl.verifyEvents(RequestInputEvent(nullptr, account, NULL, NULL));
+        prpl.inputEnter(text);
+    };
+
+    // The photo kept, which is #2, the document being #1
+    edit("[Image#2] new caption");
+    tgl.verifyRequest(editMessageCaption(chatIds[0], 1, nullptr, makeFormattedText("new caption"), false));
+    tgl.reply(make_object<error>(400, "whatever"));
+    prpl.discardEvents();
+
+    // The document in its place
+    edit("[doc.pdf#1] with the document");
+    {
+        auto request = make_object<editMessageMedia>();
+        request->chat_id_    = chatIds[0];
+        request->message_id_ = 1;
+        request->input_message_content_ = makeInputMessageDocument(make_object<inputFileLocal>(doc), nullptr, false,
+                                                                   makeFormattedText("with the document"));
+        tgl.verifyRequest(*request);
+    }
+
+    // Neither the media taken out, nor more of it
+    for (const char *text: {"just a caption", "[Image#2] [doc.pdf#1] both"}) {
+        edit(text);
+        tgl.verifyNoRequests();
+        prpl.verifyEvents(ConversationWriteEvent(
+            purpleUserName(0), purpleUserName(0),
+            *text == 'j' ? "The message is left as it was: Telegram takes no picture, video or file out of a "
+                           "message; it can be replaced, or the message deleted."
+                         : "The message is left as it was: A message holds one picture, video or file, which can "
+                           "be replaced, but no more.",
+            PURPLE_MESSAGE_ERROR, 0));
+    }
+
+    // Media not here yet is fetched first: as a file of the name made for it, being the fetched one's
+    SentMedia remote = media;
+    remote.fileId = 100;
+    remote.path   = "";
+    client->askEditMessage(chat, MessageId::fromString("2"), "", "", true, 0, remote);
+    prpl.verifyEvents(RequestInputEvent(nullptr, account, NULL, NULL));
+    prpl.inputEnter("[image-3.jpg#3]");
+    tgl.verifyRequest(downloadFile(100, 32, 0, 0, true));
+    tgl.reply(::makeFile(100, 4, later));
+    {
+        auto request = make_object<editMessageMedia>();
+        request->chat_id_    = chatIds[0];
+        request->message_id_ = 2;
+        request->input_message_content_ = makeInputMessageDocument(make_object<inputFileLocal>(later), nullptr, false,
+                                                                   makeFormattedText(""));
+        tgl.verifyRequest(*request);
+    }
+
+    for (const std::string &file: {photo, doc, later})
+        g_unlink(file.c_str());
+    g_rmdir(dir);
+    g_free(dir);
 }

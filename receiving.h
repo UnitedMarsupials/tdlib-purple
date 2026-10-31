@@ -7,9 +7,10 @@
 
 std::string makeNoticeWithSender(const td::td_api::chat &chat, const TgMessageInfo &message,
                                  const char *noticeText, PurpleAccount *account);
-// As markup; custom emoji given in smileys, by id, are shown by their codes
+// As markup; custom emoji given in smileys, by id, are shown by their codes. Sendable, only the
+// formatting that Pidgin's markup can send back, for editing it.
 std::string getMessageText(const td::td_api::formattedText &text,
-                           const std::map<int64_t, std::string> *smileys = nullptr);
+                           const std::map<int64_t, std::string> *smileys = nullptr, bool sendable = false);
 std::string makeInlineImageText(int imgstoreId);
 // How long a message may wait for its picture, preview or quoted message before it is shown
 // without: longer when catching up with a chat, where keeping messages in order matters more than
@@ -69,14 +70,36 @@ void checkMessageReady(const IncomingMessage *message, TdTransceiver &transceive
 
 void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
                            td::td_api::object_ptr<td::td_api::message> message,
-                           PendingMessageQueue::MessageAction action);
+                           PendingMessageQueue::MessageAction action, bool redrawn = false);
+// The chat's conversation, if it is open; none is opened
+PurpleConversation *findMessageConversation(TdAccountData &account, const td::td_api::chat &chat);
+// Names a message by when it was sent, as the conversation window shows it
+std::string formatMessageTime(time_t timestamp);
 void fetchHistory(TdAccountData &account, ChatId chatId, MessageId fetchFrom, MessageId stopAt);
+// Fills the chat's tab anew, in Pidgin, from the given message to the latest, if the tab can hold
+// that many; to show a message it does not, such as one just reacted to
+void redrawChat(TdAccountData &account, ChatId chatId, MessageId earliest);
+// Fills the tab anew, from as many messages more before the earliest it shows, which stays at its top
+void showEarlierMessages(TdAccountData &account, PurpleConversation *conv);
+// Fills the chat's tab anew, in Pidgin, with its messages of the given span of time back from the
+// latest one, as many as it can hold; false if the chat is busy, to be tried again later
+bool fillChat(TdAccountData &account, ChatId chatId, time_t span);
+// The chat a conversation is of, if known
+const td::td_api::chat *findConversationChat(TdAccountData &account, PurpleConversation *conv);
 void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messageId,
                           td::td_api::object_ptr<td::td_api::MessageContent> content);
 void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessages &update);
 void updateMessageReactions(TdAccountData &account, ChatId chatId, MessageId messageId,
                             const td::td_api::messageInteractionInfo *info);
 void updateUnreadReactions(TdAccountData &account, td::td_api::updateMessageUnreadReactions &update);
+
+// A chat with reactions to our messages not seen yet is marked, as the phone app marks it: its
+// conversation's title, and its contact in the buddy list, begin with a heart
+extern const char UNREAD_REACTIONS_MARK[];
+void setUnreadReactionCount(TdAccountData &account, ChatId chatId, int32_t count);
+bool hasUnreadReactions(TdAccountData &account, PurpleConversation *conv);
+// Marks the title, or takes the mark away, as the chat has reactions unread or not
+void markConversationTitle(TdAccountData &account, PurpleConversation *conv);
 
 #endif
 

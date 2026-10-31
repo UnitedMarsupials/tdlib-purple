@@ -21,6 +21,9 @@ add_executable(tests EXCLUDE_FROM_ALL
     reaction-test.cpp
     message-link-test.cpp
     custom-emoji-test.cpp
+    clipboard-test.cpp
+    thumbnail-test.cpp
+    formatted-text-test.cpp
     test-transceiver.cpp
     libpurple-mock.cpp
     printout.cpp
@@ -44,6 +47,9 @@ add_executable(tests EXCLUDE_FROM_ALL
     ../identifiers.cpp
     ../secret-chat.cpp
     ../pidgin-ui.cpp
+    ../log-history.cpp
+    ../clipboard.cpp
+    ../thumbnail.cpp
 )
 
 # C++17, not the plugin's C++14: GoogleTest requires it from 1.17 on.
@@ -54,7 +60,7 @@ target_include_directories(tests PRIVATE ${CMAKE_SOURCE_DIR} ${fmt_INCLUDE_DIRS}
 find_package(ZLIB REQUIRED)
 find_package(Threads REQUIRED)
 target_link_libraries(tests PRIVATE gtest ${fmt_LIBRARIES} Td::TdStatic ${GLIB_LIBRARIES}
-                      ${rlottie_LIBRARIES} ZLIB::ZLIB Threads::Threads ${GModule_LIBRARIES})
+                      ${rlottie_LIBRARIES} ZLIB::ZLIB Threads::Threads ${GModule_LIBRARIES} ${GIO_LIBRARIES})
 # The mock GdkPixbuf has to be found among the program's symbols, as Pidgin's would be
 set_property(TARGET tests PROPERTY ENABLE_EXPORTS ON)
 

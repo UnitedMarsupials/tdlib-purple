@@ -199,17 +199,24 @@ static bool foldCustomEmoji(TdAccountData &account)
                                    AccountOptions::FoldCustomEmojiDefault);
 }
 
-// Announces the smiley to the conversation, once for each; false if the front-end will not have it
-static bool registerSmiley(PurpleConversation *conv, const CustomEmoji &emoji, const std::string &code,
+// Announces the smiley to the conversation, once for each custom emoji: one announced already
+// keeps its code, though another emoji was taken for it, such as when it was not known yet. False if
+// the front-end will not have it.
+static bool registerSmiley(PurpleConversation *conv, const CustomEmoji &emoji, std::string &code,
                            bool &isNew)
 {
-    std::string key = "tdlib-purple custom emoji " + code;
-    isNew = !purple_conversation_get_data(conv, key.c_str());
-    if (!isNew)
+    // Codes kept for the conversations' data to point to, few as they are
+    static std::set<std::string> codes;
+    std::string key   = "tdlib-purple custom emoji " + std::to_string(emoji.id);
+    const char *known = static_cast<const char *>(purple_conversation_get_data(conv, key.c_str()));
+    isNew = !known;
+    if (known) {
+        code = known;
         return true;
+    }
     if (!purple_conv_custom_smiley_add(conv, code.c_str(), "id", std::to_string(emoji.id).c_str(), TRUE))
         return false;
-    purple_conversation_set_data(conv, key.c_str(), GINT_TO_POINTER(1));
+    purple_conversation_set_data(conv, key.c_str(), const_cast<char *>(codes.insert(code).first->c_str()));
     return true;
 }
 

@@ -2,7 +2,7 @@
 
 class MessageHistoryTest: public SupergroupTest {
 protected:
-    const std::string userNameInChat = userFirstNames[0] + " " + userLastNames[0];
+    const std::string userNameInChat = purpleUserName(0);
 };
 
 TEST_F(MessageHistoryTest, TdlibSkipMessages_LastMessageUnknown)
@@ -179,7 +179,7 @@ TEST_F(MessageHistoryTest, CatchingUpWaitsLonger)
         ChatSetTopicEvent(groupChatPurpleName, "", ""),
         ChatClearUsersEvent(groupChatPurpleName),
         ServGotChatEvent(connection, purpleChatId, userNameInChat,
-                         "<b>&gt; " + userNameInChat + " wrote:</b>\n&gt; 2\n3", PURPLE_MESSAGE_RECV, 3),
+                         "<b>&gt; " + userFirstNames[0] + " " + userLastNames[0] + " wrote:</b>\n&gt; 2\n3", PURPLE_MESSAGE_RECV, 3),
         ServGotChatEvent(connection, purpleChatId, userNameInChat, "4", PURPLE_MESSAGE_RECV, 4)
     );
     tgl.verifyRequest(viewMessages(groupChatId, {4, 3}, nullptr, true));

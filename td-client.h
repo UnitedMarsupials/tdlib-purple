@@ -4,6 +4,7 @@
 #include "account-data.h"
 #include "buildopt.h"
 #include "client-utils.h"
+#include "pidgin-ui.h"
 #include <td/telegram/Client.h>
 #include <purple.h>
 
@@ -11,6 +12,16 @@ enum class BasicGroupMembership: uint8_t {
     Invalid,
     Creator,
     NonCreator,
+};
+
+// A message's picture, video or file, to be replaced, as Telegram lets it be, once the message is edited
+struct SentMedia {
+    bool           present = false;
+    AttachmentKind kind    = AttachmentKind::Document;
+    int32_t        fileId  = 0;
+    std::string    path;    // here, if it is here yet
+    std::string    name;
+    std::string    mimeType;
 };
 
 class PurpleTdClient {
@@ -24,11 +35,22 @@ public:
     int  sendMessage(const char *buddyName, const char *message);
     void sendTyping(const char *buddyName, bool isTyping);
     void sendReadReceipts(PurpleConversation *conversation);
+    // Fills a tab just opened with the chat's latest messages, as set; false if it is to be tried
+    // again later, the chat being busy or not known yet
+    bool fillConversation(PurpleConversation *conv);
+    // Its title marked, or not, as its chat has reactions unread
+    void markConversation(PurpleConversation *conv);
+    void showEarlierMessages(PurpleConversation *conv);
+    bool hasUnreadReactions(PurpleBuddy *buddy);
 
     void addContact(const std::string &purpleName, const std::string &alias, const std::string &groupName);
     void renameContact(const char *buddyName, const char *newAlias);
     void removeContactAndPrivateChat(const std::string &buddyName);
     void getUsers(const char *username, std::vector<const td::td_api::user *> &users);
+    // A chat member named idNNN, as chats name them: the display name they are shown by, and the
+    // name of the conversation with them; empty for another name
+    std::string getChatMemberAlias(const char *name);
+    std::string getChatMemberImName(const char *name);
 
     bool joinChat(const char *chatName);
     void joinChatByInviteLink(const char *inviteLink);
@@ -49,6 +71,15 @@ public:
     void sendFileToChat(PurpleXfer *xfer, const char *purpleName, PurpleConversationType type,
                         int purpleChatId);
     void cancelUpload(PurpleXfer *xfer);
+    // Placeholders of what is pasted, which messages sent have it in place of
+    std::vector<const PastedAttachment *> addPasted(const ClipboardContent &content);
+    // The edit of a message, as written in its HTML, the number its media went by, if any: the text or
+    // caption changed, or the media replaced, as far as Telegram allows
+    void sendEdit(ChatId chatId, MessageId messageId, bool isCaption, unsigned media, const std::string &html);
+    // In the conversation's input field, in Pidgin, or else a dialog: the media, if any, by its placeholder
+    void askEditMessage(ChatId chatId, MessageId messageId, const std::string &text, const std::string &html,
+                        bool isCaption, time_t date, const SentMedia &media);
+    PlaceholderUse                        findPasted(const std::string &placeholder);
 
     bool startVoiceCall(const char *buddyName);
     bool terminateCall(PurpleConversation *conv);
@@ -58,9 +89,30 @@ public:
     // A link to the message's file was clicked: fetches the file, if need be, and opens it; a variant,
     // if given, names one of the sizes a photo or video comes in
     void openMessageFile(ChatId chatId, MessageId messageId, const std::string &variant = std::string());
-    // The link after a message in Pidgin's tab was clicked: pops up its menu
-    void showMessageMenu(ChatId chatId, MessageId messageId);
+    // The link before a message in Pidgin's tab was clicked: pops up its menu
+    // Adds the message's items to the menu opened on it
+    void showMessageMenu(ChatId chatId, MessageId messageId, OpenMenuRef openMenu);
+    // False if the conversation's chat is not known
+    bool showMessagePopup(PurpleConversation *conv, MessageId messageId, const OpenMenuRef &openMenu);
     void setMessageReaction(ChatId chatId, MessageId messageId, const std::string &emoji, bool chosen);
+    void askPaidReaction(ChatId chatId, MessageId messageId);
+    // What the dialogs of a message's menu do, once answered
+    void editMessage(ChatId chatId, MessageId messageId, td::td_api::object_ptr<td::td_api::formattedText> text,
+                     bool isCaption);
+    void deleteMessage(ChatId chatId, MessageId messageId, bool forAll);
+    void cancelEntryEdit(ChatId chatId);
+    void showEditCancelled(ChatId chatId);
+
+    // Blocks a user, or unblocks, as Pidgin's list of blocked users changes
+    void setUserBlocked(UserId userId, bool blocked);
+    // Whether Telegram takes a report about the chat as a whole, not about its messages
+    bool canReportChat(ChatId chatId);
+    // The private chat with the user, if there is one
+    ChatId getPrivateChatId(UserId userId);
+    // Reports the chat, or messages in it, to Telegram's moderators: the reason is asked for, in as
+    // many steps as Telegram has, and then details, if Telegram wants them
+    void reportChat(ChatId chatId, const std::vector<MessageId> &messageIds,
+                    const std::string &optionId = std::string(), const std::string &text = std::string());
 
     // The client of an account by its name, if it is connected
     static PurpleTdClient *findConnected(const char *accountName);
@@ -189,13 +241,42 @@ private:
 
     void openMessageFileResponse(ChatId chatId, MessageId messageId, const std::string &variant,
                                  TdObjectPtr object);
+    void sendPaidReaction(ChatId chatId, MessageId messageId, int64_t starCount);
+    void reportMenuError(ChatId chatId, const std::string &failure, const TdObjectPtr &object);
+    void reportReactionError(ChatId chatId, const std::string &emoji, const TdObjectPtr &object);
+    static void paidReactionEntered(void *data, const char *starCount);
+    static void paidReactionCancelled(void *data);
     struct ShownReaction {
         std::string emoji;
         int32_t     count;
         bool        chosen;
     };
-    void showMessageMenuResponse(ChatId chatId, MessageId messageId, const std::vector<ShownReaction> &reactions,
-                                 TdObjectPtr object);
+    // What a message's menu offers, besides the reactions it may have
+    struct MessageMenu {
+        std::vector<ShownReaction> reactions;
+        bool                       canEdit          = false;
+        bool                       isCaption        = false;
+        std::string                text;
+        std::string                html;             // with what formatting can be edited
+        time_t                     date             = 0;
+        bool                       canDeleteForSelf = false;
+        bool                       canDeleteForAll  = false;
+        bool                       canReport        = false;
+        UserId                     sender;           // someone else who sent it
+        bool                       senderBlocked    = false;
+        SentMedia                  media;
+    };
+    void requestMessageReactions(ChatId chatId, MessageId messageId, const MessageMenu &menu,
+                                 const OpenMenuRef &openMenu);
+    void noteUserBlocked(UserId userId, bool blocked);
+    void askBlockUser(UserId userId);
+    void reportChatResponse(ChatId chatId, const std::vector<MessageId> &messageIds, TdObjectPtr object);
+    void showMessageMenuResponse(ChatId chatId, MessageId messageId, const MessageMenu &menu,
+                                 const OpenMenuRef &openMenu, TdObjectPtr object);
+    void askDeleteMessage(ChatId chatId, MessageId messageId, bool forAll);
+    void showEditRefused(ChatId chatId, const std::string &reason);
+    void replaceMedia(ChatId chatId, MessageId messageId, const PlaceholderUse &use,
+                      std::shared_ptr<td::td_api::formattedText> caption);
     void openDownloadedFile(ChatId chatId, const std::string &key, const std::string &description,
                             TdObjectPtr object);
     void finishOpeningFile(ChatId chatId, const std::string &key, const std::string &description,

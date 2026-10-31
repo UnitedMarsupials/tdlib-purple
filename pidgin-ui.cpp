@@ -1,10 +1,15 @@
 #include "pidgin-ui.h"
+#include "thumbnail.h"
+#include <gio/gio.h>
 #include "client-utils.h"
 #include "config.h"
 #include <string>
 
 #ifndef NoPidgin
 #include <gtkconv.h>
+// Its header, gtkblist.h, is no C++, naming a parameter "new"
+extern "C" void *pidgin_blist_get_handle(void);
+#include <gdk/gdkkeysyms.h>
 
 // Pidgin's and GTK's functions, looked up by name: their types are those the headers declare
 #define FRONT_END_FUNCTION(name) static decltype(&name) p_##name
@@ -12,9 +17,11 @@
 
 FRONT_END_FUNCTION(pidgin_conversations_get_handle);
 FRONT_END_FUNCTION(pidgin_conversations_get_conv_ui_ops);
+FRONT_END_FUNCTION(pidgin_blist_get_handle);
 FRONT_END_FUNCTION(gtk_text_buffer_get_end_iter);
-FRONT_END_FUNCTION(gtk_text_buffer_get_iter_at_offset);
-FRONT_END_FUNCTION(gtk_text_iter_get_offset);
+FRONT_END_FUNCTION(gtk_text_iter_get_char);
+FRONT_END_FUNCTION(gtk_text_iter_forward_char);
+FRONT_END_FUNCTION(gtk_text_iter_backward_char);
 FRONT_END_FUNCTION(gtk_text_buffer_get_mark);
 FRONT_END_FUNCTION(gtk_text_buffer_create_mark);
 FRONT_END_FUNCTION(gtk_text_buffer_move_mark);
@@ -29,20 +36,107 @@ FRONT_END_FUNCTION(gtk_check_menu_item_new_with_label);
 FRONT_END_FUNCTION(gtk_check_menu_item_set_active);
 FRONT_END_FUNCTION(gtk_menu_item_set_submenu);
 FRONT_END_FUNCTION(gtk_menu_shell_append);
-FRONT_END_FUNCTION(gtk_menu_popup);
+FRONT_END_FUNCTION(gtk_menu_attach);
 FRONT_END_FUNCTION(gtk_widget_set_sensitive);
+FRONT_END_FUNCTION(gtk_widget_set_tooltip_text);
+FRONT_END_FUNCTION(gtk_bin_get_child);
+FRONT_END_FUNCTION(gtk_label_set_markup);
 FRONT_END_FUNCTION(gtk_widget_show_all);
 FRONT_END_FUNCTION(gtk_widget_destroy);
 FRONT_END_FUNCTION(g_signal_connect_data);
+FRONT_END_FUNCTION(gtk_imhtml_get_markup);
+FRONT_END_FUNCTION(gtk_imhtml_delete);
+FRONT_END_FUNCTION(gtk_imhtml_append_text_with_images);
+FRONT_END_FUNCTION(gtk_widget_modify_base);
+FRONT_END_FUNCTION(gtk_widget_grab_focus);
+FRONT_END_FUNCTION(g_signal_handler_disconnect);
+FRONT_END_FUNCTION(gtk_text_buffer_apply_tag_by_name);
+FRONT_END_FUNCTION(gtk_text_iter_forward_search);
+FRONT_END_FUNCTION(gtk_text_iter_compare);
+FRONT_END_FUNCTION(gtk_text_buffer_get_text);
+FRONT_END_FUNCTION(gtk_text_iter_get_offset);
+// For pasting a picture, without which pasting is as Pidgin has it
+FRONT_END_FUNCTION(gtk_imhtml_get_type);
+FRONT_END_FUNCTION(g_signal_lookup);
+FRONT_END_FUNCTION(g_signal_add_emission_hook);
+FRONT_END_FUNCTION(g_signal_remove_emission_hook);
+FRONT_END_FUNCTION(g_value_get_object);
+FRONT_END_FUNCTION(gtk_widget_get_clipboard);
+FRONT_END_FUNCTION(gtk_clipboard_wait_is_image_available);
+FRONT_END_FUNCTION(gtk_clipboard_wait_for_image);
+// For /paste of files, which then sends a picture only
+FRONT_END_FUNCTION(gtk_clipboard_wait_for_uris);
+FRONT_END_FUNCTION(g_signal_handler_find);
+FRONT_END_FUNCTION(g_signal_handler_block);
+FRONT_END_FUNCTION(g_signal_handler_unblock);
+FRONT_END_FUNCTION(g_signal_stop_emission_by_name);
+FRONT_END_FUNCTION(gtk_text_buffer_insert_at_cursor);
+// For the menu of a placeholder in the input field
+FRONT_END_FUNCTION(gtk_text_buffer_get_slice);
+FRONT_END_FUNCTION(gtk_text_buffer_insert);
+// For the thumbnails before placeholders
+FRONT_END_FUNCTION(gtk_text_buffer_create_child_anchor);
+FRONT_END_FUNCTION(gtk_text_view_add_child_at_anchor);
+FRONT_END_FUNCTION(gtk_text_iter_get_child_anchor);
+FRONT_END_FUNCTION(gtk_image_new_from_icon_name);
+FRONT_END_FUNCTION(gtk_image_set_from_pixbuf);
+FRONT_END_FUNCTION(gdk_pixbuf_new_from_file_at_scale);
+FRONT_END_FUNCTION(g_object_ref);
+FRONT_END_FUNCTION(gtk_text_buffer_place_cursor);
+FRONT_END_FUNCTION(gtk_text_buffer_delete);
+FRONT_END_FUNCTION(gtk_widget_create_pango_layout);
+FRONT_END_FUNCTION(pango_layout_get_pixel_size);
+FRONT_END_FUNCTION(gtk_text_buffer_get_iter_at_child_anchor);
+FRONT_END_FUNCTION(gtk_text_child_anchor_get_deleted);
+FRONT_END_FUNCTION(gtk_text_child_anchor_get_widgets);
+FRONT_END_FUNCTION(gtk_text_view_get_buffer);
+FRONT_END_FUNCTION(gtk_widget_get_parent);
+FRONT_END_FUNCTION(gtk_event_box_new);
+FRONT_END_FUNCTION(gtk_event_box_set_visible_window);
+FRONT_END_FUNCTION(gtk_container_add);
+FRONT_END_FUNCTION(gtk_menu_popup);
+FRONT_END_FUNCTION(g_object_set_data);
+// For drops
+FRONT_END_FUNCTION(g_value_get_uint);
+FRONT_END_FUNCTION(gdk_atom_intern);
+FRONT_END_FUNCTION(gtk_drag_finish);
+FRONT_END_FUNCTION(gtk_drag_dest_find_target);
+FRONT_END_FUNCTION(gdk_drag_status);
+FRONT_END_FUNCTION(gtk_drag_get_data);
+FRONT_END_FUNCTION(gdk_pixbuf_loader_new);
+FRONT_END_FUNCTION(gdk_pixbuf_loader_write);
+FRONT_END_FUNCTION(gdk_pixbuf_loader_close);
+FRONT_END_FUNCTION(gdk_pixbuf_loader_get_pixbuf);
+FRONT_END_FUNCTION(gdk_pixbuf_save_to_buffer);
+FRONT_END_FUNCTION(g_object_unref);
+FRONT_END_FUNCTION(gtk_text_buffer_get_insert);
+FRONT_END_FUNCTION(g_object_get_data);
+FRONT_END_FUNCTION(g_object_set_data_full);
+FRONT_END_FUNCTION(gtk_widget_get_pointer);
+FRONT_END_FUNCTION(gtk_adjustment_get_type);
+FRONT_END_FUNCTION(gtk_widget_get_type);
+FRONT_END_FUNCTION(g_value_get_boxed);
+FRONT_END_FUNCTION(gtk_text_buffer_get_iter_at_offset);
+FRONT_END_FUNCTION(gtk_text_view_window_to_buffer_coords);
+FRONT_END_FUNCTION(gtk_text_view_get_iter_at_location);
+FRONT_END_FUNCTION(gtk_text_iter_get_marks);
+FRONT_END_FUNCTION(gtk_text_mark_get_name);
+FRONT_END_FUNCTION(gtk_separator_menu_item_new);
+FRONT_END_FUNCTION(gtk_widget_show);
 
 static bool g_pidginUi = false;
 
-// The message being written, and where its text starts in the first conversation it goes to
+// The message being written, and the first conversation it goes to. Written in place of its
+// earlier version, if replacing, with the note after its first part.
 struct MessageBeingWritten {
     MessageId           messageId;
-    std::string         trailer;
-    PurpleConversation *conv        = nullptr;
-    gint                startOffset = 0;
+    PurpleConversation *conv = nullptr;
+    bool                replacing = false;
+    bool                anew      = false; // the whole message, not a part coming later
+    std::string         editNote;
+    bool                markChanges = false; // its text, words added and removed marked
+    bool                bodyMarked = false;
+    bool                extending  = false; // a part coming after the message was shown
 };
 static MessageBeingWritten *g_messageBeingWritten = nullptr;
 
@@ -62,16 +156,22 @@ static GtkTextBuffer *getTextBuffer(PurpleConversation *conv)
     return imhtml ? imhtml->text_buffer : nullptr;
 }
 
+// Where a message starts, before its header; where its own text starts, after the header; and where it
+// ends
 enum class MarkKind {
     Start,
+    Body,
     End,
-    Trailer
+    Reactions // the end of the line of reactions after the message, if it has one
 };
+
+static const char START_MARK_PREFIX[] = "tdlib-message-start-";
 
 static std::string getMarkName(MessageId messageId, MarkKind kind)
 {
-    const char *prefix = (kind == MarkKind::Start) ? "tdlib-message-start-" :
-                         (kind == MarkKind::End)   ? "tdlib-message-end-" : "tdlib-message-trailer-";
+    const char *prefix = (kind == MarkKind::Start) ? START_MARK_PREFIX :
+                         (kind == MarkKind::Body)  ? "tdlib-message-body-" :
+                         (kind == MarkKind::End)   ? "tdlib-message-end-" : "tdlib-message-reactions-";
     return prefix + std::to_string(messageId.value());
 }
 
@@ -90,18 +190,218 @@ static void setMark(GtkTextBuffer *buffer, const std::string &name, const GtkTex
         p_gtk_text_buffer_create_mark(buffer, name.c_str(), &where, TRUE);
 }
 
-// Emitted by Pidgin just before it writes into a tab, for IM and chat messages alike
+// Put by us before a message's own text, after Pidgin's header, so as to find where it starts; it
+// is gone once found. A word joiner, which shows as nothing, should it stay.
+static const char BODY_MARKER[] = "\xe2\x81\xa0";
+
+// The message's text and its end, if it is in the tab still, and not trimmed away
+static bool getBody(GtkTextBuffer *buffer, MessageId messageId, GtkTextIter &body, GtkTextIter &end)
+{
+    GtkTextMark *bodyMark = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Body).c_str());
+    GtkTextMark *endMark  = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::End).c_str());
+    if (!bodyMark || !endMark)
+        return false;
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &body, bodyMark);
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &end, endMark);
+    return p_gtk_text_iter_compare(&body, &end) < 0;
+}
+
+// Inserts HTML at a mark, moving it past what is inserted
+static void insertAtMark(GtkIMHtml *imhtml, GtkTextMark *mark, const char *html,
+                         GtkIMHtmlOptions options = GTK_IMHTML_NO_SCROLL)
+{
+    GtkTextBuffer *buffer = imhtml->text_buffer;
+    GtkTextIter    where;
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &where, mark);
+    // Right gravity: it stays after what is inserted
+    GtkTextMark *after = p_gtk_text_buffer_create_mark(buffer, NULL, &where, FALSE);
+    p_gtk_imhtml_insert_html_at_iter(imhtml, html, options, &where);
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &where, after);
+    p_gtk_text_buffer_move_mark(buffer, mark, &where);
+    p_gtk_text_buffer_delete_mark(buffer, after);
+}
+
+static char *getPlainText(const char *html)
+{
+    char *stripped = purple_markup_strip_html(html);
+    char *text     = purple_unescape_html(stripped);
+    g_free(stripped);
+    return text;
+}
+
+// An edited message's latest version, and the one before, kept with the tab's buffer, so that the
+// change can be marked or not, and the next one marked against it
+struct EditedText {
+    std::string previous; // plain text
+    std::string html;
+    std::string editNote;
+    bool        marked = true;
+};
+
+static std::string getEditedTextKey(MessageId messageId)
+{
+    return "tdlib-message-text-" + std::to_string(messageId.value());
+}
+
+static EditedText *getEditedText(GtkTextBuffer *buffer, MessageId messageId)
+{
+    return static_cast<EditedText *>(p_g_object_get_data(reinterpret_cast<GObject *>(buffer),
+                                                          getEditedTextKey(messageId).c_str()));
+}
+
+// A third of the way to the color from the theme's own background, light or dark, so that the
+// text on it stays as legible
+static std::string tintBackground(GtkIMHtml *imhtml, guint16 red, guint16 green, guint16 blue)
+{
+    GdkColor base = reinterpret_cast<GtkWidget *>(imhtml)->style->base[GTK_STATE_NORMAL];
+    auto     mix  = [](guint16 from, guint16 to) { return (from / 3 * 2 + to / 3) >> 8; };
+    char     color[8];
+    snprintf(color, sizeof(color), "#%02x%02x%02x", mix(base.red, red), mix(base.green, green),
+             mix(base.blue, blue));
+    return color;
+}
+
+static std::string formatEditedText(GtkIMHtml *imhtml, const EditedText &edited)
+{
+    if (!edited.marked)
+        return edited.html;
+    // Colors, not strikes or underlines, which may be the sender's own formatting
+    return markChanges(edited.previous, edited.html, tintBackground(imhtml, 0xFFFF, 0, 0),
+                       tintBackground(imhtml, 0, 0xC0C0, 0));
+}
+
+// The new version of an edited message's text, the change from the previous one marked, unless
+// the earlier version was shown without. The previous one is what the tab shows, unless kept.
+static std::string markEditedText(GtkIMHtml *imhtml, const GtkTextIter &body, const GtkTextIter &end,
+                                  const char *html)
+{
+    GtkTextBuffer *buffer = imhtml->text_buffer;
+    MessageId   messageId = g_messageBeingWritten->messageId;
+    EditedText *edited    = new EditedText;
+    edited->html     = html;
+    edited->editNote = g_messageBeingWritten->editNote;
+    if (const EditedText *kept = getEditedText(buffer, messageId)) {
+        char *previous = getPlainText(kept->html.c_str());
+        edited->previous = previous;
+        edited->marked   = kept->marked;
+        g_free(previous);
+    } else {
+        char *shown = p_gtk_text_buffer_get_text(buffer, &body, &end, FALSE);
+        char *note  = getPlainText(edited->editNote.c_str());
+        edited->previous = shown;
+        // Written after an earlier change, by a version without these marks
+        if ((edited->previous.size() >= strlen(note)) &&
+            (edited->previous.compare(edited->previous.size() - strlen(note), std::string::npos, note) == 0))
+            edited->previous.resize(edited->previous.size() - strlen(note));
+        g_free(note);
+        g_free(shown);
+    }
+    p_g_object_set_data_full(reinterpret_cast<GObject *>(buffer), getEditedTextKey(messageId).c_str(), edited,
+                             [](gpointer data) { delete static_cast<EditedText *>(data); });
+    return formatEditedText(imhtml, *edited);
+}
+
+// A part of the message written over its earlier version: the first replaces all of its text,
+// header aside; the next ones follow it
+static void replaceBody(PurpleConversation *conv, const char *html)
+{
+    GtkIMHtml     *imhtml  = getIMHtml(conv);
+    GtkTextBuffer *buffer  = imhtml->text_buffer;
+    MessageId      id      = g_messageBeingWritten->messageId;
+    GtkTextMark   *endMark = p_gtk_text_buffer_get_mark(buffer, getMarkName(id, MarkKind::End).c_str());
+    std::string    text;
+    if (!g_messageBeingWritten->bodyMarked) {
+        GtkTextIter body, end;
+        if (!getBody(buffer, id, body, end))
+            return;
+        text = g_messageBeingWritten->markChanges ? markEditedText(imhtml, body, end, html) : std::string(html);
+        p_gtk_imhtml_delete(imhtml, &body, &end);
+        g_messageBeingWritten->bodyMarked = true;
+        text += g_messageBeingWritten->editNote;
+    } else
+        text = std::string("<br>") + html;
+    insertAtMark(imhtml, endMark, text.c_str());
+}
+
+static const char EDIT_OUTCOME[] = "tdlib-edit-outcome";
+static void removeEditNotice(PurpleConversation *conv, const char *name);
+
+// Emitted by Pidgin just before it writes into a tab, for IM and chat messages alike; returning
+// TRUE stops it from writing
 static gboolean displayingMessage(PurpleAccount *account, const char *who, char **message,
                                   PurpleConversation *conv, PurpleMessageFlags flags)
 {
-    if (g_messageBeingWritten && !g_messageBeingWritten->conv) {
+    // For the log only, which has it by now; nothing is shown if that was all
+    std::string html = *message;
+    bool        logOnly = takeLogOnly(html);
+    if (takeLogMarker(html) || logOnly) {
+        g_free(*message);
+        *message = g_strdup(html.c_str());
+    }
+    if (logOnly && html.empty())
+        return TRUE;
+    // How an edit ended is of no interest once the conversation goes on
+    if (flags & (PURPLE_MESSAGE_SEND | PURPLE_MESSAGE_RECV))
+        removeEditNotice(conv, EDIT_OUTCOME);
+    if (!g_messageBeingWritten)
+        return FALSE;
+    if (!g_messageBeingWritten->conv) {
         GtkTextBuffer *buffer = getTextBuffer(conv);
-        if (buffer) {
-            GtkTextIter end;
-            p_gtk_text_buffer_get_end_iter(buffer, &end);
-            g_messageBeingWritten->conv        = conv;
-            g_messageBeingWritten->startOffset = p_gtk_text_iter_get_offset(&end);
+        if (!buffer)
+            return FALSE;
+        g_messageBeingWritten->conv = conv;
+        GtkTextIter body, end;
+        if (g_messageBeingWritten->replacing && !getBody(buffer, g_messageBeingWritten->messageId, body, end))
+            // Gone from the tab since: shown anew instead
+            g_messageBeingWritten->replacing = false;
+        MessageId    id    = g_messageBeingWritten->messageId;
+        GtkTextMark *start = p_gtk_text_buffer_get_mark(buffer, getMarkName(id, MarkKind::Start).c_str());
+        if (g_messageBeingWritten->anew) {
+            // What went with an earlier showing goes with this one instead
+            for (MarkKind kind: {MarkKind::Body, MarkKind::Reactions}) {
+                GtkTextMark *mark = p_gtk_text_buffer_get_mark(buffer, getMarkName(id, kind).c_str());
+                if (mark)
+                    p_gtk_text_buffer_delete_mark(buffer, mark);
+            }
+            // Shown as it is now, the change unmarked
+            p_g_object_set_data_full(reinterpret_cast<GObject *>(buffer), getEditedTextKey(id).c_str(),
+                                     nullptr, nullptr);
+        } else if (start && !g_messageBeingWritten->replacing) {
+            // A part coming later, such as a downloaded picture, extends the message
+            g_messageBeingWritten->bodyMarked = true;
+            g_messageBeingWritten->extending  = true;
         }
+        if (!g_messageBeingWritten->replacing && (g_messageBeingWritten->anew || !start)) {
+            // A mark, not an offset: Pidgin may yet trim the tab's oldest lines
+            p_gtk_text_buffer_get_end_iter(buffer, &end);
+            setMark(buffer, getMarkName(id, MarkKind::Start), end);
+        }
+    }
+    if (g_messageBeingWritten->conv != conv)
+        return FALSE;
+    if (g_messageBeingWritten->replacing) {
+        replaceBody(conv, *message);
+        return TRUE;
+    }
+    // Where the message ends, before its reactions and what came after it, on a line of its own,
+    // without a header again; the tab scrolled to it, if it is the last
+    GtkTextBuffer *buffer  = g_messageBeingWritten->extending ? getTextBuffer(conv) : nullptr;
+    GtkTextMark   *endMark = buffer ? p_gtk_text_buffer_get_mark(buffer,
+                                          getMarkName(g_messageBeingWritten->messageId, MarkKind::End).c_str())
+                                    : nullptr;
+    if (endMark) {
+        GtkTextIter end, bufferEnd;
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &end, endMark);
+        p_gtk_text_buffer_get_end_iter(buffer, &bufferEnd);
+        bool last = !p_gtk_text_iter_compare(&end, &bufferEnd);
+        insertAtMark(getIMHtml(conv), endMark, (std::string("<br>") + *message).c_str(),
+                     last ? GtkIMHtmlOptions(0) : GTK_IMHTML_NO_SCROLL);
+        return TRUE;
+    }
+    if (!g_messageBeingWritten->bodyMarked) {
+        gchar *marked = g_strconcat(BODY_MARKER, *message, NULL);
+        g_free(*message);
+        *message = marked;
     }
     return FALSE;
 }
@@ -114,34 +414,56 @@ static void displayedMessage(PurpleAccount *account, const char *who, char *mess
     GtkTextBuffer *buffer = (g_messageBeingWritten && (g_messageBeingWritten->conv == conv))
                             ? getTextBuffer(conv) : nullptr;
     if (buffer) {
-        GtkTextIter start, end;
-        p_gtk_text_buffer_get_iter_at_offset(buffer, &start, g_messageBeingWritten->startOffset);
+        GtkTextMark *startMark = p_gtk_text_buffer_get_mark(buffer, getMarkName(g_messageBeingWritten->messageId, true).c_str());
+        GtkTextIter  start, end;
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &start, startMark);
+        // Pidgin ends the previous line only after saying a message is coming
+        if (p_gtk_text_iter_get_char(&start) == '\n')
+            p_gtk_text_iter_forward_char(&start);
         p_gtk_text_buffer_get_end_iter(buffer, &end);
         setMark(buffer, getMarkName(g_messageBeingWritten->messageId, true), start);
         setMark(buffer, getMarkName(g_messageBeingWritten->messageId, false), end);
+
+        // Where the first part's text starts, past the header
+        GtkTextIter marker, pastMarker;
+        if (!g_messageBeingWritten->bodyMarked &&
+            p_gtk_text_iter_forward_search(&start, BODY_MARKER, GTK_TEXT_SEARCH_TEXT_ONLY, &marker, &pastMarker, &end))
+        {
+            p_gtk_imhtml_delete(getIMHtml(conv), &marker, &pastMarker);
+            setMark(buffer, getMarkName(g_messageBeingWritten->messageId, MarkKind::Body), marker);
+        }
+        g_messageBeingWritten->bodyMarked = true;
     }
 }
 
-// Inserts what follows a message after its end, once: the message is then up to its end
-static void appendTrailer(PurpleConversation *conv, MessageId messageId, const std::string &trailer)
-{
-    GtkIMHtml     *imhtml = getIMHtml(conv);
-    GtkTextBuffer *buffer = imhtml ? imhtml->text_buffer : nullptr;
-    GtkTextMark   *end    = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, false).c_str()) : nullptr;
-    if (trailer.empty() || !end || p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Trailer).c_str()))
-        return;
+static BuddyMarkHandler g_buddyMarkHandler = nullptr;
+static std::string      g_buddyMark;
 
-    GtkTextIter where;
-    p_gtk_text_buffer_get_iter_at_mark(buffer, &where, end);
-    p_gtk_text_buffer_create_mark(buffer, getMarkName(messageId, MarkKind::Trailer).c_str(), &where, TRUE);
-    // Into the tab only, not the log
-    p_gtk_imhtml_insert_html_at_iter(imhtml, trailer.c_str(), GTK_IMHTML_NO_SCROLL, &where);
-    p_gtk_text_buffer_move_mark(buffer, end, &where);
+void setBuddyMarkHandler(BuddyMarkHandler handler, const char *mark)
+{
+    g_buddyMarkHandler = handler;
+    g_buddyMark        = mark ? mark : "";
+}
+
+// The name as the buddy list shows it, escaped, Pidgin's own unless it is marked
+static char *drawingBuddy(PurpleBuddy *buddy)
+{
+    if (!g_buddyMarkHandler || !g_buddyMarkHandler(buddy))
+        return NULL;
+    const char *name    = purple_buddy_get_contact_alias(buddy);
+    gchar      *escaped = g_markup_escape_text(name ? name : purple_buddy_get_name(buddy), -1);
+    gchar      *marked  = g_strconcat(g_buddyMark.c_str(), escaped, NULL);
+    g_free(escaped);
+    return marked;
 }
 
 static guint g_connectSource = 0;
 
 // Disconnected by libpurple when the plugin is unloaded
+static void connectPaste(gpointer plugin);
+static void connectPopup();
+static void connectScroll();
+
 static gboolean connectSignals(gpointer plugin)
 {
     g_connectSource = 0;
@@ -155,23 +477,40 @@ static gboolean connectSignals(gpointer plugin)
                     connected;
     if (!connected)
         purple_debug_warning(config::pluginId, "Cannot follow Pidgin's conversation window\n");
+    if (!LOOK_UP(pidgin_blist_get_handle) ||
+        !purple_signal_connect(p_pidgin_blist_get_handle(), "drawing-buddy", plugin, PURPLE_CALLBACK(drawingBuddy), NULL))
+        purple_debug_warning(config::pluginId, "Cannot mark contacts in Pidgin's buddy list\n");
+    connectPaste(plugin);
+    connectPopup();
+    connectScroll();
     return FALSE;
 }
 
 void pidginUiLoad(PurplePlugin *plugin)
 {
     g_pidginUi = LOOK_UP(pidgin_conversations_get_handle) && LOOK_UP(pidgin_conversations_get_conv_ui_ops) &&
-                 LOOK_UP(gtk_text_buffer_get_end_iter) && LOOK_UP(gtk_text_buffer_get_iter_at_offset) &&
-                 LOOK_UP(gtk_text_iter_get_offset) && LOOK_UP(gtk_text_buffer_get_mark) &&
+                 LOOK_UP(gtk_text_buffer_get_end_iter) && LOOK_UP(gtk_text_iter_get_char) &&
+                 LOOK_UP(gtk_text_iter_forward_char) && LOOK_UP(gtk_text_iter_backward_char) &&
+                 LOOK_UP(gtk_text_buffer_get_mark) &&
                  LOOK_UP(gtk_text_buffer_create_mark) && LOOK_UP(gtk_text_buffer_move_mark) &&
                  LOOK_UP(gtk_text_buffer_delete_mark) && LOOK_UP(gtk_text_buffer_get_iter_at_mark) &&
                  LOOK_UP(gtk_text_buffer_select_range) && LOOK_UP(gtk_text_view_scroll_to_mark) &&
                  LOOK_UP(gtk_imhtml_insert_html_at_iter) && LOOK_UP(gtk_menu_new) &&
                  LOOK_UP(gtk_menu_item_new_with_label) && LOOK_UP(gtk_check_menu_item_new_with_label) &&
                  LOOK_UP(gtk_check_menu_item_set_active) && LOOK_UP(gtk_menu_item_set_submenu) &&
-                 LOOK_UP(gtk_menu_shell_append) && LOOK_UP(gtk_menu_popup) &&
-                 LOOK_UP(gtk_widget_set_sensitive) && LOOK_UP(gtk_widget_show_all) &&
-                 LOOK_UP(gtk_widget_destroy) && LOOK_UP(g_signal_connect_data);
+                 LOOK_UP(gtk_menu_shell_append) && LOOK_UP(gtk_menu_attach) &&
+                 LOOK_UP(gtk_widget_set_sensitive) && LOOK_UP(gtk_widget_set_tooltip_text) &&
+                 LOOK_UP(gtk_bin_get_child) && LOOK_UP(gtk_label_set_markup) &&
+                 LOOK_UP(gtk_widget_show_all) &&
+                 LOOK_UP(gtk_widget_destroy) && LOOK_UP(g_signal_connect_data) &&
+                 LOOK_UP(gtk_text_buffer_apply_tag_by_name) &&
+                 LOOK_UP(gtk_text_iter_forward_search) &&
+                 LOOK_UP(gtk_text_iter_compare) && LOOK_UP(gtk_imhtml_get_markup) &&
+                 LOOK_UP(gtk_imhtml_delete) && LOOK_UP(gtk_imhtml_append_text_with_images) &&
+                 LOOK_UP(gtk_widget_modify_base) && LOOK_UP(gtk_widget_grab_focus) &&
+                 LOOK_UP(g_signal_handler_disconnect) && LOOK_UP(gtk_text_buffer_get_text) && LOOK_UP(gtk_text_iter_get_offset) &&
+                 LOOK_UP(g_object_get_data) && LOOK_UP(g_object_set_data_full) &&
+                 LOOK_UP(gtk_text_buffer_get_iter_at_offset);
     purple_debug_info(config::pluginId, "Pidgin's conversation window: %s\n",
                       g_pidginUi ? "found" : "not found");
     if (!g_pidginUi)
@@ -182,8 +521,15 @@ void pidginUiLoad(PurplePlugin *plugin)
     g_connectSource = g_idle_add(connectSignals, plugin);
 }
 
+static void disconnectPaste();
+static void disconnectPopup();
+static void disconnectScroll();
+
 void pidginUiUnload()
 {
+    disconnectPaste();
+    disconnectPopup();
+    disconnectScroll();
     if (g_connectSource) {
         g_source_remove(g_connectSource);
         g_connectSource = 0;
@@ -196,12 +542,17 @@ bool pidginUiFound()
     return g_pidginUi;
 }
 
-MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &trailer)
+MessageMarkScope::MessageMarkScope(MessageId messageId, const char *editNote, bool anew, bool markChanges)
 {
     if (g_pidginUi && messageId.valid() && !g_messageBeingWritten) {
         g_messageBeingWritten = new MessageBeingWritten;
         g_messageBeingWritten->messageId = messageId;
-        g_messageBeingWritten->trailer   = trailer;
+        g_messageBeingWritten->anew      = anew && !editNote;
+        if (editNote) {
+            g_messageBeingWritten->replacing = true;
+            g_messageBeingWritten->editNote  = editNote;
+            g_messageBeingWritten->markChanges = markChanges;
+        }
         m_active = true;
     }
 }
@@ -209,11 +560,1077 @@ MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &trail
 MessageMarkScope::~MessageMarkScope()
 {
     if (m_active) {
-        if (g_messageBeingWritten->conv)
-            appendTrailer(g_messageBeingWritten->conv, g_messageBeingWritten->messageId,
-                          g_messageBeingWritten->trailer);
         delete g_messageBeingWritten;
         g_messageBeingWritten = nullptr;
+    }
+}
+
+void showMessageReactions(PurpleConversation *conv, MessageId messageId, const std::string &html)
+{
+    GtkIMHtml     *imhtml  = getIMHtml(conv);
+    GtkTextBuffer *buffer  = imhtml ? imhtml->text_buffer : nullptr;
+    GtkTextMark   *endMark = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::End).c_str()) : nullptr;
+    if (!endMark)
+        return;
+    std::string  name = getMarkName(messageId, MarkKind::Reactions);
+    GtkTextIter  end, areaEnd;
+    GtkTextMark *areaEndMark = p_gtk_text_buffer_get_mark(buffer, name.c_str());
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &end, endMark);
+    if (areaEndMark) {
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &areaEnd, areaEndMark);
+        if (p_gtk_text_iter_compare(&end, &areaEnd) < 0) {
+            p_gtk_imhtml_delete(imhtml, &end, &areaEnd);
+            p_gtk_text_buffer_get_iter_at_mark(buffer, &end, endMark);
+        }
+        p_gtk_text_buffer_delete_mark(buffer, areaEndMark);
+    }
+    // Right gravity only while the line goes in: kept so, at the end of the tab, the mark would go
+    // past the next message too, which a change of reactions would then take away
+    GtkTextMark *after = p_gtk_text_buffer_create_mark(buffer, NULL, &end, FALSE);
+    if (!html.empty()) {
+        // Into the tab only, not the log
+        std::string line = "<br>" + html;
+        p_gtk_imhtml_insert_html_at_iter(imhtml, line.c_str(), GTK_IMHTML_NO_SCROLL, &end);
+    }
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &areaEnd, after);
+    p_gtk_text_buffer_create_mark(buffer, name.c_str(), &areaEnd, TRUE);
+    p_gtk_text_buffer_delete_mark(buffer, after);
+}
+
+bool canRedrawConversation(PurpleConversation *conv)
+{
+    return getIMHtml(conv) != nullptr;
+}
+
+// A line at the end of the tab, its last character turning, and the marks around it and that
+// character
+static const char PROGRESS_KEY[]        = "tdlib-progress";
+static const char PROGRESS_START[]      = "tdlib-progress-start";
+static const char PROGRESS_SPINNER[]    = "tdlib-progress-spinner";
+static const char PROGRESS_END[]        = "tdlib-progress-end";
+static const char *const SPINNER_FRAMES[] = {"\xc2\xb7", "\xe2\x9c\xa2", "\xe2\x9c\xb3", "\xe2\x9c\xb6",
+                                             "\xe2\x9c\xbb", "\xe2\x9c\xbd"};
+enum { SPINNER_FRAME_COUNT = sizeof(SPINNER_FRAMES) / sizeof(SPINNER_FRAMES[0]), SPINNER_MS = 120 };
+
+struct Progress {
+    PurpleConversation *conv;
+    guint               timer = 0;
+    unsigned            step  = 0;
+};
+
+static GtkTextMark *getProgressMark(GtkTextBuffer *buffer, const char *name)
+{
+    return p_gtk_text_buffer_get_mark(buffer, name);
+}
+
+// Back and forth through the frames, as Claude Code's
+static const char *getSpinnerFrame(unsigned step)
+{
+    unsigned position = step % (2 * SPINNER_FRAME_COUNT - 2);
+    return SPINNER_FRAMES[(position < SPINNER_FRAME_COUNT) ? position : 2 * SPINNER_FRAME_COUNT - 2 - position];
+}
+
+static gboolean turnSpinner(gpointer data)
+{
+    Progress *progress = static_cast<Progress *>(data);
+    GtkIMHtml *imhtml  = g_list_find(purple_get_conversations(), progress->conv) ? getIMHtml(progress->conv)
+                                                                                 : nullptr;
+    GtkTextMark *spinner = imhtml ? getProgressMark(imhtml->text_buffer, PROGRESS_SPINNER) : nullptr;
+    GtkTextMark *end     = imhtml ? getProgressMark(imhtml->text_buffer, PROGRESS_END) : nullptr;
+    if (!spinner || !end) {
+        // The tab is gone
+        progress->timer = 0;
+        if (imhtml)
+            purple_conversation_set_data(progress->conv, PROGRESS_KEY, nullptr);
+        delete progress;
+        return G_SOURCE_REMOVE;
+    }
+    GtkTextIter from, to;
+    p_gtk_text_buffer_get_iter_at_mark(imhtml->text_buffer, &from, spinner);
+    p_gtk_text_buffer_get_iter_at_mark(imhtml->text_buffer, &to, end);
+    p_gtk_imhtml_delete(imhtml, &from, &to);
+    // The end, which nothing written after the line moves, past the new frame
+    insertAtMark(imhtml, end, getSpinnerFrame(++progress->step));
+    return G_SOURCE_CONTINUE;
+}
+
+void appendTabLine(PurpleConversation *conv, const std::string &html)
+{
+    GtkIMHtml *imhtml = getIMHtml(conv);
+    if (!imhtml)
+        return;
+    GtkTextIter where;
+    p_gtk_text_buffer_get_end_iter(imhtml->text_buffer, &where);
+    std::string line = (p_gtk_text_iter_get_offset(&where) ? "<br>" : "") + html;
+    p_gtk_imhtml_insert_html_at_iter(imhtml, line.c_str(), GtkIMHtmlOptions(0), &where);
+}
+
+void startProgress(PurpleConversation *conv, const std::string &html)
+{
+    GtkIMHtml *imhtml = getIMHtml(conv);
+    if (!imhtml || purple_conversation_get_data(conv, PROGRESS_KEY))
+        return;
+    GtkTextBuffer *buffer = imhtml->text_buffer;
+    GtkTextIter    where;
+    p_gtk_text_buffer_get_end_iter(buffer, &where);
+    gint        offset = p_gtk_text_iter_get_offset(&where);
+    std::string line   = (offset ? "<br>" : "") + std::string("<font color=\"#777777\">") + html + " </font>";
+    p_gtk_imhtml_insert_html_at_iter(imhtml, line.c_str(), GtkIMHtmlOptions(0), &where);
+    // What is written at either end meanwhile stays outside: the start, set once the line is in, as
+    // its right gravity would have it go past; the end, with the spinner's frame left before it
+    p_gtk_text_buffer_get_iter_at_offset(buffer, &where, offset);
+    p_gtk_text_buffer_create_mark(buffer, PROGRESS_START, &where, FALSE);
+    p_gtk_text_buffer_get_end_iter(buffer, &where);
+    p_gtk_text_buffer_create_mark(buffer, PROGRESS_SPINNER, &where, TRUE);
+    GtkTextMark *end = p_gtk_text_buffer_create_mark(buffer, PROGRESS_END, &where, TRUE);
+    insertAtMark(imhtml, end, getSpinnerFrame(0));
+
+    Progress *progress = new Progress;
+    progress->conv  = conv;
+    progress->timer = g_timeout_add(SPINNER_MS, turnSpinner, progress);
+    purple_conversation_set_data(conv, PROGRESS_KEY, progress);
+}
+
+void stopProgress(PurpleConversation *conv)
+{
+    Progress *progress = conv ? static_cast<Progress *>(purple_conversation_get_data(conv, PROGRESS_KEY)) : nullptr;
+    if (!progress)
+        return;
+    purple_conversation_set_data(conv, PROGRESS_KEY, nullptr);
+    g_source_remove(progress->timer);
+    delete progress;
+    GtkIMHtml *imhtml = getIMHtml(conv);
+    if (!imhtml)
+        return;
+    GtkTextBuffer *buffer = imhtml->text_buffer;
+    GtkTextMark   *start  = getProgressMark(buffer, PROGRESS_START);
+    GtkTextMark   *end    = getProgressMark(buffer, PROGRESS_END);
+    if (start && end) {
+        GtkTextIter from, to;
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &from, start);
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &to, end);
+        p_gtk_imhtml_delete(imhtml, &from, &to);
+    }
+    for (const char *name: {PROGRESS_START, PROGRESS_SPINNER, PROGRESS_END})
+        if (GtkTextMark *mark = getProgressMark(buffer, name))
+            p_gtk_text_buffer_delete_mark(buffer, mark);
+}
+
+// The edit in progress in a conversation's input field, and what the field held before
+struct EntryEditState {
+    EntryEdit             edit;
+    std::string           draft;
+    gulong                keyHandler = 0;
+    std::function<void()> cancelled;
+};
+static const char ENTRY_EDIT_KEY[] = "tdlib-purple-entry-edit";
+
+static GtkWidget *getEntry(PurpleConversation *conv)
+{
+    return getIMHtml(conv) ? PIDGIN_CONVERSATION(conv)->entry : nullptr;
+}
+
+// Pidgin pastes HTML or text only, a picture on the clipboard into a Telegram conversation's input
+// field going nowhere. Its handler of "paste-clipboard" stops the signal, so the picture is put in
+// by an emission hook, which comes before: at the cursor, as Pidgin's Insert menu has it, and sent
+// as a photo the same way. Pidgin pastes the text, if there is any, after.
+static guint  g_pasteSignal     = 0;
+static gulong g_pasteHook       = 0;
+static guint  g_backspaceSignal = 0;
+static gulong g_backspaceHook   = 0;
+
+static PurpleConversation *findEntryConversation(gpointer entry)
+{
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
+        if (!strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId) &&
+            (getEntry(conv) == entry))
+            return conv;
+    }
+    return nullptr;
+}
+
+// The picture on the widget's clipboard, as PNG, put into the image store; 0 if there is none
+static int storeClipboardPicture(GtkWidget *widget)
+{
+    GtkClipboard *clipboard = p_gtk_widget_get_clipboard(widget, GDK_SELECTION_CLIPBOARD);
+    if (!clipboard || !p_gtk_clipboard_wait_is_image_available(clipboard))
+        return 0;
+    GdkPixbuf *pixbuf = p_gtk_clipboard_wait_for_image(clipboard);
+    gchar     *data   = nullptr;
+    gsize      size   = 0;
+    GError    *error  = nullptr;
+    int        id     = 0;
+    if (pixbuf && p_gdk_pixbuf_save_to_buffer(pixbuf, &data, &size, "png", &error, NULL)) {
+        // The store takes the data
+        id = purple_imgstore_add_with_id(data, size, "clipboard.png");
+        purple_debug_misc(config::pluginId, "Pasted a picture of %zu bytes\n", size_t(size));
+    } else
+        purple_debug_warning(config::pluginId, "Cannot paste the picture: %s\n",
+                             error ? error->message : "none on the clipboard");
+    if (error)
+        g_error_free(error);
+    if (pixbuf)
+        p_g_object_unref(pixbuf);
+    return id;
+}
+
+// What is pasted or dropped into a Telegram conversation is attached to the message being written,
+// rather than taken as text, as Pidgin's handlers, or GtkTextView's, would take files' URIs. An
+// emission hook cannot stop a signal, so the widget's handlers are blocked for the emission, and one
+// of the plugin's, connected after them, unblocks them and stops the signal.
+struct Takeover {
+    GtkWidget          *widget;
+    guint               signal;
+    const char         *name;
+    gulong              ownHandler = 0;
+    std::vector<gulong> blocked;
+};
+static PastedHandler      g_pastedHandler      = nullptr;
+static guint              g_dropSignal         = 0;
+static gulong             g_dropHook           = 0;
+
+void setPastedHandler(PastedHandler handler)
+{
+    g_pastedHandler = handler;
+}
+
+static std::string getTakeoverKey(const char *name)
+{
+    return std::string("tdlib-purple-takeover-") + name;
+}
+
+// Connected swapped, its other arguments, which differ between signals, ignored
+static void takenOver(Takeover *takeover)
+{
+    if (takeover->blocked.empty())
+        return;
+    for (gulong handler: takeover->blocked)
+        p_g_signal_handler_unblock(takeover->widget, handler);
+    takeover->blocked.clear();
+    p_g_signal_stop_emission_by_name(takeover->widget, takeover->name);
+}
+
+static void deleteTakeover(gpointer data)
+{
+    delete static_cast<Takeover *>(data);
+}
+
+static void watchSignal(GtkWidget *widget, guint signal, const char *name)
+{
+    std::string key = getTakeoverKey(name);
+    if (p_g_object_get_data(reinterpret_cast<GObject *>(widget), key.c_str()))
+        return;
+    Takeover *takeover   = new Takeover{widget, signal, name};
+    takeover->ownHandler = p_g_signal_connect_data(widget, name, G_CALLBACK(takenOver), takeover, nullptr,
+                                                   G_CONNECT_SWAPPED);
+    p_g_object_set_data_full(reinterpret_cast<GObject *>(widget), key.c_str(), takeover, deleteTakeover);
+}
+
+static void unwatchSignal(GtkWidget *widget, const char *name)
+{
+    std::string key      = getTakeoverKey(name);
+    Takeover   *takeover = static_cast<Takeover *>(p_g_object_get_data(reinterpret_cast<GObject *>(widget),
+                                                                       key.c_str()));
+    if (!takeover)
+        return;
+    for (gulong handler: takeover->blocked)
+        p_g_signal_handler_unblock(widget, handler);
+    p_g_signal_handler_disconnect(widget, takeover->ownHandler);
+    p_g_object_set_data_full(reinterpret_cast<GObject *>(widget), key.c_str(), nullptr, nullptr);
+}
+
+// The emission under way is the plugin's from here on; false if the widget is not watched for it
+static bool takeOver(GtkWidget *widget, const char *name)
+{
+    std::string key      = getTakeoverKey(name);
+    Takeover   *takeover = static_cast<Takeover *>(p_g_object_get_data(reinterpret_cast<GObject *>(widget),
+                                                                       key.c_str()));
+    if (!takeover)
+        return false;
+    p_g_signal_handler_block(widget, takeover->ownHandler);
+    while (gulong handler = p_g_signal_handler_find(widget, GSignalMatchType(G_SIGNAL_MATCH_ID | G_SIGNAL_MATCH_UNBLOCKED),
+                                                    takeover->signal, 0, nullptr, nullptr, nullptr)) {
+        p_g_signal_handler_block(widget, handler);
+        takeover->blocked.push_back(handler);
+    }
+    p_g_signal_handler_unblock(widget, takeover->ownHandler);
+    return true;
+}
+
+// Shown as tall as so many lines of the input field's font, or this big without it
+enum { THUMBNAIL_LINES = 5, THUMBNAIL_SIZE = 96 };
+// A thumbnail in the input field stands for its placeholder, which Pidgin takes as its HTML and
+// its text, as it takes those of its own pictures
+static const char THUMBNAIL_KEY[]      = "tdlib-purple-thumbnail";
+static const char THUMBNAIL_PATH_KEY[] = "tdlib-purple-thumbnail-path";
+static const char IMHTML_HTML_KEY[]    = "gtkimhtml_htmltext";
+static const char IMHTML_TEXT_KEY[]    = "gtkimhtml_plaintext";
+
+// A placeholder of something pasted, in a conversation's input field, gets a menu of its own: to
+// send it the other way, as a file or not, or to take it out
+static PlaceholderHandler g_placeholderHandler = nullptr;
+
+void setPlaceholderHandler(PlaceholderHandler handler)
+{
+    g_placeholderHandler = handler;
+}
+
+static void addMenuItems(GtkWidget *menu, const std::vector<MenuItem> &items, unsigned columns);
+
+static GtkTextChildAnchor *getThumbnailAt(const GtkTextIter &iter)
+{
+    GtkTextChildAnchor *anchor = p_gtk_text_iter_get_child_anchor(&iter);
+    return anchor && p_g_object_get_data(reinterpret_cast<GObject *>(anchor), THUMBNAIL_KEY) ? anchor : nullptr;
+}
+
+static void setThumbnailPlaceholder(GtkTextChildAnchor *anchor, GtkWidget *box, const std::string &placeholder)
+{
+    GObject *object = reinterpret_cast<GObject *>(anchor);
+    p_g_object_set_data_full(object, THUMBNAIL_KEY, g_strdup(placeholder.c_str()), g_free);
+    p_g_object_set_data_full(object, IMHTML_HTML_KEY, g_markup_escape_text(placeholder.c_str(), -1), g_free);
+    // Without text, Pidgin would send no message of a thumbnail alone
+    p_g_object_set_data_full(object, IMHTML_TEXT_KEY, g_strdup(placeholder.c_str()), g_free);
+    std::string tooltip = placeholder + "\n" + static_cast<const char *>(p_g_object_get_data(object, THUMBNAIL_PATH_KEY));
+    p_gtk_widget_set_tooltip_text(box, tooltip.c_str());
+}
+
+static int getThumbnailSize(GtkWidget *entry)
+{
+    PangoLayout *layout = p_gtk_widget_create_pango_layout ? p_gtk_widget_create_pango_layout(entry, "A") : nullptr;
+    int          height = 0;
+    if (layout) {
+        p_pango_layout_get_pixel_size(layout, nullptr, &height);
+        p_g_object_unref(layout);
+    }
+    return (height > 0) ? height * THUMBNAIL_LINES : THUMBNAIL_SIZE;
+}
+
+static void showThumbnail(GtkWidget *image, int size, const std::string &png)
+{
+    GdkPixbuf *pixbuf = png.empty() ? nullptr : p_gdk_pixbuf_new_from_file_at_scale(png.c_str(), size, size, TRUE,
+                                                                                    nullptr);
+    if (pixbuf) {
+        p_gtk_image_set_from_pixbuf(reinterpret_cast<GtkImage *>(image), pixbuf);
+        p_g_object_unref(pixbuf);
+    }
+}
+
+static void removeThumbnail(GtkTextChildAnchor *anchor)
+{
+    if (p_gtk_text_child_anchor_get_deleted(anchor))
+        return;
+    GtkTextBuffer *buffer = nullptr;
+    GList         *widgets = p_gtk_text_child_anchor_get_widgets(anchor);
+    if (widgets)
+        buffer = p_gtk_text_view_get_buffer(reinterpret_cast<GtkTextView *>(
+            p_gtk_widget_get_parent(static_cast<GtkWidget *>(widgets->data))));
+    g_list_free(widgets);
+    if (!buffer)
+        return;
+    GtkTextIter from, to;
+    p_gtk_text_buffer_get_iter_at_child_anchor(buffer, &from, anchor);
+    to = from;
+    p_gtk_text_iter_forward_char(&to);
+    p_gtk_text_buffer_delete(buffer, &from, &to);
+}
+
+// Right-clicked, a thumbnail's menu: to send it the other way, as a file or not, or to take it out
+static gboolean thumbnailClicked(GtkWidget *box, GdkEventButton *event, gpointer data)
+{
+    if ((event->type != GDK_BUTTON_PRESS) || (event->button != 3) || !g_placeholderHandler)
+        return FALSE;
+    GtkTextChildAnchor *anchor = static_cast<GtkTextChildAnchor *>(data);
+    GtkWidget          *entry  = p_gtk_widget_get_parent(box);
+    PurpleConversation *conv   = entry ? findEntryConversation(entry) : nullptr;
+    const char         *placeholder = static_cast<const char *>(
+        p_g_object_get_data(reinterpret_cast<GObject *>(anchor), THUMBNAIL_KEY));
+    PastedForms forms;
+    if (!conv || !placeholder || !g_placeholderHandler(conv, placeholder, forms))
+        return FALSE;
+
+    // The anchor kept, should it go meanwhile
+    std::shared_ptr<GObject> kept(reinterpret_cast<GObject *>(anchor), p_g_object_unref);
+    p_g_object_ref(anchor);
+    std::vector<MenuItem> items;
+    if (!forms.other.empty()) {
+        MenuItem item;
+        item.label  = forms.otherLabel;
+        std::string other = forms.other;
+        item.action = [kept, box, other]() {
+            GtkTextChildAnchor *anchor = reinterpret_cast<GtkTextChildAnchor *>(kept.get());
+            if (!p_gtk_text_child_anchor_get_deleted(anchor))
+                setThumbnailPlaceholder(anchor, box, other);
+        };
+        items.push_back(std::move(item));
+    }
+    MenuItem remove;
+    remove.label  = forms.removeLabel;
+    remove.action = [kept]() { removeThumbnail(reinterpret_cast<GtkTextChildAnchor *>(kept.get())); };
+    items.push_back(std::move(remove));
+
+    GtkWidget *menu = p_gtk_menu_new();
+    addMenuItems(menu, items, 0);
+    p_gtk_widget_show_all(menu);
+    p_g_signal_connect_data(menu, "selection-done", G_CALLBACK(p_gtk_widget_destroy), nullptr, nullptr,
+                            GConnectFlags(0));
+    p_gtk_menu_popup(reinterpret_cast<GtkMenu *>(menu), nullptr, nullptr, nullptr, nullptr, event->button, event->time);
+    return TRUE;
+}
+
+// At the iterator, a thumbnail of the file, standing for the placeholder: an icon of its type until
+// one is found; false if there can be none
+static bool insertThumbnailAt(GtkWidget *entry, GtkTextIter *where, const PastedPlaceholder &pasted)
+{
+    if (!p_gtk_text_buffer_create_child_anchor || pasted.path.empty())
+        return false;
+    GtkTextBuffer      *buffer = reinterpret_cast<GtkIMHtml *>(entry)->text_buffer;
+    GtkTextChildAnchor *anchor = p_gtk_text_buffer_create_child_anchor(buffer, where);
+    p_g_object_set_data_full(reinterpret_cast<GObject *>(anchor), THUMBNAIL_PATH_KEY, g_strdup(pasted.path.c_str()),
+                             g_free);
+
+    std::string mime  = guessMimeType(pasted.path);
+    gchar      *type  = mime.empty() ? nullptr : g_content_type_from_mime_type(mime.c_str());
+    gchar      *icon  = type ? g_content_type_get_generic_icon_name(type) : nullptr;
+    GtkWidget  *image = p_gtk_image_new_from_icon_name(icon ? icon : "text-x-generic", GTK_ICON_SIZE_DND);
+    g_free(icon);
+    g_free(type);
+    GtkWidget *box = p_gtk_event_box_new();
+    p_gtk_event_box_set_visible_window(reinterpret_cast<GtkEventBox *>(box), FALSE);
+    p_gtk_container_add(reinterpret_cast<GtkContainer *>(box), image);
+    setThumbnailPlaceholder(anchor, box, pasted.placeholder);
+    p_g_signal_connect_data(box, "button-press-event", G_CALLBACK(thumbnailClicked), anchor, nullptr,
+                            GConnectFlags(0));
+    p_gtk_text_view_add_child_at_anchor(reinterpret_cast<GtkTextView *>(entry), box, anchor);
+    p_gtk_widget_show_all(box);
+
+    // A picture is its own; anything else as file managers have it, or a thumbnailer makes it
+    int size = getThumbnailSize(entry);
+    if (pasted.kind == AttachmentKind::Photo)
+        showThumbnail(image, size, pasted.path);
+    else {
+        p_g_object_ref(image);
+        findThumbnail(pasted.path, mime, size, [image, size](const std::string &png) {
+            showThumbnail(image, size, png);
+            p_g_object_unref(image);
+        });
+    }
+    return true;
+}
+
+static std::string getEntrySlice(GtkTextBuffer *buffer);
+static bool findBracketed(const std::string &text, gint offset, std::string &bracketed, gint &start);
+
+// The placeholders written in the field, of things pasted that are here, become their thumbnails
+static void thumbnailPlaceholders(GtkWidget *entry)
+{
+    PurpleConversation *conv = findEntryConversation(entry);
+    if (!conv || !g_placeholderHandler || !p_gtk_text_buffer_create_child_anchor)
+        return;
+    GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(entry)->text_buffer;
+    std::string    text   = getEntrySlice(buffer);
+    // From the end, so that the offsets before stay
+    for (gint offset = g_utf8_strlen(text.c_str(), -1) - 1; offset >= 0; offset--) {
+        std::string placeholder;
+        gint        start;
+        PastedForms forms;
+        if ((*g_utf8_offset_to_pointer(text.c_str(), offset) != '[') ||
+            !findBracketed(text, offset, placeholder, start) ||
+            !g_placeholderHandler(conv, placeholder, forms) || forms.path.empty())
+            continue;
+        GtkTextIter from, to;
+        p_gtk_text_buffer_get_iter_at_offset(buffer, &from, start);
+        p_gtk_text_buffer_get_iter_at_offset(buffer, &to, start + g_utf8_strlen(placeholder.c_str(), -1));
+        p_gtk_text_buffer_delete(buffer, &from, &to);
+        insertThumbnailAt(entry, &from, {placeholder, forms.path, forms.kind});
+    }
+}
+
+// Thumbnails at the cursor, or the placeholders where there can be none
+static void insertPlaceholders(GtkWidget *entry, const std::vector<PastedPlaceholder> &placeholders)
+{
+    GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(entry)->text_buffer;
+    for (const PastedPlaceholder &pasted: placeholders) {
+        GtkTextIter cursor;
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &cursor, p_gtk_text_buffer_get_insert(buffer));
+        if (!insertThumbnailAt(entry, &cursor, pasted))
+            p_gtk_text_buffer_insert_at_cursor(buffer, (pasted.placeholder + " ").c_str(), -1);
+    }
+}
+
+// Pidgin's Backspace after a picture puts its text in its place, as it does a smiley's: not that
+// of a thumbnail, whose text is only for sending
+static gboolean backspacing(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
+{
+    GtkWidget *view = paramCount ? static_cast<GtkWidget *>(p_g_value_get_object(&params[0])) : nullptr;
+    if (!view || !findEntryConversation(view))
+        return TRUE;
+    GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(view)->text_buffer;
+    GtkTextIter    cursor;
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &cursor, p_gtk_text_buffer_get_insert(buffer));
+    GtkTextChildAnchor *anchor = p_gtk_text_iter_backward_char(&cursor) ? getThumbnailAt(cursor) : nullptr;
+    if (anchor)
+        p_g_object_set_data(reinterpret_cast<GObject *>(anchor), IMHTML_TEXT_KEY, nullptr);
+    return TRUE;
+}
+
+// Pastes the placeholders of the files copied, if any
+static bool pasteFiles(GtkWidget *entry, PurpleConversation *conv)
+{
+    GtkClipboard *clipboard = p_gtk_widget_get_clipboard(entry, GDK_SELECTION_CLIPBOARD);
+    if (!clipboard || !g_pastedHandler)
+        return false;
+    gchar **uris = p_gtk_clipboard_wait_for_uris(clipboard);
+    std::vector<std::string> files = getLocalPaths(uris);
+    g_strfreev(uris);
+    if (files.empty() || !takeOver(entry, "paste-clipboard"))
+        return false;
+    ClipboardContent content;
+    content.files = files;
+    insertPlaceholders(entry, g_pastedHandler(conv, content));
+    return true;
+}
+
+struct EntryPaste {
+    PurpleConversation            *conv;
+    std::vector<PastedPlaceholder> placeholders;
+    std::string                    text;
+};
+
+static gboolean pasteIntoEntry(gpointer data)
+{
+    std::unique_ptr<EntryPaste> paste(static_cast<EntryPaste *>(data));
+    // Unless the conversation is gone by now
+    GList *item = purple_get_conversations();
+    while (item && (item->data != paste->conv))
+        item = item->next;
+    GtkWidget *entry = item ? getEntry(paste->conv) : nullptr;
+    if (entry) {
+        GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(entry)->text_buffer;
+        if (p_gtk_text_buffer_insert_at_cursor) {
+            insertPlaceholders(entry, paste->placeholders);
+            if (!paste->text.empty())
+                p_gtk_text_buffer_insert_at_cursor(buffer, (paste->text + " ").c_str(), -1);
+        }
+    }
+    return FALSE;
+}
+
+void pasteIntoEntryLater(PurpleConversation *conv, const std::vector<PastedPlaceholder> &placeholders)
+{
+    g_idle_add(pasteIntoEntry, new EntryPaste{conv, placeholders, ""});
+}
+
+static gboolean pastingClipboard(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
+{
+    gpointer   instance = paramCount ? p_g_value_get_object(&params[0]) : nullptr;
+    GtkWidget *entry    = static_cast<GtkWidget *>(instance);
+    PurpleConversation *conv = entry ? findEntryConversation(entry) : nullptr;
+    if (!conv || !g_pastedHandler || pasteFiles(entry, conv))
+        return TRUE;
+    // A picture gets a placeholder too, rather than going into the field as Pidgin's own, which
+    // Backspace would turn into the text "[Image]"
+    ClipboardContent content;
+    content.imageId = storeClipboardPicture(entry);
+    if (content.imageId && takeOver(entry, "paste-clipboard"))
+        insertPlaceholders(entry, g_pastedHandler(conv, content));
+    else if (content.imageId)
+        purple_imgstore_unref_by_id(content.imageId);
+    // Kept for the next paste
+    return TRUE;
+}
+
+bool readPidginClipboard(PurpleConversation *conv, ClipboardContent &content)
+{
+    GtkWidget *entry = g_pasteHook ? getEntry(conv) : nullptr;
+    if (!entry)
+        return false;
+    GtkClipboard *clipboard = p_gtk_clipboard_wait_for_uris ?
+                              p_gtk_widget_get_clipboard(entry, GDK_SELECTION_CLIPBOARD) : nullptr;
+    gchar **uris = clipboard ? p_gtk_clipboard_wait_for_uris(clipboard) : nullptr;
+    if (uris) {
+        content.files = getLocalPaths(uris);
+        g_strfreev(uris);
+    }
+    if (content.files.empty())
+        content.imageId = storeClipboardPicture(entry);
+    return true;
+}
+
+// Telegram takes no bigger photo
+enum { MAX_FETCHED_PICTURE = 10 * 1024 * 1024 };
+
+struct PictureFetch {
+    PurpleConversation *conv;
+    std::string         url;
+};
+
+static bool isPicture(const guchar *data, gsize length)
+{
+    GdkPixbufLoader *loader = p_gdk_pixbuf_loader_new();
+    bool picture = p_gdk_pixbuf_loader_write(loader, data, length, nullptr) &&
+                   p_gdk_pixbuf_loader_close(loader, nullptr) && p_gdk_pixbuf_loader_get_pixbuf(loader);
+    if (!picture)
+        p_gdk_pixbuf_loader_close(loader, nullptr);
+    p_g_object_unref(loader);
+    return picture;
+}
+
+// A picture goes into the input field, anything else as its link
+static void pictureFetched(PurpleUtilFetchUrlData *, gpointer data, const gchar *content, gsize length,
+                           const gchar *error)
+{
+    std::unique_ptr<PictureFetch> fetch(static_cast<PictureFetch *>(data));
+    if (content && length && isPicture(reinterpret_cast<const guchar *>(content), length)) {
+        gchar *name = g_path_get_basename(fetch->url.c_str());
+        // The store takes the copy
+        gpointer copy = g_malloc(length);
+        memcpy(copy, content, length);
+        ClipboardContent picture;
+        picture.imageId = purple_imgstore_add_with_id(copy, length, name);
+        g_free(name);
+        pasteIntoEntry(new EntryPaste{fetch->conv, g_pastedHandler(fetch->conv, picture), ""});
+    } else {
+        purple_debug_misc(config::pluginId, "Dropped %s, not a picture: %s\n", fetch->url.c_str(),
+                          error ? error : "other content");
+        pasteIntoEntry(new EntryPaste{fetch->conv, {}, fetch->url});
+    }
+}
+
+static PurpleConversation *findWidgetConversation(GtkWidget *widget)
+{
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
+        if (!strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId) &&
+            getIMHtml(conv) && ((getEntry(conv) == widget) || (reinterpret_cast<GtkWidget *>(getIMHtml(conv)) == widget)))
+            return conv;
+    }
+    return nullptr;
+}
+
+// Files dropped get their placeholders in the input field, and pictures dropped from elsewhere,
+// such as a browser, as links, are fetched to go there
+static gboolean droppingData(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
+{
+    if (paramCount < 7)
+        return TRUE;
+    GtkWidget          *widget = static_cast<GtkWidget *>(p_g_value_get_object(&params[0]));
+    PurpleConversation *conv   = widget ? findWidgetConversation(widget) : nullptr;
+    GtkSelectionData   *data   = static_cast<GtkSelectionData *>(p_g_value_get_boxed(&params[4]));
+    if (!conv || !data || (data->length <= 0) || !g_pastedHandler ||
+        (data->target != p_gdk_atom_intern("text/uri-list", FALSE)))
+        return TRUE;
+
+    std::string              list(reinterpret_cast<const char *>(data->data), data->length);
+    gchar                  **uris = g_uri_list_extract_uris(list.c_str());
+    std::vector<std::string> files = getLocalPaths(uris);
+    std::vector<std::string> urls;
+    for (gchar **uri = uris; uri && *uri; uri++)
+        if (g_str_has_prefix(*uri, "http://") || g_str_has_prefix(*uri, "https://"))
+            urls.push_back(*uri);
+    g_strfreev(uris);
+    if ((files.empty() && urls.empty()) || !takeOver(widget, "drag-data-received"))
+        return TRUE;
+
+    p_gtk_drag_finish(static_cast<GdkDragContext *>(p_g_value_get_object(&params[1])), TRUE, FALSE,
+                      p_g_value_get_uint(&params[6]));
+    GtkWidget *entry = getEntry(conv);
+    if (!files.empty()) {
+        ClipboardContent content;
+        content.files = files;
+        insertPlaceholders(entry, g_pastedHandler(conv, content));
+    }
+    for (const std::string &url: urls) {
+        purple_debug_misc(config::pluginId, "Fetching %s, dropped\n", url.c_str());
+        PictureFetch *fetch = new PictureFetch{conv, url};
+        purple_util_fetch_url_len(url.c_str(), TRUE, nullptr, TRUE, MAX_FETCHED_PICTURE, pictureFetched, fetch);
+    }
+    p_gtk_widget_grab_focus(entry);
+    return TRUE;
+}
+
+// The tab's text, not editable, takes no drop of its own accord: links and files it does take, as
+// the input field does
+static gboolean draggingOverText(GtkWidget *widget, GdkDragContext *context, gint, gint, guint time, gpointer)
+{
+    if (p_gtk_drag_dest_find_target(widget, context, nullptr) != p_gdk_atom_intern("text/uri-list", FALSE))
+        return FALSE;
+    p_gdk_drag_status(context, GDK_ACTION_COPY, time);
+    return TRUE;
+}
+
+static gboolean droppingOnText(GtkWidget *widget, GdkDragContext *context, gint, gint, guint time, gpointer)
+{
+    GdkAtom target = p_gdk_atom_intern("text/uri-list", FALSE);
+    if (p_gtk_drag_dest_find_target(widget, context, nullptr) != target)
+        return FALSE;
+    p_gtk_drag_get_data(widget, context, target, time);
+    return TRUE;
+}
+
+static const char TEXT_DROP_KEY[] = "tdlib-purple-text-drop";
+
+struct TextDrop {
+    gulong motion;
+    gulong drop;
+};
+
+static void deleteTextDrop(gpointer data)
+{
+    delete static_cast<TextDrop *>(data);
+}
+
+static void watchConversation(PidginConversation *gtkconv)
+{
+    PurpleConversation *conv = gtkconv ? gtkconv->active_conv : nullptr;
+    if (!conv || !gtkconv->entry || !gtkconv->imhtml || !g_pasteHook || !p_gtk_clipboard_wait_for_uris ||
+        strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId))
+        return;
+    watchSignal(gtkconv->entry, g_pasteSignal, "paste-clipboard");
+    if (!g_dropHook)
+        return;
+    watchSignal(gtkconv->entry, g_dropSignal, "drag-data-received");
+    watchSignal(gtkconv->imhtml, g_dropSignal, "drag-data-received");
+    if (!p_g_object_get_data(reinterpret_cast<GObject *>(gtkconv->imhtml), TEXT_DROP_KEY)) {
+        TextDrop *drop = new TextDrop;
+        drop->motion   = p_g_signal_connect_data(gtkconv->imhtml, "drag-motion", G_CALLBACK(draggingOverText),
+                                                 nullptr, nullptr, GConnectFlags(0));
+        drop->drop     = p_g_signal_connect_data(gtkconv->imhtml, "drag-drop", G_CALLBACK(droppingOnText),
+                                                 nullptr, nullptr, GConnectFlags(0));
+        p_g_object_set_data_full(reinterpret_cast<GObject *>(gtkconv->imhtml), TEXT_DROP_KEY, drop,
+                                 deleteTextDrop);
+    }
+}
+
+static void unwatchConversation(PurpleConversation *conv)
+{
+    GtkWidget *entry  = getEntry(conv);
+    GtkWidget *imhtml = entry ? reinterpret_cast<GtkWidget *>(getIMHtml(conv)) : nullptr;
+    if (!entry)
+        return;
+    unwatchSignal(entry, "paste-clipboard");
+    unwatchSignal(entry, "drag-data-received");
+    unwatchSignal(imhtml, "drag-data-received");
+    TextDrop *drop = static_cast<TextDrop *>(p_g_object_get_data(reinterpret_cast<GObject *>(imhtml), TEXT_DROP_KEY));
+    if (drop) {
+        p_g_signal_handler_disconnect(imhtml, drop->motion);
+        p_g_signal_handler_disconnect(imhtml, drop->drop);
+        p_g_object_set_data_full(reinterpret_cast<GObject *>(imhtml), TEXT_DROP_KEY, nullptr, nullptr);
+    }
+}
+
+static void connectPaste(gpointer plugin)
+{
+    if (!LOOK_UP(gtk_imhtml_get_type) || !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
+        !LOOK_UP(g_signal_remove_emission_hook) || !LOOK_UP(g_value_get_object) ||
+        !LOOK_UP(gtk_widget_get_clipboard) || !LOOK_UP(gtk_clipboard_wait_is_image_available) ||
+        !LOOK_UP(gtk_clipboard_wait_for_image) || !LOOK_UP(gdk_pixbuf_save_to_buffer) ||
+        !LOOK_UP(g_object_unref) ||
+        !LOOK_UP(gtk_text_buffer_get_insert))
+    {
+        purple_debug_warning(config::pluginId, "Cannot paste pictures: some of GTK is not found\n");
+        return;
+    }
+    g_pasteSignal = p_g_signal_lookup("paste-clipboard", p_gtk_imhtml_get_type());
+    if (g_pasteSignal)
+        g_pasteHook = p_g_signal_add_emission_hook(g_pasteSignal, 0, pastingClipboard, nullptr, nullptr);
+    if (!g_pasteHook || !LOOK_UP(gtk_clipboard_wait_for_uris) || !LOOK_UP(g_signal_handler_find) ||
+        !LOOK_UP(g_signal_handler_block) || !LOOK_UP(g_signal_handler_unblock) ||
+        !LOOK_UP(g_signal_stop_emission_by_name) || !LOOK_UP(gtk_text_buffer_insert_at_cursor))
+    {
+        p_gtk_clipboard_wait_for_uris = nullptr;
+        purple_debug_warning(config::pluginId, "Cannot paste files: some of GTK is not found\n");
+        return;
+    }
+    if (LOOK_UP(gtk_widget_get_type) && LOOK_UP(g_value_get_boxed) && LOOK_UP(g_value_get_uint) &&
+        LOOK_UP(gdk_atom_intern) && LOOK_UP(gtk_drag_finish) && LOOK_UP(gtk_drag_dest_find_target) &&
+        LOOK_UP(gdk_drag_status) && LOOK_UP(gtk_drag_get_data) && LOOK_UP(gdk_pixbuf_loader_new) &&
+        LOOK_UP(gdk_pixbuf_loader_write) && LOOK_UP(gdk_pixbuf_loader_close) &&
+        LOOK_UP(gdk_pixbuf_loader_get_pixbuf))
+    {
+        g_dropSignal = p_g_signal_lookup("drag-data-received", p_gtk_widget_get_type());
+        if (g_dropSignal)
+            g_dropHook = p_g_signal_add_emission_hook(g_dropSignal, 0, droppingData, nullptr, nullptr);
+    }
+    if (!g_dropHook)
+        purple_debug_warning(config::pluginId, "Cannot take drops: some of GTK is not found\n");
+    if (!LOOK_UP(gtk_text_buffer_create_child_anchor) || !LOOK_UP(gtk_text_view_add_child_at_anchor) ||
+        !LOOK_UP(gtk_text_iter_get_child_anchor) || !LOOK_UP(gtk_image_new_from_icon_name) ||
+        !LOOK_UP(gtk_image_set_from_pixbuf) || !LOOK_UP(gdk_pixbuf_new_from_file_at_scale) ||
+        !LOOK_UP(g_object_ref) || !LOOK_UP(gtk_widget_set_tooltip_text) || !LOOK_UP(gtk_widget_show) ||
+        !LOOK_UP(gtk_text_buffer_place_cursor) || !LOOK_UP(gtk_text_buffer_delete) ||
+        !LOOK_UP(gtk_text_iter_forward_char) || !LOOK_UP(gtk_text_iter_backward_char) ||
+        !LOOK_UP(gtk_text_buffer_get_iter_at_child_anchor) || !LOOK_UP(gtk_text_child_anchor_get_deleted) ||
+        !LOOK_UP(gtk_text_child_anchor_get_widgets) || !LOOK_UP(gtk_text_view_get_buffer) ||
+        !LOOK_UP(gtk_widget_get_parent) || !LOOK_UP(gtk_event_box_new) ||
+        !LOOK_UP(gtk_event_box_set_visible_window) || !LOOK_UP(gtk_container_add) || !LOOK_UP(gtk_menu_new) ||
+        !LOOK_UP(gtk_menu_popup) || !LOOK_UP(gtk_widget_show_all) || !LOOK_UP(gtk_widget_destroy) ||
+        !LOOK_UP(g_object_set_data) || !LOOK_UP(gtk_text_buffer_get_slice) || !LOOK_UP(g_signal_connect_data) ||
+        !(g_backspaceSignal = p_g_signal_lookup("backspace", p_gtk_imhtml_get_type())) ||
+        !(g_backspaceHook = p_g_signal_add_emission_hook(g_backspaceSignal, 0, backspacing, nullptr, nullptr)))
+    {
+        p_gtk_text_buffer_create_child_anchor = nullptr;
+        purple_debug_warning(config::pluginId, "Cannot show thumbnails of pasted files: some of GTK is not found\n");
+    }
+    // Sized by the font if they can be
+    if (!LOOK_UP(pango_layout_get_pixel_size) || !LOOK_UP(gtk_widget_create_pango_layout))
+        p_gtk_widget_create_pango_layout = nullptr;
+    purple_signal_connect(p_pidgin_conversations_get_handle(), "conversation-displayed", plugin,
+                          PURPLE_CALLBACK(watchConversation), NULL);
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
+        if (getIMHtml(conv))
+            watchConversation(PIDGIN_CONVERSATION(conv));
+    }
+}
+
+static void disconnectPaste()
+{
+    if (g_dropHook)
+        p_g_signal_remove_emission_hook(g_dropSignal, g_dropHook);
+    if (g_backspaceHook)
+        p_g_signal_remove_emission_hook(g_backspaceSignal, g_backspaceHook);
+    g_backspaceHook = 0;
+    if (g_pasteHook) {
+        p_g_signal_remove_emission_hook(g_pasteSignal, g_pasteHook);
+        for (GList *item = purple_get_conversations(); item; item = item->next)
+            unwatchConversation(static_cast<PurpleConversation *>(item->data));
+    }
+    g_pasteHook = 0;
+    g_dropHook  = 0;
+}
+
+static void setEntryText(GtkWidget *entry, const char *html)
+{
+    p_gtk_imhtml_delete(reinterpret_cast<GtkIMHtml *>(entry), NULL, NULL);
+    if (html && *html)
+        p_gtk_imhtml_append_text_with_images(reinterpret_cast<GtkIMHtml *>(entry), html, GtkIMHtmlOptions(0), NULL);
+    thumbnailPlaceholders(entry);
+}
+
+// A quarter of the way to amber from the theme's own background, light or dark
+static void tintEntry(GtkWidget *entry, bool tint)
+{
+    if (!tint) {
+        p_gtk_widget_modify_base(entry, GTK_STATE_NORMAL, NULL);
+        return;
+    }
+    GdkColor base   = entry->style->base[GTK_STATE_NORMAL];
+    GdkColor tinted = {0, guint16(base.red / 4 * 3 + 0xFFFF / 4), guint16(base.green / 4 * 3 + 0xC0C0 / 4),
+                       guint16(base.blue / 4 * 3)};
+    p_gtk_widget_modify_base(entry, GTK_STATE_NORMAL, &tinted);
+}
+
+// Lines about an edit, each between its own marks wherever other lines go meanwhile: what is
+// inserted at either of them, such as the line of reactions of the message before it or a message
+// coming after it, stays outside. One tells how to go about the edit while it lasts; the other,
+// that it was given up, until the next one.
+static const char EDIT_NOTICE[]  = "tdlib-edit-notice";
+
+static void removeEditNotice(PurpleConversation *conv, const char *name)
+{
+    GtkIMHtml     *imhtml = getIMHtml(conv);
+    GtkTextBuffer *buffer = imhtml ? imhtml->text_buffer : nullptr;
+    GtkTextMark   *start  = buffer ? p_gtk_text_buffer_get_mark(buffer, (name + std::string("-start")).c_str()) : nullptr;
+    GtkTextMark   *end    = buffer ? p_gtk_text_buffer_get_mark(buffer, (name + std::string("-end")).c_str()) : nullptr;
+    if (start && end) {
+        GtkTextIter from, to;
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &from, start);
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &to, end);
+        if (p_gtk_text_iter_compare(&from, &to) < 0)
+            p_gtk_imhtml_delete(imhtml, &from, &to);
+    }
+    for (GtkTextMark *mark: {start, end})
+        if (mark)
+            p_gtk_text_buffer_delete_mark(buffer, mark);
+}
+
+// At the end of the tab, in grey, with the line break before it; not logged
+static void showEditNotice(PurpleConversation *conv, const std::string &html, const char *name = EDIT_NOTICE)
+{
+    GtkIMHtml     *imhtml = getIMHtml(conv);
+    if (!imhtml)
+        return;
+    removeEditNotice(conv, name);
+    GtkTextBuffer *buffer = imhtml->text_buffer;
+    GtkTextIter    where;
+    p_gtk_text_buffer_get_end_iter(buffer, &where);
+    gint        offset = p_gtk_text_iter_get_offset(&where);
+    std::string line   = (offset ? "<br>" : "") + std::string("<font color=\"#777777\">") + html + "</font>";
+    p_gtk_imhtml_insert_html_at_iter(imhtml, line.c_str(), GtkIMHtmlOptions(0), &where);
+    // Set once it is in, as the start's right gravity would have it go past the line
+    p_gtk_text_buffer_get_iter_at_offset(buffer, &where, offset);
+    p_gtk_text_buffer_create_mark(buffer, (name + std::string("-start")).c_str(), &where, FALSE);
+    p_gtk_text_buffer_get_end_iter(buffer, &where);
+    p_gtk_text_buffer_create_mark(buffer, (name + std::string("-end")).c_str(), &where, TRUE);
+}
+
+void showEditOutcome(PurpleConversation *conv, const std::string &html)
+{
+    showEditNotice(conv, html, EDIT_OUTCOME);
+}
+
+static gboolean entryKeyPressed(GtkWidget *entry, GdkEventKey *event, gpointer conv)
+{
+    auto *state = static_cast<EntryEditState *>(purple_conversation_get_data(static_cast<PurpleConversation *>(conv),
+                                                                            ENTRY_EDIT_KEY));
+    if (!state || (event->keyval != GDK_Escape))
+        return FALSE;
+    std::function<void()> cancelled = std::move(state->cancelled);
+    endEntryEdit(static_cast<PurpleConversation *>(conv), nullptr);
+    if (cancelled)
+        cancelled();
+    return TRUE;
+}
+
+bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::string &text,
+                    const std::string &notice, std::function<void()> cancelled)
+{
+    GtkWidget *entry = getEntry(conv);
+    if (!entry)
+        return false;
+    auto *state = static_cast<EntryEditState *>(purple_conversation_get_data(conv, ENTRY_EDIT_KEY));
+    // Another edit begun meanwhile keeps the draft from before the first
+    if (!state) {
+        state = new EntryEditState;
+        gchar *draft = p_gtk_imhtml_get_markup(reinterpret_cast<GtkIMHtml *>(entry));
+        state->draft = draft ? draft : "";
+        g_free(draft);
+        state->keyHandler = p_g_signal_connect_data(entry, "key-press-event", G_CALLBACK(entryKeyPressed), conv,
+                                                    NULL, GConnectFlags(0));
+        purple_conversation_set_data(conv, ENTRY_EDIT_KEY, state);
+    }
+    state->edit      = edit;
+    state->cancelled = std::move(cancelled);
+    removeEditNotice(conv, EDIT_OUTCOME);
+    showEditNotice(conv, notice);
+
+    // Markup already, but for its line breaks
+    std::string html;
+    for (char c: text)
+        if (c == '\n')
+            html += "<br>";
+        else
+            html += c;
+    setEntryText(entry, html.c_str());
+    tintEntry(entry, true);
+    p_gtk_widget_grab_focus(entry);
+    return true;
+}
+
+namespace {
+struct DraftToRestore {
+    PurpleConversation *conv;
+    std::string         draft;
+};
+}
+
+// Once Pidgin has emptied the field after sending, or after a command
+static gboolean restoreDraft(gpointer data)
+{
+    std::unique_ptr<DraftToRestore> restore(static_cast<DraftToRestore *>(data));
+    GtkWidget *entry = g_list_find(purple_get_conversations(), restore->conv) ? getEntry(restore->conv) : nullptr;
+    // Emptied too, if there was none, after Esc
+    if (entry)
+        setEntryText(entry, restore->draft.c_str());
+    return FALSE;
+}
+
+bool isEntryEditing(PurpleConversation *conv, MessageId messageId)
+{
+    auto *state = conv ? static_cast<EntryEditState *>(purple_conversation_get_data(conv, ENTRY_EDIT_KEY)) : nullptr;
+    return state && (state->edit.messageId == messageId);
+}
+
+bool endEntryEdit(PurpleConversation *conv, EntryEdit *edit)
+{
+    auto *state = conv ? static_cast<EntryEditState *>(purple_conversation_get_data(conv, ENTRY_EDIT_KEY)) : nullptr;
+    if (!state)
+        return false;
+    if (edit)
+        *edit = state->edit;
+    purple_conversation_set_data(conv, ENTRY_EDIT_KEY, NULL);
+    removeEditNotice(conv, EDIT_NOTICE);
+    GtkWidget *entry = getEntry(conv);
+    if (entry) {
+        p_g_signal_handler_disconnect(entry, state->keyHandler);
+        tintEntry(entry, false);
+        g_idle_add(restoreDraft, new DraftToRestore{conv, std::move(state->draft)});
+    }
+    delete state;
+    return true;
+}
+
+bool canReplaceMessage(PurpleConversation *conv, MessageId messageId)
+{
+    GtkTextBuffer *buffer = getTextBuffer(conv);
+    GtkTextIter    body, end;
+    return buffer && getBody(buffer, messageId, body, end);
+}
+
+bool canMarkChanges(PurpleConversation *conv, MessageId messageId, bool &marked)
+{
+    GtkTextBuffer *buffer = getTextBuffer(conv);
+    GtkTextIter    body, end;
+    EditedText    *edited = (buffer && getBody(buffer, messageId, body, end)) ? getEditedText(buffer, messageId)
+                                                                            : nullptr;
+    if (edited)
+        marked = edited->marked;
+    return edited;
+}
+
+void setChangesMarked(PurpleConversation *conv, MessageId messageId, bool marked)
+{
+    GtkIMHtml     *imhtml = getIMHtml(conv);
+    GtkTextBuffer *buffer = imhtml ? imhtml->text_buffer : nullptr;
+    GtkTextIter    body, end;
+    EditedText    *edited = (buffer && getBody(buffer, messageId, body, end)) ? getEditedText(buffer, messageId)
+                                                                            : nullptr;
+    if (!edited)
+        return;
+    edited->marked = marked;
+    p_gtk_imhtml_delete(imhtml, &body, &end);
+    GtkTextMark *endMark = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::End).c_str());
+    insertAtMark(imhtml, endMark, (formatEditedText(imhtml, *edited) + edited->editNote).c_str());
+}
+
+void strikeOutMessage(PurpleConversation *conv, MessageId messageId)
+{
+    GtkTextBuffer *buffer = getTextBuffer(conv);
+    GtkTextIter    body, end;
+    if (!buffer || !getBody(buffer, messageId, body, end))
+        return;
+    // GtkIMHtml's own, as for <s>: a tag of ours would need a name, as GtkIMHtml compares
+    // the names of all tags with strncmp() when it draws, and crashes on one without
+    p_gtk_text_buffer_apply_tag_by_name(buffer, "STRIKE", &body, &end);
+}
+
+void removeMessage(PurpleConversation *conv, MessageId messageId)
+{
+    GtkIMHtml     *imhtml = getIMHtml(conv);
+    GtkTextBuffer *buffer = imhtml ? imhtml->text_buffer : nullptr;
+    GtkTextIter    body, end;
+    GtkTextMark   *start  = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Start).c_str()) : nullptr;
+    if (!start || !getBody(buffer, messageId, body, end))
+        return;
+    GtkTextIter  from, to;
+    GtkTextMark *reactionsEnd = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Reactions).c_str());
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &from, start);
+    to = end;
+    if (reactionsEnd) {
+        GtkTextIter areaEnd;
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &areaEnd, reactionsEnd);
+        if (p_gtk_text_iter_compare(&to, &areaEnd) < 0)
+            to = areaEnd;
+    }
+    // With the line break before it, which Pidgin put there for it
+    if (p_gtk_text_iter_backward_char(&from) && (p_gtk_text_iter_get_char(&from) != '\n'))
+        p_gtk_text_iter_forward_char(&from);
+    p_gtk_imhtml_delete(imhtml, &from, &to);
+    for (MarkKind kind: {MarkKind::Start, MarkKind::Body, MarkKind::End, MarkKind::Reactions}) {
+        GtkTextMark *mark = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, kind).c_str());
+        if (mark)
+            p_gtk_text_buffer_delete_mark(buffer, mark);
     }
 }
 
@@ -230,7 +1647,7 @@ MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId)
     return marks;
 }
 
-void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId, const std::string &trailer)
+void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId)
 {
     if (!g_pidginUi)
         return;
@@ -241,16 +1658,15 @@ void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId
         GtkTextBuffer      *buffer = (purple_conversation_get_account(conv) == account) ? getTextBuffer(conv) : nullptr;
         if (!buffer)
             continue;
-        for (bool start: {true, false}) {
-            GtkTextMark *mark = p_gtk_text_buffer_get_mark(buffer, getMarkName(oldId, start).c_str());
+        for (MarkKind kind: {MarkKind::Start, MarkKind::Body, MarkKind::End}) {
+            GtkTextMark *mark = p_gtk_text_buffer_get_mark(buffer, getMarkName(oldId, kind).c_str());
             if (mark) {
                 GtkTextIter where;
                 p_gtk_text_buffer_get_iter_at_mark(buffer, &where, mark);
-                setMark(buffer, getMarkName(newId, start), where);
+                setMark(buffer, getMarkName(newId, kind), where);
                 p_gtk_text_buffer_delete_mark(buffer, mark);
             }
         }
-        appendTrailer(conv, newId, trailer);
     }
 }
 
@@ -281,47 +1697,439 @@ static void deleteAction(gpointer data, GClosure *closure)
     delete static_cast<std::function<void()> *>(data);
 }
 
-static GtkWidget *makeMenu(const std::vector<MenuItem> &items)
+// In a grid of the given number of columns, if any, where an item with a submenu takes a row
+static GtkWidget *makeMenu(const std::vector<MenuItem> &items, unsigned columns);
+
+static void addMenuItems(GtkWidget *menu, const std::vector<MenuItem> &items, unsigned columns)
 {
-    GtkWidget *menu = p_gtk_menu_new();
+    unsigned column = 0, row = 0;
     for (const MenuItem &item: items) {
         GtkWidget *widget = item.checkable ? p_gtk_check_menu_item_new_with_label(item.label.c_str())
                                            : p_gtk_menu_item_new_with_label(item.label.c_str());
         if (item.checkable)
             p_gtk_check_menu_item_set_active(reinterpret_cast<GtkCheckMenuItem *>(widget), item.checked);
+        if (item.dimmed) {
+            gchar *markup = g_markup_printf_escaped("<span alpha=\"40%%\">%s</span>", item.label.c_str());
+            p_gtk_label_set_markup(reinterpret_cast<GtkLabel *>(p_gtk_bin_get_child(reinterpret_cast<GtkBin *>(widget))),
+                                   markup);
+            g_free(markup);
+        }
+        if (!item.tooltip.empty())
+            p_gtk_widget_set_tooltip_text(widget, item.tooltip.c_str());
         if (!item.submenu.empty())
-            p_gtk_menu_item_set_submenu(reinterpret_cast<GtkMenuItem *>(widget), makeMenu(item.submenu));
+            p_gtk_menu_item_set_submenu(reinterpret_cast<GtkMenuItem *>(widget),
+                                        makeMenu(item.submenu, item.columns));
         else if (item.action)
             p_g_signal_connect_data(widget, "activate", G_CALLBACK(itemActivated),
                                     new std::function<void()>(item.action), deleteAction, GConnectFlags(0));
         else
             p_gtk_widget_set_sensitive(widget, FALSE);
-        p_gtk_menu_shell_append(reinterpret_cast<GtkMenuShell *>(menu), widget);
+
+        if (!columns)
+            p_gtk_menu_shell_append(reinterpret_cast<GtkMenuShell *>(menu), widget);
+        else if (!item.submenu.empty()) {
+            if (column) {
+                column = 0;
+                row++;
+            }
+            p_gtk_menu_attach(reinterpret_cast<GtkMenu *>(menu), widget, 0, columns, row, row + 1);
+            row++;
+        } else {
+            p_gtk_menu_attach(reinterpret_cast<GtkMenu *>(menu), widget, column, column + 1, row, row + 1);
+            if (++column == columns) {
+                column = 0;
+                row++;
+            }
+        }
     }
+}
+
+static GtkWidget *makeMenu(const std::vector<MenuItem> &items, unsigned columns)
+{
+    GtkWidget *menu = p_gtk_menu_new();
+    addMenuItems(menu, items, columns);
     return menu;
 }
 
-static gboolean destroyMenu(gpointer menu)
+struct OpenMenu {
+    GtkWidget *menu        = nullptr; // none once GTK destroys it
+    GtkWidget *separator   = nullptr;
+    GtkWidget *placeholder = nullptr;
+    gulong     destroyHandler = 0;
+    ~OpenMenu()
+    {
+        if (menu)
+            p_g_signal_handler_disconnect(menu, destroyHandler);
+    }
+};
+
+static MessagePopupHandler g_messagePopupHandler = nullptr;
+static guint               g_popupSignal = 0;
+static gulong              g_popupHook   = 0;
+
+void setMessagePopupHandler(MessagePopupHandler handler)
 {
-    p_gtk_widget_destroy(static_cast<GtkWidget *>(menu));
-    return FALSE;
+    g_messagePopupHandler = handler;
 }
 
-// The chosen item is activated after the menu goes away
-static void menuDeactivated(GtkWidget *menu, gpointer data)
+static void openMenuDestroyed(GtkWidget *, gpointer data)
 {
-    g_idle_add(destroyMenu, menu);
+    std::shared_ptr<OpenMenu> menu = static_cast<std::weak_ptr<OpenMenu> *>(data)->lock();
+    if (menu)
+        menu->menu = nullptr;
 }
 
-void popUpMenu(const std::vector<MenuItem> &items)
+static void deleteOpenMenuRef(gpointer data, GClosure *)
 {
-    if (!g_pidginUi || items.empty())
+    delete static_cast<std::weak_ptr<OpenMenu> *>(data);
+}
+
+void fillOpenMenu(const OpenMenuRef &menu, const std::vector<MenuItem> &items)
+{
+    if (!menu || !menu->menu || !menu->placeholder)
         return;
-    GtkWidget *menu = makeMenu(items);
-    p_g_signal_connect_data(menu, "deactivate", G_CALLBACK(menuDeactivated), NULL, NULL, GConnectFlags(0));
+    p_gtk_widget_destroy(menu->placeholder);
+    menu->placeholder = nullptr;
+    if (items.empty())
+        p_gtk_widget_destroy(menu->separator);
+    else {
+        addMenuItems(menu->menu, items, 0);
+        p_gtk_widget_show_all(menu->menu);
+    }
+    menu->separator = nullptr;
+}
+
+// The message whose text, header or reactions are there, if any: the nearest start of a message
+// before it, if that message has not ended before it
+static MessageId findMessageAt(GtkTextBuffer *buffer, const GtkTextIter &where)
+{
+    GtkTextIter iter = where;
+    do {
+        MessageId messageId;
+        GSList   *marks = p_gtk_text_iter_get_marks(&iter);
+        for (GSList *item = marks; item && !messageId.valid(); item = item->next) {
+            const char *name = p_gtk_text_mark_get_name(static_cast<GtkTextMark *>(item->data));
+            if (name && g_str_has_prefix(name, START_MARK_PREFIX))
+                messageId = MessageId::fromString(name + strlen(START_MARK_PREFIX));
+        }
+        g_slist_free(marks);
+        if (!messageId.valid())
+            continue;
+        for (MarkKind kind: {MarkKind::Reactions, MarkKind::End}) {
+            GtkTextMark *end = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, kind).c_str());
+            GtkTextIter  endIter;
+            if (end) {
+                p_gtk_text_buffer_get_iter_at_mark(buffer, &endIter, end);
+                return (p_gtk_text_iter_compare(&where, &endIter) < 0) ? messageId : MessageId();
+            }
+        }
+        return MessageId();
+    } while (p_gtk_text_iter_backward_char(&iter));
+    return MessageId();
+}
+
+static PurpleConversation *findTabConversation(gpointer imhtml)
+{
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
+        if (!strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId) &&
+            (getIMHtml(conv) == imhtml))
+            return conv;
+    }
+    return nullptr;
+}
+
+// The input field's text, images as U+FFFC, so that its offsets are the buffer's
+static std::string getEntrySlice(GtkTextBuffer *buffer)
+{
+    GtkTextIter start, end;
+    p_gtk_text_buffer_get_iter_at_offset(buffer, &start, 0);
+    p_gtk_text_buffer_get_end_iter(buffer, &end);
+    gchar      *slice = p_gtk_text_buffer_get_slice(buffer, &start, &end, TRUE);
+    std::string text  = slice ? slice : "";
+    g_free(slice);
+    return text;
+}
+
+// The bracketed text, on one line, around the character at the offset, and where it starts
+static bool findBracketed(const std::string &text, gint offset, std::string &bracketed, gint &start)
+{
+    if ((offset < 0) || (offset >= g_utf8_strlen(text.c_str(), -1)))
+        return false;
+    const char *at    = g_utf8_offset_to_pointer(text.c_str(), offset);
+    const char *open  = at;
+    while (*open != '[') {
+        if ((open == text.c_str()) || (*open == '\n') || ((*open == ']') && (open != at)))
+            return false;
+        open = g_utf8_prev_char(open);
+    }
+    const char *close = (open == at) ? at + 1 : at;
+    while (*close != ']') {
+        if (!*close || (*close == '\n') || (*close == '['))
+            return false;
+        close++;
+    }
+    bracketed.assign(open, close + 1);
+    start = g_utf8_pointer_to_offset(text.c_str(), open);
+    return true;
+}
+
+// Whatever is at the offset now, should it still be the placeholder, takes its place
+static void replacePlaceholder(GtkWidget *entry, gint start, const std::string &placeholder,
+                               const std::string &replacement)
+{
+    GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(entry)->text_buffer;
+    std::string    text   = getEntrySlice(buffer);
+    gint           length = g_utf8_strlen(placeholder.c_str(), -1);
+    const char    *at     = g_utf8_offset_to_pointer(text.c_str(), start);
+    if ((start + length > g_utf8_strlen(text.c_str(), -1)) || strncmp(at, placeholder.c_str(), placeholder.size()))
+        return;
+    // Taken out, with the space after it, which pasting put there
+    if (replacement.empty() && (at[placeholder.size()] == ' '))
+        length++;
+    GtkTextIter from, to;
+    p_gtk_text_buffer_get_iter_at_offset(buffer, &from, start);
+    p_gtk_text_buffer_get_iter_at_offset(buffer, &to, start + length);
+    p_gtk_imhtml_delete(reinterpret_cast<GtkIMHtml *>(entry), &from, &to);
+    if (!replacement.empty()) {
+        p_gtk_text_buffer_get_iter_at_offset(buffer, &from, start);
+        p_gtk_text_buffer_insert(buffer, &from, replacement.c_str(), -1);
+    }
+}
+
+static void addPlaceholderMenu(PurpleConversation *conv, GtkWidget *entry, GtkWidget *menu, const GtkTextIter &where)
+{
+    std::string placeholder;
+    gint        start;
+    if (!g_placeholderHandler || !p_gtk_text_buffer_get_slice || !p_gtk_text_buffer_insert ||
+        !findBracketed(getEntrySlice(reinterpret_cast<GtkIMHtml *>(entry)->text_buffer),
+                       p_gtk_text_iter_get_offset(&where), placeholder, start))
+        return;
+    PastedForms forms;
+    if (!g_placeholderHandler(conv, placeholder, forms))
+        return;
+
+    std::vector<MenuItem> items;
+    if (!forms.other.empty()) {
+        MenuItem item;
+        item.label  = forms.otherLabel;
+        std::string other = forms.other;
+        item.action = [entry, start, placeholder, other]() { replacePlaceholder(entry, start, placeholder, other); };
+        items.push_back(std::move(item));
+    }
+    MenuItem remove;
+    remove.label  = forms.removeLabel;
+    remove.action = [entry, start, placeholder]() { replacePlaceholder(entry, start, placeholder, ""); };
+    items.push_back(std::move(remove));
+
+    GtkWidget *separator = p_gtk_separator_menu_item_new();
+    p_gtk_menu_shell_append(reinterpret_cast<GtkMenuShell *>(menu), separator);
+    addMenuItems(menu, items, 0);
     p_gtk_widget_show_all(menu);
-    // Where the pointer is, though no button is pressed by now
-    p_gtk_menu_popup(reinterpret_cast<GtkMenu *>(menu), NULL, NULL, NULL, NULL, 0, GDK_CURRENT_TIME);
+}
+
+// GTK builds the menu of a tab's text anew each time, before emitting "populate-popup" for others to
+// add to it. The message is the one under the pointer, also when the menu is opened from the
+// keyboard; none if the pointer is elsewhere.
+static gboolean populatingPopup(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
+{
+    GtkWidget          *view = (paramCount > 1) ? static_cast<GtkWidget *>(p_g_value_get_object(&params[0])) : nullptr;
+    GtkWidget          *menu = view ? static_cast<GtkWidget *>(p_g_value_get_object(&params[1])) : nullptr;
+    PurpleConversation *conv = menu ? findTabConversation(view) : nullptr;
+    PurpleConversation *entryConv = (menu && !conv) ? findEntryConversation(view) : nullptr;
+    if ((!conv || !g_messagePopupHandler) && !entryConv)
+        return TRUE;
+    gint x, y;
+    p_gtk_widget_get_pointer(view, &x, &y);
+    if ((x < 0) || (y < 0) || (x >= view->allocation.width) || (y >= view->allocation.height))
+        return TRUE;
+    GtkTextView *textView = reinterpret_cast<GtkTextView *>(view);
+    GtkTextIter  where;
+    p_gtk_text_view_window_to_buffer_coords(textView, GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
+    p_gtk_text_view_get_iter_at_location(textView, &where, x, y);
+    if (entryConv) {
+        addPlaceholderMenu(entryConv, view, menu, where);
+        return TRUE;
+    }
+    MessageId messageId = findMessageAt(getTextBuffer(conv), where);
+    if (!messageId.valid())
+        return TRUE;
+
+    OpenMenuRef openMenu = std::make_shared<OpenMenu>();
+    openMenu->menu        = menu;
+    openMenu->separator   = p_gtk_separator_menu_item_new();
+    openMenu->placeholder = p_gtk_menu_item_new_with_label("\xe2\x80\xa6");
+    p_gtk_widget_set_sensitive(openMenu->placeholder, FALSE);
+    for (GtkWidget *item: {openMenu->separator, openMenu->placeholder}) {
+        p_gtk_menu_shell_append(reinterpret_cast<GtkMenuShell *>(menu), item);
+        p_gtk_widget_show(item);
+    }
+    openMenu->destroyHandler = p_g_signal_connect_data(menu, "destroy", G_CALLBACK(openMenuDestroyed),
+                                                       new std::weak_ptr<OpenMenu>(openMenu), deleteOpenMenuRef,
+                                                       GConnectFlags(0));
+    purple_debug_misc(config::pluginId, "Menu opened on message %" G_GINT64_FORMAT "\n", messageId.value());
+    if (!g_messagePopupHandler(conv, messageId, openMenu))
+        fillOpenMenu(openMenu, {});
+    return TRUE;
+}
+
+MessageId findFirstMessage(PurpleConversation *conv)
+{
+    GtkTextBuffer *buffer = getTextBuffer(conv);
+    GtkTextIter    iter;
+    if (!buffer)
+        return MessageId();
+    p_gtk_text_buffer_get_iter_at_offset(buffer, &iter, 0);
+    do {
+        GSList   *marks = p_gtk_text_iter_get_marks(&iter);
+        MessageId messageId;
+        for (GSList *item = marks; item && !messageId.valid(); item = item->next) {
+            const char *name = p_gtk_text_mark_get_name(static_cast<GtkTextMark *>(item->data));
+            if (name && g_str_has_prefix(name, START_MARK_PREFIX))
+                messageId = MessageId::fromString(name + strlen(START_MARK_PREFIX));
+        }
+        g_slist_free(marks);
+        if (messageId.valid())
+            return messageId;
+    } while (p_gtk_text_iter_forward_char(&iter));
+    return MessageId();
+}
+
+namespace {
+struct ScrollToMessage {
+    PurpleConversation *conv;
+    MessageId           messageId;
+};
+}
+
+static gboolean scrollToMessageTop(gpointer data)
+{
+    std::unique_ptr<ScrollToMessage> scroll(static_cast<ScrollToMessage *>(data));
+    GtkIMHtml     *imhtml = g_list_find(purple_get_conversations(), scroll->conv) ? getIMHtml(scroll->conv) : nullptr;
+    GtkTextBuffer *buffer = imhtml ? imhtml->text_buffer : nullptr;
+    GtkTextMark   *start  = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(scroll->messageId, true).c_str())
+                                   : nullptr;
+    if (start)
+        p_gtk_text_view_scroll_to_mark(reinterpret_cast<GtkTextView *>(imhtml), start, 0.0, TRUE, 0.0, 0.0);
+    return G_SOURCE_REMOVE;
+}
+
+void scrollToMessageLater(PurpleConversation *conv, MessageId messageId)
+{
+    // GtkIMHtml scrolls to the end when idle, smoothly for up to 0.4 s
+    enum { AFTER_SCROLLING_MS = 500 };
+    if (getIMHtml(conv))
+        g_timeout_add_full(G_PRIORITY_LOW, AFTER_SCROLLING_MS, scrollToMessageTop,
+                           new ScrollToMessage{conv, messageId}, NULL);
+}
+
+// A tab's text scrolled to its top: not again until it is scrolled down from there, as filling it
+// anew starts at the top too
+static TopReachedHandler g_topReachedHandler = nullptr;
+static guint             g_scrollSignal = 0;
+static gulong            g_scrollHook   = 0;
+static guint             g_wheelSignal  = 0;
+static gulong            g_wheelHook    = 0;
+static const char        AT_TOP_KEY[]   = "tdlib-purple-at-top";
+
+void setTopReachedHandler(TopReachedHandler handler)
+{
+    g_topReachedHandler = handler;
+}
+
+static gboolean scrolled(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
+{
+    GtkAdjustment *adjustment = paramCount ? static_cast<GtkAdjustment *>(p_g_value_get_object(&params[0])) : nullptr;
+    if (!adjustment || !g_topReachedHandler)
+        return TRUE;
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv   = static_cast<PurpleConversation *>(item->data);
+        GtkIMHtml          *imhtml = strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)),
+                                            config::pluginId) ? nullptr : getIMHtml(conv);
+        if (!imhtml || (reinterpret_cast<GtkTextView *>(imhtml)->vadjustment != adjustment))
+            continue;
+        bool atTop  = (adjustment->value <= adjustment->lower) && (adjustment->upper > adjustment->page_size);
+        bool wasTop = purple_conversation_get_data(conv, AT_TOP_KEY) != nullptr;
+        purple_conversation_set_data(conv, AT_TOP_KEY, atTop ? conv : nullptr);
+        if (atTop && !wasTop)
+            g_topReachedHandler(conv);
+        break;
+    }
+    return TRUE;
+}
+
+// The wheel turned up at the top, or in a tab with no more than fits, where nothing scrolls
+static gboolean wheelTurned(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
+{
+    GtkWidget      *widget = (paramCount > 1) ? static_cast<GtkWidget *>(p_g_value_get_object(&params[0])) : nullptr;
+    GdkEventScroll *event  = widget ? static_cast<GdkEventScroll *>(p_g_value_get_boxed(&params[1])) : nullptr;
+    if (!event || (event->direction != GDK_SCROLL_UP) || !g_topReachedHandler)
+        return TRUE;
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv   = static_cast<PurpleConversation *>(item->data);
+        GtkIMHtml          *imhtml = strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)),
+                                            config::pluginId) ? nullptr : getIMHtml(conv);
+        if (!imhtml || (reinterpret_cast<GtkWidget *>(imhtml) != widget))
+            continue;
+        GtkAdjustment *adjustment = reinterpret_cast<GtkTextView *>(imhtml)->vadjustment;
+        if (adjustment && (adjustment->value <= adjustment->lower))
+            g_topReachedHandler(conv);
+        break;
+    }
+    return TRUE;
+}
+
+static void connectScroll()
+{
+    if (!LOOK_UP(gtk_adjustment_get_type) || !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
+        !LOOK_UP(g_signal_remove_emission_hook) || !LOOK_UP(g_value_get_object) ||
+        !LOOK_UP(gtk_widget_get_type) || !LOOK_UP(g_value_get_boxed))
+    {
+        purple_debug_warning(config::pluginId, "Cannot follow the scrolling of tabs: some of GTK is not found\n");
+        return;
+    }
+    g_scrollSignal = p_g_signal_lookup("value-changed", p_gtk_adjustment_get_type());
+    if (g_scrollSignal)
+        g_scrollHook = p_g_signal_add_emission_hook(g_scrollSignal, 0, scrolled, nullptr, nullptr);
+    g_wheelSignal = p_g_signal_lookup("scroll-event", p_gtk_widget_get_type());
+    if (g_wheelSignal)
+        g_wheelHook = p_g_signal_add_emission_hook(g_wheelSignal, 0, wheelTurned, nullptr, nullptr);
+}
+
+static void disconnectScroll()
+{
+    if (g_scrollHook)
+        p_g_signal_remove_emission_hook(g_scrollSignal, g_scrollHook);
+    if (g_wheelHook)
+        p_g_signal_remove_emission_hook(g_wheelSignal, g_wheelHook);
+    g_scrollHook = 0;
+    g_wheelHook  = 0;
+}
+
+static void connectPopup()
+{
+    if (!LOOK_UP(gtk_imhtml_get_type) || !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
+        !LOOK_UP(g_signal_remove_emission_hook) || !LOOK_UP(g_value_get_object) ||
+        !LOOK_UP(gtk_widget_get_pointer) || !LOOK_UP(gtk_text_view_window_to_buffer_coords) ||
+        !LOOK_UP(gtk_text_view_get_iter_at_location) || !LOOK_UP(gtk_text_iter_get_marks) ||
+        !LOOK_UP(gtk_text_mark_get_name) || !LOOK_UP(gtk_separator_menu_item_new) || !LOOK_UP(gtk_widget_show))
+    {
+        purple_debug_warning(config::pluginId, "Cannot add to the menu of a tab's text: some of GTK is not found\n");
+        return;
+    }
+    // The placeholders' menu is not added without them
+    LOOK_UP(gtk_text_buffer_get_slice);
+    LOOK_UP(gtk_text_buffer_insert);
+    g_popupSignal = p_g_signal_lookup("populate-popup", p_gtk_imhtml_get_type());
+    if (g_popupSignal)
+        g_popupHook = p_g_signal_add_emission_hook(g_popupSignal, 0, populatingPopup, nullptr, nullptr);
+}
+
+static void disconnectPopup()
+{
+    if (g_popupHook)
+        p_g_signal_remove_emission_hook(g_popupSignal, g_popupHook);
+    g_popupHook = 0;
 }
 
 #else
@@ -339,11 +2147,88 @@ bool pidginUiFound()
     return false;
 }
 
-MessageMarkScope::MessageMarkScope(MessageId messageId, const std::string &trailer)
+MessageMarkScope::MessageMarkScope(MessageId messageId, const char *editNote, bool anew, bool markChanges)
 {
 }
 
 MessageMarkScope::~MessageMarkScope()
+{
+}
+
+void showMessageReactions(PurpleConversation *conv, MessageId messageId, const std::string &html)
+{
+}
+
+bool readPidginClipboard(PurpleConversation *conv, ClipboardContent &content)
+{
+    return false;
+}
+
+void setPastedHandler(PastedHandler handler)
+{
+}
+
+void pasteIntoEntryLater(PurpleConversation *conv, const std::vector<PastedPlaceholder> &placeholders)
+{
+}
+
+
+bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::string &text,
+                    const std::string &notice, std::function<void()> cancelled)
+{
+    return false;
+}
+
+bool endEntryEdit(PurpleConversation *conv, EntryEdit *edit)
+{
+    return false;
+}
+
+void showEditOutcome(PurpleConversation *conv, const std::string &html)
+{
+}
+
+bool isEntryEditing(PurpleConversation *conv, MessageId messageId)
+{
+    return false;
+}
+
+bool canRedrawConversation(PurpleConversation *conv)
+{
+    return false;
+}
+
+void appendTabLine(PurpleConversation *conv, const std::string &html)
+{
+}
+
+void startProgress(PurpleConversation *conv, const std::string &html)
+{
+}
+
+void stopProgress(PurpleConversation *conv)
+{
+}
+
+bool canReplaceMessage(PurpleConversation *conv, MessageId messageId)
+{
+    return false;
+}
+
+bool canMarkChanges(PurpleConversation *conv, MessageId messageId, bool &marked)
+{
+    return false;
+}
+
+void setChangesMarked(PurpleConversation *conv, MessageId messageId, bool marked)
+{
+}
+
+void strikeOutMessage(PurpleConversation *conv, MessageId messageId)
+{
+}
+
+void removeMessage(PurpleConversation *conv, MessageId messageId)
 {
 }
 
@@ -352,7 +2237,7 @@ MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId)
     return MessageMarks();
 }
 
-void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId, const std::string &trailer)
+void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId)
 {
 }
 
@@ -361,7 +2246,32 @@ bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId)
     return false;
 }
 
-void popUpMenu(const std::vector<MenuItem> &items)
+void setMessagePopupHandler(MessagePopupHandler handler)
+{
+}
+
+void setBuddyMarkHandler(BuddyMarkHandler handler, const char *mark)
+{
+}
+
+MessageId findFirstMessage(PurpleConversation *conv)
+{
+    return MessageId();
+}
+
+void scrollToMessageLater(PurpleConversation *conv, MessageId messageId)
+{
+}
+
+void setTopReachedHandler(TopReachedHandler handler)
+{
+}
+
+void fillOpenMenu(const OpenMenuRef &menu, const std::vector<MenuItem> &items)
+{
+}
+
+void setPlaceholderHandler(PlaceholderHandler handler)
 {
 }
 

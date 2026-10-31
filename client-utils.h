@@ -14,7 +14,14 @@ std::string         proxyTypeToString(PurpleProxyType proxyType);
 
 const char *        getPurpleStatusId(const td::td_api::UserStatus &tdStatus);
 std::string         getPurpleBuddyName(const td::td_api::user &user);
+std::string         getPurpleBuddyName(UserId userId);
 std::string         getSecretChatBuddyName(SecretChatId secretChatId);
+// The contact list's entry for a chat, its buddy or its chat entry; none for a chat not there
+PurpleBlistNode    *findChatBlistNode(TdAccountData &account, const td::td_api::chat &chat);
+// Whether deleted messages stay in the chat's tab, struck out, rather than go: as chosen for its
+// entry in the contact list, if it has one and that was chosen, otherwise as the account has it
+bool                keepsDeletedMessages(PurpleAccount *account, PurpleBlistNode *node);
+void                setKeepsDeletedMessages(PurpleBlistNode *node, bool keep);
 std::vector<const td::td_api::user *> getUsersByPurpleName(const char *buddyName, TdAccountData &account,
                                                            const char *action);
 PurpleConversation *getImConversation(PurpleAccount *account, const char *username);
@@ -66,11 +73,28 @@ bool        jumpLinksEnabled();
 void        setJumpLinksEnabled(bool enabled);
 std::string linkToMessage(PurpleAccount *account, ChatId chatId, MessageId messageId,
                           const std::string &markup);
-// The link after each message, which opens its menu, or nothing where it cannot work
-std::string makeMenuLink(PurpleAccount *account, ChatId chatId, MessageId messageId);
-// A jump, unless the link opens the message's menu
+// Put after a message's text, for the log to say which message it is: a comment, which Pidgin's
+// log viewer does not show, and which Pidgin's conversation window is not given; Finch shows no
+// markup. Not where it would go on to other clients, as from BitlBee; enabled when the plugin loads.
+bool        logMarkersEnabled();
+void        setLogMarkersEnabled(bool enabled);
+std::string makeLogMarker(MessageId messageId);
+// Takes the marker out of a message's markup, telling which message it is, if it has one
+bool        takeLogMarker(std::string &html, MessageId *messageId = nullptr);
+// Markup for the log only, which Pidgin's tab leaves out
+std::string makeLogOnly(const std::string &html);
+// Takes what is for the log only out of a message's markup; false if there was none
+bool        takeLogOnly(std::string &html);
+// Takes the markers of what is for the log only out, leaving what they enclose
+void        unmarkLogOnly(std::string &html);
+// The new version of an edited message's text, its words compared with those of the previous one
+// (plain text), as wdiff does: removed words put back where they were, on the one background
+// color, and added ones on the other
+std::string markChanges(const std::string &previous, const std::string &html,
+                        const std::string &removedColor, const std::string &addedColor);
+// Whether the link is a jump to a message, and to which
 bool        parseJumpLink(const char *link, std::string &accountName, ChatId &chatId,
-                          MessageId &messageId, bool &menu);
+                          MessageId &messageId);
 
 std::string getDownloadXferPeerName(ChatId chatId,
                                     const TgMessageInfo &message,
@@ -84,6 +108,21 @@ void updateChatConversation(PurpleConvChat *purpleChat, const td::td_api::superg
 void updateSupergroupChatMembers(PurpleConvChat *purpleChat, const td::td_api::chatMembers &members,
                                  const TdAccountData &account);
 
+// Pidgin's markup as Telegram's formatted text: bold, italic, underline, strikethrough and links;
+// the rest of it dropped
+td::td_api::object_ptr<td::td_api::formattedText> parseFormattedText(const std::string &html);
+
+// What a pasted attachment goes as, from the file uploaded, with its caption
+td::td_api::object_ptr<td::td_api::InputMessageContent>
+makeAttachmentContent(const PlaceholderUse &use, const std::string &uploadPath,
+                      td::td_api::object_ptr<td::td_api::formattedText> caption);
+// An edit of a message sent, as written: the placeholders in it, and its text without them
+struct ParsedEdit {
+    std::vector<PlaceholderUse>                       attachments;
+    td::td_api::object_ptr<td::td_api::formattedText> text;
+};
+ParsedEdit parseEdit(const char *message, const TdAccountData &account);
+bool isSameFormattedText(const td::td_api::formattedText &a, const td::td_api::formattedText &b);
 int  transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiver,
                      TdAccountData &account, TdTransceiver::ResponseCb response);
 

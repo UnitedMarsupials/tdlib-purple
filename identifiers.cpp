@@ -68,6 +68,11 @@ UserId getUserId(const td::td_api::secretChat &secretChat)
     return UserId(secretChat.user_id_);
 }
 
+UserId getUserId(const td::td_api::updateUserFullInfo &update)
+{
+    return UserId(update.user_id_);
+}
+
 UserId getUserId(const td::td_api::updateUserStatus &update)
 {
     return UserId(update.user_id_);
@@ -118,6 +123,11 @@ ChatId getChatId(const td::td_api::messageOriginChannel &forwardOrigin)
 ChatId getChatId(const td::td_api::message &message)
 {
     return ChatId(message.chat_id_);
+}
+
+ChatId getChatId(const td::td_api::updateChatUnreadReactionCount &update)
+{
+    return ChatId(update.chat_id_);
 }
 
 ChatId getChatId(const td::td_api::updateChatAction &update)

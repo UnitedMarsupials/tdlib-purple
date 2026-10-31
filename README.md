@@ -15,6 +15,50 @@ For missing features that someone cared about, see the list of issues:
 Converting animated stickers to GIFs is CPU-intensive. If this is a problem,
 the conversion can be disabled in account settings, or even at compile time (see below).
 
+### Pasting files and pictures
+
+What is pasted into a message is sent with it, once the message is: the files
+copied to the clipboard, as a file manager copies them, or else its picture.
+Each pasted thing is numbered, and stands in the message's text as its
+placeholder, the text after it being its caption:
+
+* `[Image#1]` or `[Video#2]` sends a picture or video as such, nameless, as
+  Telegram shows it in the chat (and makes it smaller);
+* `[name#N]` sends thing N as a file, as it is, under that name: its own, as in
+  `[report.pdf#3]`, or any other, as in `[meow.jpg#1]`. A picture of the
+  clipboard's, having no name, is `image-1.png` and so on, the extension the
+  one TDLib gives the type of its content. A name without an extension takes
+  the thing's own, as `[meow#1]` does, since Telegram tells a file's type by
+  its extension.
+
+Several in a row go as an album, pictures and videos together, files apart, up
+to ten in one. Letter case does not matter. Files are not copied: one gone by
+the time the message is sent keeps the message from being sent.
+
+In Pidgin, the input field shows a thumbnail of the file in the placeholder's
+place, as tall as five lines of its font, which the message is sent with, the placeholder in its tooltip: a
+picture's own, or the one file managers keep, or one a thumbnailer registered
+for the file's type makes, or else an icon of the type. Right-clicking it, or
+a placeholder written out, offers to send it the other way, or to take it out
+of the message.
+
+A message's picture, video or file, edited, goes by a placeholder too, before
+its caption: kept, only the caption changes; another placeholder put in its
+place, or the same one written as a file, or under another name, replaces it,
+as far as Telegram allows (in an album, a photo or video only by a photo or
+video, a file by a file). Telegram takes nothing out of a message, nor puts
+more into it, and such an edit is refused.
+
+In Pidgin, pasting into a conversation's input field puts the placeholders of
+the files copied there, or of the picture; so does dropping files onto the
+conversation, its input field or the messages above it, and a picture dropped
+from a browser is fetched to go there, anything else dropped as a link going
+in as its address. `/paste` does the same everywhere: other front-ends, such
+as Finch, cannot take anything into their input line, so it says the
+placeholders, to be written into the message where they go. The clipboard is read there with
+[xclip](https://github.com/astrand/xclip), found in `PATH`, which is not
+otherwise required. Placeholders last as long as the account is connected.
+
 ## Installation
 
 Binary packages for Debian, Fedora, openSUSE and Ubuntu are available at https://download.opensuse.org/repositories/home:/ars3n1y/ .
