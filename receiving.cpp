@@ -1424,7 +1424,8 @@ static bool showEditNotice(const td::td_api::chat &chat, IncomingMessage &fullMe
     return complete;
 }
 
-// The line of a message's reactions, under it in Pidgin's tab: each with its count, ours in bold.
+// The line of a message's reactions, under it in Pidgin's tab: each with its count, if more than
+// one, ours in bold.
 // Custom-emoji ones are left out, as they would need looking up first.
 namespace {
 // A reaction as the line of them shows it: its emoji, or a custom one's id
@@ -1460,7 +1461,7 @@ static std::vector<ReactionCount> getReactionCounts(const td::td_api::messageInt
     return counts;
 }
 
-// Each with its count, ours in bold. A custom emoji is the conversation's custom smiley, its picture
+// Each with its count, if more than one, ours in bold. A custom emoji is the conversation's custom smiley, its picture
 // fetched unless already there, where the front-end has them; otherwise left out, its ordinary emoji
 // unknown until it is fetched.
 static std::string formatReactions(TdAccountData &account, PurpleConversation *conv,
@@ -1487,7 +1488,9 @@ static std::string formatReactions(TdAccountData &account, PurpleConversation *c
                 continue;
             emoji = it->second;
         }
-        std::string item = emoji + "&nbsp;" + std::to_string(reaction.count);
+        std::string item = emoji;
+        if (reaction.count > 1)
+            item += "&nbsp;" + std::to_string(reaction.count);
         if (reaction.chosen)
             item = "<b>" + item + "</b>";
         if (!line.empty())
