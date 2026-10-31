@@ -81,9 +81,10 @@ void fetchHistory(TdAccountData &account, ChatId chatId, MessageId fetchFrom, Me
 void redrawChat(TdAccountData &account, ChatId chatId, MessageId earliest);
 // Fills the tab anew, from as many messages more before the earliest it shows, which stays at its top
 void showEarlierMessages(TdAccountData &account, PurpleConversation *conv);
-// Fills the chat's tab anew, in Pidgin, with its messages of the given span of time back from the
-// latest one, as many as it can hold; false if the chat is busy, to be tried again later
-bool fillChat(TdAccountData &account, ChatId chatId, time_t span);
+// Fills the chat's tab anew, in Pidgin, with its messages from the first unread one, and some read
+// before it, as many as it can hold, scrolled to that one; false if the chat is busy, to be tried
+// again later
+bool fillChat(TdAccountData &account, ChatId chatId);
 // The chat a conversation is of, if known
 const td::td_api::chat *findConversationChat(TdAccountData &account, PurpleConversation *conv);
 void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messageId,

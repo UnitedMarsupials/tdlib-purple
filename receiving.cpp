@@ -2785,10 +2785,12 @@ namespace {
 struct Redraw {
     ChatId                                                  chatId;
     MessageId                                               earliest; // or
-    time_t                                                  span  = 0; // back from the latest message
-    time_t                                                  since = 0;
+    bool                                                    opening = false; // from the first unread
+    unsigned                                                unread = 0;  // messages, if opening
+    MessageId                                               readUpTo;    // the latest received read
+    MessageId                                               firstUnread; // found so far
     unsigned                                                extra = 0; // messages wanted before the earliest
-    bool                                                    found  = false; // the earliest
+    bool                                                    found  = false; // the earliest, or one read
     unsigned                                                beyond = 0; // found so far
     unsigned                                                limit;
     // Newest first, as TDLib gives them
@@ -2837,8 +2839,8 @@ static std::vector<LoggedLine> getLoggedLines(TdAccountData &account, const td::
 {
     enum { SAME_TIME = 10 };
     std::vector<LoggedLine> lines;
-    time_t since = redraw.since;
-    if (!since && !redraw.messages.empty() && redraw.messages.back())
+    time_t since = 0;
+    if (!redraw.messages.empty() && redraw.messages.back())
         since = redraw.messages.back()->date_;
     if (!since)
         return lines;
@@ -2898,8 +2900,8 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
     stopProgress(conv);
     if (conv) {
         purple_debug_misc(config::pluginId, "Redrawing chat %" G_GINT64_FORMAT " from message %" G_GINT64_FORMAT
-                          " or time %" G_GINT64_FORMAT ": %zu messages\n", redraw.chatId.value(),
-                          redraw.earliest.value(), int64_t(redraw.since), redraw.messages.size());
+                          " or the first unread %" G_GINT64_FORMAT ": %zu messages\n", redraw.chatId.value(),
+                          redraw.earliest.value(), redraw.firstUnread.value(), redraw.messages.size());
         purple_conversation_clear_message_history(conv);
         std::vector<LoggedLine> lines = getLoggedLines(account, *chat, conv, redraw);
         // Newest first, as the messages, each going ahead of what is queued
@@ -2918,8 +2920,11 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
     std::vector<IncomingMessage> readyMessages;
     account.pendingMessages.setChatReady(redraw.chatId, readyMessages);
     showMessages(readyMessages, account);
-    // Gone further back: what was at the top stays there
-    if (redraw.extra) {
+    // Opened: at the first unread, if any. Gone further back: what was at the top stays there.
+    if (redraw.opening) {
+        if (conv)
+            scrollToMessageLater(conv, redraw.firstUnread);
+    } else if (redraw.extra) {
         if (!redraw.beyond)
             g_historyComplete.insert(redraw.chatId.value());
         if (conv)
@@ -2932,7 +2937,6 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
 {
     MessageId more;
     bool     &found = redraw->found;
-    bool      older = false; // than the tab is filled from
     size_t    added = 0;     // none, once the chat's first message is reached
     if (response && (response->get_id() == td::td_api::messages::ID)) {
         auto &messages = static_cast<td::td_api::messages &>(*response);
@@ -2940,26 +2944,24 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
             // The message a batch goes back from may come again, starting it
             if (!message || (!redraw->messages.empty() && (getId(*message) == getId(*redraw->messages.back()))))
                 continue;
-            if (redraw->span && !redraw->since)
-                redraw->since = std::max<time_t>(message->date_ - redraw->span, 1);
-            older = redraw->since && (message->date_ < redraw->since);
-            if (older)
-                break;
             more = getId(*message);
-            if (more == redraw->earliest)
+            bool read = redraw->opening && (!redraw->unread || (more.value() <= redraw->readUpTo.value()));
+            if (!found && ((more == redraw->earliest) || read))
                 found = true;
             else if (found)
                 redraw->beyond++;
+            if (redraw->opening && !read && !message->is_outgoing_)
+                redraw->firstUnread = more;
             redraw->messages.push_back(std::move(message));
             added++;
             if ((found && (redraw->beyond >= redraw->extra)) || (redraw->messages.size() >= redraw->limit))
                 break;
         }
         bool full = redraw->messages.size() >= redraw->limit;
-        // Filling it from a message, and as many before as wanted, or as there are; from a time, all
-        // there is since; or as much as fits: either is enough
+        // Filling it from a message, or from the first unread, and as many before as wanted, or as
+        // there are; or as much as fits: either is enough
         bool enough = found && ((redraw->beyond >= redraw->extra) || !added || full);
-        if (enough || (redraw->span && (older || full || !added))) {
+        if (enough || (redraw->opening && (full || !added))) {
             if (!redraw->messages.empty()) {
                 redrawShow(account, *redraw);
                 return;
@@ -2997,7 +2999,7 @@ static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw
 }
 
 // False if the chat is busy
-static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earliest, time_t span,
+static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earliest, bool opening,
                         unsigned extra = 0)
 {
     const td::td_api::chat *chat = account.getChat(chatId);
@@ -3015,7 +3017,9 @@ static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earlies
     auto redraw = std::make_shared<Redraw>();
     redraw->chatId   = chatId;
     redraw->earliest = earliest;
-    redraw->span     = span;
+    redraw->opening  = opening;
+    redraw->unread   = std::max(chat->unread_count_, 0);
+    redraw->readUpTo = getLastReadMessageId(*chat);
     redraw->extra    = extra;
     redraw->limit    = getRedrawLimit();
     redrawRequest(account, redraw, MessageId::invalid);
@@ -3025,12 +3029,15 @@ static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earlies
 void redrawChat(TdAccountData &account, ChatId chatId, MessageId earliest)
 {
     if (!g_redrawTooFar.count({chatId.value(), earliest.value()}))
-        startRedraw(account, chatId, earliest, 0);
+        startRedraw(account, chatId, earliest, false);
 }
+
+// Shown before the earliest message, or before the first unread on opening a tab, at least, the tab
+// filled with more if they still fit
+enum { EARLIER_BATCH = 50 };
 
 void showEarlierMessages(TdAccountData &account, PurpleConversation *conv)
 {
-    enum { EARLIER_BATCH = 50 };
     const td::td_api::chat *chat     = findConversationChat(account, conv);
     MessageId               earliest = chat ? findFirstMessage(conv) : MessageId();
     if (!earliest.valid() || g_historyComplete.count(getId(*chat).value()) ||
@@ -3038,12 +3045,12 @@ void showEarlierMessages(TdAccountData &account, PurpleConversation *conv)
         return;
     purple_debug_misc(config::pluginId, "Showing messages before %" G_GINT64_FORMAT " in chat %" G_GINT64_FORMAT "\n",
                       earliest.value(), getId(*chat).value());
-    startRedraw(account, getId(*chat), earliest, 0, EARLIER_BATCH);
+    startRedraw(account, getId(*chat), earliest, false, EARLIER_BATCH);
 }
 
-bool fillChat(TdAccountData &account, ChatId chatId, time_t span)
+bool fillChat(TdAccountData &account, ChatId chatId)
 {
-    return startRedraw(account, chatId, MessageId::invalid, span);
+    return startRedraw(account, chatId, MessageId::invalid, true, EARLIER_BATCH);
 }
 
 // While a message waits to be shown, its reactions would come before it, and are part of what it

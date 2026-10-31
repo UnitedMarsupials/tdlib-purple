@@ -1610,11 +1610,6 @@ static void tgprpl_init (PurplePlugin *plugin)
                                          AccountOptions::StrikeOutDeleted, AccountOptions::StrikeOutDeletedDefault);
     prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
 
-    // TRANSLATOR: Account settings, key (number): days counted back from the conversation's latest message. 0 leaves the conversation window as Pidgin opens it.
-    opt = purple_account_option_int_new(_("Days of messages to show on opening a conversation, in Pidgin"),
-                                        AccountOptions::HistoryDays, AccountOptions::HistoryDaysDefault);
-    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
-
     // TRANSLATOR: Account settings, key (boolean)
     opt = purple_account_option_bool_new(_("Show messages from channels and groups you have not joined"),
                                          AccountOptions::ShowUnjoinedChats,

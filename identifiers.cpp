@@ -199,6 +199,11 @@ MessageId getReplyMessageId(const td::td_api::message &message)
     return MessageId(0);
 }
 
+MessageId getLastReadMessageId(const td::td_api::chat &chat)
+{
+    return MessageId(chat.last_read_inbox_message_id_);
+}
+
 MessageId getMessageId(const td::td_api::updateMessageContent &update)
 {
     return MessageId(update.message_id_);

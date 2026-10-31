@@ -2068,6 +2068,8 @@ struct ScrollToMessage {
 // tab scrolled back, after which what is written at the end leaves it be
 enum { SCROLLED_CHECK_MS = 100, SCROLLED_CHECKS = 50 };
 
+static TopReachedHandler g_topReachedHandler = nullptr;
+
 static gboolean scrollToMessageTop(gpointer data)
 {
     ScrollToMessage *scroll = static_cast<ScrollToMessage *>(data);
@@ -2079,6 +2081,11 @@ static gboolean scrollToMessageTop(gpointer data)
                                    : nullptr;
     if (start)
         p_gtk_text_view_scroll_to_mark(reinterpret_cast<GtkTextView *>(imhtml), start, 0.0, TRUE, 0.0, 0.0);
+    // Still no more than fits, where the tab is shown, its size known: earlier messages fill it
+    GtkAdjustment *adjustment = imhtml ? reinterpret_cast<GtkTextView *>(imhtml)->vadjustment : nullptr;
+    if (adjustment && (reinterpret_cast<GtkObject *>(imhtml)->flags & GTK_MAPPED) && (adjustment->upper <= adjustment->page_size) &&
+        g_topReachedHandler)
+        g_topReachedHandler(scroll->conv);
     delete scroll;
     return G_SOURCE_REMOVE;
 }
@@ -2092,7 +2099,6 @@ void scrollToMessageLater(PurpleConversation *conv, MessageId messageId)
 
 // A tab's text scrolled to its top: not again until it is scrolled down from there, nor while it
 // fits, emptied to be filled anew, which starts at the top too
-static TopReachedHandler g_topReachedHandler = nullptr;
 static guint             g_scrollSignal = 0;
 static gulong            g_scrollHook   = 0;
 static guint             g_wheelSignal  = 0;

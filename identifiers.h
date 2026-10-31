@@ -112,6 +112,7 @@ DEFINE_ID_CLASS(MessageId, int64_t)
     friend MessageId getMessageId(const td::td_api::updateMessageInteractionInfo &update);
     friend MessageId getMessageId(const td::td_api::updateMessageUnreadReactions &update);
     friend MessageId getOldMessageId(const td::td_api::updateMessageSendSucceeded &update);
+    friend MessageId getLastReadMessageId(const td::td_api::chat &chat);
 };
 
 #undef DEFINE_ID_CLASS
@@ -164,6 +165,8 @@ MessageId    getMessageId(const td::td_api::updateDeleteMessages &update, unsign
 MessageId    getMessageId(const td::td_api::updateMessageInteractionInfo &update);
 MessageId    getMessageId(const td::td_api::updateMessageUnreadReactions &update);
 MessageId    getOldMessageId(const td::td_api::updateMessageSendSucceeded &update);
+// Of those received
+MessageId    getLastReadMessageId(const td::td_api::chat &chat);
 
 namespace std {
     static inline std::string to_string(UserId id) { return to_string(id.value()); }

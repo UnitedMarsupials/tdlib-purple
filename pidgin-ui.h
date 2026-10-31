@@ -143,7 +143,8 @@ bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId);
 // The earliest message the tab shows, if any
 MessageId findFirstMessage(PurpleConversation *conv);
 // Once Pidgin is done scrolling to the end as the tab is written, scrolls it back so that the
-// message is at the top, if it is there
+// message is at the top, if it is there; if the tab, shown, still has no more than fits, it is
+// as if scrolled to its top
 void scrollToMessageLater(PurpleConversation *conv, MessageId messageId);
 
 // Told when a tab's text is scrolled to its top, for earlier messages to be shown
