@@ -500,6 +500,9 @@ public:
     ShownMessage *             findShownMessage(ChatId chatId, MessageId messageId);
     void                       removeShownMessage(ChatId chatId, MessageId messageId);
     void                       renameShownMessage(ChatId chatId, MessageId oldId, MessageId newId);
+    // The id a message sent goes by once it is, where it went by another while being sent, as the
+    // links in its showing do
+    MessageId                  getSentMessageId(ChatId chatId, MessageId messageId) const;
     void                       addPendingEdit(const PendingEdit &edit);
     bool                       extractPendingEdit(ChatId chatId, MessageId messageId, PendingEdit &edit);
 private:
@@ -585,6 +588,7 @@ private:
     // only so many are kept
     using ShownMessageKey = std::pair<ChatId, MessageId>;
     std::map<ShownMessageKey, ShownMessage> m_shownMessages;
+    std::map<ShownMessageKey, MessageId>    m_sentMessageIds;
     std::deque<ShownMessageKey>             m_shownMessageOrder;
     std::vector<PendingEdit>                m_pendingEdits;
 };

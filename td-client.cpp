@@ -986,9 +986,10 @@ static std::string makeOpenedFileKey(ChatId chatId, MessageId messageId, const s
     return std::to_string(chatId.value()) + '/' + std::to_string(messageId.value()) + '/' + variant;
 }
 
-void PurpleTdClient::openMessageFile(ChatId chatId, MessageId messageId, const std::string &variant)
+void PurpleTdClient::openMessageFile(ChatId chatId, MessageId linkedId, const std::string &variant)
 {
-    std::string key = makeOpenedFileKey(chatId, messageId, variant);
+    MessageId   messageId = m_data.getSentMessageId(chatId, linkedId);
+    std::string key       = makeOpenedFileKey(chatId, messageId, variant);
     auto        it  = m_openedFiles.find(key);
     time_t      now = time(NULL);
     if ((it != m_openedFiles.end()) &&

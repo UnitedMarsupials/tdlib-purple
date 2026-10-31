@@ -1096,8 +1096,15 @@ void TdAccountData::removeShownMessage(ChatId chatId, MessageId messageId)
     m_shownMessages.erase(ShownMessageKey(chatId, messageId));
 }
 
+MessageId TdAccountData::getSentMessageId(ChatId chatId, MessageId messageId) const
+{
+    auto it = m_sentMessageIds.find(ShownMessageKey(chatId, messageId));
+    return (it != m_sentMessageIds.end()) ? it->second : messageId;
+}
+
 void TdAccountData::renameShownMessage(ChatId chatId, MessageId oldId, MessageId newId)
 {
+    m_sentMessageIds[ShownMessageKey(chatId, oldId)] = newId;
     auto it = m_shownMessages.find(ShownMessageKey(chatId, oldId));
     if (it != m_shownMessages.end()) {
         ShownMessage message = std::move(it->second);

@@ -108,6 +108,8 @@ TEST(PastedAttachments, Names)
         gchar *name = g_path_get_basename(link.c_str());
         EXPECT_STREQ("Q3 notes.txt", name);
         g_free(name);
+        // TDLib would follow a symbolic link to the file's own name
+        EXPECT_FALSE(g_file_test(link.c_str(), G_FILE_TEST_IS_SYMLINK));
         gchar *content = nullptr;
         ASSERT_TRUE(g_file_get_contents(link.c_str(), &content, nullptr, nullptr));
         EXPECT_STREQ("Notes\n", content);

@@ -190,6 +190,24 @@ PlaceholderUse findPasted(const PastedAttachments &attachments, const std::strin
     return use;
 }
 
+static bool copyFile(const std::string &from, const std::string &to)
+{
+    FILE *in  = fopen(from.c_str(), "rb");
+    FILE *out = in ? fopen(to.c_str(), "wb") : nullptr;
+    bool  ok  = out;
+    char  buffer[65536];
+    for (size_t length; ok && (length = fread(buffer, 1, sizeof(buffer), in)); )
+        ok = (fwrite(buffer, 1, length, out) == length);
+    ok = ok && !ferror(in);
+    if (out && fclose(out))
+        ok = false;
+    if (in)
+        fclose(in);
+    if (!ok && out)
+        remove(to.c_str());
+    return ok;
+}
+
 std::string getUploadPath(PastedAttachments &attachments, const PlaceholderUse &use)
 {
     const PastedAttachment &attachment = *use.attachment;
@@ -206,22 +224,15 @@ std::string getUploadPath(PastedAttachments &attachments, const PlaceholderUse &
     if (!directory)
         return "";
     attachments.linkDirectories.push_back(directory);
-    std::string link = std::string(directory) + G_DIR_SEPARATOR_S + use.name;
+    std::string linkPath = std::string(directory) + G_DIR_SEPARATOR_S + use.name;
     g_free(directory);
+    // Not a symbolic link, which TDLib follows to the file's own name: a hard one, or else, on
+    // another file system, a copy
 #ifndef _WIN32
-    if (symlink(attachment.path.c_str(), link.c_str()))
-        return "";
-#else
-    // Without symbolic links, a copy
-    gchar *content = nullptr;
-    gsize  length  = 0;
-    bool   copied  = g_file_get_contents(attachment.path.c_str(), &content, &length, nullptr) &&
-                     g_file_set_contents(link.c_str(), content, length, nullptr);
-    g_free(content);
-    if (!copied)
-        return "";
+    if (!link(attachment.path.c_str(), linkPath.c_str()))
+        return linkPath;
 #endif
-    return link;
+    return copyFile(attachment.path, linkPath) ? linkPath : "";
 }
 
 std::vector<std::string> getLocalPaths(char **uris)

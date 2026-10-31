@@ -595,3 +595,20 @@ TEST(MarkChanges, Words)
     // Only spacing or formatting changed
     ASSERT_EQ(std::string("a<br><b>b</b>"), changes("a b", "a<br><b>b</b>"));
 }
+
+TEST_F(MessageLinkTest, SentMessageRenamed)
+{
+    loginWithOneContact();
+    const int64_t sentId = 1000;
+
+    // Shown while being sent, its link names the id it went by then
+    tgl.update(make_object<updateMessageSendSucceeded>(makeDocumentMessage(10000, "/path/video.mp4", true), sentId));
+    tgl.verifyNoRequests();
+
+    std::string sentLink = "tdlib://%2B" + selfPhoneNumber + "/" + std::to_string(chatIds[0]) + "/" +
+                           std::to_string(sentId);
+    tgprpl_open_message_link(sentLink.c_str());
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(makeDocumentMessage(10000, "/path/video.mp4", true));
+    prpl.verifyEvents(NotifyUriEvent("file:///path/video.mp4"));
+}
