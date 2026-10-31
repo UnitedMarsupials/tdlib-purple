@@ -92,14 +92,13 @@ struct PastedPlaceholder {
     std::string    path;
     AttachmentKind kind;
 };
-// Told of files copied to the clipboard and pasted into a conversation's input field, in Pidgin:
-// the field gets the placeholders it gives instead of the files' URIs
-using FilesPastedHandler = std::vector<PastedPlaceholder> (*)(PurpleConversation *conv,
-                                                              const std::vector<std::string> &files);
-void setFilesPastedHandler(FilesPastedHandler handler);
-// Once the main loop is idle, the placeholders and the picture of the image store, if any, its
-// reference taken, go into the conversation's input field at the cursor
-void pasteIntoEntryLater(PurpleConversation *conv, const std::vector<PastedPlaceholder> &placeholders, int imageId);
+// Told of files or a picture pasted or dropped into a conversation, in Pidgin, the picture's
+// reference in the image store its to let go: the input field gets the placeholders it gives,
+// rather than the files' URIs, or the picture itself
+using PastedHandler = std::vector<PastedPlaceholder> (*)(PurpleConversation *conv, const ClipboardContent &content);
+void setPastedHandler(PastedHandler handler);
+// Once the main loop is idle, the placeholders go into the conversation's input field at the cursor
+void pasteIntoEntryLater(PurpleConversation *conv, const std::vector<PastedPlaceholder> &placeholders);
 // A thumbnail at the start of the input field, before the placeholder of a message's media being edited
 void addEntryThumbnail(PurpleConversation *conv, const PastedPlaceholder &pasted);
 

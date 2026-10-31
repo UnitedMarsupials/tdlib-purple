@@ -96,7 +96,6 @@ FRONT_END_FUNCTION(gdk_pixbuf_loader_close);
 FRONT_END_FUNCTION(gdk_pixbuf_loader_get_pixbuf);
 FRONT_END_FUNCTION(gdk_pixbuf_save_to_buffer);
 FRONT_END_FUNCTION(g_object_unref);
-FRONT_END_FUNCTION(gtk_imhtml_insert_image_at_iter);
 FRONT_END_FUNCTION(gtk_text_buffer_get_insert);
 FRONT_END_FUNCTION(g_object_get_data);
 FRONT_END_FUNCTION(g_object_set_data_full);
@@ -772,13 +771,13 @@ struct Takeover {
     gulong              ownHandler = 0;
     std::vector<gulong> blocked;
 };
-static FilesPastedHandler g_filesPastedHandler = nullptr;
+static PastedHandler      g_pastedHandler      = nullptr;
 static guint              g_dropSignal         = 0;
 static gulong             g_dropHook           = 0;
 
-void setFilesPastedHandler(FilesPastedHandler handler)
+void setPastedHandler(PastedHandler handler)
 {
-    g_filesPastedHandler = handler;
+    g_pastedHandler = handler;
 }
 
 static std::string getTakeoverKey(const char *name)
@@ -923,14 +922,16 @@ static void insertPlaceholders(GtkWidget *entry, const std::vector<PastedPlaceho
 static bool pasteFiles(GtkWidget *entry, PurpleConversation *conv)
 {
     GtkClipboard *clipboard = p_gtk_widget_get_clipboard(entry, GDK_SELECTION_CLIPBOARD);
-    if (!clipboard || !g_filesPastedHandler)
+    if (!clipboard || !g_pastedHandler)
         return false;
     gchar **uris = p_gtk_clipboard_wait_for_uris(clipboard);
     std::vector<std::string> files = getLocalPaths(uris);
     g_strfreev(uris);
     if (files.empty() || !takeOver(entry, "paste-clipboard"))
         return false;
-    insertPlaceholders(entry, g_filesPastedHandler(conv, files));
+    ClipboardContent content;
+    content.files = files;
+    insertPlaceholders(entry, g_pastedHandler(conv, content));
     return true;
 }
 
@@ -938,7 +939,6 @@ struct EntryPaste {
     PurpleConversation            *conv;
     std::vector<PastedPlaceholder> placeholders;
     std::string                    text;
-    int                            imageId;
 };
 
 static gboolean pasteIntoEntry(gpointer data)
@@ -956,20 +956,13 @@ static gboolean pasteIntoEntry(gpointer data)
             if (!paste->text.empty())
                 p_gtk_text_buffer_insert_at_cursor(buffer, (paste->text + " ").c_str(), -1);
         }
-        if (paste->imageId) {
-            GtkTextIter cursor;
-            p_gtk_text_buffer_get_iter_at_mark(buffer, &cursor, p_gtk_text_buffer_get_insert(buffer));
-            p_gtk_imhtml_insert_image_at_iter(reinterpret_cast<GtkIMHtml *>(entry), paste->imageId, &cursor);
-        }
     }
-    if (paste->imageId)
-        purple_imgstore_unref_by_id(paste->imageId);
     return FALSE;
 }
 
-void pasteIntoEntryLater(PurpleConversation *conv, const std::vector<PastedPlaceholder> &placeholders, int imageId)
+void pasteIntoEntryLater(PurpleConversation *conv, const std::vector<PastedPlaceholder> &placeholders)
 {
-    g_idle_add(pasteIntoEntry, new EntryPaste{conv, placeholders, "", imageId});
+    g_idle_add(pasteIntoEntry, new EntryPaste{conv, placeholders, ""});
 }
 
 static gboolean pastingClipboard(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
@@ -977,16 +970,16 @@ static gboolean pastingClipboard(GSignalInvocationHint *, guint paramCount, cons
     gpointer   instance = paramCount ? p_g_value_get_object(&params[0]) : nullptr;
     GtkWidget *entry    = static_cast<GtkWidget *>(instance);
     PurpleConversation *conv = entry ? findEntryConversation(entry) : nullptr;
-    if (!conv || pasteFiles(entry, conv))
+    if (!conv || !g_pastedHandler || pasteFiles(entry, conv))
         return TRUE;
-    int id = storeClipboardPicture(entry);
-    if (id) {
-        GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(entry)->text_buffer;
-        GtkTextIter    cursor;
-        p_gtk_text_buffer_get_iter_at_mark(buffer, &cursor, p_gtk_text_buffer_get_insert(buffer));
-        p_gtk_imhtml_insert_image_at_iter(reinterpret_cast<GtkIMHtml *>(entry), id, &cursor);
-        purple_imgstore_unref_by_id(id);
-    }
+    // A picture gets a placeholder too, rather than going into the field as Pidgin's own, which
+    // Backspace would turn into the text "[Image]"
+    ClipboardContent content;
+    content.imageId = storeClipboardPicture(entry);
+    if (content.imageId && takeOver(entry, "paste-clipboard"))
+        insertPlaceholders(entry, g_pastedHandler(conv, content));
+    else if (content.imageId)
+        purple_imgstore_unref_by_id(content.imageId);
     // Kept for the next paste
     return TRUE;
 }
@@ -1037,13 +1030,14 @@ static void pictureFetched(PurpleUtilFetchUrlData *, gpointer data, const gchar 
         // The store takes the copy
         gpointer copy = g_malloc(length);
         memcpy(copy, content, length);
-        int id = purple_imgstore_add_with_id(copy, length, name);
+        ClipboardContent picture;
+        picture.imageId = purple_imgstore_add_with_id(copy, length, name);
         g_free(name);
-        pasteIntoEntry(new EntryPaste{fetch->conv, {}, "", id});
+        pasteIntoEntry(new EntryPaste{fetch->conv, g_pastedHandler(fetch->conv, picture), ""});
     } else {
         purple_debug_misc(config::pluginId, "Dropped %s, not a picture: %s\n", fetch->url.c_str(),
                           error ? error : "other content");
-        pasteIntoEntry(new EntryPaste{fetch->conv, {}, fetch->url, 0});
+        pasteIntoEntry(new EntryPaste{fetch->conv, {}, fetch->url});
     }
 }
 
@@ -1067,7 +1061,7 @@ static gboolean droppingData(GSignalInvocationHint *, guint paramCount, const GV
     GtkWidget          *widget = static_cast<GtkWidget *>(p_g_value_get_object(&params[0]));
     PurpleConversation *conv   = widget ? findWidgetConversation(widget) : nullptr;
     GtkSelectionData   *data   = static_cast<GtkSelectionData *>(p_g_value_get_boxed(&params[4]));
-    if (!conv || !data || (data->length <= 0) || !g_filesPastedHandler ||
+    if (!conv || !data || (data->length <= 0) || !g_pastedHandler ||
         (data->target != p_gdk_atom_intern("text/uri-list", FALSE)))
         return TRUE;
 
@@ -1085,8 +1079,11 @@ static gboolean droppingData(GSignalInvocationHint *, guint paramCount, const GV
     p_gtk_drag_finish(static_cast<GdkDragContext *>(p_g_value_get_object(&params[1])), TRUE, FALSE,
                       p_g_value_get_uint(&params[6]));
     GtkWidget *entry = getEntry(conv);
-    if (!files.empty())
-        insertPlaceholders(entry, g_filesPastedHandler(conv, files));
+    if (!files.empty()) {
+        ClipboardContent content;
+        content.files = files;
+        insertPlaceholders(entry, g_pastedHandler(conv, content));
+    }
     for (const std::string &url: urls) {
         purple_debug_misc(config::pluginId, "Fetching %s, dropped\n", url.c_str());
         PictureFetch *fetch = new PictureFetch{conv, url};
@@ -1172,7 +1169,7 @@ static void connectPaste(gpointer plugin)
         !LOOK_UP(g_signal_remove_emission_hook) || !LOOK_UP(g_value_get_object) ||
         !LOOK_UP(gtk_widget_get_clipboard) || !LOOK_UP(gtk_clipboard_wait_is_image_available) ||
         !LOOK_UP(gtk_clipboard_wait_for_image) || !LOOK_UP(gdk_pixbuf_save_to_buffer) ||
-        !LOOK_UP(g_object_unref) || !LOOK_UP(gtk_imhtml_insert_image_at_iter) ||
+        !LOOK_UP(g_object_unref) ||
         !LOOK_UP(gtk_text_buffer_get_insert))
     {
         purple_debug_warning(config::pluginId, "Cannot paste pictures: some of GTK is not found\n");
@@ -2013,14 +2010,12 @@ bool readPidginClipboard(PurpleConversation *conv, ClipboardContent &content)
     return false;
 }
 
-void setFilesPastedHandler(FilesPastedHandler handler)
+void setPastedHandler(PastedHandler handler)
 {
 }
 
-void pasteIntoEntryLater(PurpleConversation *conv, const std::vector<PastedPlaceholder> &placeholders, int imageId)
+void pasteIntoEntryLater(PurpleConversation *conv, const std::vector<PastedPlaceholder> &placeholders)
 {
-    if (imageId)
-        purple_imgstore_unref_by_id(imageId);
 }
 
 void addEntryThumbnail(PurpleConversation *conv, const PastedPlaceholder &pasted)

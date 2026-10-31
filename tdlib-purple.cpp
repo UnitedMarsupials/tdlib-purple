@@ -1006,13 +1006,15 @@ static std::vector<PastedPlaceholder> getPlaceholders(const std::vector<const Pa
     return placeholders;
 }
 
-// Placeholders for the files, typed into the input field where the clipboard is pasted
-static std::vector<PastedPlaceholder> filesPasted(PurpleConversation *conv, const std::vector<std::string> &files)
+// Placeholders for the files or picture, typed into the input field where they are pasted or dropped
+static std::vector<PastedPlaceholder> pasted(PurpleConversation *conv, const ClipboardContent &content)
 {
-    PurpleTdClient  *tdClient = getTdClient(purple_conversation_get_account(conv));
-    ClipboardContent content;
-    content.files = files;
-    return tdClient ? getPlaceholders(tdClient->addPasted(content)) : std::vector<PastedPlaceholder>();
+    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    if (tdClient)
+        return getPlaceholders(tdClient->addPasted(content));
+    if (content.imageId)
+        purple_imgstore_unref_by_id(content.imageId);
+    return {};
 }
 
 static bool placeholderClicked(PurpleConversation *conv, const std::string &placeholder, PastedForms &forms)
@@ -1047,9 +1049,9 @@ static std::string joinPlaceholders(const std::vector<std::string> &placeholders
 }
 
 // What is on the clipboard, attached to the message being written: the files copied to it, or else
-// its picture. Pidgin reads the clipboard and puts the picture into the input field, and the files'
-// placeholders; elsewhere xclip reads it, and the placeholders, to be written into the message where
-// they go, are said in the conversation.
+// its picture. Pidgin reads the clipboard and puts the placeholders into the input field; elsewhere
+// xclip reads it, and the placeholders, to be written into the message where they go, are said in
+// the conversation.
 static PurpleCmdRet pasteCommand(PurpleConversation *conv, const gchar *cmd, gchar **args, gchar **error, void *data)
 {
     PurpleTdClient  *tdClient = getTdClient(purple_conversation_get_account(conv));
@@ -1070,12 +1072,10 @@ static PurpleCmdRet pasteCommand(PurpleConversation *conv, const gchar *cmd, gch
         return PURPLE_CMD_RET_FAILED;
     }
 
-    if (inPidgin) {
-        int imageId = content.imageId;
-        content.imageId = 0;
+    if (inPidgin)
         // Pidgin empties the field once the command is done
-        pasteIntoEntryLater(conv, getPlaceholders(tdClient->addPasted(content)), imageId);
-    } else {
+        pasteIntoEntryLater(conv, getPlaceholders(tdClient->addPasted(content)));
+    else {
         std::vector<const PastedAttachment *> pasted = tdClient->addPasted(content);
         if (pasted.empty()) {
             *error = g_strdup(_("There are no files or picture on the clipboard."));
@@ -1328,7 +1328,7 @@ static void registerMessageLinks()
     // Not where messages go on to other clients, markup and all
     setLogMarkersEnabled(!canDisableReadReceipts());
     setMessagePopupHandler(messagePopupOpened);
-    setFilesPastedHandler(filesPasted);
+    setPastedHandler(pasted);
     setPlaceholderHandler(placeholderClicked);
     setBuddyMarkHandler(buddyMarked, UNREAD_REACTIONS_MARK);
     setTopReachedHandler(topReached);
