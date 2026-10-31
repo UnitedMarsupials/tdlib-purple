@@ -84,6 +84,8 @@ FRONT_END_FUNCTION(gdk_pixbuf_new_from_file_at_scale);
 FRONT_END_FUNCTION(g_object_ref);
 FRONT_END_FUNCTION(gtk_text_buffer_place_cursor);
 FRONT_END_FUNCTION(gtk_text_buffer_delete);
+FRONT_END_FUNCTION(gtk_widget_create_pango_layout);
+FRONT_END_FUNCTION(pango_layout_get_pixel_size);
 FRONT_END_FUNCTION(gtk_text_buffer_get_iter_at_child_anchor);
 FRONT_END_FUNCTION(gtk_text_child_anchor_get_deleted);
 FRONT_END_FUNCTION(gtk_text_child_anchor_get_widgets);
@@ -856,8 +858,8 @@ static bool takeOver(GtkWidget *widget, const char *name)
     return true;
 }
 
-// Shown this big, by the line of text it is in
-enum { THUMBNAIL_SIZE = 96 };
+// Shown as tall as so many lines of the input field's font, or this big without it
+enum { THUMBNAIL_LINES = 5, THUMBNAIL_SIZE = 96 };
 // A thumbnail in the input field stands for its placeholder, which Pidgin takes as its HTML and
 // its text, as it takes those of its own pictures
 static const char THUMBNAIL_KEY[]      = "tdlib-purple-thumbnail";
@@ -893,10 +895,21 @@ static void setThumbnailPlaceholder(GtkTextChildAnchor *anchor, GtkWidget *box, 
     p_gtk_widget_set_tooltip_text(box, tooltip.c_str());
 }
 
-static void showThumbnail(GtkWidget *image, const std::string &png)
+static int getThumbnailSize(GtkWidget *entry)
 {
-    GdkPixbuf *pixbuf = png.empty() ? nullptr : p_gdk_pixbuf_new_from_file_at_scale(png.c_str(), THUMBNAIL_SIZE,
-                                                                                    THUMBNAIL_SIZE, TRUE, nullptr);
+    PangoLayout *layout = p_gtk_widget_create_pango_layout ? p_gtk_widget_create_pango_layout(entry, "A") : nullptr;
+    int          height = 0;
+    if (layout) {
+        p_pango_layout_get_pixel_size(layout, nullptr, &height);
+        p_g_object_unref(layout);
+    }
+    return (height > 0) ? height * THUMBNAIL_LINES : THUMBNAIL_SIZE;
+}
+
+static void showThumbnail(GtkWidget *image, int size, const std::string &png)
+{
+    GdkPixbuf *pixbuf = png.empty() ? nullptr : p_gdk_pixbuf_new_from_file_at_scale(png.c_str(), size, size, TRUE,
+                                                                                    nullptr);
     if (pixbuf) {
         p_gtk_image_set_from_pixbuf(reinterpret_cast<GtkImage *>(image), pixbuf);
         p_g_object_unref(pixbuf);
@@ -992,12 +1005,13 @@ static bool insertThumbnailAt(GtkWidget *entry, GtkTextIter *where, const Pasted
     p_gtk_widget_show_all(box);
 
     // A picture is its own; anything else as file managers have it, or a thumbnailer makes it
+    int size = getThumbnailSize(entry);
     if (pasted.kind == AttachmentKind::Photo)
-        showThumbnail(image, pasted.path);
+        showThumbnail(image, size, pasted.path);
     else {
         p_g_object_ref(image);
-        findThumbnail(pasted.path, mime, [image](const std::string &png) {
-            showThumbnail(image, png);
+        findThumbnail(pasted.path, mime, size, [image, size](const std::string &png) {
+            showThumbnail(image, size, png);
             p_g_object_unref(image);
         });
     }
@@ -1358,6 +1372,9 @@ static void connectPaste(gpointer plugin)
         p_gtk_text_buffer_create_child_anchor = nullptr;
         purple_debug_warning(config::pluginId, "Cannot show thumbnails of pasted files: some of GTK is not found\n");
     }
+    // Sized by the font if they can be
+    if (!LOOK_UP(pango_layout_get_pixel_size) || !LOOK_UP(gtk_widget_create_pango_layout))
+        p_gtk_widget_create_pango_layout = nullptr;
     purple_signal_connect(p_pidgin_conversations_get_handle(), "conversation-displayed", plugin,
                           PURPLE_CALLBACK(watchConversation), NULL);
     for (GList *item = purple_get_conversations(); item; item = item->next) {

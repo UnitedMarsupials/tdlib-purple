@@ -48,7 +48,7 @@ protected:
     {
         bool        told = false;
         std::string content;
-        findThumbnail(file, mimeType, [&](const std::string &png) {
+        findThumbnail(file, mimeType, 85, [&](const std::string &png) {
             told = true;
             gchar *data = nullptr;
             if (!png.empty() && g_file_get_contents(png.c_str(), &data, nullptr, nullptr))
@@ -68,7 +68,7 @@ TEST_F(ThumbnailTest, MadeByThumbnailer)
     addThumbnailer("a-other", "Exec=cp %i %o\nMimeType=image/png;\n");
     addThumbnailer("b-missing", "TryExec=no-such-thumbnailer\nExec=no-such-thumbnailer %i %o\nMimeType=text/plain;\n");
     addThumbnailer("c-copying", "TryExec=cp\nExec=sh -c 'echo %s >> %o; cat %i >> %o'\nMimeType=text/x-foo;text/plain;\n");
-    EXPECT_EQ("128\nNotes\n", find("text/plain"));
+    EXPECT_EQ("85\nNotes\n", find("text/plain"));
 }
 
 TEST_F(ThumbnailTest, NoThumbnailer)

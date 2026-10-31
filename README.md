@@ -36,7 +36,7 @@ to ten in one. Letter case does not matter. Files are not copied: one gone by
 the time the message is sent keeps the message from being sent.
 
 In Pidgin, the input field shows a thumbnail of the file in the placeholder's
-place, which the message is sent with, the placeholder in its tooltip: a
+place, as tall as five lines of its font, which the message is sent with, the placeholder in its tooltip: a
 picture's own, or the one file managers keep, or one a thumbnailer registered
 for the file's type makes, or else an icon of the type. Right-clicking it, or
 a placeholder written out, offers to send it the other way, or to take it out

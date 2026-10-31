@@ -9,8 +9,6 @@
 #include <sys/wait.h>
 #endif
 
-// "normal", as the specification has it: placeholders show it smaller
-static const unsigned THUMBNAIL_SIZE = 128;
 // A thumbnailer taking longer is given up on
 static const guint THUMBNAILER_SECONDS = 10;
 
@@ -111,7 +109,8 @@ static void thumbnailerDone(GPid pid, gint status, gpointer data)
 }
 
 // Runs the thumbnailer's command, its %i, %u, %o and %s given their values
-static bool runThumbnailer(const std::string &command, const std::string &path, ThumbnailFound &found)
+static bool runThumbnailer(const std::string &command, const std::string &path, unsigned size,
+                           ThumbnailFound &found)
 {
     gchar **argv = nullptr;
     if (!g_shell_parse_argv(command.c_str(), nullptr, &argv, nullptr))
@@ -135,7 +134,7 @@ static bool runThumbnailer(const std::string &command, const std::string &path, 
             case 'i': expanded += path; break;
             case 'u': expanded += uri ? uri : ""; break;
             case 'o': expanded += output; break;
-            case 's': expanded += std::to_string(THUMBNAIL_SIZE); break;
+            case 's': expanded += std::to_string(size); break;
             case '%': expanded += '%'; break;
             default: break;
             }
@@ -168,8 +167,9 @@ static bool runThumbnailer(const std::string &command, const std::string &path, 
 }
 
 // As file managers keep them, named by the MD5 of the file's URI, unless made before the file last
-// changed. GIO tells this too, but would start its VFS, modules and all, for it.
-static std::string findKeptThumbnail(const std::string &path)
+// changed: the smallest at least as big, or else the biggest. GIO tells this too, but would start
+// its VFS, modules and all, for it.
+static std::string findKeptThumbnail(const std::string &path, unsigned size)
 {
     gchar *uri = g_filename_to_uri(path.c_str(), nullptr, nullptr);
     if (!uri)
@@ -181,9 +181,22 @@ static std::string findKeptThumbnail(const std::string &path)
     GStatBuf file;
     if (g_stat(path.c_str(), &file))
         return "";
-    for (const char *size: {"normal", "large", "x-large", "xx-large"}) {
+    // As the specification sizes them
+    static const struct { const char *name; unsigned size; } kinds[] = {
+        {"normal", 128}, {"large", 256}, {"x-large", 512}, {"xx-large", 1024}
+    };
+    enum { KINDS = sizeof(kinds) / sizeof(kinds[0]) };
+    int first = 0;
+    while ((first < KINDS - 1) && (kinds[first].size < size))
+        first++;
+    std::vector<const char *> order;
+    for (int i = first; i < KINDS; i++)
+        order.push_back(kinds[i].name);
+    for (int i = first - 1; i >= 0; i--)
+        order.push_back(kinds[i].name);
+    for (const char *kind: order) {
         std::string thumbnail = std::string(g_get_user_cache_dir()) + G_DIR_SEPARATOR_S "thumbnails" G_DIR_SEPARATOR_S +
-                                size + G_DIR_SEPARATOR_S + name;
+                                kind + G_DIR_SEPARATOR_S + name;
         GStatBuf kept;
         if (!g_stat(thumbnail.c_str(), &kept) && S_ISREG(kept.st_mode) && (kept.st_mtime >= file.st_mtime))
             return thumbnail;
@@ -191,15 +204,15 @@ static std::string findKeptThumbnail(const std::string &path)
     return "";
 }
 
-void findThumbnail(const std::string &path, const std::string &mimeType, ThumbnailFound found)
+void findThumbnail(const std::string &path, const std::string &mimeType, unsigned size, ThumbnailFound found)
 {
-    std::string kept = findKeptThumbnail(path);
+    std::string kept = findKeptThumbnail(path, size);
     if (!kept.empty()) {
         found(kept);
         return;
     }
 
     std::string command = findThumbnailer(mimeType);
-    if (command.empty() || !runThumbnailer(command, path, found))
+    if (command.empty() || !runThumbnailer(command, path, size, found))
         found("");
 }
