@@ -83,6 +83,17 @@ FRONT_END_FUNCTION(gtk_image_set_from_pixbuf);
 FRONT_END_FUNCTION(gdk_pixbuf_new_from_file_at_scale);
 FRONT_END_FUNCTION(g_object_ref);
 FRONT_END_FUNCTION(gtk_text_buffer_place_cursor);
+FRONT_END_FUNCTION(gtk_text_buffer_delete);
+FRONT_END_FUNCTION(gtk_text_buffer_get_iter_at_child_anchor);
+FRONT_END_FUNCTION(gtk_text_child_anchor_get_deleted);
+FRONT_END_FUNCTION(gtk_text_child_anchor_get_widgets);
+FRONT_END_FUNCTION(gtk_text_view_get_buffer);
+FRONT_END_FUNCTION(gtk_widget_get_parent);
+FRONT_END_FUNCTION(gtk_event_box_new);
+FRONT_END_FUNCTION(gtk_event_box_set_visible_window);
+FRONT_END_FUNCTION(gtk_container_add);
+FRONT_END_FUNCTION(gtk_menu_popup);
+FRONT_END_FUNCTION(g_object_set_data);
 // For drops
 FRONT_END_FUNCTION(g_value_get_uint);
 FRONT_END_FUNCTION(gdk_atom_intern);
@@ -721,8 +732,10 @@ static GtkWidget *getEntry(PurpleConversation *conv)
 // field going nowhere. Its handler of "paste-clipboard" stops the signal, so the picture is put in
 // by an emission hook, which comes before: at the cursor, as Pidgin's Insert menu has it, and sent
 // as a photo the same way. Pidgin pastes the text, if there is any, after.
-static guint  g_pasteSignal = 0;
-static gulong g_pasteHook   = 0;
+static guint  g_pasteSignal     = 0;
+static gulong g_pasteHook       = 0;
+static guint  g_backspaceSignal = 0;
+static gulong g_backspaceHook   = 0;
 
 static PurpleConversation *findEntryConversation(gpointer entry)
 {
@@ -844,8 +857,41 @@ static bool takeOver(GtkWidget *widget, const char *name)
 }
 
 // Shown this big, by the line of text it is in
-enum { THUMBNAIL_SIZE = 48 };
-static const char THUMBNAIL_KEY[] = "tdlib-purple-thumbnail";
+enum { THUMBNAIL_SIZE = 96 };
+// A thumbnail in the input field stands for its placeholder, which Pidgin takes as its HTML and
+// its text, as it takes those of its own pictures
+static const char THUMBNAIL_KEY[]      = "tdlib-purple-thumbnail";
+static const char THUMBNAIL_PATH_KEY[] = "tdlib-purple-thumbnail-path";
+static const char IMHTML_HTML_KEY[]    = "gtkimhtml_htmltext";
+static const char IMHTML_TEXT_KEY[]    = "gtkimhtml_plaintext";
+
+// A placeholder of something pasted, in a conversation's input field, gets a menu of its own: to
+// send it the other way, as a file or not, or to take it out
+static PlaceholderHandler g_placeholderHandler = nullptr;
+
+void setPlaceholderHandler(PlaceholderHandler handler)
+{
+    g_placeholderHandler = handler;
+}
+
+static void addMenuItems(GtkWidget *menu, const std::vector<MenuItem> &items, unsigned columns);
+
+static GtkTextChildAnchor *getThumbnailAt(const GtkTextIter &iter)
+{
+    GtkTextChildAnchor *anchor = p_gtk_text_iter_get_child_anchor(&iter);
+    return anchor && p_g_object_get_data(reinterpret_cast<GObject *>(anchor), THUMBNAIL_KEY) ? anchor : nullptr;
+}
+
+static void setThumbnailPlaceholder(GtkTextChildAnchor *anchor, GtkWidget *box, const std::string &placeholder)
+{
+    GObject *object = reinterpret_cast<GObject *>(anchor);
+    p_g_object_set_data_full(object, THUMBNAIL_KEY, g_strdup(placeholder.c_str()), g_free);
+    p_g_object_set_data_full(object, IMHTML_HTML_KEY, g_markup_escape_text(placeholder.c_str(), -1), g_free);
+    // Without text, Pidgin would send no message of a thumbnail alone
+    p_g_object_set_data_full(object, IMHTML_TEXT_KEY, g_strdup(placeholder.c_str()), g_free);
+    std::string tooltip = placeholder + "\n" + static_cast<const char *>(p_g_object_get_data(object, THUMBNAIL_PATH_KEY));
+    p_gtk_widget_set_tooltip_text(box, tooltip.c_str());
+}
 
 static void showThumbnail(GtkWidget *image, const std::string &png)
 {
@@ -857,17 +903,77 @@ static void showThumbnail(GtkWidget *image, const std::string &png)
     }
 }
 
-// Before the placeholder, a thumbnail of its file: an icon of its type until one is found, its
-// anchor holding no text, so that it is not sent
-static void insertThumbnail(GtkWidget *entry, const PastedPlaceholder &pasted)
+static void removeThumbnail(GtkTextChildAnchor *anchor)
+{
+    if (p_gtk_text_child_anchor_get_deleted(anchor))
+        return;
+    GtkTextBuffer *buffer = nullptr;
+    GList         *widgets = p_gtk_text_child_anchor_get_widgets(anchor);
+    if (widgets)
+        buffer = p_gtk_text_view_get_buffer(reinterpret_cast<GtkTextView *>(
+            p_gtk_widget_get_parent(static_cast<GtkWidget *>(widgets->data))));
+    g_list_free(widgets);
+    if (!buffer)
+        return;
+    GtkTextIter from, to;
+    p_gtk_text_buffer_get_iter_at_child_anchor(buffer, &from, anchor);
+    to = from;
+    p_gtk_text_iter_forward_char(&to);
+    p_gtk_text_buffer_delete(buffer, &from, &to);
+}
+
+// Right-clicked, a thumbnail's menu: to send it the other way, as a file or not, or to take it out
+static gboolean thumbnailClicked(GtkWidget *box, GdkEventButton *event, gpointer data)
+{
+    if ((event->type != GDK_BUTTON_PRESS) || (event->button != 3) || !g_placeholderHandler)
+        return FALSE;
+    GtkTextChildAnchor *anchor = static_cast<GtkTextChildAnchor *>(data);
+    GtkWidget          *entry  = p_gtk_widget_get_parent(box);
+    PurpleConversation *conv   = entry ? findEntryConversation(entry) : nullptr;
+    const char         *placeholder = static_cast<const char *>(
+        p_g_object_get_data(reinterpret_cast<GObject *>(anchor), THUMBNAIL_KEY));
+    PastedForms forms;
+    if (!conv || !placeholder || !g_placeholderHandler(conv, placeholder, forms))
+        return FALSE;
+
+    // The anchor kept, should it go meanwhile
+    std::shared_ptr<GObject> kept(reinterpret_cast<GObject *>(anchor), p_g_object_unref);
+    p_g_object_ref(anchor);
+    std::vector<MenuItem> items;
+    if (!forms.other.empty()) {
+        MenuItem item;
+        item.label  = forms.otherLabel;
+        std::string other = forms.other;
+        item.action = [kept, box, other]() {
+            GtkTextChildAnchor *anchor = reinterpret_cast<GtkTextChildAnchor *>(kept.get());
+            if (!p_gtk_text_child_anchor_get_deleted(anchor))
+                setThumbnailPlaceholder(anchor, box, other);
+        };
+        items.push_back(std::move(item));
+    }
+    MenuItem remove;
+    remove.label  = forms.removeLabel;
+    remove.action = [kept]() { removeThumbnail(reinterpret_cast<GtkTextChildAnchor *>(kept.get())); };
+    items.push_back(std::move(remove));
+
+    GtkWidget *menu = p_gtk_menu_new();
+    addMenuItems(menu, items, 0);
+    p_gtk_widget_show_all(menu);
+    p_g_signal_connect_data(menu, "selection-done", G_CALLBACK(p_gtk_widget_destroy), nullptr, nullptr,
+                            GConnectFlags(0));
+    p_gtk_menu_popup(reinterpret_cast<GtkMenu *>(menu), nullptr, nullptr, nullptr, nullptr, event->button, event->time);
+    return TRUE;
+}
+
+// At the iterator, a thumbnail of the file, standing for the placeholder: an icon of its type until
+// one is found; false if there can be none
+static bool insertThumbnailAt(GtkWidget *entry, GtkTextIter *where, const PastedPlaceholder &pasted)
 {
     if (!p_gtk_text_buffer_create_child_anchor || pasted.path.empty())
-        return;
-    GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(entry)->text_buffer;
-    GtkTextIter    cursor;
-    p_gtk_text_buffer_get_iter_at_mark(buffer, &cursor, p_gtk_text_buffer_get_insert(buffer));
-    GtkTextChildAnchor *anchor = p_gtk_text_buffer_create_child_anchor(buffer, &cursor);
-    p_g_object_set_data_full(reinterpret_cast<GObject *>(anchor), THUMBNAIL_KEY, g_strdup(pasted.placeholder.c_str()),
+        return false;
+    GtkTextBuffer      *buffer = reinterpret_cast<GtkIMHtml *>(entry)->text_buffer;
+    GtkTextChildAnchor *anchor = p_gtk_text_buffer_create_child_anchor(buffer, where);
+    p_g_object_set_data_full(reinterpret_cast<GObject *>(anchor), THUMBNAIL_PATH_KEY, g_strdup(pasted.path.c_str()),
                              g_free);
 
     std::string mime  = guessMimeType(pasted.path);
@@ -876,9 +982,14 @@ static void insertThumbnail(GtkWidget *entry, const PastedPlaceholder &pasted)
     GtkWidget  *image = p_gtk_image_new_from_icon_name(icon ? icon : "text-x-generic", GTK_ICON_SIZE_DND);
     g_free(icon);
     g_free(type);
-    p_gtk_widget_set_tooltip_text(image, pasted.path.c_str());
-    p_gtk_text_view_add_child_at_anchor(reinterpret_cast<GtkTextView *>(entry), image, anchor);
-    p_gtk_widget_show(image);
+    GtkWidget *box = p_gtk_event_box_new();
+    p_gtk_event_box_set_visible_window(reinterpret_cast<GtkEventBox *>(box), FALSE);
+    p_gtk_container_add(reinterpret_cast<GtkContainer *>(box), image);
+    setThumbnailPlaceholder(anchor, box, pasted.placeholder);
+    p_g_signal_connect_data(box, "button-press-event", G_CALLBACK(thumbnailClicked), anchor, nullptr,
+                            GConnectFlags(0));
+    p_gtk_text_view_add_child_at_anchor(reinterpret_cast<GtkTextView *>(entry), box, anchor);
+    p_gtk_widget_show_all(box);
 
     // A picture is its own; anything else as file managers have it, or a thumbnailer makes it
     if (pasted.kind == AttachmentKind::Photo)
@@ -890,32 +1001,63 @@ static void insertThumbnail(GtkWidget *entry, const PastedPlaceholder &pasted)
             p_g_object_unref(image);
         });
     }
+    return true;
 }
 
-void addEntryThumbnail(PurpleConversation *conv, const PastedPlaceholder &pasted)
+static std::string getEntrySlice(GtkTextBuffer *buffer);
+static bool findBracketed(const std::string &text, gint offset, std::string &bracketed, gint &start);
+
+// The placeholders written in the field, of things pasted that are here, become their thumbnails
+static void thumbnailPlaceholders(GtkWidget *entry)
 {
-    GtkWidget *entry = getEntry(conv);
-    if (!entry || !p_gtk_text_buffer_create_child_anchor)
+    PurpleConversation *conv = findEntryConversation(entry);
+    if (!conv || !g_placeholderHandler || !p_gtk_text_buffer_create_child_anchor)
         return;
-    // At the start, where an edited message's placeholder is, the cursor kept where it was
     GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(entry)->text_buffer;
-    GtkTextIter    cursor, start;
-    p_gtk_text_buffer_get_iter_at_mark(buffer, &cursor, p_gtk_text_buffer_get_insert(buffer));
-    gint offset = p_gtk_text_iter_get_offset(&cursor);
-    p_gtk_text_buffer_get_iter_at_offset(buffer, &start, 0);
-    p_gtk_text_buffer_place_cursor(buffer, &start);
-    insertThumbnail(entry, pasted);
-    p_gtk_text_buffer_get_iter_at_offset(buffer, &cursor, offset + 1);
-    p_gtk_text_buffer_place_cursor(buffer, &cursor);
+    std::string    text   = getEntrySlice(buffer);
+    // From the end, so that the offsets before stay
+    for (gint offset = g_utf8_strlen(text.c_str(), -1) - 1; offset >= 0; offset--) {
+        std::string placeholder;
+        gint        start;
+        PastedForms forms;
+        if ((*g_utf8_offset_to_pointer(text.c_str(), offset) != '[') ||
+            !findBracketed(text, offset, placeholder, start) ||
+            !g_placeholderHandler(conv, placeholder, forms) || forms.path.empty())
+            continue;
+        GtkTextIter from, to;
+        p_gtk_text_buffer_get_iter_at_offset(buffer, &from, start);
+        p_gtk_text_buffer_get_iter_at_offset(buffer, &to, start + g_utf8_strlen(placeholder.c_str(), -1));
+        p_gtk_text_buffer_delete(buffer, &from, &to);
+        insertThumbnailAt(entry, &from, {placeholder, forms.path, forms.kind});
+    }
 }
 
+// Thumbnails at the cursor, or the placeholders where there can be none
 static void insertPlaceholders(GtkWidget *entry, const std::vector<PastedPlaceholder> &placeholders)
 {
+    GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(entry)->text_buffer;
     for (const PastedPlaceholder &pasted: placeholders) {
-        insertThumbnail(entry, pasted);
-        p_gtk_text_buffer_insert_at_cursor(reinterpret_cast<GtkIMHtml *>(entry)->text_buffer,
-                                           (pasted.placeholder + " ").c_str(), -1);
+        GtkTextIter cursor;
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &cursor, p_gtk_text_buffer_get_insert(buffer));
+        if (!insertThumbnailAt(entry, &cursor, pasted))
+            p_gtk_text_buffer_insert_at_cursor(buffer, (pasted.placeholder + " ").c_str(), -1);
     }
+}
+
+// Pidgin's Backspace after a picture puts its text in its place, as it does a smiley's: not that
+// of a thumbnail, whose text is only for sending
+static gboolean backspacing(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
+{
+    GtkWidget *view = paramCount ? static_cast<GtkWidget *>(p_g_value_get_object(&params[0])) : nullptr;
+    if (!view || !findEntryConversation(view))
+        return TRUE;
+    GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(view)->text_buffer;
+    GtkTextIter    cursor;
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &cursor, p_gtk_text_buffer_get_insert(buffer));
+    GtkTextChildAnchor *anchor = p_gtk_text_iter_backward_char(&cursor) ? getThumbnailAt(cursor) : nullptr;
+    if (anchor)
+        p_g_object_set_data(reinterpret_cast<GObject *>(anchor), IMHTML_TEXT_KEY, nullptr);
+    return TRUE;
 }
 
 // Pastes the placeholders of the files copied, if any
@@ -1202,7 +1344,16 @@ static void connectPaste(gpointer plugin)
         !LOOK_UP(gtk_text_iter_get_child_anchor) || !LOOK_UP(gtk_image_new_from_icon_name) ||
         !LOOK_UP(gtk_image_set_from_pixbuf) || !LOOK_UP(gdk_pixbuf_new_from_file_at_scale) ||
         !LOOK_UP(g_object_ref) || !LOOK_UP(gtk_widget_set_tooltip_text) || !LOOK_UP(gtk_widget_show) ||
-        !LOOK_UP(gtk_text_buffer_place_cursor))
+        !LOOK_UP(gtk_text_buffer_place_cursor) || !LOOK_UP(gtk_text_buffer_delete) ||
+        !LOOK_UP(gtk_text_iter_forward_char) || !LOOK_UP(gtk_text_iter_backward_char) ||
+        !LOOK_UP(gtk_text_buffer_get_iter_at_child_anchor) || !LOOK_UP(gtk_text_child_anchor_get_deleted) ||
+        !LOOK_UP(gtk_text_child_anchor_get_widgets) || !LOOK_UP(gtk_text_view_get_buffer) ||
+        !LOOK_UP(gtk_widget_get_parent) || !LOOK_UP(gtk_event_box_new) ||
+        !LOOK_UP(gtk_event_box_set_visible_window) || !LOOK_UP(gtk_container_add) || !LOOK_UP(gtk_menu_new) ||
+        !LOOK_UP(gtk_menu_popup) || !LOOK_UP(gtk_widget_show_all) || !LOOK_UP(gtk_widget_destroy) ||
+        !LOOK_UP(g_object_set_data) || !LOOK_UP(gtk_text_buffer_get_slice) || !LOOK_UP(g_signal_connect_data) ||
+        !(g_backspaceSignal = p_g_signal_lookup("backspace", p_gtk_imhtml_get_type())) ||
+        !(g_backspaceHook = p_g_signal_add_emission_hook(g_backspaceSignal, 0, backspacing, nullptr, nullptr)))
     {
         p_gtk_text_buffer_create_child_anchor = nullptr;
         purple_debug_warning(config::pluginId, "Cannot show thumbnails of pasted files: some of GTK is not found\n");
@@ -1220,6 +1371,9 @@ static void disconnectPaste()
 {
     if (g_dropHook)
         p_g_signal_remove_emission_hook(g_dropSignal, g_dropHook);
+    if (g_backspaceHook)
+        p_g_signal_remove_emission_hook(g_backspaceSignal, g_backspaceHook);
+    g_backspaceHook = 0;
     if (g_pasteHook) {
         p_g_signal_remove_emission_hook(g_pasteSignal, g_pasteHook);
         for (GList *item = purple_get_conversations(); item; item = item->next)
@@ -1234,6 +1388,7 @@ static void setEntryText(GtkWidget *entry, const char *html)
     p_gtk_imhtml_delete(reinterpret_cast<GtkIMHtml *>(entry), NULL, NULL);
     if (html && *html)
         p_gtk_imhtml_append_text_with_images(reinterpret_cast<GtkIMHtml *>(entry), html, GtkIMHtmlOptions(0), NULL);
+    thumbnailPlaceholders(entry);
 }
 
 // A quarter of the way to amber from the theme's own background, light or dark
@@ -1667,15 +1822,6 @@ static PurpleConversation *findTabConversation(gpointer imhtml)
     return nullptr;
 }
 
-// A placeholder of something pasted, in a conversation's input field, gets a menu of its own: to
-// send it the other way, as a file or not, or to take it out
-static PlaceholderHandler g_placeholderHandler = nullptr;
-
-void setPlaceholderHandler(PlaceholderHandler handler)
-{
-    g_placeholderHandler = handler;
-}
-
 // The input field's text, images as U+FFFC, so that its offsets are the buffer's
 static std::string getEntrySlice(GtkTextBuffer *buffer)
 {
@@ -1721,18 +1867,9 @@ static void replacePlaceholder(GtkWidget *entry, gint start, const std::string &
     const char    *at     = g_utf8_offset_to_pointer(text.c_str(), start);
     if ((start + length > g_utf8_strlen(text.c_str(), -1)) || strncmp(at, placeholder.c_str(), placeholder.size()))
         return;
-    // Taken out, with the space after it, which pasting put there, and its thumbnail before it
+    // Taken out, with the space after it, which pasting put there
     if (replacement.empty() && (at[placeholder.size()] == ' '))
         length++;
-    if (replacement.empty() && (start > 0) && p_gtk_text_iter_get_child_anchor) {
-        GtkTextIter before;
-        p_gtk_text_buffer_get_iter_at_offset(buffer, &before, start - 1);
-        GtkTextChildAnchor *anchor = p_gtk_text_iter_get_child_anchor(&before);
-        if (anchor && p_g_object_get_data(reinterpret_cast<GObject *>(anchor), THUMBNAIL_KEY)) {
-            start--;
-            length++;
-        }
-    }
     GtkTextIter from, to;
     p_gtk_text_buffer_get_iter_at_offset(buffer, &from, start);
     p_gtk_text_buffer_get_iter_at_offset(buffer, &to, start + length);
@@ -2018,9 +2155,6 @@ void pasteIntoEntryLater(PurpleConversation *conv, const std::vector<PastedPlace
 {
 }
 
-void addEntryThumbnail(PurpleConversation *conv, const PastedPlaceholder &pasted)
-{
-}
 
 bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::string &text,
                     const std::string &notice, std::function<void()> cancelled)

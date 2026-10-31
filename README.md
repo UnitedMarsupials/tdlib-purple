@@ -29,13 +29,15 @@ placeholder, the text after it being its caption:
   clipboard's, having no name, is `image-1.png` and so on.
 
 Several in a row go as an album, pictures and videos together, files apart, up
-to ten in one. Letter case does not matter. In Pidgin, a placeholder in the
-input field has a thumbnail before it, which is not sent: a picture's own, or
-the one file managers keep, or one a thumbnailer registered for the file's type
-makes, or else an icon of the type. Files are not copied: one gone by
-the time the message is sent keeps the message from being sent. In Pidgin,
-right-clicking a placeholder in the input field offers to send it the other
-way, or to take it out of the message.
+to ten in one. Letter case does not matter. Files are not copied: one gone by
+the time the message is sent keeps the message from being sent.
+
+In Pidgin, the input field shows a thumbnail of the file in the placeholder's
+place, which the message is sent with, the placeholder in its tooltip: a
+picture's own, or the one file managers keep, or one a thumbnailer registered
+for the file's type makes, or else an icon of the type. Right-clicking it, or
+a placeholder written out, offers to send it the other way, or to take it out
+of the message.
 
 A message's picture, video or file, edited, goes by a placeholder too, before
 its caption: kept, only the caption changes; another placeholder put in its

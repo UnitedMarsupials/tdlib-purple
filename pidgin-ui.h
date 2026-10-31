@@ -97,10 +97,10 @@ struct PastedPlaceholder {
 // rather than the files' URIs, or the picture itself
 using PastedHandler = std::vector<PastedPlaceholder> (*)(PurpleConversation *conv, const ClipboardContent &content);
 void setPastedHandler(PastedHandler handler);
-// Once the main loop is idle, the placeholders go into the conversation's input field at the cursor
+// Once the main loop is idle, the placeholders go into the conversation's input field at the cursor,
+// as thumbnails that stand for them, where their files have one. Those written in the text the field
+// is given, such as of a message edited there, become thumbnails too.
 void pasteIntoEntryLater(PurpleConversation *conv, const std::vector<PastedPlaceholder> &placeholders);
-// A thumbnail at the start of the input field, before the placeholder of a message's media being edited
-void addEntryThumbnail(PurpleConversation *conv, const PastedPlaceholder &pasted);
 
 // Writes the HTML into the tab as a line of its own, at its end, not logged
 void appendTabLine(PurpleConversation *conv, const std::string &html);
@@ -171,12 +171,15 @@ void setMessagePopupHandler(MessagePopupHandler handler);
 // Whether the buddy list shows the contact's name after the mark, which is plain text
 using BuddyMarkHandler = bool (*)(PurpleBuddy *buddy);
 void setBuddyMarkHandler(BuddyMarkHandler handler, const char *mark);
-// A placeholder of something pasted, right-clicked in the input field: its other form, if any, to
-// send it the other way, as a file or not, and the menu's labels for that and for taking it out
+// A placeholder of something pasted, right-clicked in the input field, or its thumbnail: its other
+// form, if any, to send it the other way, as a file or not, and the menu's labels for that and for
+// taking it out; and its file, where it is here, for a thumbnail
 struct PastedForms {
-    std::string other;
-    std::string otherLabel;
-    std::string removeLabel;
+    std::string    other;
+    std::string    otherLabel;
+    std::string    removeLabel;
+    std::string    path;
+    AttachmentKind kind = AttachmentKind::Document;
 };
 // False if the text is no placeholder
 using PlaceholderHandler = bool (*)(PurpleConversation *conv, const std::string &placeholder, PastedForms &forms);

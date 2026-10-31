@@ -1023,6 +1023,8 @@ static bool placeholderClicked(PurpleConversation *conv, const std::string &plac
     PlaceholderUse  use      = tdClient ? tdClient->findPasted(placeholder) : PlaceholderUse();
     if (!use.attachment)
         return false;
+    forms.path = use.attachment->path;
+    forms.kind = use.attachment->kind;
     if (use.attachment->kind != AttachmentKind::Document) {
         forms.other = use.asFile ? use.attachment->placeholder() : use.attachment->filePlaceholder();
         if (!use.asFile)

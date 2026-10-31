@@ -1544,12 +1544,8 @@ void PurpleTdClient::askEditMessage(ChatId chatId, MessageId messageId, const st
     // TRANSLATOR: In-chat notification, not logged, until the edit ends. Argument is the time (or date and time) the message was sent at, as the conversation window shows it. "/cancel" must remain verbatim!
     std::string notice = formatMessage(_("Editing the message from {}: send it to save the change; Esc or /cancel leaves it as it was."),
                                        linkToMessage(m_data.purpleAccount, chatId, messageId, formatMessageTime(date)));
-    if (conv && beginEntryEdit(conv, {chatId, messageId, isCaption, html, number}, html, notice, editCancelled)) {
-        for (const PastedAttachment &attachment: m_data.pastedAttachments.items)
-            if (number && (attachment.number == number) && !attachment.path.empty())
-                addEntryThumbnail(conv, {attachment.placeholder(), attachment.path, attachment.kind});
+    if (conv && beginEntryEdit(conv, {chatId, messageId, isCaption, html, number}, html, notice, editCancelled))
         return;
-    }
 
     // Not tied to the connection: the account is found again once the user answers
     auto *request = new MessageRequest{purple_account_get_username(m_data.purpleAccount), chatId, messageId, isCaption,
