@@ -34,6 +34,9 @@ using PidginTextMark   = void;
 void pidginUiLoad(PurplePlugin *plugin);
 void pidginUiUnload();
 bool pidginUiFound();
+// The height of a line of a conversation's text, in pixels, for pictures to be sized by; 0 without
+// Pidgin
+unsigned getTextLineHeight();
 
 // Each message shown is bracketed in its tab by two marks, found again by its id; those of a
 // message shown again are moved. While an object of this class lives, what is written into a

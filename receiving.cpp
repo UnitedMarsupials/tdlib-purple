@@ -1718,22 +1718,30 @@ const td::td_api::file *selectPhotoSize(PurpleAccount *account, const td::td_api
 
 // The thumbnail the sender attached to a video, if it is one the conversation window can show:
 // Telegram also sends MPEG4 thumbnails for some videos and animations, and those are skipped.
-// Of a cover the sender chose for a video, the size that does for a preview: the smallest at least as
-// wide as the video's thumbnail, which is what the preview would be without a cover, or else the widest
+// Of a cover the sender chose for a video, the size that does for a preview: in Pidgin, the smallest
+// at least so many lines of the conversation's text tall, or else the tallest; elsewhere the smallest
+// at least as wide as the video's thumbnail, which is what the preview would be without a cover, or
+// else the widest
+enum { COVER_LINES = 20 };
 static const td::td_api::file *getCoverPreview(const td::td_api::photo *cover,
                                                const td::td_api::thumbnail *thumbnail)
 {
     // Telegram's thumbnails are 320 pixels wide, should one not say
-    int32_t previewWidth = (thumbnail && (thumbnail->width_ > 0)) ? thumbnail->width_ : 320;
+    int32_t  previewWidth = (thumbnail && (thumbnail->width_ > 0)) ? thumbnail->width_ : 320;
+    unsigned lineHeight   = getTextLineHeight();
+    bool     byHeight     = (lineHeight > 0);
+    int32_t  wanted       = byHeight ? int32_t(lineHeight * COVER_LINES) : previewWidth;
     const td::td_api::photoSize *chosen = nullptr;
     if (cover)
         for (const auto &size: cover->sizes_) {
             if (!size || !size->photo_)
                 continue;
-            bool wideEnough = (size->width_ >= previewWidth);
+            int32_t measure       = byHeight ? size->height_ : size->width_;
+            int32_t chosenMeasure = chosen ? (byHeight ? chosen->height_ : chosen->width_) : 0;
+            bool    bigEnough     = (measure >= wanted);
             if (!chosen ||
-                (wideEnough && ((chosen->width_ < previewWidth) || (size->width_ < chosen->width_))) ||
-                (!wideEnough && (chosen->width_ < previewWidth) && (size->width_ > chosen->width_)))
+                (bigEnough && ((chosenMeasure < wanted) || (measure < chosenMeasure))) ||
+                (!bigEnough && (chosenMeasure < wanted) && (measure > chosenMeasure)))
                 chosen = size.get();
         }
     return chosen ? chosen->photo_.get() : nullptr;

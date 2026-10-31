@@ -86,6 +86,12 @@ FRONT_END_FUNCTION(gtk_text_buffer_place_cursor);
 FRONT_END_FUNCTION(gtk_text_buffer_delete);
 FRONT_END_FUNCTION(gtk_widget_create_pango_layout);
 FRONT_END_FUNCTION(pango_layout_get_pixel_size);
+FRONT_END_FUNCTION(gtk_widget_get_default_style);
+FRONT_END_FUNCTION(gdk_pango_context_get);
+FRONT_END_FUNCTION(pango_context_get_metrics);
+FRONT_END_FUNCTION(pango_font_metrics_get_ascent);
+FRONT_END_FUNCTION(pango_font_metrics_get_descent);
+FRONT_END_FUNCTION(pango_font_metrics_unref);
 FRONT_END_FUNCTION(gtk_text_buffer_get_iter_at_child_anchor);
 FRONT_END_FUNCTION(gtk_text_child_anchor_get_deleted);
 FRONT_END_FUNCTION(gtk_text_child_anchor_get_widgets);
@@ -515,6 +521,13 @@ void pidginUiLoad(PurplePlugin *plugin)
                       g_pidginUi ? "found" : "not found");
     if (!g_pidginUi)
         return;
+    // Pictures sized by the font if they can be
+    if (!LOOK_UP(pango_layout_get_pixel_size) || !LOOK_UP(gtk_widget_create_pango_layout))
+        p_gtk_widget_create_pango_layout = nullptr;
+    if (!LOOK_UP(gtk_widget_get_default_style) || !LOOK_UP(gdk_pango_context_get) ||
+        !LOOK_UP(pango_context_get_metrics) || !LOOK_UP(pango_font_metrics_get_ascent) ||
+        !LOOK_UP(pango_font_metrics_get_descent) || !LOOK_UP(pango_font_metrics_unref))
+        p_gtk_widget_get_default_style = nullptr;
 
     // A protocol plugin is loaded before Pidgin's window registers its signals: they are
     // connected to once the main loop is idle
@@ -895,15 +908,48 @@ static void setThumbnailPlaceholder(GtkTextChildAnchor *anchor, GtkWidget *box, 
     p_gtk_widget_set_tooltip_text(box, tooltip.c_str());
 }
 
-static int getThumbnailSize(GtkWidget *entry)
+// Of a line of the widget's font, as Pango lays it out; 0 if it cannot be told
+static int getLineHeight(GtkWidget *widget)
 {
-    PangoLayout *layout = p_gtk_widget_create_pango_layout ? p_gtk_widget_create_pango_layout(entry, "A") : nullptr;
+    PangoLayout *layout = p_gtk_widget_create_pango_layout ? p_gtk_widget_create_pango_layout(widget, "A") : nullptr;
     int          height = 0;
     if (layout) {
         p_pango_layout_get_pixel_size(layout, nullptr, &height);
         p_g_object_unref(layout);
     }
+    return height;
+}
+
+static int getThumbnailSize(GtkWidget *entry)
+{
+    int height = getLineHeight(entry);
     return (height > 0) ? height * THUMBNAIL_LINES : THUMBNAIL_SIZE;
+}
+
+unsigned getTextLineHeight()
+{
+    if (!g_pidginUi)
+        return 0;
+    // A conversation's own, all of them having the same, or else GTK's
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        GtkIMHtml *imhtml = getIMHtml(static_cast<PurpleConversation *>(item->data));
+        if (imhtml)
+            return std::max(getLineHeight(reinterpret_cast<GtkWidget *>(imhtml)), 0);
+    }
+    if (!p_gtk_widget_get_default_style)
+        return 0;
+    GtkStyle     *style   = p_gtk_widget_get_default_style();
+    PangoContext *context = p_gdk_pango_context_get();
+    PangoFontMetrics *metrics = (style && context) ? p_pango_context_get_metrics(context, style->font_desc, nullptr)
+                                                   : nullptr;
+    int height = 0;
+    if (metrics) {
+        height = PANGO_PIXELS(p_pango_font_metrics_get_ascent(metrics) + p_pango_font_metrics_get_descent(metrics));
+        p_pango_font_metrics_unref(metrics);
+    }
+    if (context)
+        p_g_object_unref(context);
+    return std::max(height, 0);
 }
 
 static void showThumbnail(GtkWidget *image, int size, const std::string &png)
@@ -1372,9 +1418,6 @@ static void connectPaste(gpointer plugin)
         p_gtk_text_buffer_create_child_anchor = nullptr;
         purple_debug_warning(config::pluginId, "Cannot show thumbnails of pasted files: some of GTK is not found\n");
     }
-    // Sized by the font if they can be
-    if (!LOOK_UP(pango_layout_get_pixel_size) || !LOOK_UP(gtk_widget_create_pango_layout))
-        p_gtk_widget_create_pango_layout = nullptr;
     purple_signal_connect(p_pidgin_conversations_get_handle(), "conversation-displayed", plugin,
                           PURPLE_CALLBACK(watchConversation), NULL);
     for (GList *item = purple_get_conversations(); item; item = item->next) {
@@ -2145,6 +2188,11 @@ void pidginUiUnload()
 bool pidginUiFound()
 {
     return false;
+}
+
+unsigned getTextLineHeight()
+{
+    return 0;
 }
 
 MessageMarkScope::MessageMarkScope(MessageId messageId, const char *editNote, bool anew, bool markChanges)
