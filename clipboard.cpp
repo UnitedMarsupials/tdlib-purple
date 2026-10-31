@@ -3,6 +3,8 @@
 #include "format.h"
 #include "file-transfer.h"
 #include "translate.h"
+#include <td/telegram/Client.h>
+#include <td/telegram/td_api.h>
 #include <purple.h>
 #include <gio/gio.h>
 #include <string.h>
@@ -92,18 +94,15 @@ std::string makeAttachmentName(AttachmentKind kind, unsigned number, const std::
     std::string name = (kind == AttachmentKind::Photo) ? "image" : (kind == AttachmentKind::Video) ? "video"
                                                                                                   : "document";
     name += "-" + std::to_string(number);
-    // GIO tells no extension for a type: the subtype gives one, as image/svg+xml does svg, unless it
-    // is a vendor's, or the like
-    size_t slash = mimeType.find('/');
-    if (slash == std::string::npos)
-        return name;
-    std::string subtype = mimeType.substr(slash + 1);
-    subtype = subtype.substr(0, subtype.find('+'));
-    if (g_str_has_prefix(subtype.c_str(), "x-"))
-        subtype.erase(0, 2);
-    if (!subtype.empty() && (subtype.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789") == std::string::npos))
-        name += "." + subtype;
-    return name;
+    // TDLib's, which it tells the type of a file it sends by
+    std::string extension;
+    if (!mimeType.empty()) {
+        td::Client::Response response =
+            td::Client::execute({0, td::td_api::make_object<td::td_api::getFileExtension>(mimeType)});
+        if (response.object && (response.object->get_id() == td::td_api::text::ID))
+            extension = static_cast<const td::td_api::text &>(*response.object).text_;
+    }
+    return extension.empty() ? name : name + "." + extension;
 }
 
 const PastedAttachment &addPastedFile(PastedAttachments &attachments, const std::string &path)
@@ -185,8 +184,16 @@ PlaceholderUse findPasted(const PastedAttachments &attachments, const std::strin
         return use;
     use.asFile = true;
     // A name it cannot go under, one of a directory, is its own
-    use.name   = (label.find('/') == std::string::npos) && (label != ".") && (label != "..") ? label
-                                                                                           : use.attachment->name;
+    if ((label.find('/') != std::string::npos) || (label == ".") || (label == "..")) {
+        use.name = use.attachment->name;
+        return use;
+    }
+    // Without an extension, TDLib could not tell its type: its own name's is taken
+    use.name = label;
+    const char *own = strrchr(use.attachment->name.c_str(), '.');
+    size_t      dot = label.rfind('.');
+    if (((dot == std::string::npos) || (dot == 0)) && own && (own != use.attachment->name.c_str()))
+        use.name += own;
     return use;
 }
 

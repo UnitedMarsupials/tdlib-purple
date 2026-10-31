@@ -26,7 +26,10 @@ placeholder, the text after it being its caption:
   Telegram shows it in the chat (and makes it smaller);
 * `[name#N]` sends thing N as a file, as it is, under that name: its own, as in
   `[report.pdf#3]`, or any other, as in `[meow.jpg#1]`. A picture of the
-  clipboard's, having no name, is `image-1.png` and so on.
+  clipboard's, having no name, is `image-1.png` and so on, the extension the
+  one TDLib gives the type of its content. A name without an extension takes
+  the thing's own, as `[meow#1]` does, since Telegram tells a file's type by
+  its extension.
 
 Several in a row go as an album, pictures and videos together, files apart, up
 to ten in one. Letter case does not matter. Files are not copied: one gone by

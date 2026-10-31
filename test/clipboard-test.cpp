@@ -117,6 +117,10 @@ TEST(PastedAttachments, Names)
 
         // No directory of another name
         EXPECT_EQ("notes.txt", findPasted(attachments, "[../x#1]").name);
+        // Without an extension, its own
+        EXPECT_EQ("Q3 notes.txt", findPasted(attachments, "[Q3 notes#1]").name);
+        EXPECT_EQ(".hidden.txt", findPasted(attachments, "[.hidden#1]").name);
+        EXPECT_EQ("notes.md", findPasted(attachments, "[notes.md#1]").name);
         // A document has no label of a picture's
         EXPECT_TRUE(findPasted(attachments, "[Image#1]").asFile);
     }
@@ -127,11 +131,12 @@ TEST(PastedAttachments, Names)
 
 TEST(PastedAttachments, MadeNames)
 {
+    // TDLib's extensions, which it tells types by
     EXPECT_EQ("image-1.png", makeAttachmentName(AttachmentKind::Photo, 1, "image/png"));
     EXPECT_EQ("image-2.svg", makeAttachmentName(AttachmentKind::Photo, 2, "image/svg+xml"));
     EXPECT_EQ("document-3.pdf", makeAttachmentName(AttachmentKind::Document, 3, "application/pdf"));
-    EXPECT_EQ("document-4.tar", makeAttachmentName(AttachmentKind::Document, 4, "application/x-tar"));
-    EXPECT_EQ("document-5", makeAttachmentName(AttachmentKind::Document, 5,
-                                               "application/vnd.oasis.opendocument.text"));
+    EXPECT_EQ("video-4.mov", makeAttachmentName(AttachmentKind::Video, 4, "video/quicktime"));
+    EXPECT_EQ("document-5.odt", makeAttachmentName(AttachmentKind::Document, 5,
+                                                   "application/vnd.oasis.opendocument.text"));
     EXPECT_EQ("video-6", makeAttachmentName(AttachmentKind::Video, 6, ""));
 }
