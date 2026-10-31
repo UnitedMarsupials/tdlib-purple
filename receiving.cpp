@@ -11,6 +11,7 @@
 #include "pidgin-ui.h"
 #include "log-history.h"
 #include <algorithm>
+#include <limits>
 #include <tuple>
 #include <fmt/format.h>
 
@@ -2775,13 +2776,13 @@ void fetchHistory(TdAccountData &account, ChatId chatId, MessageId fetchFrom, Me
     fetchHistoryRequest(account, chatId, 0, fetchFrom, stopAt);
 }
 
-// As many messages as Pidgin's tab keeps, at most, it having at least a line for each
+// As many messages as Pidgin's tab keeps, at most, it having at least a line for each; no limit
+// if it keeps all
 static unsigned getRedrawLimit()
 {
     static const char SCROLLBACK_PREF[] = "/pidgin/conversations/scrollback_lines";
-    enum { NO_SCROLLBACK_LIMIT = 10000 };
     int lines = purple_prefs_exists(SCROLLBACK_PREF) ? purple_prefs_get_int(SCROLLBACK_PREF) : 0;
-    return (lines > 0) ? lines : NO_SCROLLBACK_LIMIT;
+    return (lines > 0) ? lines : std::numeric_limits<unsigned>::max();
 }
 
 namespace {
