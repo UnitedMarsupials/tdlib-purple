@@ -349,6 +349,23 @@ static gboolean displayingMessage(PurpleAccount *account, const char *who, char 
     // How an edit ended is of no interest once the conversation goes on
     if (flags & (PURPLE_MESSAGE_SEND | PURPLE_MESSAGE_RECV))
         removeEditNotice(conv, EDIT_OUTCOME);
+    // Pidgin's "Last Said" finds a chat member's latest message by a mark named after the sender
+    // written, which for our own is not the account's name the member list has us by: that mark is
+    // set too, where Pidgin sets its own, unless an earlier message is being written over
+    bool           ownInChat  = (flags & PURPLE_MESSAGE_SEND) &&
+                                (purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_CHAT) &&
+                                !strcmp(purple_account_get_protocol_id(account), config::pluginId);
+    GtkTextBuffer *chatBuffer = ownInChat ? getTextBuffer(conv) : nullptr;
+    if (chatBuffer && !(g_messageBeingWritten && g_messageBeingWritten->replacing)) {
+        std::string name = std::string("user:") + purple_account_get_username(account);
+        GtkTextIter end;
+        p_gtk_text_buffer_get_end_iter(chatBuffer, &end);
+        GtkTextMark *mark = p_gtk_text_buffer_get_mark(chatBuffer, name.c_str());
+        if (mark)
+            p_gtk_text_buffer_move_mark(chatBuffer, mark, &end);
+        else
+            p_gtk_text_buffer_create_mark(chatBuffer, name.c_str(), &end, TRUE);
+    }
     if (!g_messageBeingWritten)
         return FALSE;
     if (!g_messageBeingWritten->conv) {
