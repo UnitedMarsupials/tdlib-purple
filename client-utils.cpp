@@ -245,6 +245,12 @@ std::vector<const td::td_api::user *> getUsersByPurpleName(const char *buddyName
             result.push_back(tdUser);
         else if (action)
             purple_debug_warning(config::pluginId, "Cannot %s: no user with id %s\n", action, buddyName);
+    } else if (!strcmp(getCanonicalPhoneNumber(buddyName),
+                       getCanonicalPhoneNumber(purple_account_get_username(account.purpleAccount)))) {
+        // Ourselves, as group chats list us: by the account's name, for libpurple to show our alias
+        const td::td_api::user *self = account.getUserByPhone(purple_account_get_username(account.purpleAccount));
+        if (self)
+            result.push_back(self);
     } else {
         account.getUsersByDisplayName(buddyName, result);
         if (action) {

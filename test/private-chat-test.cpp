@@ -2,6 +2,7 @@
 #include "sticker.h"
 #include "libpurple-mock.h"
 #include "purple-info.h"
+#include "td-client.h"
 #include <fmt/format.h>
 
 class PrivateChatTest: public CommTest {
@@ -1552,4 +1553,17 @@ TEST_F(PrivateChatTest, ContactRegistered)
             PURPLE_MESSAGE_SYSTEM, date
         )
     );
+}
+
+TEST_F(PrivateChatTest, FindOurselvesByAccountName)
+{
+    loginWithOneContact();
+    // As group chats list us, with "+" or without
+    auto *client = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(connection));
+    for (const std::string &name: {"+" + selfPhoneNumber, selfPhoneNumber}) {
+        std::vector<const td::td_api::user *> users;
+        client->getUsers(name.c_str(), users);
+        ASSERT_EQ(1u, users.size());
+        EXPECT_EQ(selfId, users[0]->id_);
+    }
 }
