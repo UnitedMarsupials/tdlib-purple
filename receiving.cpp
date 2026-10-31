@@ -15,10 +15,6 @@
 #include <tuple>
 #include <fmt/format.h>
 
-enum {
-    HISTORY_MESSAGES_ABSOLUTE_LIMIT = 80
-};
-
 // The name is chosen by whoever sent the file and routinely contains spaces and other
 // characters a URI cannot carry literally, so the path has to be percent-encoded before
 // it is handed to a viewer.
@@ -2712,14 +2708,13 @@ static void fetchHistoryResponse(TdAccountData &account, ChatId chatId, MessageI
                 purple_debug_warning(config::pluginId, "Erroneous message in history, stopping\n");
                 break;
             }
-            if (stopAt.valid() && (getId(*message) == stopAt)) {
-                purple_debug_misc(config::pluginId, "Found message %" G_GINT64_FORMAT ", stopping\n",
+            // That one may be gone since, deleted, and ids grow with time
+            if (stopAt.valid() && (getId(*message).value() <= stopAt.value())) {
+                purple_debug_misc(config::pluginId, "Reached message %" G_GINT64_FORMAT ", stopping\n",
                                   stopAt.value());
                 break;
             }
-            if ((!stopAt.valid() && (messagesFetched >= 100)) ||
-                (messagesFetched >= HISTORY_MESSAGES_ABSOLUTE_LIMIT))
-            {
+            if (!stopAt.valid() && (messagesFetched >= 100)) {
                 purple_debug_misc(config::pluginId, "Reached history limit, stopping\n");
                 break;
             }
@@ -2739,7 +2734,7 @@ static void fetchHistoryResponse(TdAccountData &account, ChatId chatId, MessageI
             showChatNotification(account, *chat, message.c_str(), PURPLE_MESSAGE_ERROR);
     }
 
-    if (requestMoreFrom.valid() && messagesFetched < HISTORY_MESSAGES_ABSOLUTE_LIMIT)
+    if (requestMoreFrom.valid())
         fetchHistoryRequest(account, chatId, messagesFetched, requestMoreFrom, stopAt);
     else {
         purple_debug_misc(config::pluginId, "Done fetching history for chat %" G_GINT64_FORMAT " (%u msgs)\n",

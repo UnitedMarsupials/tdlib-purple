@@ -19,6 +19,7 @@
 
 ### Fixes
 
+- **Messages that came while the account was offline are all shown once it connects, not only the latest 80 of a chat.** Fetching them stops at the last message seen before, or the first older one if it has been deleted since, which is what the limit guarded against.
 - **In Pidgin, "Last Said" on our own entry in a group chat's member list goes to our latest message there, rather than being disabled.** Pidgin finds it by the name a message is written under, which for ours is not the one the list has us by.
 - **Our own entry in a group chat's member list shows our information, as anyone else's does, rather than "User not found".** Group chats list us by the account's name, our phone number, which the lookup took for a display name.
 - **A link to the file of a message we sent, clicked, opens it rather than saying the message is not found.** The link named the id the message went by while being sent, which Telegram replaces once it is.
