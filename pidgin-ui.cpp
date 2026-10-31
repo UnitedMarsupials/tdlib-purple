@@ -2059,32 +2059,39 @@ namespace {
 struct ScrollToMessage {
     PurpleConversation *conv;
     MessageId           messageId;
+    unsigned            checks = 0;
 };
 }
 
+// GtkIMHtml scrolls to the end when idle, smoothly for up to 0.4 s after the latest message written
+// while it was there, and so for as long as messages keep coming: only once it is done is the
+// tab scrolled back, after which what is written at the end leaves it be
+enum { SCROLLED_CHECK_MS = 100, SCROLLED_CHECKS = 50 };
+
 static gboolean scrollToMessageTop(gpointer data)
 {
-    std::unique_ptr<ScrollToMessage> scroll(static_cast<ScrollToMessage *>(data));
-    GtkIMHtml     *imhtml = g_list_find(purple_get_conversations(), scroll->conv) ? getIMHtml(scroll->conv) : nullptr;
+    ScrollToMessage *scroll = static_cast<ScrollToMessage *>(data);
+    GtkIMHtml       *imhtml = g_list_find(purple_get_conversations(), scroll->conv) ? getIMHtml(scroll->conv) : nullptr;
+    if (imhtml && imhtml->scroll_src && (++scroll->checks < SCROLLED_CHECKS))
+        return G_SOURCE_CONTINUE;
     GtkTextBuffer *buffer = imhtml ? imhtml->text_buffer : nullptr;
     GtkTextMark   *start  = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(scroll->messageId, true).c_str())
                                    : nullptr;
     if (start)
         p_gtk_text_view_scroll_to_mark(reinterpret_cast<GtkTextView *>(imhtml), start, 0.0, TRUE, 0.0, 0.0);
+    delete scroll;
     return G_SOURCE_REMOVE;
 }
 
 void scrollToMessageLater(PurpleConversation *conv, MessageId messageId)
 {
-    // GtkIMHtml scrolls to the end when idle, smoothly for up to 0.4 s
-    enum { AFTER_SCROLLING_MS = 500 };
     if (getIMHtml(conv))
-        g_timeout_add_full(G_PRIORITY_LOW, AFTER_SCROLLING_MS, scrollToMessageTop,
+        g_timeout_add_full(G_PRIORITY_LOW, SCROLLED_CHECK_MS, scrollToMessageTop,
                            new ScrollToMessage{conv, messageId}, NULL);
 }
 
-// A tab's text scrolled to its top: not again until it is scrolled down from there, as filling it
-// anew starts at the top too
+// A tab's text scrolled to its top: not again until it is scrolled down from there, nor while it
+// fits, emptied to be filled anew, which starts at the top too
 static TopReachedHandler g_topReachedHandler = nullptr;
 static guint             g_scrollSignal = 0;
 static gulong            g_scrollHook   = 0;
@@ -2108,8 +2115,10 @@ static gboolean scrolled(GSignalInvocationHint *, guint paramCount, const GValue
                                             config::pluginId) ? nullptr : getIMHtml(conv);
         if (!imhtml || (reinterpret_cast<GtkTextView *>(imhtml)->vadjustment != adjustment))
             continue;
-        bool atTop  = (adjustment->value <= adjustment->lower) && (adjustment->upper > adjustment->page_size);
+        bool atTop  = adjustment->value <= adjustment->lower;
         bool wasTop = purple_conversation_get_data(conv, AT_TOP_KEY) != nullptr;
+        if (atTop && (adjustment->upper <= adjustment->page_size))
+            break;
         purple_conversation_set_data(conv, AT_TOP_KEY, atTop ? conv : nullptr);
         if (atTop && !wasTop)
             g_topReachedHandler(conv);
