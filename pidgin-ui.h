@@ -118,9 +118,20 @@ void stopProgress(PurpleConversation *conv);
 // Whether the message's text is in the conversation's tab, to be written over
 bool canReplaceMessage(PurpleConversation *conv, MessageId messageId);
 
-// The line under a message that lists its reactions, as HTML, replacing what it said before; none
-// if empty. In Pidgin's tab only, where the message is.
-void showMessageReactions(PurpleConversation *conv, MessageId messageId, const std::string &html);
+// The line under a message that lists its reactions, replacing what it said before; none if
+// empty. In Pidgin's tab only, where the message is. Each is HTML, and a key that its tooltip is
+// asked for by, if any.
+struct ShownReaction {
+    std::string html;
+    std::string key;
+};
+void showMessageReactions(PurpleConversation *conv, MessageId messageId, const std::vector<ShownReaction> &reactions);
+// Asked for the tooltip of a message's reaction under the pointer, plain text; false if none
+using ReactionTipHandler = bool (*)(PurpleConversation *conv, MessageId messageId, const std::string &key,
+                                    std::string &tip);
+void setReactionTipHandler(ReactionTipHandler handler);
+// Asks again for the tooltip shown, if any, as what it said has changed
+void refreshReactionTip(PurpleConversation *conv);
 
 // Whether the tab shows an edited message whose change can be marked, and whether it is
 bool canMarkChanges(PurpleConversation *conv, MessageId messageId, bool &marked);

@@ -129,6 +129,15 @@ FRONT_END_FUNCTION(gtk_text_iter_get_marks);
 FRONT_END_FUNCTION(gtk_text_mark_get_name);
 FRONT_END_FUNCTION(gtk_separator_menu_item_new);
 FRONT_END_FUNCTION(gtk_widget_show);
+FRONT_END_FUNCTION(gtk_text_buffer_get_tag_table);
+FRONT_END_FUNCTION(gtk_text_tag_table_lookup);
+FRONT_END_FUNCTION(gtk_text_buffer_create_tag);
+FRONT_END_FUNCTION(gtk_text_buffer_apply_tag);
+FRONT_END_FUNCTION(gtk_text_iter_get_tags);
+FRONT_END_FUNCTION(gtk_text_view_get_iter_location);
+FRONT_END_FUNCTION(gtk_widget_set_has_tooltip);
+FRONT_END_FUNCTION(gtk_widget_trigger_tooltip_query);
+FRONT_END_FUNCTION(gtk_tooltip_set_text);
 
 static bool g_pidginUi = false;
 
@@ -534,6 +543,10 @@ void pidginUiLoad(PurplePlugin *plugin)
                  LOOK_UP(g_signal_handler_disconnect) && LOOK_UP(gtk_text_buffer_get_text) && LOOK_UP(gtk_text_iter_get_offset) &&
                  LOOK_UP(g_object_get_data) && LOOK_UP(g_object_set_data_full) &&
                  LOOK_UP(gtk_text_buffer_get_iter_at_offset);
+    // Reactions are listed in their line's tooltip only with these
+    if (g_pidginUi && (!LOOK_UP(gtk_text_buffer_get_tag_table) || !LOOK_UP(gtk_text_tag_table_lookup) ||
+                       !LOOK_UP(gtk_text_buffer_create_tag) || !LOOK_UP(gtk_text_buffer_apply_tag)))
+        p_gtk_text_buffer_apply_tag = nullptr;
     purple_debug_info(config::pluginId, "Pidgin's conversation window: %s\n",
                       g_pidginUi ? "found" : "not found");
     if (!g_pidginUi)
@@ -554,9 +567,11 @@ void pidginUiLoad(PurplePlugin *plugin)
 static void disconnectPaste();
 static void disconnectPopup();
 static void disconnectScroll();
+static void disconnectReactionTips();
 
 void pidginUiUnload()
 {
+    disconnectReactionTips();
     disconnectPaste();
     disconnectPopup();
     disconnectScroll();
@@ -595,7 +610,18 @@ MessageMarkScope::~MessageMarkScope()
     }
 }
 
-void showMessageReactions(PurpleConversation *conv, MessageId messageId, const std::string &html)
+// Each reaction on a message's line is tagged as that reaction, for its tooltip
+static const char REACTION_TAG_PREFIX[] = "tdlib-reaction ";
+static void connectReactionTips(GtkIMHtml *imhtml);
+
+static GtkTextTag *getReactionTag(GtkTextBuffer *buffer, const std::string &key)
+{
+    std::string name = REACTION_TAG_PREFIX + key;
+    GtkTextTag *tag  = p_gtk_text_tag_table_lookup(p_gtk_text_buffer_get_tag_table(buffer), name.c_str());
+    return tag ? tag : p_gtk_text_buffer_create_tag(buffer, name.c_str(), NULL);
+}
+
+void showMessageReactions(PurpleConversation *conv, MessageId messageId, const std::vector<ShownReaction> &reactions)
 {
     GtkIMHtml     *imhtml  = getIMHtml(conv);
     GtkTextBuffer *buffer  = imhtml ? imhtml->text_buffer : nullptr;
@@ -617,11 +643,26 @@ void showMessageReactions(PurpleConversation *conv, MessageId messageId, const s
     // Right gravity only while the line goes in: kept so, at the end of the tab, the mark would go
     // past the next message too, which a change of reactions would then take away
     GtkTextMark *after = p_gtk_text_buffer_create_mark(buffer, NULL, &end, FALSE);
-    if (!html.empty()) {
-        // Into the tab only, not the log
-        std::string line = "<br>" + html;
-        p_gtk_imhtml_insert_html_at_iter(imhtml, line.c_str(), GTK_IMHTML_NO_SCROLL, &end);
+    // Into the tab only, not the log; each reaction in turn, to be tagged as such
+    bool tagged = p_gtk_text_buffer_get_tag_table && p_gtk_text_tag_table_lookup && p_gtk_text_buffer_create_tag &&
+                  p_gtk_text_buffer_apply_tag;
+    for (size_t i = 0; i < reactions.size(); i++) {
+        std::string html = (i ? "&nbsp;&nbsp;&nbsp;" : "<br>");
+        p_gtk_imhtml_insert_html_at_iter(imhtml, ("<font size=\"2\">" + html + "</font>").c_str(),
+                                         GTK_IMHTML_NO_SCROLL, &end);
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &end, after);
+        gint start = p_gtk_text_iter_get_offset(&end);
+        p_gtk_imhtml_insert_html_at_iter(imhtml, ("<font size=\"2\">" + reactions[i].html + "</font>").c_str(),
+                                         GTK_IMHTML_NO_SCROLL, &end);
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &end, after);
+        if (tagged && !reactions[i].key.empty()) {
+            GtkTextIter from;
+            p_gtk_text_buffer_get_iter_at_offset(buffer, &from, start);
+            p_gtk_text_buffer_apply_tag(buffer, getReactionTag(buffer, reactions[i].key), &from, &end);
+        }
     }
+    if (tagged && !reactions.empty())
+        connectReactionTips(imhtml);
     p_gtk_text_buffer_get_iter_at_mark(buffer, &areaEnd, after);
     p_gtk_text_buffer_create_mark(buffer, name.c_str(), &areaEnd, TRUE);
     p_gtk_text_buffer_delete_mark(buffer, after);
@@ -2033,6 +2074,81 @@ static gboolean populatingPopup(GSignalInvocationHint *, guint paramCount, const
     return TRUE;
 }
 
+// A reaction under the pointer, on its message's line, lists who gave it, in GTK's tooltip; Pidgin's
+// own, for links, is a window of its own
+static ReactionTipHandler g_reactionTipHandler = nullptr;
+static const char         REACTION_TIPS_KEY[]  = "tdlib-purple-reaction-tips";
+
+void setReactionTipHandler(ReactionTipHandler handler)
+{
+    g_reactionTipHandler = handler;
+}
+
+static gboolean queryingTooltip(GtkWidget *view, gint x, gint y, gboolean keyboard, GtkTooltip *tooltip, gpointer)
+{
+    PurpleConversation *conv = (g_reactionTipHandler && !keyboard) ? findTabConversation(view) : nullptr;
+    if (!conv)
+        return FALSE;
+    GtkTextView *textView = reinterpret_cast<GtkTextView *>(view);
+    GtkTextIter  where;
+    GdkRectangle place;
+    p_gtk_text_view_window_to_buffer_coords(textView, GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
+    p_gtk_text_view_get_iter_at_location(textView, &where, x, y);
+    // Nearest the pointer, which may be past the end of the line
+    p_gtk_text_view_get_iter_location(textView, &where, &place);
+    if ((x < place.x) || (x >= place.x + place.width) || (y < place.y) || (y >= place.y + place.height))
+        return FALSE;
+    std::string key;
+    GSList     *tags = p_gtk_text_iter_get_tags(&where);
+    for (GSList *item = tags; item && key.empty(); item = item->next) {
+        const char *name = static_cast<GtkTextTag *>(item->data)->name;
+        if (name && g_str_has_prefix(name, REACTION_TAG_PREFIX))
+            key = name + strlen(REACTION_TAG_PREFIX);
+    }
+    g_slist_free(tags);
+    MessageId   messageId = key.empty() ? MessageId() : findMessageAt(getTextBuffer(conv), where);
+    std::string tip;
+    if (!messageId.valid() || !g_reactionTipHandler(conv, messageId, key, tip) || tip.empty())
+        return FALSE;
+    p_gtk_tooltip_set_text(tooltip, tip.c_str());
+    return TRUE;
+}
+
+static void connectReactionTips(GtkIMHtml *imhtml)
+{
+    if (p_g_object_get_data(G_OBJECT(imhtml), REACTION_TIPS_KEY) || !g_reactionTipHandler ||
+        !LOOK_UP(gtk_text_iter_get_tags) || !LOOK_UP(gtk_text_view_get_iter_location) ||
+        !LOOK_UP(gtk_widget_set_has_tooltip) || !LOOK_UP(gtk_tooltip_set_text) ||
+        !LOOK_UP(gtk_widget_get_pointer) || !LOOK_UP(gtk_text_view_window_to_buffer_coords) ||
+        !LOOK_UP(gtk_text_view_get_iter_at_location) || !LOOK_UP(gtk_text_iter_get_marks) ||
+        !LOOK_UP(gtk_text_mark_get_name))
+        return;
+    gulong handler = p_g_signal_connect_data(imhtml, "query-tooltip", G_CALLBACK(queryingTooltip), nullptr, nullptr,
+                                             GConnectFlags(0));
+    p_g_object_set_data_full(G_OBJECT(imhtml), REACTION_TIPS_KEY, GSIZE_TO_POINTER(handler), nullptr);
+    p_gtk_widget_set_has_tooltip(reinterpret_cast<GtkWidget *>(imhtml), TRUE);
+}
+
+static void disconnectReactionTips()
+{
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        GtkIMHtml *imhtml  = getIMHtml(static_cast<PurpleConversation *>(item->data));
+        gulong     handler = imhtml ? GPOINTER_TO_SIZE(p_g_object_get_data(G_OBJECT(imhtml), REACTION_TIPS_KEY)) : 0;
+        if (handler) {
+            p_g_signal_handler_disconnect(imhtml, handler);
+            p_g_object_set_data_full(G_OBJECT(imhtml), REACTION_TIPS_KEY, nullptr, nullptr);
+            p_gtk_widget_set_has_tooltip(reinterpret_cast<GtkWidget *>(imhtml), FALSE);
+        }
+    }
+}
+
+void refreshReactionTip(PurpleConversation *conv)
+{
+    GtkIMHtml *imhtml = getIMHtml(conv);
+    if (imhtml && p_g_object_get_data(G_OBJECT(imhtml), REACTION_TIPS_KEY) && LOOK_UP(gtk_widget_trigger_tooltip_query))
+        p_gtk_widget_trigger_tooltip_query(reinterpret_cast<GtkWidget *>(imhtml));
+}
+
 MessageId findFirstMessage(PurpleConversation *conv)
 {
     GtkTextBuffer *buffer = getTextBuffer(conv);
@@ -2235,7 +2351,15 @@ MessageMarkScope::~MessageMarkScope()
 {
 }
 
-void showMessageReactions(PurpleConversation *conv, MessageId messageId, const std::string &html)
+void showMessageReactions(PurpleConversation *conv, MessageId messageId, const std::vector<ShownReaction> &reactions)
+{
+}
+
+void setReactionTipHandler(ReactionTipHandler handler)
+{
+}
+
+void refreshReactionTip(PurpleConversation *conv)
 {
 }
 

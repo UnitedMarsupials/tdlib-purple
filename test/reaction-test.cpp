@@ -493,3 +493,46 @@ TEST_F(ReactionTest, UnreadMarked)
     tgl.update(make_object<updateChatUnreadReactionCount>(chatIds[0], 0));
     prpl.verifyEvents(ConvSetTitleEvent(purpleUserName(0), title));
 }
+
+TEST_F(ReactionTest, GiversInTooltip)
+{
+    loginWithOneContact();
+    receive(makeTextMessage("hi"), "hi");
+    PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, purpleUserName(0).c_str(),
+                                                                     account);
+    ASSERT_NE(nullptr, conv);
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    const std::string user = userFirstNames[0] + " " + userLastNames[0];
+    const std::string self = selfFirstName + " " + selfLastName;
+
+    react({{"\U0001F44D", 2, false, {userIds[0]}}});
+    prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0),
+                                     "reacted with \U0001F44D to message „hi“.", PURPLE_MESSAGE_RECV, 0));
+    std::string tip;
+    ASSERT_FALSE(client->getReactionTip(conv, MessageId::fromString("1"), "e\U0001F600", tip));
+
+    // Not all named: the rest are fetched, once
+    ASSERT_TRUE(client->getReactionTip(conv, MessageId::fromString("1"), "e\U0001F44D", tip));
+    ASSERT_EQ(user + "\nand 1 more", tip);
+    ASSERT_TRUE(client->getReactionTip(conv, MessageId::fromString("1"), "e\U0001F44D", tip));
+    uint64_t requestId = tgl.verifyRequest(getMessageAddedReactions(chatIds[0], messageId,
+                                                                    make_object<reactionTypeEmoji>("\U0001F44D"), "",
+                                                                    100));
+    tgl.verifyNoRequests();
+
+    std::vector<object_ptr<addedReaction>> added;
+    added.push_back(make_object<addedReaction>(make_object<reactionTypeEmoji>("\U0001F44D"),
+                                               make_object<messageSenderUser>(userIds[0]), false, date));
+    added.push_back(make_object<addedReaction>(make_object<reactionTypeEmoji>("\U0001F44D"),
+                                               make_object<messageSenderUser>(selfId), true, date));
+    tgl.reply(requestId, make_object<addedReactions>(2, std::move(added), ""));
+    ASSERT_TRUE(client->getReactionTip(conv, MessageId::fromString("1"), "e\U0001F44D", tip));
+    ASSERT_EQ(user + "\n" + self, tip);
+    tgl.verifyNoRequests();
+
+    // Channels name nobody, and the count says how many
+    react({{"\U0001F44D", 40, false, {}}});
+    ASSERT_FALSE(client->getReactionTip(conv, MessageId::fromString("1"), "e\U0001F44D", tip));
+    tgl.verifyNoRequests();
+}

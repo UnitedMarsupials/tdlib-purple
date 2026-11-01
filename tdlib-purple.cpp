@@ -1309,6 +1309,13 @@ static void topReached(PurpleConversation *conv, double filling)
         tdClient->showEarlierMessages(conv, filling);
 }
 
+// A reaction to a message, under the pointer
+static bool reactionTipAsked(PurpleConversation *conv, MessageId messageId, const std::string &key, std::string &tip)
+{
+    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    return tdClient && tdClient->getReactionTip(conv, messageId, key, tip);
+}
+
 // The menu of a tab's text, opened on a message
 static bool messagePopupOpened(PurpleConversation *conv, MessageId messageId, const OpenMenuRef &menu)
 {
@@ -1334,6 +1341,7 @@ static void registerMessageLinks()
     setPlaceholderHandler(placeholderClicked);
     setBuddyMarkHandler(buddyMarked, UNREAD_REACTIONS_MARK);
     setTopReachedHandler(topReached);
+    setReactionTipHandler(reactionTipAsked);
 }
 
 static void unregisterMessageLinks()
@@ -1349,6 +1357,7 @@ static void unregisterMessageLinks()
     setMessagePopupHandler(nullptr);
     setBuddyMarkHandler(nullptr, nullptr);
     setTopReachedHandler(nullptr);
+    setReactionTipHandler(nullptr);
 }
 
 static gboolean tgprpl_unload (PurplePlugin *plugin)
