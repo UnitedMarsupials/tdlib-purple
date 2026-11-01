@@ -1286,8 +1286,28 @@ static gboolean jumpLinkClicked(PidginIMHtml *imhtml, PidginIMHtmlLink *link)
     return TRUE;
 }
 
-// Called whenever the link is right-clicked; it adds nothing to the menu
+// Called whenever the link to a message's file is right-clicked
 static gboolean messageLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *link, PidginWidget *linkMenu)
+{
+    const char *url = g_linkGetUrl(link);
+    std::string accountName, variant;
+    ChatId      chatId;
+    MessageId   messageId;
+    if (!url || !parseMessageLink(url, accountName, chatId, messageId, variant))
+        return TRUE;
+    MenuItem item;
+    item.label  = _("Copy the file");
+    item.action = [accountName, chatId, messageId, variant]() {
+        PurpleTdClient *client = PurpleTdClient::findConnected(accountName.c_str());
+        if (client)
+            client->openMessageFile(chatId, messageId, variant, PurpleTdClient::FileUse::Copy);
+    };
+    addLinkMenuItems(linkMenu, {item});
+    return TRUE;
+}
+
+// Called whenever the link to a message is right-clicked; it adds nothing to the menu
+static gboolean jumpLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *link, PidginWidget *linkMenu)
 {
     return TRUE;
 }
@@ -1333,7 +1353,7 @@ static void registerMessageLinks()
                       messageLinksEnabled() ? MESSAGE_LINK_SCHEME : "file://");
     // Only where Pidgin's tab can be scrolled to the message
     setJumpLinksEnabled(messageLinksEnabled() && pidginUiFound() &&
-                        g_registerProtocol(JUMP_LINK_SCHEME, jumpLinkClicked, messageLinkContextMenu));
+                        g_registerProtocol(JUMP_LINK_SCHEME, jumpLinkClicked, jumpLinkContextMenu));
     // Not where messages go on to other clients, markup and all
     setLogMarkersEnabled(!canDisableReadReceipts());
     setMessagePopupHandler(messagePopupOpened);

@@ -919,6 +919,27 @@ msgstr ""
 msgid "Could not open {0}: {1}"
 msgstr ""
 
+#. TRANSLATOR: Item of a message's menu: the picture goes on the clipboard, as a file and as a picture, downloaded first, if need be.
+#: ../td-client.cpp:1332
+msgid "Copy the picture"
+msgstr ""
+
+#. TRANSLATOR: Item of a message's menu, and of a file's link: the file goes on the clipboard, for a file manager to paste, downloaded first, if need be.
+#: ../td-client.cpp:1334 ../tdlib-purple.cpp:1299
+msgid "Copy the file"
+msgstr ""
+
+#. TRANSLATOR: In-chat error message, the reason in "Could not copy {0}: {1}".
+#: ../td-client.cpp:1867
+msgid "there is no clipboard to put it on"
+msgstr ""
+
+#. TRANSLATOR: In-chat error message, after "Copy the file" was picked. Arguments are a file *type* or name, and the reason.
+#: ../td-client.cpp:1886
+#, c++-format
+msgid "Could not copy {0}: {1}"
+msgstr ""
+
 #: ../td-client.cpp:1851
 msgid "the file"
 msgstr ""

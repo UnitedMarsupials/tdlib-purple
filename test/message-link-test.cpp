@@ -146,6 +146,34 @@ TEST_F(MessageLinkTest, MessageGone)
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
 }
 
+TEST_F(MessageLinkTest, CopyWithoutClipboard)
+{
+    loginWithOneContact();
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    const ChatId    chat    = ChatId::fromString(std::to_string(chatIds[0]).c_str());
+    const MessageId message = MessageId::fromString("1");
+
+    // Fetched as for opening it, but without Pidgin, there is no clipboard to put it on
+    client->openMessageFile(chat, message, std::string(), PurpleTdClient::FileUse::Copy);
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(makeDocumentMessage(10000, "/path/video.mp4", true));
+    prpl.verifyEvents(
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+        ConversationWriteEvent(
+            purpleUserName(0), purpleUserName(0),
+            "Could not copy video.mp4 [video/mp4]: there is no clipboard to put it on",
+            PURPLE_MESSAGE_SYSTEM, 0
+        )
+    );
+
+    // Opening it is not held up by that
+    tgprpl_open_message_link(link().c_str());
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(makeDocumentMessage(10000, "/path/video.mp4", true));
+    prpl.verifyEvents(NotifyUriEvent("file:///path/video.mp4"));
+}
+
 TEST_F(MessageLinkTest, NotALink)
 {
     loginWithOneContact();

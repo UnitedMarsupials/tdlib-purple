@@ -138,6 +138,22 @@ FRONT_END_FUNCTION(gtk_text_view_get_iter_location);
 FRONT_END_FUNCTION(gtk_widget_set_has_tooltip);
 FRONT_END_FUNCTION(gtk_widget_trigger_tooltip_query);
 FRONT_END_FUNCTION(gtk_tooltip_set_text);
+FRONT_END_FUNCTION(gtk_clipboard_get);
+FRONT_END_FUNCTION(gtk_clipboard_set_with_data);
+FRONT_END_FUNCTION(gtk_clipboard_set_can_store);
+FRONT_END_FUNCTION(gtk_target_list_new);
+FRONT_END_FUNCTION(gtk_target_list_add);
+FRONT_END_FUNCTION(gtk_target_list_add_uri_targets);
+FRONT_END_FUNCTION(gtk_target_list_add_image_targets);
+FRONT_END_FUNCTION(gtk_target_list_add_text_targets);
+FRONT_END_FUNCTION(gtk_target_list_unref);
+FRONT_END_FUNCTION(gtk_target_table_new_from_list);
+FRONT_END_FUNCTION(gtk_target_table_free);
+FRONT_END_FUNCTION(gtk_selection_data_set);
+FRONT_END_FUNCTION(gtk_selection_data_set_uris);
+FRONT_END_FUNCTION(gtk_selection_data_set_text);
+FRONT_END_FUNCTION(gtk_selection_data_set_pixbuf);
+FRONT_END_FUNCTION(gdk_pixbuf_new_from_file);
 
 static bool g_pidginUi = false;
 
@@ -1900,6 +1916,103 @@ void fillOpenMenu(const OpenMenuRef &menu, const std::vector<MenuItem> &items)
     menu->separator = nullptr;
 }
 
+void addLinkMenuItems(GtkWidget *menu, const std::vector<MenuItem> &items)
+{
+    addMenuItems(menu, items, 0);
+}
+
+// What is on the clipboard, while it is ours, in the forms it is offered in
+struct CopiedFile {
+    std::string path;
+    std::string uri;
+};
+enum CopiedForm { COPIED_URIS, COPIED_GNOME_FILES, COPIED_PICTURE, COPIED_TEXT };
+static const char GNOME_COPIED_FILES[] = "x-special/gnome-copied-files";
+
+static void gettingCopiedFile(GtkClipboard *, GtkSelectionData *data, guint form, gpointer owner)
+{
+    const CopiedFile *file = static_cast<const CopiedFile *>(owner);
+    switch (form) {
+    case COPIED_URIS: {
+        gchar *uris[] = {const_cast<gchar *>(file->uri.c_str()), nullptr};
+        p_gtk_selection_data_set_uris(data, uris);
+        break;
+    }
+    case COPIED_GNOME_FILES: {
+        // As Nautilus, and other file managers after it, put files copied there
+        std::string list = "copy\n" + file->uri;
+        p_gtk_selection_data_set(data, data->target, 8, reinterpret_cast<const guchar *>(list.c_str()), list.size());
+        break;
+    }
+    case COPIED_PICTURE: {
+        GError    *error  = nullptr;
+        GdkPixbuf *pixbuf = p_gdk_pixbuf_new_from_file(file->path.c_str(), &error);
+        if (pixbuf) {
+            p_gtk_selection_data_set_pixbuf(data, pixbuf);
+            p_g_object_unref(pixbuf);
+        } else {
+            purple_debug_warning(config::pluginId, "Cannot paste %s as a picture: %s\n", file->path.c_str(),
+                                 error ? error->message : "unknown error");
+            if (error)
+                g_error_free(error);
+        }
+        break;
+    }
+    case COPIED_TEXT: {
+        gchar *text = g_filename_to_utf8(file->path.c_str(), -1, nullptr, nullptr, nullptr);
+        p_gtk_selection_data_set_text(data, text ? text : file->uri.c_str(), -1);
+        g_free(text);
+        break;
+    }
+    }
+}
+
+static void clearingCopiedFile(GtkClipboard *, gpointer owner)
+{
+    delete static_cast<CopiedFile *>(owner);
+}
+
+bool copyFileToClipboard(const std::string &path, bool picture)
+{
+    gchar *uri = g_filename_to_uri(path.c_str(), nullptr, nullptr);
+    if (!uri || !LOOK_UP(gtk_clipboard_get) || !LOOK_UP(gtk_clipboard_set_with_data) ||
+        !LOOK_UP(gtk_clipboard_set_can_store) || !LOOK_UP(gtk_target_list_new) || !LOOK_UP(gtk_target_list_add) ||
+        !LOOK_UP(gtk_target_list_add_uri_targets) || !LOOK_UP(gtk_target_list_add_image_targets) ||
+        !LOOK_UP(gtk_target_list_add_text_targets) || !LOOK_UP(gtk_target_list_unref) ||
+        !LOOK_UP(gtk_target_table_new_from_list) || !LOOK_UP(gtk_target_table_free) ||
+        !LOOK_UP(gtk_selection_data_set) || !LOOK_UP(gtk_selection_data_set_uris) ||
+        !LOOK_UP(gtk_selection_data_set_text) || !LOOK_UP(gtk_selection_data_set_pixbuf) ||
+        !LOOK_UP(gdk_pixbuf_new_from_file))
+    {
+        g_free(uri);
+        return false;
+    }
+    CopiedFile *file = new CopiedFile{path, uri};
+    g_free(uri);
+
+    // Most programs take the first form they know: the file itself, then the picture, if it is
+    // one, then its path
+    GtkTargetList *forms = p_gtk_target_list_new(nullptr, 0);
+    p_gtk_target_list_add_uri_targets(forms, COPIED_URIS);
+    p_gtk_target_list_add(forms, p_gdk_atom_intern(GNOME_COPIED_FILES, FALSE), 0, COPIED_GNOME_FILES);
+    if (picture)
+        p_gtk_target_list_add_image_targets(forms, COPIED_PICTURE, TRUE);
+    p_gtk_target_list_add_text_targets(forms, COPIED_TEXT);
+    gint            count;
+    GtkTargetEntry *table     = p_gtk_target_table_new_from_list(forms, &count);
+    GtkClipboard   *clipboard = p_gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
+    bool            copied    = p_gtk_clipboard_set_with_data(clipboard, table, count, gettingCopiedFile,
+                                                              clearingCopiedFile, file);
+    if (copied)
+        // Kept by a clipboard manager, if there is one, after Pidgin quits
+        p_gtk_clipboard_set_can_store(clipboard, nullptr, 0);
+    else
+        delete file;
+    p_gtk_target_table_free(table, count);
+    p_gtk_target_list_unref(forms);
+    return copied;
+}
+
 // The message whose text, header or reactions are there, if any: the nearest start of a message
 // before it, if that message has not ended before it
 static MessageId findMessageAt(GtkTextBuffer *buffer, const GtkTextIter &where)
@@ -2477,6 +2590,15 @@ void fillOpenMenu(const OpenMenuRef &menu, const std::vector<MenuItem> &items)
 
 void setPlaceholderHandler(PlaceholderHandler handler)
 {
+}
+
+void addLinkMenuItems(PidginWidget *menu, const std::vector<MenuItem> &items)
+{
+}
+
+bool copyFileToClipboard(const std::string &path, bool picture)
+{
+    return false;
 }
 
 #endif

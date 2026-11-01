@@ -204,5 +204,12 @@ void setPlaceholderHandler(PlaceholderHandler handler);
 
 // The items take the placeholder's place, after a separator; with none, the separator goes too
 void fillOpenMenu(const OpenMenuRef &menu, const std::vector<MenuItem> &items);
+// The items go into the menu Pidgin opens on a link, after its own, if any
+void addLinkMenuItems(PidginWidget *menu, const std::vector<MenuItem> &items);
+
+// The file goes on the clipboard: its URI, for a file manager to paste a copy, or a conversation to
+// attach it; its path, as text; and, if it is a picture, the picture itself, for a program that
+// takes one. False if there is no clipboard, without Pidgin.
+bool copyFileToClipboard(const std::string &path, bool picture);
 
 #endif

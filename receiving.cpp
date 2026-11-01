@@ -2035,6 +2035,32 @@ void getFileFromMessage(const IncomingMessage &fullMessage, FileInfo &result)
     }
 }
 
+void getMessageFileKind(const td::td_api::MessageContent &content, bool &hasFile, bool &picture)
+{
+    hasFile = true;
+    picture = false;
+    switch (content.get_id()) {
+        case td::td_api::messagePhoto::ID:
+            picture = true;
+            break;
+        case td::td_api::messageSticker::ID: {
+            const auto &sticker = static_cast<const td::td_api::messageSticker &>(content);
+            picture = sticker.sticker_ && sticker.sticker_->format_ &&
+                      (sticker.sticker_->format_->get_id() == td::td_api::stickerFormatWebp::ID);
+            break;
+        }
+        case td::td_api::messageDocument::ID:
+        case td::td_api::messageVideo::ID:
+        case td::td_api::messageAnimation::ID:
+        case td::td_api::messageAudio::ID:
+        case td::td_api::messageVoiceNote::ID:
+        case td::td_api::messageVideoNote::ID:
+            break;
+        default:
+            hasFile = false;
+    }
+}
+
 bool isMessageReady(const IncomingMessage &fullMessage, const TdAccountData &account)
 {
     if (!fullMessage.message) return true;

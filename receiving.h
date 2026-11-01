@@ -59,6 +59,9 @@ struct FileInfo {
 
 const td::td_api::file *selectPhotoSize(PurpleAccount *account, const td::td_api::messagePhoto &photo);
 void getFileFromMessage(const IncomingMessage &fullMessage, FileInfo &result);
+// Whether a message of the content carries a file, as getFileFromMessage() finds it, and whether
+// that is a picture, to be copied as one too: a photo, or a sticker that does not move
+void getMessageFileKind(const td::td_api::MessageContent &content, bool &hasFile, bool &picture);
 
 void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td_api::message> message,
                      IncomingMessage &fullMessage, const TdAccountData &account);

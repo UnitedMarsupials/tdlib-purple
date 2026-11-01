@@ -87,9 +87,11 @@ public:
 
     void createSecretChat(const char *buddyName);
 
-    // A link to the message's file was clicked: fetches the file, if need be, and opens it; a variant,
-    // if given, names one of the sizes a photo or video comes in
-    void openMessageFile(ChatId chatId, MessageId messageId, const std::string &variant = std::string());
+    // A link to the message's file was clicked: fetches the file, if need be, and opens it, or puts it
+    // on the clipboard; a variant, if given, names one of the sizes a photo or video comes in
+    enum class FileUse { Open, Copy };
+    void openMessageFile(ChatId chatId, MessageId messageId, const std::string &variant = std::string(),
+                         FileUse use = FileUse::Open);
     // The link before a message in Pidgin's tab was clicked: pops up its menu
     // Adds the message's items to the menu opened on it
     void showMessageMenu(ChatId chatId, MessageId messageId, OpenMenuRef openMenu);
@@ -234,13 +236,15 @@ private:
     // Files being opened, or opened lately, so that clicking a link again while the program for the
     // file is still starting does not start another
     struct OpenedFile {
-        bool   inProgress;
-        time_t openedAt;
+        bool    inProgress;
+        time_t  openedAt;
+        FileUse use     = FileUse::Open;
+        bool    picture = false; // a photo or a still sticker, copied as a picture too
     };
-    // By the link clicked: the chat, the message and the variant
+    // By the link clicked: the chat, the message, the variant and the use
     std::map<std::string, OpenedFile> m_openedFiles;
 
-    void openMessageFileResponse(ChatId chatId, MessageId messageId, const std::string &variant,
+    void openMessageFileResponse(ChatId chatId, MessageId messageId, const std::string &variant, FileUse use,
                                  TdObjectPtr object);
     void sendPaidReaction(ChatId chatId, MessageId messageId, int64_t starCount);
     void reportMenuError(ChatId chatId, const std::string &failure, const TdObjectPtr &object);
@@ -266,6 +270,8 @@ private:
         UserId                     sender;           // someone else who sent it
         bool                       senderBlocked    = false;
         SentMedia                  media;
+        bool                       hasFile          = false;
+        bool                       picture          = false; // the file is
     };
     void requestMessageReactions(ChatId chatId, MessageId messageId, const MessageMenu &menu,
                                  const OpenMenuRef &openMenu);
