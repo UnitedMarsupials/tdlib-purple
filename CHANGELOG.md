@@ -22,6 +22,7 @@
 
 ### Fixes
 
+- **In Pidgin, "Save Image..." suggests the picture's own file name, a photo's, a sticker's, a custom emoji's or a video cover's, rather than none.**
 - **Messages that came while the account was offline are all shown once it connects, not only the latest 80 of a chat.** Fetching them stops at the last message seen before, or the first older one if it has been deleted since, which is what the limit guarded against. Like those filling a conversation, they make no sound, nor any notification, which only messages coming now do.
 - **In Pidgin, "Last Said" on our own entry in a group chat's member list goes to our latest message there, rather than being disabled.** Pidgin finds it by the name a message is written under, which for ours is not the one the list has us by.
 - **Our own entry in a group chat's member list shows our information, as anyone else's does, rather than "User not found".** Group chats list us by the account's name, our phone number, which the lookup took for a display name.
