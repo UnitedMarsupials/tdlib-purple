@@ -63,10 +63,10 @@ TEST_F(MessageHistoryTest, TdlibSkipMessages)
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
         ChatSetTopicEvent(groupChatPurpleName, "", ""),
         ChatClearUsersEvent(groupChatPurpleName),
-        ServGotChatEvent(connection, purpleChatId, userNameInChat, "2", PURPLE_MESSAGE_RECV, 2),
-        ServGotChatEvent(connection, purpleChatId, userNameInChat, "3", PURPLE_MESSAGE_RECV, 3),
-        ServGotChatEvent(connection, purpleChatId, userNameInChat, "4", PURPLE_MESSAGE_RECV, 4),
-        ServGotChatEvent(connection, purpleChatId, userNameInChat, "5", PURPLE_MESSAGE_RECV, 5),
+        ServGotChatEvent(connection, purpleChatId, userNameInChat, "2", (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_DELAYED), 2),
+        ServGotChatEvent(connection, purpleChatId, userNameInChat, "3", (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_DELAYED), 3),
+        ServGotChatEvent(connection, purpleChatId, userNameInChat, "4", (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_DELAYED), 4),
+        ServGotChatEvent(connection, purpleChatId, userNameInChat, "5", (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_DELAYED), 5),
         ServGotChatEvent(connection, purpleChatId, userNameInChat, "6", PURPLE_MESSAGE_RECV, 6),
         ServGotChatEvent(connection, purpleChatId, userNameInChat, "7", PURPLE_MESSAGE_RECV, 7)
     );
@@ -130,10 +130,10 @@ TEST_F(MessageHistoryTest, TdlibSkipMessages_FlushAtLogout)
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
         ChatSetTopicEvent(groupChatPurpleName, "", ""),
         ChatClearUsersEvent(groupChatPurpleName),
-        ServGotChatEvent(connection, purpleChatId, userNameInChat, "2", PURPLE_MESSAGE_RECV, 2),
-        ServGotChatEvent(connection, purpleChatId, userNameInChat, "3", PURPLE_MESSAGE_RECV, 3),
-        ServGotChatEvent(connection, purpleChatId, userNameInChat, "4", PURPLE_MESSAGE_RECV, 4),
-        ServGotChatEvent(connection, purpleChatId, userNameInChat, "5", PURPLE_MESSAGE_RECV, 5),
+        ServGotChatEvent(connection, purpleChatId, userNameInChat, "2", (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_DELAYED), 2),
+        ServGotChatEvent(connection, purpleChatId, userNameInChat, "3", (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_DELAYED), 3),
+        ServGotChatEvent(connection, purpleChatId, userNameInChat, "4", (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_DELAYED), 4),
+        ServGotChatEvent(connection, purpleChatId, userNameInChat, "5", (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_DELAYED), 5),
         ServGotChatEvent(connection, purpleChatId, userNameInChat, "6", PURPLE_MESSAGE_RECV, 6)
     );
     tgl.verifyRequest(viewMessages(groupChatId, {6, 5, 4, 3, 2}, nullptr, true));
@@ -179,7 +179,8 @@ TEST_F(MessageHistoryTest, CatchingUpWaitsLonger)
         ChatSetTopicEvent(groupChatPurpleName, "", ""),
         ChatClearUsersEvent(groupChatPurpleName),
         ServGotChatEvent(connection, purpleChatId, userNameInChat,
-                         "<b>&gt; " + userFirstNames[0] + " " + userLastNames[0] + " wrote:</b>\n&gt; 2\n3", PURPLE_MESSAGE_RECV, 3),
+                         "<b>&gt; " + userFirstNames[0] + " " + userLastNames[0] + " wrote:</b>\n&gt; 2\n3",
+                         (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_DELAYED), 3),
         ServGotChatEvent(connection, purpleChatId, userNameInChat, "4", PURPLE_MESSAGE_RECV, 4)
     );
     tgl.verifyRequest(viewMessages(groupChatId, {4, 3}, nullptr, true));
