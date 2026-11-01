@@ -1301,12 +1301,12 @@ static bool buddyMarked(PurpleBuddy *buddy)
     return tdClient && tdClient->hasUnreadReactions(buddy);
 }
 
-// Scrolled to the top of its tab
-static void topReached(PurpleConversation *conv)
+// Scrolled to the top of its tab, or that having no more than fits
+static void topReached(PurpleConversation *conv, double filling)
 {
     PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
     if (tdClient)
-        tdClient->showEarlierMessages(conv);
+        tdClient->showEarlierMessages(conv, filling);
 }
 
 // The menu of a tab's text, opened on a message

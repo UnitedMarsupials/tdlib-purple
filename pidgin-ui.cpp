@@ -2083,9 +2083,9 @@ static gboolean scrollToMessageTop(gpointer data)
         p_gtk_text_view_scroll_to_mark(reinterpret_cast<GtkTextView *>(imhtml), start, 0.0, TRUE, 0.0, 0.0);
     // Still no more than fits, where the tab is shown, its size known: earlier messages fill it
     GtkAdjustment *adjustment = imhtml ? reinterpret_cast<GtkTextView *>(imhtml)->vadjustment : nullptr;
-    if (adjustment && (reinterpret_cast<GtkObject *>(imhtml)->flags & GTK_MAPPED) && (adjustment->upper <= adjustment->page_size) &&
-        g_topReachedHandler)
-        g_topReachedHandler(scroll->conv);
+    if (adjustment && (reinterpret_cast<GtkObject *>(imhtml)->flags & GTK_MAPPED) &&
+        (adjustment->upper <= adjustment->page_size) && g_topReachedHandler)
+        g_topReachedHandler(scroll->conv, (adjustment->upper > 0) ? adjustment->page_size / adjustment->upper : 0);
     delete scroll;
     return G_SOURCE_REMOVE;
 }
@@ -2127,7 +2127,7 @@ static gboolean scrolled(GSignalInvocationHint *, guint paramCount, const GValue
             break;
         purple_conversation_set_data(conv, AT_TOP_KEY, atTop ? conv : nullptr);
         if (atTop && !wasTop)
-            g_topReachedHandler(conv);
+            g_topReachedHandler(conv, 0);
         break;
     }
     return TRUE;
@@ -2148,7 +2148,7 @@ static gboolean wheelTurned(GSignalInvocationHint *, guint paramCount, const GVa
             continue;
         GtkAdjustment *adjustment = reinterpret_cast<GtkTextView *>(imhtml)->vadjustment;
         if (adjustment && (adjustment->value <= adjustment->lower))
-            g_topReachedHandler(conv);
+            g_topReachedHandler(conv, 0);
         break;
     }
     return TRUE;

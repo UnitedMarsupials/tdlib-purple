@@ -1937,9 +1937,9 @@ void PurpleTdClient::sendReadReceipts(PurpleConversation *conversation)
     }
 }
 
-void PurpleTdClient::showEarlierMessages(PurpleConversation *conv)
+void PurpleTdClient::showEarlierMessages(PurpleConversation *conv, double filling)
 {
-    ::showEarlierMessages(m_data, conv);
+    ::showEarlierMessages(m_data, conv, filling);
 }
 
 void PurpleTdClient::markConversation(PurpleConversation *conv)

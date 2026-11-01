@@ -144,11 +144,13 @@ bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId);
 MessageId findFirstMessage(PurpleConversation *conv);
 // Once Pidgin is done scrolling to the end as the tab is written, scrolls it back so that the
 // message is at the top, if it is there; if the tab, shown, still has no more than fits, it is
-// as if scrolled to its top
+// to be filled with earlier messages
 void scrollToMessageLater(PurpleConversation *conv, MessageId messageId);
 
-// Told when a tab's text is scrolled to its top, for earlier messages to be shown
-using TopReachedHandler = void (*)(PurpleConversation *conv);
+// Told when a tab's text is scrolled to its top, for earlier messages to be shown, or when it is
+// to be filled with them, having no more than fits: then, how many times its text's height the
+// window's is, if known
+using TopReachedHandler = void (*)(PurpleConversation *conv, double filling);
 void setTopReachedHandler(TopReachedHandler handler);
 
 // An item of a menu: a submenu, if it has items, otherwise disabled if it has no action. The

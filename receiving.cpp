@@ -11,6 +11,7 @@
 #include "pidgin-ui.h"
 #include "log-history.h"
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <tuple>
 #include <fmt/format.h>
@@ -2790,6 +2791,7 @@ struct Redraw {
     MessageId                                               readUpTo;    // the latest received read
     MessageId                                               firstUnread; // found so far
     unsigned                                                extra = 0; // messages wanted before the earliest
+    bool                                                    filling = false; // a tab that fit, kept at its end
     bool                                                    found  = false; // the earliest, or one read
     unsigned                                                beyond = 0; // found so far
     unsigned                                                limit;
@@ -2804,6 +2806,8 @@ static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw
 static std::set<std::pair<int64_t, int64_t>> g_redrawTooFar;
 // Chats whose tabs show their first message
 static std::set<int64_t> g_historyComplete;
+// Messages its tab was last filled with, for those that would fill it to be reckoned
+static std::map<int64_t, size_t> g_redrawnCounts;
 
 static void stopRedrawProgress(TdAccountData &account, ChatId chatId)
 {
@@ -2903,6 +2907,7 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
                           " or the first unread %" G_GINT64_FORMAT ": %zu messages\n", redraw.chatId.value(),
                           redraw.earliest.value(), redraw.firstUnread.value(), redraw.messages.size());
         purple_conversation_clear_message_history(conv);
+        g_redrawnCounts[redraw.chatId.value()] = redraw.messages.size();
         std::vector<LoggedLine> lines = getLoggedLines(account, *chat, conv, redraw);
         // Newest first, as the messages, each going ahead of what is queued
         auto line = lines.rbegin();
@@ -2920,7 +2925,8 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
     std::vector<IncomingMessage> readyMessages;
     account.pendingMessages.setChatReady(redraw.chatId, readyMessages);
     showMessages(readyMessages, account);
-    // Opened: at the first unread, if any. Gone further back: what was at the top stays there.
+    // Opened: at the first unread, if any. Gone further back: what was at the top stays there,
+    // unless all of it was in view, the end then staying in view too, as Pidgin keeps it.
     if (redraw.opening) {
         if (conv)
             scrollToMessageLater(conv, redraw.firstUnread);
@@ -2928,7 +2934,7 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
         if (!redraw.beyond)
             g_historyComplete.insert(redraw.chatId.value());
         if (conv)
-            scrollToMessageLater(conv, redraw.earliest);
+            scrollToMessageLater(conv, redraw.filling ? MessageId() : redraw.earliest);
     }
 }
 
@@ -3000,7 +3006,7 @@ static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw
 
 // False if the chat is busy
 static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earliest, bool opening,
-                        unsigned extra = 0)
+                        unsigned extra = 0, bool filling = false)
 {
     const td::td_api::chat *chat = account.getChat(chatId);
     PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
@@ -3021,6 +3027,7 @@ static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earlies
     redraw->unread   = std::max(chat->unread_count_, 0);
     redraw->readUpTo = getLastReadMessageId(*chat);
     redraw->extra    = extra;
+    redraw->filling  = filling;
     redraw->limit    = getRedrawLimit();
     redrawRequest(account, redraw, MessageId::invalid);
     return true;
@@ -3032,11 +3039,11 @@ void redrawChat(TdAccountData &account, ChatId chatId, MessageId earliest)
         startRedraw(account, chatId, earliest, false);
 }
 
-// Shown before the earliest message, or before the first unread on opening a tab, at least, the tab
-// filled with more if they still fit
+// Shown before the earliest message scrolled to, or before the first unread on opening a tab, at
+// least; a tab is filled with more if they still fit
 enum { EARLIER_BATCH = 50 };
 
-void showEarlierMessages(TdAccountData &account, PurpleConversation *conv)
+void showEarlierMessages(TdAccountData &account, PurpleConversation *conv, double filling)
 {
     const td::td_api::chat *chat     = findConversationChat(account, conv);
     MessageId               earliest = chat ? findFirstMessage(conv) : MessageId();
@@ -3045,7 +3052,14 @@ void showEarlierMessages(TdAccountData &account, PurpleConversation *conv)
         return;
     purple_debug_misc(config::pluginId, "Showing messages before %" G_GINT64_FORMAT " in chat %" G_GINT64_FORMAT "\n",
                       earliest.value(), getId(*chat).value());
-    startRedraw(account, getId(*chat), earliest, false, EARLIER_BATCH);
+    // As many again as it has for each time it would go into the window, and one more
+    unsigned extra = EARLIER_BATCH;
+    if (filling) {
+        auto   it    = g_redrawnCounts.find(getId(*chat).value());
+        size_t shown = (it != g_redrawnCounts.end()) ? it->second : 0;
+        extra        = unsigned(std::ceil(shown * std::max(filling - 1, 0.0))) + 1;
+    }
+    startRedraw(account, getId(*chat), earliest, false, extra, filling > 0);
 }
 
 bool fillChat(TdAccountData &account, ChatId chatId)

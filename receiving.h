@@ -79,8 +79,10 @@ void fetchHistory(TdAccountData &account, ChatId chatId, MessageId fetchFrom, Me
 // Fills the chat's tab anew, in Pidgin, from the given message to the latest, if the tab can hold
 // that many; to show a message it does not, such as one just reacted to
 void redrawChat(TdAccountData &account, ChatId chatId, MessageId earliest);
-// Fills the tab anew, from as many messages more before the earliest it shows, which stays at its top
-void showEarlierMessages(TdAccountData &account, PurpleConversation *conv);
+// Fills the tab anew, from as many messages more before the earliest it shows, which stays at its
+// top; or, filling a tab that had no more than fits, the window so many times its text's height,
+// from about as many more as fill it, the end staying in view
+void showEarlierMessages(TdAccountData &account, PurpleConversation *conv, double filling = 0);
 // Fills the chat's tab anew, in Pidgin, with its messages from the first unread one, and some read
 // before it, as many as it can hold, scrolled to that one; false if the chat is busy, to be tried
 // again later
