@@ -199,11 +199,40 @@ TEST_F(MessageLinkTest, Drag)
     ASSERT_FALSE(picture);
     prpl.verifyNoEvents();
 
+    // A photo and a still sticker are dropped as pictures too, an animated sticker is not
+    auto makeStickerMessage = [&](const std::string &stickerPath, object_ptr<StickerFormat> format) {
+        auto stickerObject = makeSticker(320, 200, "", ::makeFile(fileId, 10000, stickerPath));
+        stickerObject->format_ = std::move(format);
+        return makeMessage(messageId, userIds[0], chatIds[0], false, date,
+                           make_object<messageSticker>(std::move(stickerObject), false));
+    };
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(::makeFile(fileId, 10000, "/path/photo.jpg"), 640, 480));
+    object_ptr<td::td_api::message> pictures[] = {
+        makeMessage(messageId, userIds[0], chatIds[0], false, date,
+                    makeMessagePhoto(make_object<photo>(false, nullptr, std::move(sizes)),
+                                     make_object<formattedText>("", std::vector<object_ptr<textEntity>>()),
+                                     false, false, false)),
+        makeStickerMessage("/path/sticker.webp", make_object<stickerFormatWebp>()),
+        makeStickerMessage("/path/sticker.tgs", make_object<stickerFormatTgs>())
+    };
+    const char *paths[]   = {"/path/photo.jpg", "/path/sticker.webp", "/path/sticker.tgs"};
+    const bool  isPicture[] = {true, true, false};
+    for (unsigned i = 0; i < 3; i++) {
+        client->dragMessageFile(chat, message, std::string(), fileFound);
+        tgl.verifyRequest(getMessage(chatIds[0], messageId));
+        tgl.reply(std::move(pictures[i]));
+        ASSERT_EQ(int(2 + i), found) << paths[i];
+        ASSERT_EQ(paths[i], path);
+        ASSERT_EQ(isPicture[i], picture) << paths[i];
+    }
+    prpl.verifyNoEvents();
+
     // Gone, it cannot be had, which the conversation is told
     client->dragMessageFile(chat, message, std::string(), fileFound);
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
     tgl.reply(makeError(404, "Not Found"));
-    ASSERT_EQ(2, found);
+    ASSERT_EQ(5, found);
     ASSERT_EQ("", path);
     prpl.verifyEvents(
         NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),

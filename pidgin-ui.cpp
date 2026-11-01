@@ -2143,6 +2143,20 @@ static GdkPixbuf *makeDragIcon(GtkWidget *image)
                                      GDK_INTERP_BILINEAR);
 }
 
+// The reaction the character is part of, on its message's line, if any
+static std::string getReactionKey(const GtkTextIter &where)
+{
+    std::string key;
+    GSList     *tags = p_gtk_text_iter_get_tags(&where);
+    for (GSList *item = tags; item && key.empty(); item = item->next) {
+        const char *name = static_cast<GtkTextTag *>(item->data)->name;
+        if (name && g_str_has_prefix(name, REACTION_TAG_PREFIX))
+            key = name + strlen(REACTION_TAG_PREFIX);
+    }
+    g_slist_free(tags);
+    return key;
+}
+
 static gboolean pressingTab(GtkWidget *view, GdkEventButton *event, gpointer)
 {
     g_pressedFile.reset();
@@ -2180,7 +2194,9 @@ static gboolean pressingTab(GtkWidget *view, GdkEventButton *event, gpointer)
     }
     g_slist_free(tags);
     if (pressed->link.empty()) {
-        pressed->messageId = box ? findMessageAt(getTextBuffer(conv), where) : MessageId();
+        // A reaction's custom emoji is not the message's picture
+        pressed->messageId = (box && getReactionKey(where).empty()) ? findMessageAt(getTextBuffer(conv), where)
+                                                                     : MessageId();
         if (!pressed->messageId.valid())
             return FALSE;
         pressed->picture = true;
@@ -2485,14 +2501,7 @@ static gboolean queryingTooltip(GtkWidget *view, gint x, gint y, gboolean keyboa
     p_gtk_text_view_window_to_buffer_coords(textView, GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
     if (!getCharAt(textView, x, y, where))
         return FALSE;
-    std::string key;
-    GSList     *tags = p_gtk_text_iter_get_tags(&where);
-    for (GSList *item = tags; item && key.empty(); item = item->next) {
-        const char *name = static_cast<GtkTextTag *>(item->data)->name;
-        if (name && g_str_has_prefix(name, REACTION_TAG_PREFIX))
-            key = name + strlen(REACTION_TAG_PREFIX);
-    }
-    g_slist_free(tags);
+    std::string key = getReactionKey(where);
     MessageId   messageId = key.empty() ? MessageId() : findMessageAt(getTextBuffer(conv), where);
     std::string tip;
     if (!messageId.valid() || !g_reactionTipHandler(conv, messageId, key, tip) || tip.empty())
