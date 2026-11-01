@@ -174,6 +174,46 @@ TEST_F(MessageLinkTest, CopyWithoutClipboard)
     prpl.verifyEvents(NotifyUriEvent("file:///path/video.mp4"));
 }
 
+TEST_F(MessageLinkTest, Drag)
+{
+    loginWithOneContact();
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    const ChatId    chat    = ChatId::fromString(std::to_string(chatIds[0]).c_str());
+    const MessageId message = MessageId::fromString("1");
+    std::string     path;
+    bool            picture = true;
+    int             found   = 0;
+    auto            fileFound = [&](const std::string &filePath, bool isPicture) {
+        path    = filePath;
+        picture = isPicture;
+        found++;
+    };
+
+    // Fetched as for opening it, and told where it is
+    client->dragMessageFile(chat, message, std::string(), fileFound);
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(makeDocumentMessage(10000, "/path/video.mp4", true));
+    ASSERT_EQ(1, found);
+    ASSERT_EQ("/path/video.mp4", path);
+    ASSERT_FALSE(picture);
+    prpl.verifyNoEvents();
+
+    // Gone, it cannot be had, which the conversation is told
+    client->dragMessageFile(chat, message, std::string(), fileFound);
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(makeError(404, "Not Found"));
+    ASSERT_EQ(2, found);
+    ASSERT_EQ("", path);
+    prpl.verifyEvents(
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+        ConversationWriteEvent(
+            purpleUserName(0), purpleUserName(0), "Could not copy the file: code 404 (Not Found)",
+            PURPLE_MESSAGE_SYSTEM, 0
+        )
+    );
+}
+
 TEST_F(MessageLinkTest, NotALink)
 {
     loginWithOneContact();

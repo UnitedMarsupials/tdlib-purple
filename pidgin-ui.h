@@ -212,4 +212,12 @@ void addLinkMenuItems(PidginWidget *menu, const std::vector<MenuItem> &items);
 // takes one. False if there is no clipboard, without Pidgin.
 bool copyFileToClipboard(const std::string &path, bool picture);
 
+// A file dragged out of a tab, in Pidgin, to another program or another conversation: that of a link
+// to a message's file, or the file of the message whose picture it is. Told where the file is once it
+// is here, or with no path, if it cannot be had.
+using DraggedFileFound   = std::function<void(const std::string &path)>;
+using DraggedFileHandler = void (*)(PurpleConversation *conv, MessageId messageId, const std::string &link,
+                                    DraggedFileFound found);
+void setDraggedFileHandler(DraggedFileHandler handler);
+
 #endif

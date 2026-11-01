@@ -1343,6 +1343,29 @@ static bool messagePopupOpened(PurpleConversation *conv, MessageId messageId, co
     return tdClient && tdClient->showMessagePopup(conv, messageId, menu);
 }
 
+// A file dragged out of a conversation, in Pidgin: a link's, or a message's own
+static void fileDragged(PurpleConversation *conv, MessageId messageId, const std::string &link,
+                        DraggedFileFound found)
+{
+    auto foundFile = [found](const std::string &path, bool) { found(path); };
+    std::string accountName, variant;
+    ChatId      chatId;
+    if (!link.empty()) {
+        PurpleTdClient *client = parseMessageLink(link.c_str(), accountName, chatId, messageId, variant)
+                                 ? PurpleTdClient::findConnected(accountName.c_str()) : nullptr;
+        if (client)
+            client->dragMessageFile(chatId, messageId, variant, foundFile);
+        else
+            found(std::string());
+        return;
+    }
+    PurpleTdClient *client = getTdClient(purple_conversation_get_account(conv));
+    if (client)
+        client->dragConversationFile(conv, messageId, foundFile);
+    else
+        found(std::string());
+}
+
 static void registerMessageLinks()
 {
     g_registerProtocol = reinterpret_cast<RegisterProtocol>(findFrontEndSymbol("gtk_imhtml_class_register_protocol"));
@@ -1357,6 +1380,9 @@ static void registerMessageLinks()
     // Not where messages go on to other clients, markup and all
     setLogMarkersEnabled(!canDisableReadReceipts());
     setMessagePopupHandler(messagePopupOpened);
+    // Only where links to messages' files work
+    if (messageLinksEnabled())
+        setDraggedFileHandler(fileDragged);
     setPastedHandler(pasted);
     setPlaceholderHandler(placeholderClicked);
     setBuddyMarkHandler(buddyMarked, UNREAD_REACTIONS_MARK);
@@ -1375,6 +1401,7 @@ static void unregisterMessageLinks()
     setMessageLinksEnabled(false);
     setLogMarkersEnabled(false);
     setMessagePopupHandler(nullptr);
+    setDraggedFileHandler(nullptr);
     setBuddyMarkHandler(nullptr, nullptr);
     setTopReachedHandler(nullptr);
     setReactionTipHandler(nullptr);

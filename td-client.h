@@ -92,6 +92,13 @@ public:
     enum class FileUse { Open, Copy };
     void openMessageFile(ChatId chatId, MessageId messageId, const std::string &variant = std::string(),
                          FileUse use = FileUse::Open);
+    // The file is dragged out of the conversation: fetched as for opening it, and told where it is
+    // once it is here, and whether it is a picture; the path is empty if it cannot be had
+    void dragMessageFile(ChatId chatId, MessageId messageId, const std::string &variant,
+                         std::function<void(const std::string &path, bool picture)> found);
+    // The same, of a message in the conversation
+    void dragConversationFile(PurpleConversation *conv, MessageId messageId,
+                              std::function<void(const std::string &path, bool picture)> found);
     // The link before a message in Pidgin's tab was clicked: pops up its menu
     // Adds the message's items to the menu opened on it
     void showMessageMenu(ChatId chatId, MessageId messageId, OpenMenuRef openMenu);
@@ -236,16 +243,20 @@ private:
     // Files being opened, or opened lately, so that clicking a link again while the program for the
     // file is still starting does not start another
     struct OpenedFile {
-        bool    inProgress;
-        time_t  openedAt;
-        FileUse use     = FileUse::Open;
-        bool    picture = false; // a photo or a still sticker, copied as a picture too
+        bool   inProgress;
+        time_t openedAt;
     };
     // By the link clicked: the chat, the message, the variant and the use
     std::map<std::string, OpenedFile> m_openedFiles;
 
-    void openMessageFileResponse(ChatId chatId, MessageId messageId, const std::string &variant, FileUse use,
-                                 TdObjectPtr object);
+    // The message's file, downloaded first, if need be, with what it is, and whether it is a picture:
+    // a photo or a still sticker, copied as a picture too; the path is empty if it cannot be had, the
+    // error saying why
+    using FileFetched = std::function<void(const std::string &path, const std::string &description, bool picture,
+                                           const std::string &error)>;
+    void fetchMessageFile(ChatId chatId, MessageId messageId, const std::string &variant, FileFetched fetched);
+    void fetchMessageFileResponse(ChatId chatId, const std::string &variant, FileFetched fetched, TdObjectPtr object);
+    void showFileError(ChatId chatId, FileUse use, const std::string &description, const std::string &reason);
     void sendPaidReaction(ChatId chatId, MessageId messageId, int64_t starCount);
     void reportMenuError(ChatId chatId, const std::string &failure, const TdObjectPtr &object);
     void reportReactionError(ChatId chatId, const std::string &emoji, const TdObjectPtr &object);
@@ -284,10 +295,8 @@ private:
     void showEditRefused(ChatId chatId, const std::string &reason);
     void replaceMedia(ChatId chatId, MessageId messageId, const PlaceholderUse &use,
                       std::shared_ptr<td::td_api::formattedText> caption);
-    void openDownloadedFile(ChatId chatId, const std::string &key, const std::string &description,
-                            TdObjectPtr object);
-    void finishOpeningFile(ChatId chatId, const std::string &key, const std::string &description,
-                           const std::string &path, const std::string &error);
+    void finishOpeningFile(ChatId chatId, const std::string &key, FileUse use, const std::string &description,
+                           const std::string &path, bool picture, const std::string &error);
 };
 
 #endif

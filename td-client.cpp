@@ -1002,16 +1002,50 @@ void PurpleTdClient::openMessageFile(ChatId chatId, MessageId linkedId, const st
                           messageId.value(), (use == FileUse::Copy) ? "copied" : "opened");
         return;
     }
-    m_openedFiles[key] = OpenedFile{true, now, use};
+    m_openedFiles[key] = OpenedFile{true, now};
 
     purple_debug_misc(config::pluginId, "%s file of message %" G_GINT64_FORMAT "\n",
                       (use == FileUse::Copy) ? "Copying" : "Opening", messageId.value());
+    fetchMessageFile(chatId, messageId, variant,
+        [this, chatId, key, use](const std::string &path, const std::string &description, bool picture,
+                                 const std::string &error) {
+            finishOpeningFile(chatId, key, use, description, path, picture, error);
+        });
+}
+
+void PurpleTdClient::dragMessageFile(ChatId chatId, MessageId linkedId, const std::string &variant,
+                                     std::function<void(const std::string &path, bool picture)> found)
+{
+    MessageId messageId = m_data.getSentMessageId(chatId, linkedId);
+    purple_debug_misc(config::pluginId, "Dragging file of message %" G_GINT64_FORMAT "\n", messageId.value());
+    fetchMessageFile(chatId, messageId, variant,
+        [this, chatId, found](const std::string &path, const std::string &description, bool picture,
+                              const std::string &error) {
+            if (path.empty())
+                showFileError(chatId, FileUse::Copy, description, error);
+            found(path, picture);
+        });
+}
+
+void PurpleTdClient::dragConversationFile(PurpleConversation *conv, MessageId messageId,
+                                          std::function<void(const std::string &path, bool picture)> found)
+{
+    const td::td_api::chat *chat = findConversationChat(m_data, conv);
+    if (chat)
+        dragMessageFile(getId(*chat), messageId, std::string(), found);
+    else
+        found(std::string(), false);
+}
+
+void PurpleTdClient::fetchMessageFile(ChatId chatId, MessageId messageId, const std::string &variant,
+                                      FileFetched fetched)
+{
     auto request = td::td_api::make_object<td::td_api::getMessage>();
     request->chat_id_    = chatId.value();
     request->message_id_ = messageId.value();
     m_transceiver.sendQuery(std::move(request),
-        [this, chatId, messageId, variant, use](uint64_t, TdObjectPtr object) {
-            openMessageFileResponse(chatId, messageId, variant, use, std::move(object));
+        [this, chatId, variant, fetched](uint64_t, TdObjectPtr object) {
+            fetchMessageFileResponse(chatId, variant, fetched, std::move(object));
         });
 }
 
@@ -1790,13 +1824,12 @@ void PurpleTdClient::deleteMessage(ChatId chatId, MessageId messageId, bool forA
     });
 }
 
-void PurpleTdClient::openMessageFileResponse(ChatId chatId, MessageId messageId, const std::string &variant,
-                                             FileUse use, TdObjectPtr object)
+void PurpleTdClient::fetchMessageFileResponse(ChatId chatId, const std::string &variant, FileFetched fetched,
+                                              TdObjectPtr object)
 {
-    std::string key = makeOpenedFileKey(chatId, messageId, variant, use);
     const td::td_api::chat *chat = m_data.getChat(chatId);
     if (!chat || !object || (object->get_id() != td::td_api::message::ID)) {
-        finishOpeningFile(chatId, key, std::string(), std::string(), getDisplayedError(object));
+        fetched(std::string(), std::string(), false, getDisplayedError(object));
         return;
     }
 
@@ -1812,14 +1845,14 @@ void PurpleTdClient::openMessageFileResponse(ChatId chatId, MessageId messageId,
     if (!fileInfo.file) {
         // Unlikely error message not worth translating
         // TRANSLATOR: In-chat error message, the reason in "Could not open {0}: {1}".
-        finishOpeningFile(chatId, key, fileInfo.description, std::string(), _("no file in the message"));
+        fetched(std::string(), fileInfo.description, false, _("no file in the message"));
         return;
     }
-    bool hasFile;
-    getMessageFileKind(*fullMessage.message->content_, hasFile, m_openedFiles[key].picture);
+    bool hasFile, picture;
+    getMessageFileKind(*fullMessage.message->content_, hasFile, picture);
 
     if (fileInfo.file->local_ && fileInfo.file->local_->is_downloading_completed_) {
-        finishOpeningFile(chatId, key, fileInfo.description, fileInfo.file->local_->path_, std::string());
+        fetched(fileInfo.file->local_->path_, fileInfo.description, picture, std::string());
         return;
     }
 
@@ -1835,28 +1868,21 @@ void PurpleTdClient::openMessageFileResponse(ChatId chatId, MessageId messageId,
     downloadReq->limit_       = 0;
     downloadReq->synchronous_ = true;
     m_transceiver.sendQuery(std::move(downloadReq),
-        [this, chatId, key, description](uint64_t, TdObjectPtr object) {
-            openDownloadedFile(chatId, key, description, std::move(object));
+        [fetched, description, picture](uint64_t, TdObjectPtr object) {
+            const td::td_api::file *file = nullptr;
+            if (object && (object->get_id() == td::td_api::file::ID))
+                file = static_cast<const td::td_api::file *>(object.get());
+            if (file && file->local_ && file->local_->is_downloading_completed_)
+                fetched(file->local_->path_, description, picture, std::string());
+            else
+                fetched(std::string(), description, picture, getDisplayedError(object));
         });
 }
 
-void PurpleTdClient::openDownloadedFile(ChatId chatId, const std::string &key, const std::string &description,
-                                        TdObjectPtr object)
+void PurpleTdClient::finishOpeningFile(ChatId chatId, const std::string &key, FileUse use,
+                                       const std::string &description, const std::string &path, bool picture,
+                                       const std::string &error)
 {
-    const td::td_api::file *file = nullptr;
-    if (object && (object->get_id() == td::td_api::file::ID))
-        file = static_cast<const td::td_api::file *>(object.get());
-    if (file && file->local_ && file->local_->is_downloading_completed_)
-        finishOpeningFile(chatId, key, description, file->local_->path_, std::string());
-    else
-        finishOpeningFile(chatId, key, description, std::string(), getDisplayedError(object));
-}
-
-void PurpleTdClient::finishOpeningFile(ChatId chatId, const std::string &key, const std::string &description,
-                                       const std::string &path, const std::string &error)
-{
-    FileUse use     = m_openedFiles[key].use;
-    bool    picture = m_openedFiles[key].picture;
     std::string reason = error;
     if (!path.empty() && (use == FileUse::Copy)) {
         m_openedFiles.erase(key);
@@ -1879,10 +1905,16 @@ void PurpleTdClient::finishOpeningFile(ChatId chatId, const std::string &key, co
                          key.c_str(), reason.c_str());
     // Nothing was opened, so another click may try again at once
     m_openedFiles.erase(key);
+    showFileError(chatId, use, description, reason);
+}
+
+void PurpleTdClient::showFileError(ChatId chatId, FileUse use, const std::string &description,
+                                   const std::string &reason)
+{
     const td::td_api::chat *chat = m_data.getChat(chatId);
     if (chat) {
         std::string notice = formatMessage((use == FileUse::Copy) ?
-                                           // TRANSLATOR: In-chat error message, after "Copy the file" was picked. Arguments are a file *type* or name, and the reason.
+                                           // TRANSLATOR: In-chat error message, after "Copy the file" was picked, or the file was dragged out of the conversation. Arguments are a file *type* or name, and the reason.
                                            _("Could not copy {0}: {1}") :
                                            // TRANSLATOR: In-chat error message. Arguments are a file *type* or name, and the reason.
                                            _("Could not open {0}: {1}"),

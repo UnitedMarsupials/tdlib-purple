@@ -3,6 +3,7 @@
 #include <gio/gio.h>
 #include "client-utils.h"
 #include "config.h"
+#include <algorithm>
 #include <string>
 
 #ifndef NoPidgin
@@ -154,6 +155,16 @@ FRONT_END_FUNCTION(gtk_selection_data_set_uris);
 FRONT_END_FUNCTION(gtk_selection_data_set_text);
 FRONT_END_FUNCTION(gtk_selection_data_set_pixbuf);
 FRONT_END_FUNCTION(gdk_pixbuf_new_from_file);
+FRONT_END_FUNCTION(gtk_text_view_get_iter_at_position);
+FRONT_END_FUNCTION(gtk_drag_begin);
+FRONT_END_FUNCTION(gtk_drag_check_threshold);
+FRONT_END_FUNCTION(gtk_drag_set_icon_pixbuf);
+FRONT_END_FUNCTION(gdk_window_get_user_data);
+FRONT_END_FUNCTION(gtk_image_get_storage_type);
+FRONT_END_FUNCTION(gtk_image_get_pixbuf);
+FRONT_END_FUNCTION(gdk_pixbuf_scale_simple);
+FRONT_END_FUNCTION(gdk_pixbuf_get_width);
+FRONT_END_FUNCTION(gdk_pixbuf_get_height);
 
 static bool g_pidginUi = false;
 
@@ -1400,6 +1411,9 @@ static void deleteTextDrop(gpointer data)
     delete static_cast<TextDrop *>(data);
 }
 
+static void watchDrags(GtkWidget *imhtml);
+static void unwatchDrags(GtkWidget *imhtml);
+
 static void watchConversation(PidginConversation *gtkconv)
 {
     PurpleConversation *conv = gtkconv ? gtkconv->active_conv : nullptr;
@@ -1407,6 +1421,7 @@ static void watchConversation(PidginConversation *gtkconv)
         strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId))
         return;
     watchSignal(gtkconv->entry, g_pasteSignal, "paste-clipboard");
+    watchDrags(gtkconv->imhtml);
     if (!g_dropHook)
         return;
     watchSignal(gtkconv->entry, g_dropSignal, "drag-data-received");
@@ -1429,6 +1444,7 @@ static void unwatchConversation(PurpleConversation *conv)
     if (!entry)
         return;
     unwatchSignal(entry, "paste-clipboard");
+    unwatchDrags(imhtml);
     unwatchSignal(entry, "drag-data-received");
     unwatchSignal(imhtml, "drag-data-received");
     TextDrop *drop = static_cast<TextDrop *>(p_g_object_get_data(reinterpret_cast<GObject *>(imhtml), TEXT_DROP_KEY));
@@ -1972,32 +1988,43 @@ static void clearingCopiedFile(GtkClipboard *, gpointer owner)
     delete static_cast<CopiedFile *>(owner);
 }
 
+// Most programs take the first form they know: the file itself, then the picture, if it is one,
+// then its path. File managers take files copied to the clipboard in a form of their own.
+static GtkTargetList *makeCopiedForms(bool picture, bool clipboard)
+{
+    GtkTargetList *forms = p_gtk_target_list_new(nullptr, 0);
+    p_gtk_target_list_add_uri_targets(forms, COPIED_URIS);
+    if (clipboard)
+        p_gtk_target_list_add(forms, p_gdk_atom_intern(GNOME_COPIED_FILES, FALSE), 0, COPIED_GNOME_FILES);
+    if (picture)
+        p_gtk_target_list_add_image_targets(forms, COPIED_PICTURE, TRUE);
+    p_gtk_target_list_add_text_targets(forms, COPIED_TEXT);
+    return forms;
+}
+
+static bool lookUpClipboard()
+{
+    return LOOK_UP(gtk_clipboard_get) && LOOK_UP(gtk_clipboard_set_with_data) &&
+           LOOK_UP(gtk_clipboard_set_can_store) && LOOK_UP(gtk_target_list_new) && LOOK_UP(gtk_target_list_add) &&
+           LOOK_UP(gtk_target_list_add_uri_targets) && LOOK_UP(gtk_target_list_add_image_targets) &&
+           LOOK_UP(gtk_target_list_add_text_targets) && LOOK_UP(gtk_target_list_unref) &&
+           LOOK_UP(gtk_target_table_new_from_list) && LOOK_UP(gtk_target_table_free) &&
+           LOOK_UP(gtk_selection_data_set) && LOOK_UP(gtk_selection_data_set_uris) &&
+           LOOK_UP(gtk_selection_data_set_text) && LOOK_UP(gtk_selection_data_set_pixbuf) &&
+           LOOK_UP(gdk_pixbuf_new_from_file);
+}
+
 bool copyFileToClipboard(const std::string &path, bool picture)
 {
     gchar *uri = g_filename_to_uri(path.c_str(), nullptr, nullptr);
-    if (!uri || !LOOK_UP(gtk_clipboard_get) || !LOOK_UP(gtk_clipboard_set_with_data) ||
-        !LOOK_UP(gtk_clipboard_set_can_store) || !LOOK_UP(gtk_target_list_new) || !LOOK_UP(gtk_target_list_add) ||
-        !LOOK_UP(gtk_target_list_add_uri_targets) || !LOOK_UP(gtk_target_list_add_image_targets) ||
-        !LOOK_UP(gtk_target_list_add_text_targets) || !LOOK_UP(gtk_target_list_unref) ||
-        !LOOK_UP(gtk_target_table_new_from_list) || !LOOK_UP(gtk_target_table_free) ||
-        !LOOK_UP(gtk_selection_data_set) || !LOOK_UP(gtk_selection_data_set_uris) ||
-        !LOOK_UP(gtk_selection_data_set_text) || !LOOK_UP(gtk_selection_data_set_pixbuf) ||
-        !LOOK_UP(gdk_pixbuf_new_from_file))
-    {
+    if (!uri || !lookUpClipboard()) {
         g_free(uri);
         return false;
     }
     CopiedFile *file = new CopiedFile{path, uri};
     g_free(uri);
 
-    // Most programs take the first form they know: the file itself, then the picture, if it is
-    // one, then its path
-    GtkTargetList *forms = p_gtk_target_list_new(nullptr, 0);
-    p_gtk_target_list_add_uri_targets(forms, COPIED_URIS);
-    p_gtk_target_list_add(forms, p_gdk_atom_intern(GNOME_COPIED_FILES, FALSE), 0, COPIED_GNOME_FILES);
-    if (picture)
-        p_gtk_target_list_add_image_targets(forms, COPIED_PICTURE, TRUE);
-    p_gtk_target_list_add_text_targets(forms, COPIED_TEXT);
+    GtkTargetList  *forms     = makeCopiedForms(picture, true);
     gint            count;
     GtkTargetEntry *table     = p_gtk_target_table_new_from_list(forms, &count);
     GtkClipboard   *clipboard = p_gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
@@ -2051,6 +2078,257 @@ static PurpleConversation *findTabConversation(gpointer imhtml)
             return conv;
     }
     return nullptr;
+}
+
+// The character at the point, in buffer coordinates, if the point is on it, not past the end of its
+// line or beside the text
+static bool getCharAt(GtkTextView *view, gint x, gint y, GtkTextIter &where)
+{
+    gint         trailing;
+    GdkRectangle place;
+    p_gtk_text_view_get_iter_at_position(view, &where, &trailing, x, y);
+    p_gtk_text_view_get_iter_location(view, &where, &place);
+    return (x >= place.x) && (x < place.x + place.width) && (y >= place.y) && (y < place.y + place.height);
+}
+
+// A file dragged out of a tab, to another program or another conversation: that of the link to it
+// pressed on, as of a document or a video, the cover in it too, or that of the message whose picture
+// was pressed on; told where it is once it is fetched
+struct DraggedFile {
+    GtkWidget      *view    = nullptr;
+    gint            x, y;              // where the button was pressed, on the screen
+    std::string     link;
+    MessageId       messageId;
+    bool            picture = false;   // dropped as a picture too
+    GdkPixbuf      *icon    = nullptr; // the picture, smaller
+    GdkDragContext *context = nullptr;
+    bool            fetched = false;
+    std::string     path;              // none if it cannot be had
+    ~DraggedFile()
+    {
+        if (icon)
+            p_g_object_unref(icon);
+    }
+};
+// Pressed on, and dragged once the pointer moves far enough
+static std::shared_ptr<DraggedFile> g_pressedFile;
+static std::shared_ptr<DraggedFile> g_draggedFile;
+static DraggedFileHandler           g_draggedFileHandler = nullptr;
+static const char                   TEXT_DRAG_KEY[]      = "tdlib-purple-text-drag";
+static const char                   LINK_URL_KEY[]       = "link_url";
+static const char                   IMAGE_SAVE_KEY[]     = "image-save-data";
+// A drop asks for the file at once, which is long enough to fetch it from TDLib, unless it is to be
+// downloaded, which it is too, for a later drag
+enum { DRAG_WAIT_SECONDS = 5, DRAG_ICON_SIZE = 128 };
+
+void setDraggedFileHandler(DraggedFileHandler handler)
+{
+    g_draggedFileHandler = handler;
+}
+
+static GdkPixbuf *makeDragIcon(GtkWidget *image)
+{
+    // Pidgin's pictures are pixbufs, an animation's frames too, which it sets in turn
+    GtkImage  *gtkImage = reinterpret_cast<GtkImage *>(image);
+    GdkPixbuf *pixbuf   = (image && (p_gtk_image_get_storage_type(gtkImage) == GTK_IMAGE_PIXBUF))
+                          ? p_gtk_image_get_pixbuf(gtkImage) : nullptr;
+    if (!pixbuf)
+        return nullptr;
+    int width  = p_gdk_pixbuf_get_width(pixbuf);
+    int height = p_gdk_pixbuf_get_height(pixbuf);
+    if ((width <= DRAG_ICON_SIZE) && (height <= DRAG_ICON_SIZE))
+        return static_cast<GdkPixbuf *>(p_g_object_ref(pixbuf));
+    double scale = double(DRAG_ICON_SIZE) / std::max(width, height);
+    return p_gdk_pixbuf_scale_simple(pixbuf, std::max(1, int(width * scale)), std::max(1, int(height * scale)),
+                                     GDK_INTERP_BILINEAR);
+}
+
+static gboolean pressingTab(GtkWidget *view, GdkEventButton *event, gpointer)
+{
+    g_pressedFile.reset();
+    PurpleConversation *conv = (g_draggedFileHandler && (event->type == GDK_BUTTON_PRESS) && (event->button == 1))
+                               ? findTabConversation(view) : nullptr;
+    if (!conv)
+        return FALSE;
+    GtkTextView *textView = reinterpret_cast<GtkTextView *>(view);
+    gint         x, y;
+    GtkTextIter  where;
+    p_gtk_widget_get_pointer(view, &x, &y);
+    p_gtk_text_view_window_to_buffer_coords(textView, GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
+    if (!getCharAt(textView, x, y, where))
+        return FALSE;
+    auto pressed = std::make_shared<DraggedFile>();
+    // A picture, Pidgin's, is an event box of its own at an anchor of the text
+    gpointer owner = nullptr;
+    p_gdk_window_get_user_data(event->window, &owner);
+    GtkWidget *box = (owner != view) ? static_cast<GtkWidget *>(owner) : nullptr;
+    if (box) {
+        GtkTextChildAnchor *anchor  = p_gtk_text_iter_get_child_anchor(&where);
+        GList              *widgets = anchor ? p_gtk_text_child_anchor_get_widgets(anchor) : nullptr;
+        bool                found   = g_list_find(widgets, box) && p_g_object_get_data(G_OBJECT(box), IMAGE_SAVE_KEY);
+        g_list_free(widgets);
+        if (!found)
+            return FALSE;
+        pressed->icon = makeDragIcon(p_gtk_bin_get_child(reinterpret_cast<GtkBin *>(box)));
+    }
+    // The link it is in, if any, of a video's cover too, rather than the message's own file
+    GSList *tags = p_gtk_text_iter_get_tags(&where);
+    for (GSList *item = tags; item && pressed->link.empty(); item = item->next) {
+        const char *url = static_cast<const char *>(p_g_object_get_data(G_OBJECT(item->data), LINK_URL_KEY));
+        if (url && g_str_has_prefix(url, MESSAGE_LINK_SCHEME))
+            pressed->link = url;
+    }
+    g_slist_free(tags);
+    if (pressed->link.empty()) {
+        pressed->messageId = box ? findMessageAt(getTextBuffer(conv), where) : MessageId();
+        if (!pressed->messageId.valid())
+            return FALSE;
+        pressed->picture = true;
+    }
+    pressed->view = view;
+    pressed->x    = event->x_root;
+    pressed->y    = event->y_root;
+    g_pressedFile = pressed;
+    return FALSE;
+}
+
+static gboolean releasingTab(GtkWidget *, GdkEventButton *, gpointer)
+{
+    g_pressedFile.reset();
+    return FALSE;
+}
+
+static gboolean movingOverTab(GtkWidget *view, GdkEventMotion *event, gpointer)
+{
+    std::shared_ptr<DraggedFile> pressed = g_pressedFile;
+    if (!pressed || (pressed->view != view) || !(event->state & GDK_BUTTON1_MASK) ||
+        !p_gtk_drag_check_threshold(view, pressed->x, pressed->y, event->x_root, event->y_root))
+        return FALSE;
+    g_pressedFile.reset();
+    PurpleConversation *conv = findTabConversation(view);
+    if (!conv)
+        return FALSE;
+    // Nothing selected on the way, as GTK's own drag of the text would take that
+    GtkTextBuffer *buffer = getTextBuffer(conv);
+    GtkTextIter    cursor;
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &cursor, p_gtk_text_buffer_get_insert(buffer));
+    p_gtk_text_buffer_place_cursor(buffer, &cursor);
+
+    GtkTargetList *forms = makeCopiedForms(pressed->picture, false);
+    pressed->context     = p_gtk_drag_begin(view, forms, GDK_ACTION_COPY, 1, reinterpret_cast<GdkEvent *>(event));
+    p_gtk_target_list_unref(forms);
+    if (!pressed->context)
+        return FALSE;
+    if (pressed->icon)
+        p_gtk_drag_set_icon_pixbuf(pressed->context, pressed->icon, p_gdk_pixbuf_get_width(pressed->icon) / 2,
+                                   p_gdk_pixbuf_get_height(pressed->icon) / 2);
+    g_draggedFile = pressed;
+    std::weak_ptr<DraggedFile> dragged = pressed;
+    g_draggedFileHandler(conv, pressed->messageId, pressed->link, [dragged](const std::string &path) {
+        std::shared_ptr<DraggedFile> file = dragged.lock();
+        if (file) {
+            file->path    = path;
+            file->fetched = true;
+        }
+    });
+    return TRUE;
+}
+
+static gboolean dragWaitExpired(gpointer data)
+{
+    *static_cast<bool *>(data) = true;
+    return FALSE;
+}
+
+static void gettingDraggedFile(GtkWidget *view, GdkDragContext *context, GtkSelectionData *data, guint form,
+                               guint, gpointer)
+{
+    std::shared_ptr<DraggedFile> dragged = g_draggedFile;
+    if (!dragged || (dragged->context != context))
+        return;
+    // Not GtkTextView's, which would give the text selected, if any
+    p_g_signal_stop_emission_by_name(view, "drag-data-get");
+    if (!dragged->fetched) {
+        bool  expired = false;
+        guint timer   = g_timeout_add_seconds(DRAG_WAIT_SECONDS, dragWaitExpired, &expired);
+        while (!dragged->fetched && !expired)
+            g_main_context_iteration(nullptr, TRUE);
+        if (!expired)
+            g_source_remove(timer);
+    }
+    gchar *uri = dragged->path.empty() ? nullptr : g_filename_to_uri(dragged->path.c_str(), nullptr, nullptr);
+    if (!uri) {
+        purple_debug_misc(config::pluginId, "Nothing to drop: the file is not here%s\n",
+                          dragged->fetched ? "" : " yet");
+        return;
+    }
+    CopiedFile file{dragged->path, uri};
+    g_free(uri);
+    gettingCopiedFile(nullptr, data, form, &file);
+}
+
+static void draggedFileEnded(GtkWidget *, GdkDragContext *context, gpointer)
+{
+    if (g_draggedFile && (g_draggedFile->context == context))
+        g_draggedFile.reset();
+}
+
+struct TextDrag {
+    std::vector<gulong> handlers;
+};
+
+static void deleteTextDrag(gpointer data)
+{
+    delete static_cast<TextDrag *>(data);
+}
+
+static void watchDrags(GtkWidget *imhtml)
+{
+    static bool found = lookUpClipboard() && LOOK_UP(gtk_text_view_get_iter_at_position) &&
+                        LOOK_UP(gtk_text_view_get_iter_location) && LOOK_UP(gtk_text_iter_get_tags) &&
+                        LOOK_UP(gtk_text_view_window_to_buffer_coords) && LOOK_UP(gtk_widget_get_pointer) &&
+                        LOOK_UP(gtk_text_iter_get_marks) && LOOK_UP(gtk_text_mark_get_name) &&
+                        LOOK_UP(gtk_drag_begin) && LOOK_UP(gtk_drag_check_threshold) &&
+                        LOOK_UP(gtk_drag_set_icon_pixbuf) && LOOK_UP(gdk_window_get_user_data) &&
+                        LOOK_UP(gtk_image_get_storage_type) && LOOK_UP(gtk_image_get_pixbuf) &&
+                        LOOK_UP(gdk_pixbuf_scale_simple) && LOOK_UP(gdk_pixbuf_get_width) &&
+                        LOOK_UP(gdk_pixbuf_get_height) && LOOK_UP(gtk_bin_get_child) &&
+                        LOOK_UP(gtk_text_iter_get_child_anchor) && LOOK_UP(gtk_text_child_anchor_get_widgets) &&
+                        LOOK_UP(gtk_text_buffer_place_cursor) && LOOK_UP(gtk_text_buffer_get_insert) &&
+                        LOOK_UP(g_signal_stop_emission_by_name) && LOOK_UP(g_object_ref);
+    if (!found) {
+        static bool told = false;
+        if (!told)
+            purple_debug_warning(config::pluginId, "Cannot drag files out: some of GTK is not found\n");
+        told = true;
+        return;
+    }
+    if (p_g_object_get_data(G_OBJECT(imhtml), TEXT_DRAG_KEY))
+        return;
+    TextDrag *drag = new TextDrag;
+    const std::pair<const char *, GCallback> signals[] = {
+        {"button-press-event",   G_CALLBACK(pressingTab)},
+        {"button-release-event", G_CALLBACK(releasingTab)},
+        {"motion-notify-event",  G_CALLBACK(movingOverTab)},
+        {"drag-data-get",        G_CALLBACK(gettingDraggedFile)},
+        {"drag-end",             G_CALLBACK(draggedFileEnded)},
+    };
+    for (const auto &signal: signals)
+        drag->handlers.push_back(p_g_signal_connect_data(imhtml, signal.first, signal.second, nullptr, nullptr,
+                                                         GConnectFlags(0)));
+    p_g_object_set_data_full(G_OBJECT(imhtml), TEXT_DRAG_KEY, drag, deleteTextDrag);
+}
+
+static void unwatchDrags(GtkWidget *imhtml)
+{
+    TextDrag *drag = imhtml ? static_cast<TextDrag *>(p_g_object_get_data(G_OBJECT(imhtml), TEXT_DRAG_KEY)) : nullptr;
+    if (!drag)
+        return;
+    for (gulong handler: drag->handlers)
+        p_g_signal_handler_disconnect(imhtml, handler);
+    p_g_object_set_data_full(G_OBJECT(imhtml), TEXT_DRAG_KEY, nullptr, nullptr);
+    g_pressedFile.reset();
+    g_draggedFile.reset();
 }
 
 // The input field's text, images as U+FFFC, so that its offsets are the buffer's
@@ -2204,12 +2482,8 @@ static gboolean queryingTooltip(GtkWidget *view, gint x, gint y, gboolean keyboa
         return FALSE;
     GtkTextView *textView = reinterpret_cast<GtkTextView *>(view);
     GtkTextIter  where;
-    GdkRectangle place;
     p_gtk_text_view_window_to_buffer_coords(textView, GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
-    p_gtk_text_view_get_iter_at_location(textView, &where, x, y);
-    // Nearest the pointer, which may be past the end of the line
-    p_gtk_text_view_get_iter_location(textView, &where, &place);
-    if ((x < place.x) || (x >= place.x + place.width) || (y < place.y) || (y >= place.y + place.height))
+    if (!getCharAt(textView, x, y, where))
         return FALSE;
     std::string key;
     GSList     *tags = p_gtk_text_iter_get_tags(&where);
@@ -2231,6 +2505,7 @@ static void connectReactionTips(GtkIMHtml *imhtml)
 {
     if (p_g_object_get_data(G_OBJECT(imhtml), REACTION_TIPS_KEY) || !g_reactionTipHandler ||
         !LOOK_UP(gtk_text_iter_get_tags) || !LOOK_UP(gtk_text_view_get_iter_location) ||
+        !LOOK_UP(gtk_text_view_get_iter_at_position) ||
         !LOOK_UP(gtk_widget_set_has_tooltip) || !LOOK_UP(gtk_tooltip_set_text) ||
         !LOOK_UP(gtk_widget_get_pointer) || !LOOK_UP(gtk_text_view_window_to_buffer_coords) ||
         !LOOK_UP(gtk_text_view_get_iter_at_location) || !LOOK_UP(gtk_text_iter_get_marks) ||
@@ -2599,6 +2874,10 @@ void addLinkMenuItems(PidginWidget *menu, const std::vector<MenuItem> &items)
 bool copyFileToClipboard(const std::string &path, bool picture)
 {
     return false;
+}
+
+void setDraggedFileHandler(DraggedFileHandler handler)
+{
 }
 
 #endif
