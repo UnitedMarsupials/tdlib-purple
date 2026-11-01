@@ -536,3 +536,19 @@ TEST_F(ReactionTest, GiversInTooltip)
     ASSERT_FALSE(client->getReactionTip(conv, MessageId::fromString("1"), "e\U0001F44D", tip));
     tgl.verifyNoRequests();
 }
+
+TEST_F(ReactionTest, GiversInTooltip_OursAdded)
+{
+    loginWithOneContact();
+    receive(makeTextMessage("hi"), "hi");
+    PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, purpleUserName(0).c_str(),
+                                                                     account);
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    react({{"\U0001F44D", 1, false, {userIds[0]}}});
+    prpl.discardEvents();
+    react({{"\U0001F44D", 2, true, {selfId, userIds[0]}}});
+    prpl.discardEvents();
+    std::string tip;
+    ASSERT_TRUE(client->getReactionTip(conv, MessageId::fromString("1"), "e\U0001F44D", tip));
+    ASSERT_EQ(selfFirstName + " " + selfLastName + "\n" + userFirstNames[0] + " " + userLastNames[0], tip);
+}
