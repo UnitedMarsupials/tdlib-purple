@@ -577,9 +577,7 @@ msgstr ""
 #. TRANSLATOR: Under the names of those who gave a reaction, in its tooltip, when not all are known. Argument is a number.
 #: ../receiving.cpp:3224
 msgid "and {} more"
-msgid_plural "and {} more"
-msgstr[0] ""
-msgstr[1] ""
+msgstr ""
 
 #. TRANSLATOR: Default buddy-alias for a new secret chat. Argument is the Telegram nick, I think.
 #: ../secret-chat.cpp:20

@@ -1397,10 +1397,7 @@ msgstr "Отримання повідомлень із Telegram"
 
 #. TRANSLATOR: Under the names of those who gave a reaction, in its tooltip, when not all are known. Argument is a number.
 msgid "and {} more"
-msgid_plural "and {} more"
-msgstr[0] "і ще {}"
-msgstr[1] "і ще {}"
-msgstr[2] "і ще {}"
+msgstr "і ще {}"
 
 #. TRANSLATOR: After the text of a message edited where it stands, in Pidgin's conversation window, when only the formatting of its words (bold, italic and the like) changed.
 msgid "formatting edited"

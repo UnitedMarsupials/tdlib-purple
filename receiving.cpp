@@ -3221,7 +3221,7 @@ bool getReactionTip(TdAccountData &account, PurpleConversation *conv, MessageId 
     int32_t more = givers.total - int32_t(givers.senders.size());
     if ((more > 0) && !tip.empty())
         // TRANSLATOR: Under the names of those who gave a reaction, in its tooltip, when not all are known. Argument is a number.
-        tip += "\n" + formatMessage(P_("and {} more", "and {} more", more), more);
+        tip += "\n" + formatMessage(_("and {} more"), more);
     return !tip.empty();
 }
 
