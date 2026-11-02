@@ -106,7 +106,7 @@ TEST_F(GroupChatTest, BasicGroupReceiveTextAndReply)
     tgl.verifyRequest(viewMessages(groupChatId, {messageId[0]}, nullptr, true));
     prpl.verifyEvents(
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
-        ServGotChatEvent(connection, purpleChatId, userFirstNames[0] + " " + userLastNames[0],
+        ServGotChatEvent(connection, purpleChatId, purpleUserName(0),
                          "Hello", PURPLE_MESSAGE_RECV, date[0])
     );
 
@@ -154,7 +154,7 @@ TEST_F(GroupChatTest, BasicGroupReceivePhoto)
     prpl.verifyEvents(
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
         ServGotChatEvent(
-            connection, 1, userFirstNames[0] + " " + userLastNames[0],
+            connection, 1, purpleUserName(0),
             "<img src=\"file:///path\">\n"
             "photo",
             (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES), date
@@ -227,7 +227,7 @@ TEST_F(GroupChatTest, ExistingBasicGroupReceiveMessageAtLogin_WithMemberList_Rem
         {
             std::make_unique<ServGotJoinedChatEvent>(connection, purpleChatId, groupChatPurpleName,
                                                      groupChatTitle),
-            std::make_unique<ServGotChatEvent>(connection, purpleChatId, userFirstNames[0] + " " + userLastNames[0],
+            std::make_unique<ServGotChatEvent>(connection, purpleChatId, purpleUserName(0),
                                                "Hello", PURPLE_MESSAGE_RECV, date)
         },
         {
@@ -255,8 +255,8 @@ TEST_F(GroupChatTest, ExistingBasicGroupReceiveMessageAtLogin_WithMemberList_Rem
             ),
             std::make_unique<ChatAddUserEvent>(
                 groupChatPurpleName,
-                // This user is not in our contact list so first/last name is used
-                userFirstNames[1] + " " + userLastNames[1],
+                // By user id, shown by the display name
+                purpleUserName(1),
                 "", PURPLE_CBFLAGS_FOUNDER, false
             ),
             std::make_unique<ChatAddUserEvent>(
@@ -285,13 +285,13 @@ TEST_F(GroupChatTest, ExistingBasicGroupReceiveMessageAtLogin_WithMemberList_Rem
         ChatClearUsersEvent(groupChatPurpleName),
         ChatAddUserEvent(
             groupChatPurpleName,
-            // This user is no longer in our contact list so first/last name is used
-            userFirstNames[0] + " " + userLastNames[0],
+            // By user id, shown by the display name
+            purpleUserName(0),
             "", PURPLE_CBFLAGS_NONE, false
         ),
         ChatAddUserEvent(
             groupChatPurpleName,
-            userFirstNames[1] + " " + userLastNames[1],
+            purpleUserName(1),
             "", PURPLE_CBFLAGS_FOUNDER, false
         ),
         ChatAddUserEvent(
@@ -375,12 +375,12 @@ TEST_F(GroupChatTest, SendMessageWithMemberList)
         ChatClearUsersEvent(groupChatPurpleName),
         ChatAddUserEvent(
             groupChatPurpleName,
-            userFirstNames[0] + " " + userLastNames[0],
+            purpleUserName(0),
             "", PURPLE_CBFLAGS_NONE, false
         ),
         ChatAddUserEvent(
             groupChatPurpleName,
-            userFirstNames[1] + " " + userLastNames[1],
+            purpleUserName(1),
             "", PURPLE_CBFLAGS_FOUNDER, false
         ),
         ChatAddUserEvent(
@@ -529,14 +529,14 @@ TEST_F(GroupChatTest, JoinBasicGroupByInviteLink)
         ChatClearUsersEvent(groupChatPurpleName),
         ChatAddUserEvent(
             groupChatPurpleName,
-            // This user is not in our contact list so first/last name is used
-            userFirstNames[0] + " " + userLastNames[0],
+            // By user id, shown by the display name
+            purpleUserName(0),
             "", PURPLE_CBFLAGS_NONE, false
         ),
         ChatAddUserEvent(
             groupChatPurpleName,
-            // This user is not in our contact list so first/last name is used
-            userFirstNames[1] + " " + userLastNames[1],
+            // By user id, shown by the display name
+            purpleUserName(1),
             "", PURPLE_CBFLAGS_FOUNDER, false
         ),
         ChatAddUserEvent(
@@ -829,12 +829,12 @@ TEST_F(GroupChatTest, UsersWithSameName)
         ChatClearUsersEvent(groupChatPurpleName),
         ChatAddUserEvent(
             groupChatPurpleName,
-            userFirstNames[0] + " " + userLastNames[0],
+            purpleUserName(0),
             "", PURPLE_CBFLAGS_NONE, false
         ),
         ChatAddUserEvent(
             groupChatPurpleName,
-            userFirstNames[0] + " " + userLastNames[0] + " #1",
+            purpleUserName(1),
             "", PURPLE_CBFLAGS_FOUNDER, false
         ),
         ChatAddUserEvent(
@@ -925,7 +925,7 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
         ChatClearUsersEvent(groupChatPurpleName),
         ChatAddUserEvent(
             groupChatPurpleName,
-            userFirstNames[0] + " " + userLastNames[0],
+            purpleUserName(0),
             "", PURPLE_CBFLAGS_FOUNDER, false
         ),
         ChatAddUserEvent(
@@ -955,7 +955,7 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
         ChatClearUsersEvent(groupChatPurpleName),
         ChatAddUserEvent(
             groupChatPurpleName,
-            userFirstNames[0] + " " + userLastNames[0],
+            purpleUserName(0),
             "", PURPLE_CBFLAGS_FOUNDER, false
         ),
         ChatAddUserEvent(
@@ -1471,9 +1471,9 @@ TEST_F(GroupChatTest, OpenLeftGroupChat_ReceiveMessageAtLogin)
         {
             std::make_unique<ServGotJoinedChatEvent>(connection, purpleChatId, groupChatPurpleName,
                                                      groupChatTitle),
-            std::make_unique<ServGotChatEvent>(connection, purpleChatId, userFirstNames[0] + " " + userLastNames[0],
+            std::make_unique<ServGotChatEvent>(connection, purpleChatId, purpleUserName(0),
                                                "Hello", PURPLE_MESSAGE_RECV, date),
-            std::make_unique<ServGotChatEvent>(connection, purpleChatId, userFirstNames[0] + " " + userLastNames[0],
+            std::make_unique<ServGotChatEvent>(connection, purpleChatId, purpleUserName(0),
                                                "Hello2", PURPLE_MESSAGE_RECV, date)
         },
         {

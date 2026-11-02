@@ -120,15 +120,19 @@ TEST_F(MessageEditTest, ChangeOutOfSight)
     loginWithOneContact();
     receiveText("text");
 
-    // Formatting, which the conversation does not show
+    // How a link in it is previewed, which the conversation does not show
     object_ptr<messageText> content = makeTextMessage("text");
-    auto bold = make_object<textEntity>();
-    bold->offset_ = 0;
-    bold->length_ = 4;
-    bold->type_   = make_object<textEntityTypeBold>();
-    content->text_->entities_.push_back(std::move(bold));
+    content->link_preview_options_ = make_object<linkPreviewOptions>();
+    content->link_preview_options_->is_disabled_ = true;
     tgl.update(makeUpdateMessageContent(chatIds[0], messageId, std::move(content)));
     tgl.verifyNoRequests();
+    prpl.verifyNoEvents();
+
+    // Its formatting alone, which it does show
+    content = makeTextMessage("text");
+    content->text_->entities_.push_back(makeTextEntity(0, 4, make_object<textEntityTypeBold>()));
+    tgl.update(makeUpdateMessageContent(chatIds[0], messageId, std::move(content)));
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
     prpl.verifyNoEvents();
 }
 

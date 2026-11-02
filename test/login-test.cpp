@@ -560,7 +560,7 @@ TEST_F(LoginTest, IncomingGroupChatMessageAtLoginWhileChatListStillNull)
             std::make_unique<AddChatEvent>(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), nullptr),
             std::make_unique<ServGotJoinedChatEvent>(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
             std::make_unique<ConvSetTitleEvent>(groupChatPurpleName, groupChatTitle),
-            std::make_unique<ServGotChatEvent>(connection, purpleChatId, userFirstNames[0] + " " + userLastNames[0],
+            std::make_unique<ServGotChatEvent>(connection, purpleChatId, purpleUserName(0),
                              "text", PURPLE_MESSAGE_RECV, date),
             std::make_unique<AddChatEvent>(groupChatPurpleName, groupChatTitle, account, nullptr, nullptr)
         },

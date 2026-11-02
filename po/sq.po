@@ -1266,11 +1266,6 @@ msgstr "Mesazhi nuk shfaqet"
 msgid "It is no longer in this conversation's window."
 msgstr "Nuk ndodhet më në dritaren e kësaj bisede."
 
-#. TRANSLATOR: Error dialog, primary content, after the menu link after a message was clicked.
-#: ../td-client.cpp:1019 ../tdlib-purple.cpp:982
-msgid "Cannot open the message's menu"
-msgstr "Menuja e mesazhit nuk mund të hapet"
-
 #. TRANSLATOR: Submenu of reactions, after the most likely ones.
 #: ../td-client.cpp:1083
 msgid "More"
@@ -1286,7 +1281,311 @@ msgstr "Nuk lejohen reagime"
 msgid "Reactions"
 msgstr "Reagime"
 
-#. TRANSLATOR: Error dialog, primary content, after a reaction was picked from a message's menu.
+#. TRANSLATOR: Tooltip of the paid reaction in a message's menu.
+#: ../td-client.cpp:1060
+msgid "Spend Telegram Stars on a reaction"
+msgstr "Shpenzo Telegram Stars për një reagim"
+
+#. TRANSLATOR: Paid reaction dialog, title
+#: ../td-client.cpp:1188
+msgid "Paid reaction"
+msgstr "Reagim me pagesë"
+
+#. TRANSLATOR: Paid reaction dialog, primary content
+#: ../td-client.cpp:1190
+msgid "How many Telegram Stars to spend on this message?"
+msgstr "Sa Telegram Stars të shpenzohen për këtë mesazh?"
+
+#. TRANSLATOR: Paid reaction dialog, secondary content
+#: ../td-client.cpp:1192
+msgid "They are spent at once, and cannot be taken back."
+msgstr "Shpenzohen menjëherë dhe nuk mund të kthehen."
+
+#. TRANSLATOR: In-chat error, when the paid reaction dialog got something other than a number of stars.
+#: ../td-client.cpp:1218
+#, c++-format
+msgid "Not a number of Telegram Stars: {}"
+msgstr "Nuk është numër Telegram Stars: {}"
+
+#. TRANSLATOR: Item of a message's menu; it opens a dialog.
+#: ../td-client.cpp:1192
+msgid "Edit…"
+msgstr "Ndrysho…"
+
+#. TRANSLATOR: Item of a message's menu; it asks for confirmation.
+#: ../td-client.cpp:1204
+msgid "Delete for everyone…"
+msgstr "Fshije për të gjithë…"
+
+#. TRANSLATOR: Item of a message's menu; it asks for confirmation.
+#: ../td-client.cpp:1206
+msgid "Delete for me…"
+msgstr "Fshije për mua…"
+
+#. TRANSLATOR: Message editing dialog, title
+#: ../td-client.cpp:1348
+msgid "Edit message"
+msgstr "Ndrysho mesazhin"
+
+#. TRANSLATOR: Message editing dialog, primary content
+#: ../td-client.cpp:1350
+msgid "New caption of the message"
+msgstr "Përshkrimi i ri i mesazhit"
+
+#. TRANSLATOR: Message editing dialog, primary content
+#: ../td-client.cpp:1352
+msgid "New text of the message"
+msgstr "Teksti i ri i mesazhit"
+
+#. TRANSLATOR: In-chat error, after a message was edited from its menu; followed by the reason.
+#: ../td-client.cpp:1389
+msgid "Cannot edit the message"
+msgstr "Mesazhi nuk mund të ndryshohet"
+
+#. TRANSLATOR: Message deletion dialog, title
+#: ../td-client.cpp:1404
+msgid "Delete message"
+msgstr "Fshi mesazhin"
+
+#. TRANSLATOR: Message deletion dialog, primary content
+#: ../td-client.cpp:1406
+msgid "Delete the message for everyone in the chat?"
+msgstr "Të fshihet mesazhi për të gjithë në bisedë?"
+
+#. TRANSLATOR: Message deletion dialog, primary content
+#: ../td-client.cpp:1408
+msgid "Delete the message for yourself only?"
+msgstr "Të fshihet mesazhi vetëm për ju?"
+
+#. TRANSLATOR: Message deletion dialog, secondary content
+#: ../td-client.cpp:1410
+msgid "This cannot be undone."
+msgstr "Kjo nuk mund të zhbëhet."
+
+#. TRANSLATOR: Message deletion dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
+#: ../td-client.cpp:1417
+msgid "_Delete"
+msgstr "_Fshije"
+
+#. TRANSLATOR: In-chat error, after a message was deleted from its menu; followed by the reason.
+#: ../td-client.cpp:1434
+msgid "Cannot delete the message"
+msgstr "Mesazhi nuk mund të fshihet"
+
+#. TRANSLATOR: After the text of a message edited where it stands, in Pidgin's conversation window.
+#: ../receiving.cpp:1274
+msgid "edited"
+msgstr "ndryshuar"
+
+#. TRANSLATOR: Item of a message's menu, while the message is being edited in the input field.
+#: ../td-client.cpp:1195
+msgid "Cancel editing"
+msgstr "Anulo ndryshimin"
+
+#. TRANSLATOR: In-chat notification, not logged, once editing a message was given up.
+#. TRANSLATOR: In-chat notification, not logged, after a message being edited was sent unchanged.
+#. TRANSLATOR: In-chat notification, not logged, after the /cancel command.
+#: ../td-client.cpp:1413 ../tdlib-purple.cpp:359 ../tdlib-purple.cpp:818
+msgid "The message is left as it was."
+msgstr "Mesazhi mbetet siç ishte."
+
+#. TRANSLATOR: Error after the /cancel command.
+#: ../tdlib-purple.cpp:814
+msgid "No message is being edited."
+msgstr "Nuk po ndryshohet asnjë mesazh."
+
+#. TRANSLATOR: Command description, the initial "cancel" must remain verbatim!
+#: ../tdlib-purple.cpp:1094
+msgid "cancel: Leave the message being edited as it was"
+msgstr "cancel: Lëre mesazhin që po ndryshohet siç ishte"
+
+#. TRANSLATOR: In-chat notification, not logged. Argument is the time (or date and time) the message was sent at, as the conversation window shows it. "/cancel" must remain verbatim!
+#: ../td-client.cpp:1364
+#, c++-format
+msgid ""
+"Editing the message from {}: send it to save the change; Esc or /cancel "
+"leaves it as it was."
+msgstr "Po ndryshohet mesazhi nga {}: dërgojeni për ta ruajtur ndryshimin; Esc ose /cancel e lë siç ishte."
+
+#. TRANSLATOR: Error dialog, secondary content, when the message has been deleted.
+#: ../td-client.cpp:1057
+msgid "The message has been deleted."
+msgstr "Mesazhi është fshirë."
+
+#. TRANSLATOR: Account settings, key (boolean)
+#: ../tdlib-purple.cpp:1313
+msgid "Strike out deleted messages in Pidgin, rather than remove them"
+msgstr "Vija mbi mesazhet e fshira në Pidgin, në vend që t'i hiqni"
+
+#. TRANSLATOR: Item of an edited message's menu, while its latest edit is shown: removed words put back, and added ones, each on its own color. It shows just the text as it now is.
+msgid "Show the latest version"
+msgstr "Shfaq versionin e fundit"
+
+#. TRANSLATOR: Item of an edited message's menu, while just its text as it now is is shown. It shows the latest edit: removed words put back, and added ones, each on its own color.
+msgid "Show the latest edit"
+msgstr "Shfaq redaktimin e fundit"
+
+#. TRANSLATOR: Account settings, key (number): days counted back from the conversation's latest message. 0 leaves the conversation window as Pidgin opens it.
+msgid "Days of messages to show on opening a conversation, in Pidgin"
+msgstr "Ditë mesazhesh për t'u shfaqur kur hapet një bisedë, në Pidgin"
+
+#. TRANSLATOR: At the end of a conversation window while it is being filled, followed by a turning character.
+msgid "Fetching messages from Telegram"
+msgstr "Po merren mesazhet nga Telegram"
+
+#. TRANSLATOR: After the text of a message edited where it stands, in Pidgin's conversation window, when only the formatting of its words (bold, italic and the like) changed.
+msgid "formatting edited"
+msgstr "ndryshuar formatimi"
+
+#. TRANSLATOR: Contact and conversation menu item, while deleted messages stay in the conversation window, struck out. It has them removed from now on.
+msgid "Remove deleted messages"
+msgstr "Hiq mesazhet e fshira"
+
+#. TRANSLATOR: Contact and conversation menu item, while deleted messages are removed from the conversation window. It has them stay, struck out, from now on.
+msgid "Keep deleted messages, struck out"
+msgstr "Mbaj mesazhet e fshira, të vijëzuara"
+
+msgid "The message from {0} was edited"
+msgstr "Mesazhi i {0} u përpunua"
+
+msgid "{0} edited the message from {1}"
+msgstr "{0} përpunoi mesazhin e {1}"
+
+msgid "Report the message…"
+msgstr "Raporto mesazhin…"
+
+#, c++-format
+msgid "Unblock {}"
+msgstr "Zhblloko {}"
+
+#, c++-format
+msgid "Block {}…"
+msgstr "Blloko {}…"
+
+#, c++-format
+msgid "Cannot block {}"
+msgstr "{} nuk mund të bllokohet"
+
+#, c++-format
+msgid "Cannot unblock {}"
+msgstr "{} nuk mund të zhbllokohet"
+
+#, c++-format
+msgid "Block {}?"
+msgstr "Të bllokohet {}?"
+
+msgid "Block user"
+msgstr "Blloko përdoruesin"
+
+msgid "They will not be able to write to you or call you."
+msgstr "Nuk do të mund t'ju shkruajë apo t'ju telefonojë."
+
+msgid "_Block"
+msgstr "_Blloko"
+
+msgid "Reported to Telegram's moderators."
+msgstr "U raportua te moderatorët e Telegram-it."
+
+msgid "Report"
+msgstr "Raporto"
+
+msgid "_Next"
+msgstr "_Vazhdo"
+
+msgid "Tell Telegram's moderators more"
+msgstr "Tregojuni moderatorëve të Telegram-it më shumë"
+
+msgid "This may be left empty."
+msgstr "Mund të lihet bosh."
+
+msgid "_Report"
+msgstr "_Raporto"
+
+msgid "Telegram wants messages to go with this report: report one from its menu instead, by right-clicking it."
+msgstr "Telegram-i do mesazhe bashkë me këtë raport: në vend të kësaj, raportoni një prej tyre nga menyja e tij, me klikim të djathtë."
+
+msgid "Cannot send the report"
+msgstr "Raporti nuk mund të dërgohet"
+
+msgid "Report…"
+msgstr "Raporto…"
+
+#, c++-format
+msgid "{} joined Telegram"
+msgstr "{} tani është në Telegram"
+
+#. TRANSLATOR: Error after the /paste command, when xclip fails without saying why.
+#, c++-format
+msgid "xclip failed, with status {}"
+msgstr "xclip dështoi, me gjendjen {}"
+
+#. TRANSLATOR: Error after the /paste command.
+msgid "There are no files or picture on the clipboard."
+msgstr "Nuk ka skedarë apo foto në kujtesën e fragmenteve."
+
+#. TRANSLATOR: Command description, the initial "paste" must remain verbatim!
+msgid "paste: Attach the files copied to the clipboard, or its picture, to the message being written"
+msgstr "paste: Bashkëngjit te mesazhi që po shkruhet skedarët e kopjuar në kujtesën e fragmenteve, ose foton e saj"
+
+#. TRANSLATOR: In-chat notification, not logged, after /paste. The argument is the pasted things' placeholders, such as [Image#1] or [report.pdf].
+#, c++-format
+msgid "Pasted {}: write it into the message, where it goes, to send it there."
+msgstr "U ngjit {}: shkruajeni në mesazh, aty ku duhet, për ta dërguar atje."
+
+#. TRANSLATOR: In-chat notification, of a picture or video pasted, in the list after "Pasted". The arguments are its placeholders, the second its file name, such as [Image#1] and [holiday.jpg].
+#, c++-format
+msgid "{0} (or {1}, as a file)"
+msgstr "{0} (ose {1}, si skedar)"
+
+#. TRANSLATOR: Item of the menu of a pasted picture's or video's placeholder, such as [Image#1], in the message being written.
+msgid "Send as a file"
+msgstr "Dërgoje si skedar"
+
+#. TRANSLATOR: Item of the menu of a pasted video's placeholder by its file name, such as [holiday.mp4], in the message being written.
+msgid "Send as a video"
+msgstr "Dërgoje si video"
+
+#. TRANSLATOR: Item of the menu of a pasted picture's placeholder by its file name, such as [holiday.jpg], in the message being written.
+msgid "Send as a photo"
+msgstr "Dërgoje si foto"
+
+#. TRANSLATOR: Item of the menu of a pasted thing's placeholder, such as [Image#1] or [report.pdf], in the message being written.
+msgid "Remove from the message"
+msgstr "Hiqe nga mesazhi"
+
+#. TRANSLATOR: In-chat error message. The arguments are a pasted file's placeholder, such as [report.pdf#3], and where the file was.
+#, c++-format
+msgid "The message is not sent: {0} is gone from {1}."
+msgstr "Mesazhi nuk u dërgua: {0} nuk gjendet më te {1}."
+
+#. TRANSLATOR: In-chat notification, after an edit Telegram does not allow was sent. The argument is why.
+#, c++-format
+msgid "The message is left as it was: {}"
+msgstr "Mesazhi mbetet siç ishte: {}"
+
+#. TRANSLATOR: In-chat notification, after "The message is left as it was:", when a placeholder of something pasted was put into a message of text being edited.
+msgid "Telegram adds no picture, video or file to a message of text."
+msgstr "Telegram nuk shton foto, video apo skedar te një mesazh teksti."
+
+#. TRANSLATOR: In-chat notification, after "The message is left as it was:", when the placeholder of a message's picture, video or file was taken out as it was edited.
+msgid "Telegram takes no picture, video or file out of a message; it can be replaced, or the message deleted."
+msgstr "Telegram nuk heq foto, video apo skedar nga një mesazh; mund të zëvendësohet, ose mesazhi të fshihet."
+
+#. TRANSLATOR: In-chat notification, after "The message is left as it was:", when placeholders of more than one thing were put into a message with a picture, video or file being edited.
+msgid "A message holds one picture, video or file, which can be replaced, but no more."
+msgstr "Një mesazh mban një foto, video ose skedar, që mund të zëvendësohet, por jo më shumë."
+
+#. TRANSLATOR: In-chat notification, after "The message is left as it was:". The arguments are a pasted file's placeholder, such as [report.pdf#3], and where the file was.
+#, c++-format
+msgid "{0} is gone from {1}."
+msgstr "{0} nuk gjendet më te {1}."
+
+#. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
+#: ../td-client.cpp:1091
+msgid "Needs Telegram Premium"
+msgstr "Kërkon Telegram Premium"
+
+#. TRANSLATOR: In-chat error, after a reaction was picked from a message's menu; followed by the reaction.
 #: ../td-client.cpp:1115
 msgid "Cannot change the reaction"
 msgstr "Reagimi nuk mund të ndryshohet"

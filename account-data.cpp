@@ -1096,8 +1096,15 @@ void TdAccountData::removeShownMessage(ChatId chatId, MessageId messageId)
     m_shownMessages.erase(ShownMessageKey(chatId, messageId));
 }
 
+MessageId TdAccountData::getSentMessageId(ChatId chatId, MessageId messageId) const
+{
+    auto it = m_sentMessageIds.find(ShownMessageKey(chatId, messageId));
+    return (it != m_sentMessageIds.end()) ? it->second : messageId;
+}
+
 void TdAccountData::renameShownMessage(ChatId chatId, MessageId oldId, MessageId newId)
 {
+    m_sentMessageIds[ShownMessageKey(chatId, oldId)] = newId;
     auto it = m_shownMessages.find(ShownMessageKey(chatId, oldId));
     if (it != m_shownMessages.end()) {
         ShownMessage message = std::move(it->second);
@@ -1117,6 +1124,7 @@ void TdAccountData::addPendingEdit(const PendingEdit &edit)
         // One showing will do for both, and the file is new if either brought one. Should it fail,
         // what was shown before the first comes back, but only over what the last put in place
         it->captionOnly = it->captionOnly && edit.captionOnly;
+        it->formattingOnly = it->formattingOnly && edit.formattingOnly;
         it->installed   = edit.installed;
     }
 }

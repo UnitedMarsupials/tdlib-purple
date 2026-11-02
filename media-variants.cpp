@@ -40,20 +40,26 @@ void getMediaVariants(const td::td_api::MessageContent &content, std::vector<Med
                                                 alternative->codec_, alternative->video_.get()});
     }
 
-    std::stable_sort(variants.begin(), variants.end(), [](const MediaVariant &a, const MediaVariant &b) {
-        return ((int64_t)a.width * a.height < (int64_t)b.width * b.height) ||
-               (((int64_t)a.width * a.height == (int64_t)b.width * b.height) && (a.size < b.size));
+    // One of unknown dimensions, as the original of a photo just sent is, is taken for the largest
+    auto area = [](const MediaVariant &variant) {
+        return (variant.width && variant.height) ? (int64_t)variant.width * variant.height : INT64_MAX;
+    };
+    std::stable_sort(variants.begin(), variants.end(), [&area](const MediaVariant &a, const MediaVariant &b) {
+        return (area(a) < area(b)) || ((area(a) == area(b)) && (a.size < b.size));
     });
 }
 
 static std::string describeVariant(const MediaVariant &variant)
 {
-    std::string result = std::to_string(variant.width) + "×" + std::to_string(variant.height);
+    std::string result;
+    if (variant.width && variant.height)
+        result = std::to_string(variant.width) + "×" + std::to_string(variant.height);
     if (!variant.codec.empty())
-        result += " (" + variant.codec + ")";
+        result += (result.empty() ? "" : " ") + ("(" + variant.codec + ")");
     if (variant.size) {
         char *size = purple_str_size_to_units(variant.size);
-        result += ", ";
+        if (!result.empty())
+            result += ", ";
         result += size;
         g_free(size);
     }

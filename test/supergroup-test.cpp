@@ -124,8 +124,8 @@ TEST_F(SupergroupTest, AddSupergroupChatAtLogin_WithMemberList_OpenChatAfterFull
         ChatClearUsersEvent(groupChatPurpleName),
         ChatAddUserEvent(
             groupChatPurpleName,
-            // This user is not in our contact list so first/last name is used
-            userFirstNames[1] + " " + userLastNames[1],
+            // By user id, shown by the display name
+            purpleUserName(1),
             "", PURPLE_CBFLAGS_FOUNDER, false
         ),
         ChatAddUserEvent(
@@ -136,8 +136,8 @@ TEST_F(SupergroupTest, AddSupergroupChatAtLogin_WithMemberList_OpenChatAfterFull
         ),
         ChatAddUserEvent(
             groupChatPurpleName,
-            // This user is not in our contact list so first/last name is used
-            userFirstNames[0] + " " + userLastNames[0],
+            // By user id, shown by the display name
+            purpleUserName(0),
             "", PURPLE_CBFLAGS_OP, false
         ),
         PresentConversationEvent(groupChatPurpleName)
@@ -246,7 +246,7 @@ TEST_F(SupergroupTest, ExistingSupergroupReceiveMessageAtLogin_WithMemberList_Op
         {
             std::make_unique<ServGotJoinedChatEvent>(connection, purpleChatId, groupChatPurpleName,
                                                      groupChatTitle),
-            std::make_unique<ServGotChatEvent>(connection, purpleChatId, userFirstNames[0] + " " + userLastNames[0],
+            std::make_unique<ServGotChatEvent>(connection, purpleChatId, purpleUserName(0),
                                                "Hello", PURPLE_MESSAGE_RECV, date)
         },
         {
@@ -272,8 +272,8 @@ TEST_F(SupergroupTest, ExistingSupergroupReceiveMessageAtLogin_WithMemberList_Op
             std::make_unique<ChatClearUsersEvent>(groupChatPurpleName),
             std::make_unique<ChatAddUserEvent>(
                 groupChatPurpleName,
-                // This user is not in our contact list so first/last name is used
-                userFirstNames[1] + " " + userLastNames[1],
+                // By user id, shown by the display name
+                purpleUserName(1),
                 "", PURPLE_CBFLAGS_FOUNDER, false
             ),
             std::make_unique<ChatAddUserEvent>(
@@ -284,8 +284,8 @@ TEST_F(SupergroupTest, ExistingSupergroupReceiveMessageAtLogin_WithMemberList_Op
             ),
             std::make_unique<ChatAddUserEvent>(
                 groupChatPurpleName,
-                // This user is not in our contact list so first/last name is used
-                userFirstNames[0] + " " + userLastNames[0],
+                // By user id, shown by the display name
+                purpleUserName(0),
                 "", PURPLE_CBFLAGS_OP, false
             ),
             std::make_unique<AccountSetAliasEvent>(account, selfFirstName + " " + selfLastName),

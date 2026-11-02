@@ -3,6 +3,7 @@
 account-data.cpp
 call.cpp
 client-utils.cpp
+clipboard.cpp
 custom-emoji.cpp
 file-transfer.cpp
 format.cpp
@@ -14,4 +15,5 @@ secret-chat.cpp
 sticker.cpp
 td-client.cpp
 tdlib-purple.cpp
+thumbnail.cpp
 transceiver.cpp

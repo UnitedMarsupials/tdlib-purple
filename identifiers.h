@@ -62,6 +62,7 @@ DEFINE_ID_CLASS(UserId, int64_t)
     friend UserId getSenderUserId(const td::td_api::message &message);
     friend UserId getSenderUserId(const td::td_api::messageOriginUser &forwardOrigin);
     friend UserId getUserId(const td::td_api::secretChat &secretChat);
+    friend UserId getUserId(const td::td_api::updateUserFullInfo &update);
     friend UserId getUserId(const td::td_api::updateUserStatus &update);
     friend UserId getUserId(const td::td_api::updateChatAction &update);
     friend UserId getUserId(const td::td_api::importedContacts &contacts, unsigned index);
@@ -77,6 +78,7 @@ DEFINE_ID_CLASS(ChatId, int64_t)
     friend ChatId getChatId(const td::td_api::messageOriginChannel &forwardOrigin);
     friend ChatId getChatId(const td::td_api::message &message);
     friend ChatId getChatId(const td::td_api::updateChatAction &update);
+    friend ChatId getChatId(const td::td_api::updateChatUnreadReactionCount &update);
     friend ChatId getChatId(const td::td_api::updateChatLastMessage &update);
     friend ChatId getChatId(const td::td_api::updateMessageContent &update);
     friend ChatId getChatId(const td::td_api::updateDeleteMessages &update);
@@ -110,6 +112,7 @@ DEFINE_ID_CLASS(MessageId, int64_t)
     friend MessageId getMessageId(const td::td_api::updateMessageInteractionInfo &update);
     friend MessageId getMessageId(const td::td_api::updateMessageUnreadReactions &update);
     friend MessageId getOldMessageId(const td::td_api::updateMessageSendSucceeded &update);
+    friend MessageId getLastReadMessageId(const td::td_api::chat &chat);
 };
 
 #undef DEFINE_ID_CLASS
@@ -127,6 +130,7 @@ UserId       getUserId(const td::td_api::call &call);
 UserId       getSenderUserId(const td::td_api::message &message);
 UserId       getSenderUserId(const td::td_api::messageOriginUser &forwardOrigin);
 UserId       getUserId(const td::td_api::secretChat &secretChat);
+UserId       getUserId(const td::td_api::updateUserFullInfo &update);
 UserId       getUserId(const td::td_api::updateUserStatus &update);
 UserId       getUserId(const td::td_api::updateChatAction &update);
 UserId       getUserId(const td::td_api::importedContacts &contacts, unsigned index);
@@ -139,6 +143,7 @@ ChatId       getChatId(const td::td_api::updateChatActionBar &update);
 ChatId       getChatId(const td::td_api::messageOriginChannel &forwardOrigin);
 ChatId       getChatId(const td::td_api::message &message);
 ChatId       getChatId(const td::td_api::updateChatAction &update);
+ChatId       getChatId(const td::td_api::updateChatUnreadReactionCount &update);
 ChatId       getChatId(const td::td_api::updateChatLastMessage &update);
 ChatId       getChatId(const td::td_api::updateMessageContent &update);
 ChatId       getChatId(const td::td_api::updateDeleteMessages &update);
@@ -160,6 +165,8 @@ MessageId    getMessageId(const td::td_api::updateDeleteMessages &update, unsign
 MessageId    getMessageId(const td::td_api::updateMessageInteractionInfo &update);
 MessageId    getMessageId(const td::td_api::updateMessageUnreadReactions &update);
 MessageId    getOldMessageId(const td::td_api::updateMessageSendSucceeded &update);
+// Of those received
+MessageId    getLastReadMessageId(const td::td_api::chat &chat);
 
 namespace std {
     static inline std::string to_string(UserId id) { return to_string(id.value()); }

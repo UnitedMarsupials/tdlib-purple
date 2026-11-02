@@ -2,6 +2,7 @@
 #include "libpurple-mock.h"
 #include "buildopt.h"
 #include "sticker.h"
+#include "td-client.h"
 #include <ctime>
 #include <unistd.h>
 
@@ -465,4 +466,30 @@ TEST_F(CustomEmojiReactionTest, NoGdkPixbuf)
     reactWithCustomEmoji();
     replyWithSticker(make_object<stickerFormatTgs>(), TEST_SOURCE_DIR "/test.tgs");
     verifyReaction(linked(TEST_SOURCE_DIR "/test.tgs", "\U0001F63A"), false);
+}
+
+TEST_F(ReactionTest, UnreadMarked)
+{
+    loginWithOneContact();
+    receive(makeTextMessage("Did you ask already?"), "Did you ask already?");
+    PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, purpleUserName(0).c_str(),
+                                                                     account);
+    ASSERT_NE(nullptr, conv);
+    // The mock sets none: the name stands for it
+    const char *convTitle = purple_conversation_get_title(conv);
+    std::string title     = convTitle ? convTitle : purple_conversation_get_name(conv);
+
+    // Marked while there are any, as the phone app marks the chat
+    tgl.update(make_object<updateChatUnreadReactionCount>(chatIds[0], 2));
+    prpl.verifyEvents(ConvSetTitleEvent(purpleUserName(0), "\xe2\x9d\xa4\xef\xb8\x8f " + title));
+    tgl.update(make_object<updateChatUnreadReactionCount>(chatIds[0], 1));
+    prpl.verifyNoEvents();
+
+    // Seen once the conversation is
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    client->sendReadReceipts(conv);
+    tgl.verifyRequest(readAllChatReactions(chatIds[0]));
+    tgl.update(make_object<updateChatUnreadReactionCount>(chatIds[0], 0));
+    prpl.verifyEvents(ConvSetTitleEvent(purpleUserName(0), title));
 }

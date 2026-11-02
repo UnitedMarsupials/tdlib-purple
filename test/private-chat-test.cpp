@@ -2,6 +2,7 @@
 #include "sticker.h"
 #include "libpurple-mock.h"
 #include "purple-info.h"
+#include "td-client.h"
 #include <fmt/format.h>
 
 class PrivateChatTest: public CommTest {
@@ -1522,4 +1523,47 @@ TEST_F(PrivateChatTest, DeletedAccountsFoundAtLogin)
                       account, nullptr, nullptr, nullptr),
         AliasBuddyEvent(purpleUserName(1), userFirstNames[1] + " " + userLastNames[1])
     );
+}
+
+TEST_F(PrivateChatTest, ContactRegistered)
+{
+    constexpr int64_t messageId = 10000;
+    constexpr int32_t date      = 123456;
+    loginWithOneContact();
+
+    tgl.update(make_object<updateNewMessage>(makeMessage(
+        messageId,
+        userIds[0],
+        chatIds[0],
+        false,
+        date,
+        make_object<messageContactRegistered>()
+    )));
+
+    tgl.verifyRequest(viewMessages(
+        chatIds[0],
+        {messageId}, nullptr,
+        true
+    ));
+    prpl.verifyEvents(
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+        ConversationWriteEvent(
+            purpleUserName(0), purpleUserName(0),
+            userFirstNames[0] + " " + userLastNames[0] + " joined Telegram",
+            PURPLE_MESSAGE_SYSTEM, date
+        )
+    );
+}
+
+TEST_F(PrivateChatTest, FindOurselvesByAccountName)
+{
+    loginWithOneContact();
+    // As group chats list us, with "+" or without
+    auto *client = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(connection));
+    for (const std::string &name: {"+" + selfPhoneNumber, selfPhoneNumber}) {
+        std::vector<const td::td_api::user *> users;
+        client->getUsers(name.c_str(), users);
+        ASSERT_EQ(1u, users.size());
+        EXPECT_EQ(selfId, users[0]->id_);
+    }
 }
