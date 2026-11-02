@@ -975,6 +975,12 @@ void PurpleTdClient::onChatListReady()
             purple_account_get_username(m_account));
 
     purple_blist_add_account(m_account);
+
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
+        if (purple_conversation_get_account(conv) == m_account)
+            conversationShown(conv, isConversationShown(conv));
+    }
 }
 
 // A second click within this long after the first does not open the file again: the program for it
@@ -2020,6 +2026,44 @@ bool PurpleTdClient::getReactionTip(PurpleConversation *conv, MessageId messageI
 void PurpleTdClient::markConversation(PurpleConversation *conv)
 {
     markConversationTitle(m_data, conv);
+}
+
+void PurpleTdClient::conversationShown(PurpleConversation *conv, bool shown)
+{
+    // Those shown by then are opened once the chats are known; a disconnection closes them all
+    const td::td_api::chat *chat = m_chatListReady ? findConversationChat(m_data, conv) : nullptr;
+    if (!chat)
+        return;
+    ChatId chatId = getId(*chat);
+    if (shown == (m_openChats.count(chatId) != 0))
+        return;
+    purple_debug_misc(config::pluginId, "%s chat %" G_GINT64_FORMAT "\n", shown ? "Opening" : "Closing",
+                      chatId.value());
+    if (shown) {
+        m_openChats[chatId];
+        m_transceiver.sendQuery(td::td_api::make_object<td::td_api::openChat>(chatId.value()), nullptr);
+        checkViewedLater(conv);
+    } else {
+        m_openChats.erase(chatId);
+        m_transceiver.sendQuery(td::td_api::make_object<td::td_api::closeChat>(chatId.value()), nullptr);
+    }
+}
+
+void PurpleTdClient::messagesViewed(PurpleConversation *conv, const std::vector<MessageId> &messageIds)
+{
+    // Seen messages of an open chat are read, which is the account's to allow
+    const td::td_api::chat *chat = findConversationChat(m_data, conv);
+    auto                    it   = chat ? m_openChats.find(getId(*chat)) : m_openChats.end();
+    if ((it == m_openChats.end()) || messageIds.empty() || (it->second == messageIds) ||
+        !isReadReceiptsEnabled(m_account))
+        return;
+    it->second = messageIds;
+    auto request = td::td_api::make_object<td::td_api::viewMessages>();
+    request->chat_id_ = it->first.value();
+    for (MessageId messageId: messageIds)
+        request->message_ids_.push_back(messageId.value());
+    request->force_read_ = false;
+    m_transceiver.sendQuery(std::move(request), nullptr);
 }
 
 bool PurpleTdClient::hasUnreadReactions(PurpleBuddy *buddy)

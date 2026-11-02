@@ -556,6 +556,9 @@ void sendConversationReadReceipts(TdAccountData &account, PurpleConversation *co
 
     std::vector<ReadReceipt> receipts;
     account.extractPendingReadReceipts(chatId, receipts);
+    // Read as they are seen on screen, rather than all at once
+    if (viewsMessages(conv))
+        receipts.clear();
 
     // Seen now, as the phone app takes them to be once the chat is opened
     if (hasUnreadReactions(account, conv)) {

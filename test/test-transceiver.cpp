@@ -681,6 +681,16 @@ static void compare(const readAllChatReactions &actual, const readAllChatReactio
     COMPARE(chat_id_);
 }
 
+static void compare(const openChat &actual, const openChat &expected)
+{
+    COMPARE(chat_id_);
+}
+
+static void compare(const closeChat &actual, const closeChat &expected)
+{
+    COMPARE(chat_id_);
+}
+
 static void compare(const getMessageAddedReactions &actual, const getMessageAddedReactions &expected)
 {
     COMPARE(chat_id_);
@@ -754,6 +764,8 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(setMessageSenderBlockList)
         C(reportChat)
         C(readAllChatReactions)
+        C(openChat)
+        C(closeChat)
         C(getMessageAddedReactions)
         case editMessageMedia::ID:
             compare(static_cast<const editMessageMedia &>(actual), static_cast<const editMessageMedia &>(expected),

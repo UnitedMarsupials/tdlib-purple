@@ -4,6 +4,7 @@
 #include "client-utils.h"
 #include "config.h"
 #include <algorithm>
+#include <set>
 #include <string>
 
 #ifndef NoPidgin
@@ -165,6 +166,9 @@ FRONT_END_FUNCTION(gtk_image_get_pixbuf);
 FRONT_END_FUNCTION(gdk_pixbuf_scale_simple);
 FRONT_END_FUNCTION(gdk_pixbuf_get_width);
 FRONT_END_FUNCTION(gdk_pixbuf_get_height);
+FRONT_END_FUNCTION(pidgin_conv_window_get_active_conversation);
+FRONT_END_FUNCTION(gdk_window_get_state);
+FRONT_END_FUNCTION(gtk_text_view_get_visible_rect);
 
 static bool g_pidginUi = false;
 
@@ -465,6 +469,8 @@ static gboolean displayingMessage(PurpleAccount *account, const char *who, char 
     return FALSE;
 }
 
+static void scheduleViewCheck(PurpleConversation *conv);
+
 // Emitted by Pidgin once it has written into a tab; not if another plugin stopped the writing.
 // The marks are set (again) after each part of the message, while the conversation surely exists.
 static void displayedMessage(PurpleAccount *account, const char *who, char *message,
@@ -493,6 +499,8 @@ static void displayedMessage(PurpleAccount *account, const char *who, char *mess
         }
         g_messageBeingWritten->bodyMarked = true;
     }
+    if (conv)
+        scheduleViewCheck(conv);
 }
 
 static BuddyMarkHandler g_buddyMarkHandler = nullptr;
@@ -522,6 +530,7 @@ static guint g_connectSource = 0;
 static void connectPaste(gpointer plugin);
 static void connectPopup();
 static void connectScroll();
+static void connectShown(gpointer plugin);
 
 static gboolean connectSignals(gpointer plugin)
 {
@@ -542,6 +551,7 @@ static gboolean connectSignals(gpointer plugin)
     connectPaste(plugin);
     connectPopup();
     connectScroll();
+    connectShown(plugin);
     return FALSE;
 }
 
@@ -595,9 +605,11 @@ static void disconnectPaste();
 static void disconnectPopup();
 static void disconnectScroll();
 static void disconnectReactionTips();
+static void disconnectShown();
 
 void pidginUiUnload()
 {
+    disconnectShown();
     disconnectReactionTips();
     disconnectPaste();
     disconnectPopup();
@@ -2626,7 +2638,7 @@ void setTopReachedHandler(TopReachedHandler handler)
 static gboolean scrolled(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
 {
     GtkAdjustment *adjustment = paramCount ? static_cast<GtkAdjustment *>(p_g_value_get_object(&params[0])) : nullptr;
-    if (!adjustment || !g_topReachedHandler)
+    if (!adjustment)
         return TRUE;
     for (GList *item = purple_get_conversations(); item; item = item->next) {
         PurpleConversation *conv   = static_cast<PurpleConversation *>(item->data);
@@ -2634,6 +2646,9 @@ static gboolean scrolled(GSignalInvocationHint *, guint paramCount, const GValue
                                             config::pluginId) ? nullptr : getIMHtml(conv);
         if (!imhtml || (reinterpret_cast<GtkTextView *>(imhtml)->vadjustment != adjustment))
             continue;
+        scheduleViewCheck(conv);
+        if (!g_topReachedHandler)
+            break;
         bool atTop  = adjustment->value <= adjustment->lower;
         bool wasTop = purple_conversation_get_data(conv, AT_TOP_KEY) != nullptr;
         if (atTop && (adjustment->upper <= adjustment->page_size))
@@ -2692,6 +2707,240 @@ static void disconnectScroll()
         p_g_signal_remove_emission_hook(g_wheelSignal, g_wheelHook);
     g_scrollHook = 0;
     g_wheelHook  = 0;
+}
+
+// The tabs shown, as last told, worked out anew whenever that may have changed: until it can be,
+// every tab is taken to be shown
+static bool                           g_tracksShown       = false;
+static std::set<PurpleConversation *> g_shownConversations;
+static ShownHandler                   g_shownHandler      = nullptr;
+static ViewedHandler                  g_viewedHandler     = nullptr;
+static guint                          g_windowStateSignal = 0;
+static gulong                         g_windowStateHook   = 0;
+static guint                          g_shownSource       = 0;
+static const char                     VIEW_SOURCE_KEY[]   = "tdlib-purple-view-source";
+
+// Not on screen until it has stood still this long
+enum { VIEW_SETTLE_MS = 1000 };
+
+bool tracksShownConversations()
+{
+    return g_tracksShown;
+}
+
+bool isConversationShown(PurpleConversation *conv)
+{
+    return !g_tracksShown || g_shownConversations.count(conv);
+}
+
+void setShownHandler(ShownHandler handler)
+{
+    g_shownHandler = handler;
+}
+
+bool viewsMessages(PurpleConversation *conv)
+{
+    return g_tracksShown && getIMHtml(conv);
+}
+
+void setViewedHandler(ViewedHandler handler)
+{
+    g_viewedHandler = handler;
+}
+
+static bool isOurConversation(PurpleConversation *conv)
+{
+    return !strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId);
+}
+
+static bool findShown(PurpleConversation *conv)
+{
+    if (!getIMHtml(conv))
+        return false;
+    PidginWindow *win    = PIDGIN_CONVERSATION(conv)->win;
+    GtkWidget    *window = win ? win->window : nullptr;
+    return window && (p_pidgin_conv_window_get_active_conversation(win) == conv) &&
+           (reinterpret_cast<GtkObject *>(window)->flags & GTK_MAPPED) && window->window &&
+           !(p_gdk_window_get_state(window->window) & GDK_WINDOW_STATE_ICONIFIED);
+}
+
+// The messages any of which is between the top and the bottom of the tab's text on screen
+static std::vector<MessageId> findViewedMessages(GtkIMHtml *imhtml)
+{
+    GtkTextView *view = reinterpret_cast<GtkTextView *>(imhtml);
+    GdkRectangle rect;
+    GtkTextIter  iter, last;
+    p_gtk_text_view_get_visible_rect(view, &rect);
+    p_gtk_text_view_get_iter_at_location(view, &iter, rect.x, rect.y);
+    p_gtk_text_view_get_iter_at_location(view, &last, rect.x + rect.width, rect.y + rect.height - 1);
+
+    std::vector<MessageId> messageIds;
+    MessageId              first = findMessageAt(imhtml->text_buffer, iter);
+    if (first.valid())
+        messageIds.push_back(first);
+    do {
+        GSList *marks = p_gtk_text_iter_get_marks(&iter);
+        for (GSList *item = marks; item; item = item->next) {
+            const char *name = p_gtk_text_mark_get_name(static_cast<GtkTextMark *>(item->data));
+            MessageId   messageId = (name && g_str_has_prefix(name, START_MARK_PREFIX))
+                                    ? MessageId::fromString(name + strlen(START_MARK_PREFIX)) : MessageId();
+            if (messageId.valid() && (messageIds.empty() || !(messageIds.back() == messageId)))
+                messageIds.push_back(messageId);
+        }
+        g_slist_free(marks);
+    } while ((p_gtk_text_iter_compare(&iter, &last) < 0) && p_gtk_text_iter_forward_char(&iter));
+    return messageIds;
+}
+
+static gboolean checkViewed(gpointer data)
+{
+    // Its source is removed with it
+    PurpleConversation *conv   = static_cast<PurpleConversation *>(data);
+    GtkIMHtml          *imhtml = getIMHtml(conv);
+    // Still scrolling to the end, written to
+    if (imhtml && imhtml->scroll_src)
+        return G_SOURCE_CONTINUE;
+    purple_conversation_set_data(conv, VIEW_SOURCE_KEY, nullptr);
+    if (imhtml && g_shownConversations.count(conv) && g_viewedHandler) {
+        std::vector<MessageId> messageIds = findViewedMessages(imhtml);
+        if (!messageIds.empty())
+            g_viewedHandler(conv, messageIds);
+    }
+    return G_SOURCE_REMOVE;
+}
+
+static void stopViewCheck(PurpleConversation *conv)
+{
+    guint source = GPOINTER_TO_UINT(purple_conversation_get_data(conv, VIEW_SOURCE_KEY));
+    if (source) {
+        g_source_remove(source);
+        purple_conversation_set_data(conv, VIEW_SOURCE_KEY, nullptr);
+    }
+}
+
+static void scheduleViewCheck(PurpleConversation *conv)
+{
+    if (!g_tracksShown || !g_shownConversations.count(conv))
+        return;
+    stopViewCheck(conv);
+    guint source = g_timeout_add(VIEW_SETTLE_MS, checkViewed, conv);
+    purple_conversation_set_data(conv, VIEW_SOURCE_KEY, GUINT_TO_POINTER(source));
+}
+
+void checkViewedLater(PurpleConversation *conv)
+{
+    scheduleViewCheck(conv);
+}
+
+static void refreshShown()
+{
+    std::set<PurpleConversation *> shown;
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
+        if (isOurConversation(conv) && findShown(conv))
+            shown.insert(conv);
+    }
+    std::vector<PurpleConversation *> hidden, revealed;
+    for (PurpleConversation *conv: g_shownConversations)
+        if (!shown.count(conv))
+            hidden.push_back(conv);
+    for (PurpleConversation *conv: shown)
+        if (!g_shownConversations.count(conv))
+            revealed.push_back(conv);
+    g_shownConversations = std::move(shown);
+    for (PurpleConversation *conv: hidden) {
+        stopViewCheck(conv);
+        if (g_shownHandler)
+            g_shownHandler(conv, false);
+    }
+    for (PurpleConversation *conv: revealed) {
+        if (g_shownHandler)
+            g_shownHandler(conv, true);
+        scheduleViewCheck(conv);
+    }
+}
+
+static gboolean refreshShownNow(gpointer)
+{
+    g_shownSource = 0;
+    refreshShown();
+    return G_SOURCE_REMOVE;
+}
+
+// Once Pidgin is done: its window's chosen tab is not changed yet when it says it is switching
+static void refreshShownLater()
+{
+    if (!g_shownSource)
+        g_shownSource = g_idle_add(refreshShownNow, nullptr);
+}
+
+static void conversationSwitched(gpointer)
+{
+    refreshShownLater();
+}
+
+static void deletingConversation(PurpleConversation *conv)
+{
+    stopViewCheck(conv);
+    if (g_shownConversations.erase(conv) && g_shownHandler)
+        g_shownHandler(conv, false);
+    refreshShownLater();
+}
+
+// Any window minimized or restored, Pidgin's or not
+static gboolean windowStateChanged(GSignalInvocationHint *, guint, const GValue *, gpointer)
+{
+    refreshShownLater();
+    return TRUE;
+}
+
+static void connectShown(gpointer plugin)
+{
+    if (!LOOK_UP(pidgin_conv_window_get_active_conversation) || !LOOK_UP(gdk_window_get_state) ||
+        !LOOK_UP(gtk_text_view_get_visible_rect) || !LOOK_UP(gtk_text_view_get_iter_at_location) ||
+        !LOOK_UP(gtk_text_iter_get_marks) || !LOOK_UP(gtk_text_mark_get_name) || !LOOK_UP(gtk_widget_get_type) ||
+        !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
+        !LOOK_UP(g_signal_remove_emission_hook))
+    {
+        purple_debug_warning(config::pluginId, "Cannot tell which tabs are shown: some of GTK is not found\n");
+        return;
+    }
+    g_windowStateSignal = p_g_signal_lookup("window-state-event", p_gtk_widget_get_type());
+    if (g_windowStateSignal)
+        g_windowStateHook = p_g_signal_add_emission_hook(g_windowStateSignal, 0, windowStateChanged, nullptr,
+                                                         nullptr);
+    if (!g_windowStateHook) {
+        purple_debug_warning(config::pluginId, "Cannot tell which tabs are shown: windows cannot be followed\n");
+        return;
+    }
+    purple_signal_connect(p_pidgin_conversations_get_handle(), "conversation-switched", plugin,
+                          PURPLE_CALLBACK(conversationSwitched), NULL);
+    purple_signal_connect(p_pidgin_conversations_get_handle(), "conversation-displayed", plugin,
+                          PURPLE_CALLBACK(conversationSwitched), NULL);
+    purple_signal_connect(purple_conversations_get_handle(), "deleting-conversation", plugin,
+                          PURPLE_CALLBACK(deletingConversation), NULL);
+    // Those that have been taken to be shown so far, which most are not
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
+        if (isOurConversation(conv) && getIMHtml(conv))
+            g_shownConversations.insert(conv);
+    }
+    g_tracksShown = true;
+    refreshShown();
+}
+
+static void disconnectShown()
+{
+    if (g_windowStateHook)
+        p_g_signal_remove_emission_hook(g_windowStateSignal, g_windowStateHook);
+    g_windowStateHook = 0;
+    if (g_shownSource)
+        g_source_remove(g_shownSource);
+    g_shownSource = 0;
+    for (GList *item = purple_get_conversations(); item; item = item->next)
+        stopViewCheck(static_cast<PurpleConversation *>(item->data));
+    g_shownConversations.clear();
+    g_tracksShown = false;
 }
 
 static void connectPopup()
@@ -2886,6 +3135,33 @@ bool copyFileToClipboard(const std::string &path, bool picture)
 }
 
 void setDraggedFileHandler(DraggedFileHandler handler)
+{
+}
+
+bool tracksShownConversations()
+{
+    return false;
+}
+
+bool isConversationShown(PurpleConversation *conv)
+{
+    return true;
+}
+
+void setShownHandler(ShownHandler handler)
+{
+}
+
+bool viewsMessages(PurpleConversation *conv)
+{
+    return false;
+}
+
+void setViewedHandler(ViewedHandler handler)
+{
+}
+
+void checkViewedLater(PurpleConversation *conv)
 {
 }
 

@@ -1609,3 +1609,41 @@ TEST_F(PrivateChatTest, FindOurselvesByAccountName)
         EXPECT_EQ(selfId, users[0]->id_);
     }
 }
+
+TEST_F(PrivateChatTest, OpenWhileShown)
+{
+    loginWithOneContact();
+    PurpleTdClient     *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    PurpleConversation *conv   = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, purpleUserName(0).c_str());
+    ASSERT_NE(nullptr, client);
+    prpl.discardEvents();
+
+    // Not open yet, so not seen
+    client->messagesViewed(conv, {MessageId::fromString("1")});
+    tgl.verifyNoRequests();
+
+    client->conversationShown(conv, true);
+    tgl.verifyRequest(openChat(chatIds[0]));
+    client->conversationShown(conv, true);
+    tgl.verifyNoRequests();
+
+    client->messagesViewed(conv, {MessageId::fromString("1"), MessageId::fromString("2")});
+    tgl.verifyRequest(viewMessages(chatIds[0], {1, 2}, nullptr, false));
+    // The same again: TDLib knows
+    client->messagesViewed(conv, {MessageId::fromString("1"), MessageId::fromString("2")});
+    tgl.verifyNoRequests();
+    client->messagesViewed(conv, {MessageId::fromString("2"), MessageId::fromString("3")});
+    tgl.verifyRequest(viewMessages(chatIds[0], {2, 3}, nullptr, false));
+
+    client->conversationShown(conv, false);
+    tgl.verifyRequest(closeChat(chatIds[0]));
+    client->conversationShown(conv, false);
+    client->messagesViewed(conv, {MessageId::fromString("3")});
+    tgl.verifyNoRequests();
+
+    // Seen anew once opened again
+    client->conversationShown(conv, true);
+    tgl.verifyRequest(openChat(chatIds[0]));
+    client->messagesViewed(conv, {MessageId::fromString("2"), MessageId::fromString("3")});
+    tgl.verifyRequest(viewMessages(chatIds[0], {2, 3}, nullptr, false));
+}
