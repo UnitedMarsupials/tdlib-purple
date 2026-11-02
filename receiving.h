@@ -11,6 +11,8 @@ std::string makeNoticeWithSender(const td::td_api::chat &chat, const TgMessageIn
 // formatting that Pidgin's markup can send back, for editing it.
 std::string getMessageText(const td::td_api::formattedText &text,
                            const std::map<int64_t, std::string> *smileys = nullptr, bool sendable = false);
+// Into the image store, which takes the data, under the file's name, for Pidgin to offer when saving it
+int addImageFile(gchar *data, size_t length, const std::string &filePath);
 std::string makeInlineImageText(int imgstoreId);
 // How long a message may wait for its picture, preview or quoted message before it is shown
 // without: longer when catching up with a chat, where keeping messages in order matters more than
@@ -59,6 +61,9 @@ struct FileInfo {
 
 const td::td_api::file *selectPhotoSize(PurpleAccount *account, const td::td_api::messagePhoto &photo);
 void getFileFromMessage(const IncomingMessage &fullMessage, FileInfo &result);
+// Whether a message of the content carries a file, as getFileFromMessage() finds it, and whether
+// that is a picture, to be copied as one too: a photo, or a sticker that does not move
+void getMessageFileKind(const td::td_api::MessageContent &content, bool &hasFile, bool &picture);
 
 void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td_api::message> message,
                      IncomingMessage &fullMessage, const TdAccountData &account);

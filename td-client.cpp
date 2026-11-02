@@ -981,33 +981,71 @@ void PurpleTdClient::onChatListReady()
 // may well be starting still
 enum { OPEN_FILE_GRACE_SECONDS = 5 };
 
-static std::string makeOpenedFileKey(ChatId chatId, MessageId messageId, const std::string &variant)
+static std::string makeOpenedFileKey(ChatId chatId, MessageId messageId, const std::string &variant,
+                                     PurpleTdClient::FileUse use)
 {
-    return std::to_string(chatId.value()) + '/' + std::to_string(messageId.value()) + '/' + variant;
+    return std::to_string(chatId.value()) + '/' + std::to_string(messageId.value()) + '/' + variant +
+           ((use == PurpleTdClient::FileUse::Copy) ? "/copy" : "");
 }
 
-void PurpleTdClient::openMessageFile(ChatId chatId, MessageId linkedId, const std::string &variant)
+void PurpleTdClient::openMessageFile(ChatId chatId, MessageId linkedId, const std::string &variant, FileUse use)
 {
     MessageId   messageId = m_data.getSentMessageId(chatId, linkedId);
-    std::string key       = makeOpenedFileKey(chatId, messageId, variant);
+    std::string key       = makeOpenedFileKey(chatId, messageId, variant, use);
     auto        it  = m_openedFiles.find(key);
     time_t      now = time(NULL);
+    // Copied again at once, if asked, as that starts nothing
     if ((it != m_openedFiles.end()) &&
         (it->second.inProgress || (now - it->second.openedAt < OPEN_FILE_GRACE_SECONDS)))
     {
-        purple_debug_misc(config::pluginId, "File of message %" G_GINT64_FORMAT " is being opened already\n",
-                          messageId.value());
+        purple_debug_misc(config::pluginId, "File of message %" G_GINT64_FORMAT " is being %s already\n",
+                          messageId.value(), (use == FileUse::Copy) ? "copied" : "opened");
         return;
     }
     m_openedFiles[key] = OpenedFile{true, now};
 
-    purple_debug_misc(config::pluginId, "Opening file of message %" G_GINT64_FORMAT "\n", messageId.value());
+    purple_debug_misc(config::pluginId, "%s file of message %" G_GINT64_FORMAT "\n",
+                      (use == FileUse::Copy) ? "Copying" : "Opening", messageId.value());
+    fetchMessageFile(chatId, messageId, variant,
+        [this, chatId, key, use](const std::string &path, const std::string &description, bool picture,
+                                 const std::string &error) {
+            finishOpeningFile(chatId, key, use, description, path, picture, error);
+        });
+}
+
+void PurpleTdClient::dragMessageFile(ChatId chatId, MessageId linkedId, const std::string &variant,
+                                     std::function<void(const std::string &path, bool picture)> found)
+{
+    MessageId messageId = m_data.getSentMessageId(chatId, linkedId);
+    purple_debug_misc(config::pluginId, "Dragging file of message %" G_GINT64_FORMAT "\n", messageId.value());
+    fetchMessageFile(chatId, messageId, variant,
+        [this, chatId, found](const std::string &path, const std::string &description, bool picture,
+                              const std::string &error) {
+            if (path.empty())
+                showFileError(chatId, FileUse::Copy, description, error);
+            found(path, picture);
+        });
+}
+
+void PurpleTdClient::dragConversationFile(PurpleConversation *conv, MessageId messageId,
+                                          std::function<void(const std::string &path, bool picture)> found)
+{
+    const td::td_api::chat *chat = findConversationChat(m_data, conv);
+    if (chat)
+        dragMessageFile(getId(*chat), messageId, std::string(), found);
+    else
+        found(std::string(), false);
+}
+
+void PurpleTdClient::fetchMessageFile(ChatId chatId, MessageId messageId, const std::string &variant,
+                                      FileFetched fetched)
+{
     auto request = td::td_api::make_object<td::td_api::getMessage>();
     request->chat_id_    = chatId.value();
     request->message_id_ = messageId.value();
     m_transceiver.sendQuery(std::move(request),
-        [this, chatId, messageId, variant](uint64_t, TdObjectPtr object) {
-            openMessageFileResponse(chatId, messageId, variant, std::move(object));
+        [this, chatId, variant, fetched](uint64_t, TdObjectPtr object) {
+            fetchMessageFileResponse(chatId, variant, fetched, std::move(object));
         });
 }
 
@@ -1160,6 +1198,8 @@ void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId, OpenMen
         if (menu.isCaption)
             getMessageMedia(message, menu.media);
         menu.date = message.date_;
+        if (message.content_)
+            getMessageFileKind(*message.content_, menu.hasFile, menu.picture);
         if (!message.is_outgoing_)
             menu.sender = getSenderUserId(message);
 
@@ -1316,6 +1356,20 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
         item.action = [conv, messageId, marked]() {
             if (g_list_find(purple_get_conversations(), conv))
                 setChangesMarked(conv, messageId, !marked);
+        };
+        items.push_back(std::move(item));
+    }
+    if (menu.hasFile) {
+        MenuItem item;
+        item.label  = menu.picture ?
+                      // TRANSLATOR: Item of a message's menu: the picture goes on the clipboard, as a file and as a picture, downloaded first, if need be.
+                      _("Copy the picture") :
+                      // TRANSLATOR: Item of a message's menu, and of a file's link: the file goes on the clipboard, for a file manager to paste, downloaded first, if need be.
+                      _("Copy the file");
+        item.action = [accountName, chatId, messageId]() {
+            PurpleTdClient *client = findConnected(accountName.c_str());
+            if (client)
+                client->openMessageFile(chatId, messageId, std::string(), FileUse::Copy);
         };
         items.push_back(std::move(item));
     }
@@ -1770,13 +1824,12 @@ void PurpleTdClient::deleteMessage(ChatId chatId, MessageId messageId, bool forA
     });
 }
 
-void PurpleTdClient::openMessageFileResponse(ChatId chatId, MessageId messageId, const std::string &variant,
-                                             TdObjectPtr object)
+void PurpleTdClient::fetchMessageFileResponse(ChatId chatId, const std::string &variant, FileFetched fetched,
+                                              TdObjectPtr object)
 {
-    std::string key = makeOpenedFileKey(chatId, messageId, variant);
     const td::td_api::chat *chat = m_data.getChat(chatId);
     if (!chat || !object || (object->get_id() != td::td_api::message::ID)) {
-        finishOpeningFile(chatId, key, std::string(), std::string(), getDisplayedError(object));
+        fetched(std::string(), std::string(), false, getDisplayedError(object));
         return;
     }
 
@@ -1792,12 +1845,14 @@ void PurpleTdClient::openMessageFileResponse(ChatId chatId, MessageId messageId,
     if (!fileInfo.file) {
         // Unlikely error message not worth translating
         // TRANSLATOR: In-chat error message, the reason in "Could not open {0}: {1}".
-        finishOpeningFile(chatId, key, fileInfo.description, std::string(), _("no file in the message"));
+        fetched(std::string(), fileInfo.description, false, _("no file in the message"));
         return;
     }
+    bool hasFile, picture;
+    getMessageFileKind(*fullMessage.message->content_, hasFile, picture);
 
     if (fileInfo.file->local_ && fileInfo.file->local_->is_downloading_completed_) {
-        finishOpeningFile(chatId, key, fileInfo.description, fileInfo.file->local_->path_, std::string());
+        fetched(fileInfo.file->local_->path_, fileInfo.description, picture, std::string());
         return;
     }
 
@@ -1813,27 +1868,31 @@ void PurpleTdClient::openMessageFileResponse(ChatId chatId, MessageId messageId,
     downloadReq->limit_       = 0;
     downloadReq->synchronous_ = true;
     m_transceiver.sendQuery(std::move(downloadReq),
-        [this, chatId, key, description](uint64_t, TdObjectPtr object) {
-            openDownloadedFile(chatId, key, description, std::move(object));
+        [fetched, description, picture](uint64_t, TdObjectPtr object) {
+            const td::td_api::file *file = nullptr;
+            if (object && (object->get_id() == td::td_api::file::ID))
+                file = static_cast<const td::td_api::file *>(object.get());
+            if (file && file->local_ && file->local_->is_downloading_completed_)
+                fetched(file->local_->path_, description, picture, std::string());
+            else
+                fetched(std::string(), description, picture, getDisplayedError(object));
         });
 }
 
-void PurpleTdClient::openDownloadedFile(ChatId chatId, const std::string &key, const std::string &description,
-                                        TdObjectPtr object)
+void PurpleTdClient::finishOpeningFile(ChatId chatId, const std::string &key, FileUse use,
+                                       const std::string &description, const std::string &path, bool picture,
+                                       const std::string &error)
 {
-    const td::td_api::file *file = nullptr;
-    if (object && (object->get_id() == td::td_api::file::ID))
-        file = static_cast<const td::td_api::file *>(object.get());
-    if (file && file->local_ && file->local_->is_downloading_completed_)
-        finishOpeningFile(chatId, key, description, file->local_->path_, std::string());
-    else
-        finishOpeningFile(chatId, key, description, std::string(), getDisplayedError(object));
-}
-
-void PurpleTdClient::finishOpeningFile(ChatId chatId, const std::string &key, const std::string &description,
-                                       const std::string &path, const std::string &error)
-{
-    if (!path.empty()) {
+    std::string reason = error;
+    if (!path.empty() && (use == FileUse::Copy)) {
+        m_openedFiles.erase(key);
+        purple_debug_misc(config::pluginId, "Copying %s%s\n", path.c_str(), picture ? ", a picture" : "");
+        if (copyFileToClipboard(path, picture))
+            return;
+        // TRANSLATOR: In-chat error message, the reason in "Could not copy {0}: {1}".
+        reason = _("there is no clipboard to put it on");
+    }
+    if (!path.empty() && (use == FileUse::Open)) {
         // From now on, the grace period runs
         m_openedFiles[key] = OpenedFile{false, time(NULL)};
         std::string uri = makeFileUri(path);
@@ -1842,15 +1901,25 @@ void PurpleTdClient::finishOpeningFile(ChatId chatId, const std::string &key, co
         return;
     }
 
-    purple_debug_warning(config::pluginId, "Cannot open file of %s: %s\n", key.c_str(), error.c_str());
+    purple_debug_warning(config::pluginId, "Cannot %s file of %s: %s\n", (use == FileUse::Copy) ? "copy" : "open",
+                         key.c_str(), reason.c_str());
     // Nothing was opened, so another click may try again at once
     m_openedFiles.erase(key);
+    showFileError(chatId, use, description, reason);
+}
+
+void PurpleTdClient::showFileError(ChatId chatId, FileUse use, const std::string &description,
+                                   const std::string &reason)
+{
     const td::td_api::chat *chat = m_data.getChat(chatId);
     if (chat) {
-        // TRANSLATOR: In-chat error message. Arguments are a file *type* or name, and the reason.
-        std::string notice = formatMessage(_("Could not open {0}: {1}"),
+        std::string notice = formatMessage((use == FileUse::Copy) ?
+                                           // TRANSLATOR: In-chat error message, after "Copy the file" was picked, or the file was dragged out of the conversation. Arguments are a file *type* or name, and the reason.
+                                           _("Could not copy {0}: {1}") :
+                                           // TRANSLATOR: In-chat error message. Arguments are a file *type* or name, and the reason.
+                                           _("Could not open {0}: {1}"),
                                            {escapeForDisplay(description.empty() ? std::string(_("the file")) : description),
-                                            escapeForDisplay(error)});
+                                            escapeForDisplay(reason)});
         showChatNotification(m_data, *chat, notice.c_str());
     }
 }

@@ -1286,8 +1286,28 @@ static gboolean jumpLinkClicked(PidginIMHtml *imhtml, PidginIMHtmlLink *link)
     return TRUE;
 }
 
-// Called whenever the link is right-clicked; it adds nothing to the menu
+// Called whenever the link to a message's file is right-clicked
 static gboolean messageLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *link, PidginWidget *linkMenu)
+{
+    const char *url = g_linkGetUrl(link);
+    std::string accountName, variant;
+    ChatId      chatId;
+    MessageId   messageId;
+    if (!url || !parseMessageLink(url, accountName, chatId, messageId, variant))
+        return TRUE;
+    MenuItem item;
+    item.label  = _("Copy the file");
+    item.action = [accountName, chatId, messageId, variant]() {
+        PurpleTdClient *client = PurpleTdClient::findConnected(accountName.c_str());
+        if (client)
+            client->openMessageFile(chatId, messageId, variant, PurpleTdClient::FileUse::Copy);
+    };
+    addLinkMenuItems(linkMenu, {item});
+    return TRUE;
+}
+
+// Called whenever the link to a message is right-clicked; it adds nothing to the menu
+static gboolean jumpLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *link, PidginWidget *linkMenu)
 {
     return TRUE;
 }
@@ -1323,6 +1343,29 @@ static bool messagePopupOpened(PurpleConversation *conv, MessageId messageId, co
     return tdClient && tdClient->showMessagePopup(conv, messageId, menu);
 }
 
+// A file dragged out of a conversation, in Pidgin: a link's, or a message's own
+static void fileDragged(PurpleConversation *conv, MessageId messageId, const std::string &link,
+                        DraggedFileFound found)
+{
+    auto foundFile = [found](const std::string &path, bool) { found(path); };
+    std::string accountName, variant;
+    ChatId      chatId;
+    if (!link.empty()) {
+        PurpleTdClient *client = parseMessageLink(link.c_str(), accountName, chatId, messageId, variant)
+                                 ? PurpleTdClient::findConnected(accountName.c_str()) : nullptr;
+        if (client)
+            client->dragMessageFile(chatId, messageId, variant, foundFile);
+        else
+            found(std::string());
+        return;
+    }
+    PurpleTdClient *client = getTdClient(purple_conversation_get_account(conv));
+    if (client)
+        client->dragConversationFile(conv, messageId, foundFile);
+    else
+        found(std::string());
+}
+
 static void registerMessageLinks()
 {
     g_registerProtocol = reinterpret_cast<RegisterProtocol>(findFrontEndSymbol("gtk_imhtml_class_register_protocol"));
@@ -1333,10 +1376,13 @@ static void registerMessageLinks()
                       messageLinksEnabled() ? MESSAGE_LINK_SCHEME : "file://");
     // Only where Pidgin's tab can be scrolled to the message
     setJumpLinksEnabled(messageLinksEnabled() && pidginUiFound() &&
-                        g_registerProtocol(JUMP_LINK_SCHEME, jumpLinkClicked, messageLinkContextMenu));
+                        g_registerProtocol(JUMP_LINK_SCHEME, jumpLinkClicked, jumpLinkContextMenu));
     // Not where messages go on to other clients, markup and all
     setLogMarkersEnabled(!canDisableReadReceipts());
     setMessagePopupHandler(messagePopupOpened);
+    // Only where links to messages' files work
+    if (messageLinksEnabled())
+        setDraggedFileHandler(fileDragged);
     setPastedHandler(pasted);
     setPlaceholderHandler(placeholderClicked);
     setBuddyMarkHandler(buddyMarked, UNREAD_REACTIONS_MARK);
@@ -1355,6 +1401,7 @@ static void unregisterMessageLinks()
     setMessageLinksEnabled(false);
     setLogMarkersEnabled(false);
     setMessagePopupHandler(nullptr);
+    setDraggedFileHandler(nullptr);
     setBuddyMarkHandler(nullptr, nullptr);
     setTopReachedHandler(nullptr);
     setReactionTipHandler(nullptr);

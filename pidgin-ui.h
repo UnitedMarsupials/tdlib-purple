@@ -204,5 +204,20 @@ void setPlaceholderHandler(PlaceholderHandler handler);
 
 // The items take the placeholder's place, after a separator; with none, the separator goes too
 void fillOpenMenu(const OpenMenuRef &menu, const std::vector<MenuItem> &items);
+// The items go into the menu Pidgin opens on a link, after its own, if any
+void addLinkMenuItems(PidginWidget *menu, const std::vector<MenuItem> &items);
+
+// The file goes on the clipboard: its URI, for a file manager to paste a copy, or a conversation to
+// attach it; its path, as text; and, if it is a picture, the picture itself, for a program that
+// takes one. False if there is no clipboard, without Pidgin.
+bool copyFileToClipboard(const std::string &path, bool picture);
+
+// A file dragged out of a tab, in Pidgin, to another program or another conversation: that of a link
+// to a message's file, or the file of the message whose picture it is. Told where the file is once it
+// is here, or with no path, if it cannot be had.
+using DraggedFileFound   = std::function<void(const std::string &path)>;
+using DraggedFileHandler = void (*)(PurpleConversation *conv, MessageId messageId, const std::string &link,
+                                    DraggedFileFound found);
+void setDraggedFileHandler(DraggedFileHandler handler);
 
 #endif

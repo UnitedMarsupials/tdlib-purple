@@ -638,6 +638,27 @@ msgstr "Помилка автентифікації: {}"
 msgid "Could not open {0}: {1}"
 msgstr "Не вдалося відкрити {0}: {1}"
 
+#. TRANSLATOR: Item of a message's menu: the picture goes on the clipboard, as a file and as a picture, downloaded first, if need be.
+#: ../td-client.cpp:1366
+msgid "Copy the picture"
+msgstr "Скопіювати зображення"
+
+#. TRANSLATOR: Item of a message's menu, and of a file's link: the file goes on the clipboard, for a file manager to paste, downloaded first, if need be.
+#: ../td-client.cpp:1368 ../tdlib-purple.cpp:1299
+msgid "Copy the file"
+msgstr "Скопіювати файл"
+
+#. TRANSLATOR: In-chat error message, the reason in "Could not copy {0}: {1}".
+#: ../td-client.cpp:1893
+msgid "there is no clipboard to put it on"
+msgstr "немає буфера обміну, куди його покласти"
+
+#. TRANSLATOR: In-chat error message, after "Copy the file" was picked, or the file was dragged out of the conversation. Arguments are a file *type* or name, and the reason.
+#: ../td-client.cpp:1918
+#, c++-format
+msgid "Could not copy {0}: {1}"
+msgstr "Не вдалося скопіювати {0}: {1}"
+
 #: ../td-client.cpp:1020
 msgid "the file"
 msgstr "файл"

@@ -504,6 +504,14 @@ unsigned getMessageWaitSeconds(const TgMessageInfo &message)
     return message.fromHistory ? HISTORY_WAIT_SECONDS : MESSAGE_WAIT_SECONDS;
 }
 
+int addImageFile(gchar *data, size_t length, const std::string &filePath)
+{
+    gchar *name = g_path_get_basename(filePath.c_str());
+    int    id   = purple_imgstore_add_with_id(data, length, name);
+    g_free(name);
+    return id;
+}
+
 std::string makeInlineImageText(int imgstoreId)
 {
     return "\n<img id=\"" + std::to_string(imgstoreId) + "\">";
@@ -902,7 +910,7 @@ static void showDownloadedImage(const td::td_api::chat &chat, TgMessageInfo &mes
     }
 
     if (g_file_get_contents (filePath.c_str(), &data, &len, NULL)) {
-        int id = purple_imgstore_add_with_id (data, len, NULL);
+        int id = addImageFile(data, len, filePath);
         text = makeInlineImageText(id);
     } else
         text = "<img src=\"" + escapeForDisplay(makeFileUri(filePath)) + "\">";
@@ -1119,7 +1127,7 @@ static std::string makePreviewImageText(const IncomingMessage &fullMessage)
         !g_file_get_contents(fullMessage.previewPath.c_str(), &data, &len, NULL))
         return "";
 
-    int id = purple_imgstore_add_with_id(data, len, NULL);
+    int id = addImageFile(data, len, fullMessage.previewPath);
     return "<img id=\"" + std::to_string(id) + "\">";
 }
 
@@ -2035,6 +2043,32 @@ void getFileFromMessage(const IncomingMessage &fullMessage, FileInfo &result)
     }
 }
 
+void getMessageFileKind(const td::td_api::MessageContent &content, bool &hasFile, bool &picture)
+{
+    hasFile = true;
+    picture = false;
+    switch (content.get_id()) {
+        case td::td_api::messagePhoto::ID:
+            picture = true;
+            break;
+        case td::td_api::messageSticker::ID: {
+            const auto &sticker = static_cast<const td::td_api::messageSticker &>(content);
+            picture = sticker.sticker_ && sticker.sticker_->format_ &&
+                      (sticker.sticker_->format_->get_id() == td::td_api::stickerFormatWebp::ID);
+            break;
+        }
+        case td::td_api::messageDocument::ID:
+        case td::td_api::messageVideo::ID:
+        case td::td_api::messageAnimation::ID:
+        case td::td_api::messageAudio::ID:
+        case td::td_api::messageVoiceNote::ID:
+        case td::td_api::messageVideoNote::ID:
+            break;
+        default:
+            hasFile = false;
+    }
+}
+
 bool isMessageReady(const IncomingMessage &fullMessage, const TdAccountData &account)
 {
     if (!fullMessage.message) return true;
@@ -2390,7 +2424,7 @@ static void showCustomEmojiFile(TdAccountData &account, const std::string &path,
     ImageSupport support = probeImageFile(path);
     if ((support == ImageSupport::Supported) && g_file_get_contents(path.c_str(), &data, &size, NULL)) {
         // The imgstore takes the data
-        int imageId = purple_imgstore_add_with_id(data, size, NULL);
+        int imageId = addImageFile(data, size, path);
         shown(account, linkStart + makeReactionImageText(imageId) + linkEnd, true);
         return;
     }

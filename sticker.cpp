@@ -23,7 +23,7 @@ void showStickerFile(const td::td_api::chat &chat, const TgMessageInfo &message,
     ImageSupport support = probeImageFile(filePath);
     if ((support == ImageSupport::Supported) && g_file_get_contents(filePath.c_str(), &data, &size, NULL)) {
         // The imgstore takes the data
-        int id = purple_imgstore_add_with_id(data, size, NULL);
+        int id = addImageFile(data, size, filePath);
         std::string text = makeInlineImageText(id);
         showMessageText(account, chat, message, text.c_str(), NULL, PURPLE_MESSAGE_IMAGES);
     } else {
