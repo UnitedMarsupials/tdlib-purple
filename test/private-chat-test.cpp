@@ -637,9 +637,9 @@ TEST_F(PrivateChatTest, Photo)
 
     prpl.verifyEvents(ServGotImEvent(
         connection, purpleUserName(0),
-        "<img src=\"file:///path\">\n"
+        "<a href=\"file://file:///path\">photo</a>\n"
         "photo",
-        (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES), date
+        PURPLE_MESSAGE_RECV, date
     ));
     tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
 
@@ -681,9 +681,9 @@ TEST_F(PrivateChatTest, AlreadyDownloadedPhoto)
         ServGotImEvent(
             connection,
             purpleUserName(0),
-            "<img src=\"file:///path\">\n"
+            "<a href=\"file://file:///path\">photo</a>\n"
             "photo",
-            (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES),
+            PURPLE_MESSAGE_RECV,
             date
         )
     );

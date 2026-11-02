@@ -48,8 +48,8 @@ void MessageEditTest::receivePhoto(const std::string &caption)
     )));
     tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
     prpl.verifyEvents(ServGotImEvent(
-        connection, purpleUserName(0), "<img src=\"file:///path\">\n" + caption,
-        (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES), date
+        connection, purpleUserName(0), "<a href=\"file://file:///path\">photo</a>\n" + caption,
+        PURPLE_MESSAGE_RECV, date
     ));
 }
 
@@ -244,8 +244,8 @@ TEST_F(MessageEditTest, PhotoReplaced)
             PURPLE_MESSAGE_SYSTEM, editDate
         ),
         ServGotImEvent(
-            connection, purpleUserName(0), "<img src=\"file:///path\">\ncaption",
-            (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES), editDate
+            connection, purpleUserName(0), "<a href=\"file://file:///path\">photo</a>\ncaption",
+            PURPLE_MESSAGE_RECV, editDate
         )
     );
     tgl.verifyNoRequests();

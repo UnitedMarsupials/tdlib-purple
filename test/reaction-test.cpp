@@ -145,8 +145,8 @@ TEST_F(ReactionTest, WhileEditDownloads)
                                userFirstNames[0] + " " + userLastNames[0] + " edited the message from " +
                                messageTime(date) + ":",
                                PURPLE_MESSAGE_SYSTEM, date + 1),
-        ServGotImEvent(connection, purpleUserName(0), "<img src=\"file:///path\">\nphoto",
-                       (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES), date + 1)
+        ServGotImEvent(connection, purpleUserName(0), "<a href=\"file://file:///path\">photo</a>\nphoto",
+                       PURPLE_MESSAGE_RECV, date + 1)
     );
     tgl.verifyNoRequests();
 }
