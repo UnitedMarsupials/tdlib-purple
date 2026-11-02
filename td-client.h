@@ -41,6 +41,7 @@ public:
     // Its title marked, or not, as its chat has reactions unread
     void markConversation(PurpleConversation *conv);
     void showEarlierMessages(PurpleConversation *conv, double filling = 0);
+    bool getReactionTip(PurpleConversation *conv, MessageId messageId, const std::string &key, std::string &tip);
     bool hasUnreadReactions(PurpleBuddy *buddy);
 
     void addContact(const std::string &purpleName, const std::string &alias, const std::string &groupName);

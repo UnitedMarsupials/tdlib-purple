@@ -83,6 +83,10 @@ void redrawChat(TdAccountData &account, ChatId chatId, MessageId earliest);
 // top; or, filling a tab that had no more than fits, the window so many times its text's height,
 // from about as many more as fill it, the end staying in view
 void showEarlierMessages(TdAccountData &account, PurpleConversation *conv, double filling = 0);
+// Who gave the reaction to the message, as plain text, a name a line, for its tooltip; asked for
+// the first time, those not named yet are fetched, the tooltip asked for again once they are
+bool getReactionTip(TdAccountData &account, PurpleConversation *conv, MessageId messageId, const std::string &typeKey,
+                    std::string &tip);
 // Fills the chat's tab anew, in Pidgin, with its messages from the first unread one, and some read
 // before it, as many as it can hold, scrolled to that one; false if the chat is busy, to be tried
 // again later

@@ -1433,7 +1433,20 @@ struct ReactionCount {
     int64_t     customEmojiId = 0;
     int32_t     count         = 0;
     bool        chosen        = false;
+    std::string key;
 };
+}
+
+static std::string getReactionTypeKey(const td::td_api::ReactionType &type)
+{
+    switch (type.get_id()) {
+    case td::td_api::reactionTypeEmoji::ID:
+        return "e" + static_cast<const td::td_api::reactionTypeEmoji &>(type).emoji_;
+    case td::td_api::reactionTypeCustomEmoji::ID:
+        return "x" + std::to_string(static_cast<const td::td_api::reactionTypeCustomEmoji &>(type).custom_emoji_id_);
+    default:
+        return "p";
+    }
 }
 
 static std::vector<ReactionCount> getReactionCounts(const td::td_api::messageInteractionInfo *info)
@@ -1455,6 +1468,7 @@ static std::vector<ReactionCount> getReactionCounts(const td::td_api::messageInt
             continue;
         item.count  = reaction->total_count_;
         item.chosen = reaction->is_chosen_;
+        item.key    = getReactionTypeKey(*reaction->type_);
         counts.push_back(std::move(item));
     }
     return counts;
@@ -1463,8 +1477,8 @@ static std::vector<ReactionCount> getReactionCounts(const td::td_api::messageInt
 // Each with its count, if more than one, ours in bold. A custom emoji is the conversation's custom smiley, its picture
 // fetched unless already there, where the front-end has them; otherwise left out, its ordinary emoji
 // unknown until it is fetched.
-static std::string formatReactions(TdAccountData &account, PurpleConversation *conv,
-                                   const std::vector<ReactionCount> &counts)
+static std::vector<ShownReaction> formatReactions(TdAccountData &account, PurpleConversation *conv,
+                                                  const std::vector<ReactionCount> &counts)
 {
     // Stands for the custom emoji until its picture is in
     static const char CUSTOM_EMOJI_PLACEHOLDER[] = "\xe2\x97\x8c";
@@ -1476,7 +1490,7 @@ static std::string formatReactions(TdAccountData &account, PurpleConversation *c
     if (!customEmoji.empty())
         smileys = addCustomEmojiSmileys(account, conv, customEmoji);
 
-    std::string line;
+    std::vector<ShownReaction> line;
     for (const ReactionCount &reaction: counts) {
         std::string emoji;
         if (!reaction.customEmojiId)
@@ -1492,11 +1506,9 @@ static std::string formatReactions(TdAccountData &account, PurpleConversation *c
             item += "&nbsp;" + std::to_string(reaction.count);
         if (reaction.chosen)
             item = "<b>" + item + "</b>";
-        if (!line.empty())
-            line += "&nbsp;&nbsp;&nbsp;";
-        line += item;
+        line.push_back({std::move(item), reaction.key});
     }
-    return line.empty() ? line : "<font size=\"2\">" + line + "</font>";
+    return line;
 }
 
 // Shows the message's reactions under it once it has been written
@@ -1511,9 +1523,11 @@ public:
             return;
         // Not where it would not be shown, nor its custom emoji fetched
         PurpleConversation *conv = pidginUiFound() ? findMessageConversation(m_account, m_chat) : nullptr;
-        std::string         html = conv ? formatReactions(m_account, conv, m_counts) : std::string();
-        if (!html.empty())
-            showMessageReactions(conv, m_messageId, html);
+        std::vector<ShownReaction> line;
+        if (conv)
+            line = formatReactions(m_account, conv, m_counts);
+        if (!line.empty())
+            showMessageReactions(conv, m_messageId, line);
     }
 private:
     TdAccountData             &m_account;
@@ -2197,18 +2211,6 @@ static std::string getSenderKey(const td::td_api::MessageSender &sender)
     return "";
 }
 
-static std::string getReactionTypeKey(const td::td_api::ReactionType &type)
-{
-    switch (type.get_id()) {
-    case td::td_api::reactionTypeEmoji::ID:
-        return "e" + static_cast<const td::td_api::reactionTypeEmoji &>(type).emoji_;
-    case td::td_api::reactionTypeCustomEmoji::ID:
-        return "x" + std::to_string(static_cast<const td::td_api::reactionTypeCustomEmoji &>(type).custom_emoji_id_);
-    default:
-        return "p";
-    }
-}
-
 // Who gave which: the sender's key and the reaction's, in that order, with a space between
 static std::string getReactionKey(const std::string &senderKey, const td::td_api::ReactionType &type)
 {
@@ -2243,6 +2245,30 @@ static void getGivenReactions(const td::td_api::messageInteractionInfo *info, st
     }
 }
 
+
+// Those giving each reaction now, as far as they are named
+static std::map<std::string, ShownMessage::Givers> getReactionGivers(const td::td_api::messageInteractionInfo *info)
+{
+    std::map<std::string, ShownMessage::Givers> givers;
+    if (!info || !info->reactions_ || info->reactions_->are_tags_)
+        return givers;
+    for (const auto &reaction: info->reactions_->reactions_) {
+        if (!reaction || !reaction->type_)
+            continue;
+        ShownMessage::Givers &item = givers[getReactionTypeKey(*reaction->type_)];
+        item.total = reaction->total_count_;
+        for (const auto &sender: reaction->recent_sender_ids_)
+            if (sender)
+                item.senders.push_back(getSenderKey(*sender));
+        // Ours is not always among the latest
+        if (reaction->is_chosen_ && reaction->used_sender_id_) {
+            std::string self = getSenderKey(*reaction->used_sender_id_);
+            if (std::find(item.senders.begin(), item.senders.end(), self) == item.senders.end())
+                item.senders.insert(item.senders.begin(), self);
+        }
+    }
+    return givers;
+}
 
 static std::string getReactionSenderName(TdAccountData &account, const std::string &reactionKey)
 {
@@ -2510,6 +2536,7 @@ void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
         getGivenReactions(message->interaction_info_.get(), reactions, nullptr);
         for (const GivenReaction &reaction: reactions)
             shownMessage.reactions.emplace(reaction.key, reaction.self);
+        shownMessage.givers = getReactionGivers(message->interaction_info_.get());
         account.addShownMessage(chatId, getId(*message), std::move(shownMessage));
     }
 
@@ -2535,8 +2562,10 @@ static void editedMessageResponse(TdAccountData &account, const PendingEdit &edi
         if (shownMessage && (*shownMessage == edit.installed)) {
             // Reactions are not the edit's to take back
             std::map<std::string, bool> reactions = std::move(shownMessage->reactions);
+            auto                        givers    = std::move(shownMessage->givers);
             *shownMessage           = edit.previous;
             shownMessage->reactions = std::move(reactions);
+            shownMessage->givers    = std::move(givers);
         }
         return;
     }
@@ -2629,6 +2658,7 @@ void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messa
     editedMessage.timestamp = shownMessage->timestamp;
     // Edits leave reactions be
     editedMessage.reactions = shownMessage->reactions;
+    editedMessage.givers    = shownMessage->givers;
     edit.installed   = editedMessage;
     *shownMessage = std::move(editedMessage);
 
@@ -3090,6 +3120,7 @@ void updateMessageReactions(TdAccountData &account, ChatId chatId, MessageId mes
     std::set<std::string>      present;
     std::set<std::string>      changedBy;
     getGivenReactions(info, reactions, &incompleteTypes);
+    shownMessage->givers = getReactionGivers(info);
     for (const GivenReaction &reaction: reactions) {
         present.insert(reaction.key);
         if (shownMessage->reactions.emplace(reaction.key, reaction.self).second) {
@@ -3117,6 +3148,81 @@ void updateMessageReactions(TdAccountData &account, ChatId chatId, MessageId mes
         if (conv)
             showMessageReactions(conv, messageId, formatReactions(account, conv, getReactionCounts(info)));
     }
+}
+
+static td::td_api::object_ptr<td::td_api::ReactionType> makeReactionType(const std::string &typeKey)
+{
+    if ((typeKey.size() > 1) && (typeKey[0] == 'e'))
+        return td::td_api::make_object<td::td_api::reactionTypeEmoji>(typeKey.substr(1));
+    if ((typeKey.size() > 1) && (typeKey[0] == 'x'))
+        return td::td_api::make_object<td::td_api::reactionTypeCustomEmoji>(g_ascii_strtoll(typeKey.c_str() + 1,
+                                                                                            nullptr, 10));
+    return td::td_api::make_object<td::td_api::reactionTypePaid>();
+}
+
+// All who gave the reaction, where Telegram names them, as many as one request returns
+static void fetchReactionGivers(TdAccountData &account, ChatId chatId, MessageId messageId, const std::string &typeKey)
+{
+    enum { MAX_GIVERS = 100 };
+    auto request = td::td_api::make_object<td::td_api::getMessageAddedReactions>(
+        chatId.value(), messageId.value(), makeReactionType(typeKey), "", MAX_GIVERS);
+    account.transceiver.sendQuery(std::move(request),
+        [&account, chatId, messageId, typeKey](uint64_t, td::td_api::object_ptr<td::td_api::Object> response) {
+            ShownMessage *shownMessage = account.findShownMessage(chatId, messageId);
+            if (!shownMessage)
+                return;
+            // Changed meanwhile, the request made for what was before
+            auto it = shownMessage->givers.find(typeKey);
+            if ((it == shownMessage->givers.end()) || !it->second.fetching)
+                return;
+            if (!response || (response->get_id() != td::td_api::addedReactions::ID)) {
+                purple_debug_misc(config::pluginId, "Cannot list who gave reaction %s to message %" G_GINT64_FORMAT
+                                  ": %s\n", typeKey.c_str(), messageId.value(), getDisplayedError(response).c_str());
+                return;
+            }
+            std::vector<std::string> senders;
+            for (const auto &reaction: static_cast<const td::td_api::addedReactions &>(*response).reactions_)
+                if (reaction && reaction->sender_id_ &&
+                    (std::find(senders.begin(), senders.end(), getSenderKey(*reaction->sender_id_)) == senders.end()))
+                    senders.push_back(getSenderKey(*reaction->sender_id_));
+            if (senders.size() > it->second.senders.size())
+                it->second.senders = std::move(senders);
+            const td::td_api::chat *chat = account.getChat(chatId);
+            PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+            if (conv)
+                refreshReactionTip(conv);
+        });
+}
+
+bool getReactionTip(TdAccountData &account, PurpleConversation *conv, MessageId messageId, const std::string &typeKey,
+                    std::string &tip)
+{
+    const td::td_api::chat *chat         = findConversationChat(account, conv);
+    ShownMessage           *shownMessage = chat ? account.findShownMessage(getId(*chat), messageId) : nullptr;
+    if (!shownMessage)
+        return false;
+    auto it = shownMessage->givers.find(typeKey);
+    if (it == shownMessage->givers.end())
+        return false;
+    ShownMessage::Givers &givers = it->second;
+    // Channels name nobody, and the count is shown already
+    if (givers.senders.empty())
+        return false;
+    if ((givers.total > int32_t(givers.senders.size())) && !givers.fetching) {
+        givers.fetching = true;
+        fetchReactionGivers(account, getId(*chat), messageId, typeKey);
+    }
+    tip.clear();
+    for (const std::string &sender: givers.senders) {
+        std::string name = getReactionSenderName(account, sender);
+        if (!name.empty())
+            tip += (tip.empty() ? "" : "\n") + name;
+    }
+    int32_t more = givers.total - int32_t(givers.senders.size());
+    if ((more > 0) && !tip.empty())
+        // TRANSLATOR: Under the names of those who gave a reaction, in its tooltip, when not all are known. Argument is a number.
+        tip += "\n" + formatMessage(_("and {} more"), more);
+    return !tip.empty();
 }
 
 using UnreadReactions = std::vector<td::td_api::object_ptr<td::td_api::unreadReaction>>;

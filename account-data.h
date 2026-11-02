@@ -347,6 +347,14 @@ struct ShownMessage {
     time_t      timestamp;
     // Who gave which reaction, as far as anyone has been named, and whether it was us
     std::map<std::string, bool> reactions;
+    // Those giving each reaction now, by its key: as many as are named, the latest first, all once
+    // fetched, and how many in all
+    struct Givers {
+        std::vector<std::string> senders;
+        int32_t                  total    = 0;
+        bool                     fetching = false; // or fetched
+    };
+    std::map<std::string, Givers> givers;
 
     // As far as an edit changes it
     bool operator==(const ShownMessage &other) const

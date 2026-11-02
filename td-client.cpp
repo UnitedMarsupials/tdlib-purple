@@ -1942,6 +1942,12 @@ void PurpleTdClient::showEarlierMessages(PurpleConversation *conv, double fillin
     ::showEarlierMessages(m_data, conv, filling);
 }
 
+bool PurpleTdClient::getReactionTip(PurpleConversation *conv, MessageId messageId, const std::string &key,
+                                    std::string &tip)
+{
+    return ::getReactionTip(m_data, conv, messageId, key, tip);
+}
+
 void PurpleTdClient::markConversation(PurpleConversation *conv)
 {
     markConversationTitle(m_data, conv);
