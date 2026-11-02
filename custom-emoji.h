@@ -6,6 +6,9 @@
 #include <string>
 #include <vector>
 
+// Custom emoji are 100 pixels square
+enum { CUSTOM_EMOJI_SIZE = 100 };
+
 // A custom emoji in a message: its id, and the ordinary emoji it stands for
 struct CustomEmoji {
     int64_t     id;

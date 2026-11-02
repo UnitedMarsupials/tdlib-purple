@@ -2396,8 +2396,6 @@ static std::string makeReactionImageText(int imageId)
 static void showCustomEmojiFile(TdAccountData &account, const std::string &path, int32_t format,
                                 const std::string &fallback, CustomEmojiShown shown)
 {
-    // Custom emoji are 100 pixels square
-    enum { CUSTOM_EMOJI_SIZE = 100 };
     // Whatever it is shown as, it leads to the file
     std::string linkStart = "<a href=\"" + escapeForDisplay(makeFileLinkTarget(path)) + "\">";
     std::string linkEnd   = "</a>";
