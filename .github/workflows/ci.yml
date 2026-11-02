@@ -333,7 +333,7 @@ jobs:
 
       - name: Boot ${{ matrix.name }}
         id: boot
-        uses: cross-platform-actions/action@v1.6.0
+        uses: cross-platform-actions/action@v1.7.0
         with:
           operating_system: ${{ matrix.os }}
           version: ${{ matrix.version }}
