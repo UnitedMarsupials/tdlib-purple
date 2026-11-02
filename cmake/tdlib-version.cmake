@@ -61,14 +61,14 @@ if (_unknown)
         "#   CANNOT TELL WHICH VERSION OF TDLIB THIS IS.                #\n"
         "#                                                              #\n"
         "#   Neither TdConfigVersion.cmake, nor TDLib's pkg-config      #\n"
-        "#   files, nor the soname of libtdjson says.  1.8.0 or newer   #\n"
+        "#   files, nor the soname of libtdjson says.  1.8.44 or newer  #\n"
         "#   is required; that cannot be checked.  Which form of the    #\n"
         "#   TDLib API to use is guessed by compiling probes instead.   #\n"
         "#                                                              #\n"
         "################################################################\n")
-elseif ("${TDLIB_VERSION}" VERSION_LESS 1.8.0)
+elseif ("${TDLIB_VERSION}" VERSION_LESS 1.8.44)
     # Error message must begin with "tdlib version" for a grep command from readme
-    message(FATAL_ERROR "at least tdlib version 1.8.0 is required
+    message(FATAL_ERROR "at least tdlib version 1.8.44 is required
 (version found: ${TDLIB_VERSION})")
 else ()
     message(STATUS "TDLib version: ${TDLIB_VERSION}")

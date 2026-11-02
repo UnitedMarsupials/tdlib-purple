@@ -33,6 +33,7 @@
 
 - **Pidgin's headers are needed to build, for features of its conversation window, and `-DNoPidgin=True` builds without them.**
 - **GIO is linked, for the types of the files pasted, told by their content, never their names, as shared-mime-info's magic has them.** It comes with GLib; without shared-mime-info's database installed, every file goes as a document.
+- **TDLib 1.8.44 or newer is required, as is checked, rather than the 1.8.0 still declared, which the code had long outgrown.** Video covers came with 1.8.44; later changes to TDLib's API are followed whichever release is found.
 
 ## 0.9.4 (2026-10-27)
 
