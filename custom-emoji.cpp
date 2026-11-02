@@ -134,8 +134,6 @@ static void getFile(TdAccountData &account, const FileRef &file, FileReady ready
 // failing that, its thumbnail, which is a still picture of it
 static void fetchSmileyPicture(TdAccountData &account, const td::td_api::sticker &sticker, const SmileyTarget &target)
 {
-    // Custom emoji are 100 pixels square
-    enum { CUSTOM_EMOJI_SIZE = 100 };
 
     FileRef stickerFile(sticker.sticker_.get());
     FileRef thumbnail(sticker.thumbnail_ ? sticker.thumbnail_->file_.get() : nullptr);

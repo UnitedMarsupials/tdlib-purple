@@ -897,34 +897,24 @@ static void showDownloadedImage(const td::td_api::chat &chat, TgMessageInfo &mes
                                 const std::string &filePath, const char *caption,
                                 TdAccountData &account)
 {
-    std::string  text;
-    std::string  notice;
-    gchar       *data   = NULL;
-    size_t       len    = 0;
+    gchar  *data = NULL;
+    size_t  len  = 0;
 
-    // A front-end that shows no pictures gets the link to the file
-    if (!canShowImages()) {
+    // A front-end that shows no pictures gets the link to the file, and so does one whose picture
+    // cannot be read: Pidgin shows pictures from its image store only, never from <img src=...>
+    if (!canShowImages() || !g_file_get_contents(filePath.c_str(), &data, &len, NULL)) {
         // TRANSLATOR: File-type, used to describe what is being downloaded, in sentences like "Downloading photo" or "Ignoring photo download".
         showGenericFileInline(chat, message, filePath, caption, _("photo"), std::string(), account);
         return;
     }
 
-    if (g_file_get_contents (filePath.c_str(), &data, &len, NULL)) {
-        int id = addImageFile(data, len, filePath);
-        text = makeInlineImageText(id);
-    } else
-        text = "<img src=\"" + escapeForDisplay(makeFileUri(filePath)) + "\">";
+    std::string text = makeInlineImageText(addImageFile(data, len, filePath));
     if (!message.mediaVariantLinks.empty())
         text += "\n" + message.mediaVariantLinks;
+    if (caption && *caption)
+        text += "\n" + std::string(caption);
 
-    if (caption && *caption) {
-        if (!text.empty())
-            text += "\n";
-        text += caption;
-    }
-
-    showMessageText(account, chat, message, text.empty() ? NULL : text.c_str(),
-                    notice.empty() ? NULL : notice.c_str(), PURPLE_MESSAGE_IMAGES);
+    showMessageText(account, chat, message, text.c_str(), NULL, PURPLE_MESSAGE_IMAGES);
 }
 
 bool isStickerAnimated(const std::string &filePath)
@@ -2396,8 +2386,6 @@ static std::string makeReactionImageText(int imageId)
 static void showCustomEmojiFile(TdAccountData &account, const std::string &path, int32_t format,
                                 const std::string &fallback, CustomEmojiShown shown)
 {
-    // Custom emoji are 100 pixels square
-    enum { CUSTOM_EMOJI_SIZE = 100 };
     // Whatever it is shown as, it leads to the file
     std::string linkStart = "<a href=\"" + escapeForDisplay(makeFileLinkTarget(path)) + "\">";
     std::string linkEnd   = "</a>";

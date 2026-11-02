@@ -489,10 +489,10 @@ TEST_F(MessageLinkTest, PhotoSizes)
     tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
     prpl.verifyEvents(ServGotImEvent(
         connection, purpleUserName(0),
-        "<img src=\"file:///path\">\n"
+        "<a href=\"file://file:///path\">photo</a>\n"
         "<a href=\"" + link() + "/pm\">320×240, purple_str_size_to_units</a> · "
         "<a href=\"" + link() + "/py\">1280×960, purple_str_size_to_units</a>\ncaption",
-        (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES), date
+        PURPLE_MESSAGE_RECV, date
     ));
 }
 

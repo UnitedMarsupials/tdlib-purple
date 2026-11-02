@@ -91,9 +91,9 @@ The debug log contains a lot of private information such as names and phone numb
 
 ## Building
 
-Compatible version of TDLib should be prebuilt and installed somewhere (requires C++14). Version requirement can be found in CMakeLists.txt:
+Compatible version of TDLib should be prebuilt and installed somewhere (requires C++14). Version requirement can be found in cmake/tdlib-version.cmake:
 ```
-grep -o "tdlib version.*" CMakeLists.txt
+grep -o "tdlib version.*" cmake/tdlib-version.cmake
 ```
 
 TDLib can be built like this:

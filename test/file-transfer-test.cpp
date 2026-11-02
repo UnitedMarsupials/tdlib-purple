@@ -97,8 +97,8 @@ TEST_F(FileTransferTest, BigPhoto_RequestDownload)
     prpl.verifyEvents(ServGotImEvent(
         connection,
         purpleUserName(0),
-        "<img src=\"file:///path\">",
-        (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES),
+        "<a href=\"file://file:///path\">photo</a>",
+        PURPLE_MESSAGE_RECV,
         date
     ));
 }
@@ -221,8 +221,8 @@ TEST_F(FileTransferTest, PhotoWithoutCaption)
     prpl.verifyEvents(ServGotImEvent(
         connection,
         purpleUserName(0),
-        "<img src=\"file:///path\">",
-        (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES),
+        "<a href=\"file://file:///path\">photo</a>",
+        PURPLE_MESSAGE_RECV,
         date
     ));
     tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
@@ -769,8 +769,8 @@ TEST_F(FileTransferTest, Photo_DownloadProgress_StuckAtStart)
         ServGotImEvent(
             connection,
             purpleUserName(0),
-            "<img src=\"file:///path\">",
-            (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES),
+            "<a href=\"file://file:///path\">photo</a>",
+            PURPLE_MESSAGE_RECV,
             date
         )
     );
@@ -859,8 +859,8 @@ TEST_F(FileTransferTest, Photo_DownloadProgress)
         ServGotImEvent(
             connection,
             purpleUserName(0),
-            "<img src=\"file:///path\">",
-            (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES),
+            "<a href=\"file://file:///path\">photo</a>",
+            PURPLE_MESSAGE_RECV,
             date
         )
     );
@@ -1353,8 +1353,8 @@ TEST_F(FileTransferTest, Photo_LongDownload_StartandDownloadsConfigured)
     prpl.verifyEvents(ServGotImEvent(
         connection,
         purpleUserName(0),
-        "<img src=\"file:///path\">",
-        (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES),
+        "<a href=\"file://file:///path\">photo</a>",
+        PURPLE_MESSAGE_RECV,
         date
     ));
 }
