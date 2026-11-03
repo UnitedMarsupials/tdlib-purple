@@ -164,18 +164,19 @@ void scrollToMessageLater(PurpleConversation *conv, MessageId messageId);
 using TopReachedHandler = void (*)(PurpleConversation *conv, double filling);
 void setTopReachedHandler(TopReachedHandler handler);
 
-// Whether the conversation is shown: the tab chosen in its window, which is not minimized. Without
-// Pidgin's window to tell, every conversation there is is taken to be.
+// Whether the conversation is shown: the tab chosen in its window, which is not minimized, while
+// the user is not idle, as long as Pidgin's own setting takes. Without Pidgin's window to tell,
+// every conversation there is is taken to be.
 bool tracksShownConversations();
 bool isConversationShown(PurpleConversation *conv);
 // Told when a tab comes to be shown, or no longer is: another tab chosen in its window, the window
-// minimized or restored, the tab closed
+// minimized or restored, the user idle or back, the tab closed
 using ShownHandler = void (*)(PurpleConversation *conv, bool shown);
 void setShownHandler(ShownHandler handler);
 
 // Told which messages are on screen in a shown tab, once it has not scrolled for a while: after it
 // comes to be shown, is scrolled or is written to, or its window is given the focus. Only while its
-// window has the focus and the screen is not blanked, and where viewsMessages() is true.
+// window has the focus, and where viewsMessages() is true.
 bool viewsMessages(PurpleConversation *conv);
 using ViewedHandler = void (*)(PurpleConversation *conv, const std::vector<MessageId> &messageIds);
 void setViewedHandler(ViewedHandler handler);

@@ -928,6 +928,11 @@ int purple_prefs_get_int(const char *name)
     return 0;
 }
 
+PurpleIdleUiOps *purple_idle_get_ui_ops(void)
+{
+    return NULL;
+}
+
 void purple_conversation_clear_message_history(PurpleConversation *conv)
 {
 }
