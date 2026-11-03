@@ -1664,15 +1664,23 @@ TEST_F(PrivateChatTest, OfflineWhileIdle)
     tgl.verifyRequest(viewMessages(chatIds[0], {1, 2}, nullptr, false));
 
     pluginInfo().set_idle(connection, 300);
-    tgl.verifyRequest(setOption("online", make_object<optionValueBoolean>(false)));
-    tgl.reply(make_object<ok>());
-    tgl.verifyNoRequests();
+    tgl.verifyRequests({
+        make_object<setOption>("online", make_object<optionValueBoolean>(false)),
+        make_object<closeChat>(chatIds[0])
+    });
     pluginInfo().set_idle(connection, 310);
     tgl.verifyNoRequests();
+    // Still shown, but nobody looks
+    client->conversationShown(conv, true);
+    client->messagesViewed(conv, {MessageId::fromString("2"), MessageId::fromString("3")});
+    tgl.verifyNoRequests();
 
-    // Back: the messages seen are told again, for TDLib to poll them
+    // Back: the chat is opened again, and the messages seen told anew, for TDLib to poll them
     pluginInfo().set_idle(connection, 0);
-    tgl.verifyRequest(setOption("online", make_object<optionValueBoolean>(true)));
-    tgl.reply(make_object<ok>());
+    tgl.verifyRequests({
+        make_object<setOption>("online", make_object<optionValueBoolean>(true)),
+        make_object<openChat>(chatIds[0])
+    });
+    client->messagesViewed(conv, {MessageId::fromString("1"), MessageId::fromString("2")});
     tgl.verifyRequest(viewMessages(chatIds[0], {1, 2}, nullptr, false));
 }

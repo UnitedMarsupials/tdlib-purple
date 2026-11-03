@@ -207,6 +207,7 @@ TEST_F(GroupChatTest, ExistingBasicGroupReceiveMessageAtLogin_WithMemberList_Rem
     );
     chat->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
 
+    chatsOpenedAtLogin = {groupChatId};
     login(
         {
             // Private chat with the contact
@@ -1450,6 +1451,7 @@ TEST_F(GroupChatTest, OpenLeftGroupChat_ReceiveMessageAtLogin)
         groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0
     );
     chat->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
+    chatsOpenedAtLogin = {groupChatId};
     login(
         {
             // Private chat with the contact

@@ -815,8 +815,14 @@ PurpleConversation *purple_find_conversation_with_account(
 
 GList *purple_get_conversations(void)
 {
-    // Only wanted for Pidgin's window, which the tests do not have
-    return NULL;
+    // libpurple's own list, not to be freed by the caller: made anew each time
+    static GList *conversations = NULL;
+    g_list_free(conversations);
+    conversations = NULL;
+    for (const AccountInfo &info: g_accounts)
+        for (PurpleConversation *conv: info.conversations)
+            conversations = g_list_append(conversations, conv);
+    return conversations;
 }
 
 void *purple_notify_message(void *handle, PurpleNotifyMsgType type,

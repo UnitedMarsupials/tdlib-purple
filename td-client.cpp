@@ -977,7 +977,11 @@ void PurpleTdClient::onChatListReady()
             purple_account_get_username(m_account));
 
     purple_blist_add_account(m_account);
+    refreshOpenChats();
+}
 
+void PurpleTdClient::refreshOpenChats()
+{
     for (GList *item = purple_get_conversations(); item; item = item->next) {
         PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
         if (purple_conversation_get_account(conv) == m_account)
@@ -2032,10 +2036,12 @@ void PurpleTdClient::markConversation(PurpleConversation *conv)
 
 void PurpleTdClient::conversationShown(PurpleConversation *conv, bool shown)
 {
-    // Those shown by then are opened once the chats are known; a disconnection closes them all
+    // Those shown by then are opened once the chats are known; a disconnection closes them all.
+    // Nobody looks at them while the user is idle.
     const td::td_api::chat *chat = m_chatListReady ? findConversationChat(m_data, conv) : nullptr;
     if (!chat)
         return;
+    shown = shown && !m_idle;
     ChatId chatId = getId(*chat);
     if (shown == (m_openChats.count(chatId) != 0))
         return;
@@ -2060,13 +2066,8 @@ void PurpleTdClient::messagesViewed(PurpleConversation *conv, const std::vector<
         !isReadReceiptsEnabled(m_account))
         return;
     it->second = messageIds;
-    sendViewedMessages(it->first, messageIds);
-}
-
-void PurpleTdClient::sendViewedMessages(ChatId chatId, const std::vector<MessageId> &messageIds)
-{
     auto request = td::td_api::make_object<td::td_api::viewMessages>();
-    request->chat_id_ = chatId.value();
+    request->chat_id_ = it->first.value();
     for (MessageId messageId: messageIds)
         request->message_ids_.push_back(messageId.value());
     request->force_read_ = false;
@@ -2075,12 +2076,15 @@ void PurpleTdClient::sendViewedMessages(ChatId chatId, const std::vector<Message
 
 void PurpleTdClient::setIdle(bool idle)
 {
+    if (idle == m_idle)
+        return;
     m_idle = idle;
     updateOnline();
+    refreshOpenChats();
 }
 
-// TDLib polls the reactions and views of the messages last seen in an open chat only while online.
-// Once it is, it is told of them again, for it to start; they are read already.
+// TDLib polls the reactions and views of the messages last seen in an open chat only while online:
+// once the user is back, the chats are opened again, and their messages on screen told anew
 void PurpleTdClient::updateOnline()
 {
     bool online = m_chatListReady && !m_idle;
@@ -2090,12 +2094,7 @@ void PurpleTdClient::updateOnline()
     purple_debug_misc(config::pluginId, "Going %s\n", online ? "online" : "offline");
     auto request = td::td_api::make_object<td::td_api::setOption>(
         "online", td::td_api::make_object<td::td_api::optionValueBoolean>(online));
-    m_transceiver.sendQuery(std::move(request), [this](uint64_t, td::td_api::object_ptr<td::td_api::Object>) {
-        if (m_online)
-            for (const auto &chat: m_openChats)
-                if (!chat.second.empty())
-                    sendViewedMessages(chat.first, chat.second);
-    });
+    m_transceiver.sendQuery(std::move(request), nullptr);
 }
 
 bool PurpleTdClient::hasUnreadReactions(PurpleBuddy *buddy)

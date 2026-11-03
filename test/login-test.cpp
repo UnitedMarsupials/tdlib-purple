@@ -542,6 +542,7 @@ TEST_F(LoginTest, IncomingGroupChatMessageAtLoginWhileChatListStillNull)
     purple_blist_add_chat(purple_chat_new(account, groupChatTitle.c_str(), components), NULL, NULL);
     prpl.discardEvents();
 
+    chatsOpenedAtLogin = {groupChatId};
     login(
         {
             standardUpdateUser(0),

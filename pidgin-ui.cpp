@@ -2721,14 +2721,10 @@ static gulong                         g_windowStateHook   = 0;
 static guint                          g_notifySignal      = 0;
 static gulong                         g_focusHook         = 0;
 static guint                          g_shownSource       = 0;
-static bool                           g_userIdle          = false;
-static guint                          g_idleSource        = 0;
 static const char                     VIEW_SOURCE_KEY[]   = "tdlib-purple-view-source";
 
 // Not on screen until it has stood still this long
 enum { VIEW_SETTLE_MS = 1000 };
-// Nothing tells of the user coming back: how often to look while idle
-enum { IDLE_POLL_S = 2 };
 
 bool tracksShownConversations()
 {
@@ -2762,13 +2758,66 @@ static bool isOurConversation(PurpleConversation *conv)
 
 static bool findShown(PurpleConversation *conv)
 {
-    if (g_userIdle || !getIMHtml(conv))
+    if (!getIMHtml(conv))
         return false;
     PidginWindow *win    = PIDGIN_CONVERSATION(conv)->win;
     GtkWidget    *window = win ? win->window : nullptr;
     return window && (p_pidgin_conv_window_get_active_conversation(win) == conv) &&
            (reinterpret_cast<GtkObject *>(window)->flags & GTK_MAPPED) && window->window &&
            !(p_gdk_window_get_state(window->window) & GDK_WINDOW_STATE_ICONIFIED);
+}
+
+// The screen blanked by the X server, or its monitor put to sleep, as asked of its extensions, which
+// Pidgin links against for its idle time: without them, or without X, it is taken not to be. Only
+// the server's own saver tells it; a screensaver program grabs the keyboard instead, which takes the
+// focus from Pidgin's windows.
+struct ScreenSaverInfo {        // XScreenSaverInfo, as in X11/extensions/scrnsaver.h
+    unsigned long window;
+    int           state;
+    int           kind;
+    unsigned long tilOrSince;
+    unsigned long idle;
+    unsigned long eventMask;
+};
+enum { SCREEN_SAVER_ON = 1, DPMS_MODE_ON = 0 };
+using GetDisplay        = void *(*)();
+using GetRootWindow     = unsigned long (*)();
+using QueryExtension    = int (*)(void *display, int *eventBase, int *errorBase);
+using QueryScreenSaver  = int (*)(void *display, unsigned long drawable, ScreenSaverInfo *info);
+using DpmsCapable       = int (*)(void *display);
+using DpmsInfo          = int (*)(void *display, unsigned short *powerLevel, unsigned char *state);
+
+static bool isScreenBlanked()
+{
+    static bool             lookedUp = false;
+    static void            *display  = nullptr;
+    static unsigned long    root     = 0;
+    static QueryScreenSaver querySaver = nullptr;
+    static DpmsInfo         dpmsInfo   = nullptr;
+    if (!lookedUp) {
+        lookedUp = true;
+        GetDisplay    getDisplay = reinterpret_cast<GetDisplay>(findFrontEndSymbol("gdk_x11_get_default_xdisplay"));
+        GetRootWindow getRoot    = reinterpret_cast<GetRootWindow>(findFrontEndSymbol("gdk_x11_get_default_root_xwindow"));
+        display = getDisplay ? getDisplay() : nullptr;
+        root    = (display && getRoot) ? getRoot() : 0;
+        int eventBase, errorBase;
+        QueryExtension saverExtension = reinterpret_cast<QueryExtension>(findFrontEndSymbol("XScreenSaverQueryExtension"));
+        if (root && saverExtension && saverExtension(display, &eventBase, &errorBase))
+            querySaver = reinterpret_cast<QueryScreenSaver>(findFrontEndSymbol("XScreenSaverQueryInfo"));
+        QueryExtension dpmsExtension = reinterpret_cast<QueryExtension>(findFrontEndSymbol("DPMSQueryExtension"));
+        DpmsCapable    dpmsCapable   = reinterpret_cast<DpmsCapable>(findFrontEndSymbol("DPMSCapable"));
+        if (display && dpmsExtension && dpmsCapable && dpmsExtension(display, &eventBase, &errorBase) &&
+            dpmsCapable(display))
+            dpmsInfo = reinterpret_cast<DpmsInfo>(findFrontEndSymbol("DPMSInfo"));
+        purple_debug_misc(config::pluginId, "Screen blanking %s told by the X server's saver, %s by DPMS\n",
+                          querySaver ? "is" : "is not", dpmsInfo ? "is" : "is not");
+    }
+    ScreenSaverInfo info;
+    if (querySaver && querySaver(display, root, &info) && (info.state == SCREEN_SAVER_ON))
+        return true;
+    unsigned short powerLevel;
+    unsigned char  enabled;
+    return dpmsInfo && dpmsInfo(display, &powerLevel, &enabled) && enabled && (powerLevel != DPMS_MODE_ON);
 }
 
 // Whether the tab, shown, is before the user's eyes: its window has the focus
@@ -2811,12 +2860,14 @@ static gboolean checkViewed(gpointer data)
     // Its source is removed with it
     PurpleConversation *conv   = static_cast<PurpleConversation *>(data);
     GtkIMHtml          *imhtml = getIMHtml(conv);
-    // Still scrolling to the end, written to
-    if (imhtml && imhtml->scroll_src)
+    // Not focused: checked again once it is
+    bool focused = imhtml && g_shownConversations.count(conv) && isWindowFocused(conv);
+    // Still scrolling to the end, written to; or nobody sees it until the screen is woken up, which
+    // nothing tells
+    if (imhtml && (imhtml->scroll_src || (focused && isScreenBlanked())))
         return G_SOURCE_CONTINUE;
     purple_conversation_set_data(conv, VIEW_SOURCE_KEY, nullptr);
-    // Not focused: checked again once it is
-    if (imhtml && g_shownConversations.count(conv) && isWindowFocused(conv) && g_viewedHandler) {
+    if (focused && g_viewedHandler) {
         std::vector<MessageId> messageIds = findViewedMessages(imhtml);
         if (!messageIds.empty())
             g_viewedHandler(conv, messageIds);
@@ -2887,25 +2938,6 @@ static void refreshShownLater()
 {
     if (!g_shownSource)
         g_shownSource = g_idle_add(refreshShownNow, nullptr);
-}
-
-// The user is idle once away from the keyboard and mouse for as long as Pidgin's own setting
-// takes, Pidgin telling the time since: looked at again then, if not back by then, or soon, while
-// idle. Every tab is hidden meanwhile.
-static gboolean checkIdle(gpointer)
-{
-    PurpleIdleUiOps *ops   = purple_idle_get_ui_ops();
-    time_t           after = time_t(std::max(purple_prefs_get_int("/purple/away/mins_before_away"), 1)) * 60;
-    time_t           left  = after - ops->get_time_idle();
-    bool             idle  = (left <= 0);
-    if (idle != g_userIdle) {
-        g_userIdle = idle;
-        purple_debug_misc(config::pluginId, "The user is %s\n", idle ? "idle" : "back");
-        refreshShown();
-    }
-    g_idleSource = g_timeout_add_seconds(idle ? IDLE_POLL_S : std::max<time_t>(left, IDLE_POLL_S), checkIdle,
-                                         nullptr);
-    return G_SOURCE_REMOVE;
 }
 
 static void conversationSwitched(gpointer)
@@ -2984,11 +3016,6 @@ static void connectShown(gpointer plugin)
             g_shownConversations.insert(conv);
     }
     g_tracksShown = true;
-    g_userIdle    = false;
-    // Without Pidgin telling the time idle, the user never is
-    PurpleIdleUiOps *ops = purple_idle_get_ui_ops();
-    if (ops && ops->get_time_idle)
-        checkIdle(nullptr);
     refreshShown();
 }
 
@@ -3002,10 +3029,7 @@ static void disconnectShown()
     g_focusHook       = 0;
     if (g_shownSource)
         g_source_remove(g_shownSource);
-    if (g_idleSource)
-        g_source_remove(g_idleSource);
     g_shownSource = 0;
-    g_idleSource  = 0;
     for (GList *item = purple_get_conversations(); item; item = item->next)
         stopViewCheck(static_cast<PurpleConversation *>(item->data));
     g_shownConversations.clear();

@@ -34,6 +34,8 @@ protected:
     const std::string replyPattern      = "<b>&gt; {} wrote:</b>\n&gt; {}\n{}";
     // Whether the chats are all known once login() is done, the user then going online
     bool              chatListReadyAtLogin = true;
+    // Those whose conversations are there by then, opened once the chats are known
+    std::vector<int64_t> chatsOpenedAtLogin;
 
     void SetUp() override;
     void TearDown() override;

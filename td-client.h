@@ -45,7 +45,8 @@ public:
     // fetches only for open chats; its messages on screen, then, are seen, and so read
     void conversationShown(PurpleConversation *conv, bool shown);
     void messagesViewed(PurpleConversation *conv, const std::vector<MessageId> &messageIds);
-    // Online, for Telegram, while the user is not idle, as libpurple tells
+    // Online, for Telegram, while the user is not idle, as libpurple tells; the chats shown are
+    // closed meanwhile
     void setIdle(bool idle);
     void showEarlierMessages(PurpleConversation *conv, double filling = 0);
     bool getReactionTip(PurpleConversation *conv, MessageId messageId, const std::string &key, std::string &tip);
@@ -222,7 +223,7 @@ private:
     void        requestRecoveryEmailConfirmation(const std::string &emailInfo);
     static void verifyRecoveryEmail(PurpleTdClient *self, const char *code);
     void        updateOnline();
-    void        sendViewedMessages(ChatId chatId, const std::vector<MessageId> &messageIds);
+    void        refreshOpenChats();
     void        verifyRecoveryEmailResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
 
     PurpleAccount        *m_account;
