@@ -2767,9 +2767,109 @@ static bool findShown(PurpleConversation *conv)
            !(p_gdk_window_get_state(window->window) & GDK_WINDOW_STATE_ICONIFIED);
 }
 
-// The screen blanked by the X server, or its monitor put to sleep, as asked of its extensions, which
-// Pidgin links against for its idle time: without them, or without X, it is taken not to be. Only
-// the server's own saver tells it; a screensaver program grabs the keyboard instead, which takes the
+// Screen lockers say whether they are on over the session's D-Bus, each desktop's under a name of its
+// own, all alike: asked once, and followed after. One not there never answers.
+struct ScreenLocker {
+    const char *name; // its interface too
+    const char *path;
+};
+static const ScreenLocker SCREEN_LOCKERS[] = {
+    {"org.freedesktop.ScreenSaver", "/org/freedesktop/ScreenSaver"}, // KDE's, xfce4-screensaver, light-locker
+    {"org.gnome.ScreenSaver",       "/org/gnome/ScreenSaver"},
+    {"org.mate.ScreenSaver",        "/org/mate/ScreenSaver"},
+    {"org.cinnamon.ScreenSaver",    "/org/cinnamon/ScreenSaver"},
+    {"org.xfce.ScreenSaver",        "/org/xfce/ScreenSaver"},
+};
+enum { SCREEN_LOCKER_COUNT = G_N_ELEMENTS(SCREEN_LOCKERS) };
+static GDBusConnection *g_sessionBus                              = nullptr;
+static GCancellable    *g_busCancellable                          = nullptr;
+static guint            g_lockerSubscriptions[SCREEN_LOCKER_COUNT] = {};
+static bool             g_lockerActive[SCREEN_LOCKER_COUNT]        = {};
+
+static void setLockerActive(size_t index, GVariant *value)
+{
+    if (!value || !g_variant_is_of_type(value, G_VARIANT_TYPE("(b)")))
+        return;
+    gboolean active = FALSE;
+    g_variant_get(value, "(b)", &active);
+    if (active != g_lockerActive[index])
+        purple_debug_misc(config::pluginId, "%s is %s\n", SCREEN_LOCKERS[index].name, active ? "on" : "off");
+    g_lockerActive[index] = active;
+}
+
+static void lockerChanged(GDBusConnection *, const gchar *, const gchar *, const gchar *, const gchar *,
+                          GVariant *parameters, gpointer data)
+{
+    setLockerActive(GPOINTER_TO_SIZE(data), parameters);
+}
+
+static void lockerAnswered(GObject *source, GAsyncResult *result, gpointer data)
+{
+    GError   *error = nullptr;
+    GVariant *reply = g_dbus_connection_call_finish(G_DBUS_CONNECTION(source), result, &error);
+    if (!reply) {
+        g_error_free(error);
+        return;
+    }
+    // Gone meanwhile
+    if (g_sessionBus) {
+        purple_debug_misc(config::pluginId, "Screen locking is told by %s\n", SCREEN_LOCKERS[GPOINTER_TO_SIZE(data)].name);
+        setLockerActive(GPOINTER_TO_SIZE(data), reply);
+    }
+    g_variant_unref(reply);
+}
+
+static void sessionBusFound(GObject *, GAsyncResult *result, gpointer)
+{
+    GError          *error = nullptr;
+    GDBusConnection *bus   = g_bus_get_finish(result, &error);
+    if (!bus) {
+        if (!g_error_matches(error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+            purple_debug_misc(config::pluginId, "No session bus to ask screen lockers on: %s\n", error->message);
+        g_error_free(error);
+        return;
+    }
+    g_sessionBus = bus;
+    for (size_t i = 0; i < SCREEN_LOCKER_COUNT; i++) {
+        // On any path: KDE's says it on two
+        g_lockerSubscriptions[i] = g_dbus_connection_signal_subscribe(bus, SCREEN_LOCKERS[i].name,
+            SCREEN_LOCKERS[i].name, "ActiveChanged", nullptr, nullptr, G_DBUS_SIGNAL_FLAGS_NONE, lockerChanged,
+            GSIZE_TO_POINTER(i), nullptr);
+        g_dbus_connection_call(bus, SCREEN_LOCKERS[i].name, SCREEN_LOCKERS[i].path, SCREEN_LOCKERS[i].name,
+                               "GetActive", nullptr, G_VARIANT_TYPE("(b)"), G_DBUS_CALL_FLAGS_NO_AUTO_START, -1,
+                               g_busCancellable, lockerAnswered, GSIZE_TO_POINTER(i));
+    }
+}
+
+static void connectScreenLockers()
+{
+    g_busCancellable = g_cancellable_new();
+    g_bus_get(G_BUS_TYPE_SESSION, g_busCancellable, sessionBusFound, nullptr);
+}
+
+static void disconnectScreenLockers()
+{
+    if (g_busCancellable) {
+        g_cancellable_cancel(g_busCancellable);
+        g_object_unref(g_busCancellable);
+    }
+    g_busCancellable = nullptr;
+    if (g_sessionBus) {
+        for (guint &subscription: g_lockerSubscriptions)
+            if (subscription)
+                g_dbus_connection_signal_unsubscribe(g_sessionBus, subscription);
+        g_object_unref(g_sessionBus);
+    }
+    g_sessionBus = nullptr;
+    for (size_t i = 0; i < SCREEN_LOCKER_COUNT; i++) {
+        g_lockerSubscriptions[i] = 0;
+        g_lockerActive[i]        = false;
+    }
+}
+
+// The screen locked, as above; or blanked by the X server, or its monitor put to sleep, as asked of
+// its extensions, which Pidgin links against for its idle time: without them, or without X, it is
+// taken not to be. A screensaver program that tells neither grabs the keyboard, which takes the
 // focus from Pidgin's windows.
 struct ScreenSaverInfo {        // XScreenSaverInfo, as in X11/extensions/scrnsaver.h
     unsigned long window;
@@ -2789,6 +2889,8 @@ using DpmsInfo          = int (*)(void *display, unsigned short *powerLevel, uns
 
 static bool isScreenBlanked()
 {
+    if (std::find(std::begin(g_lockerActive), std::end(g_lockerActive), true) != std::end(g_lockerActive))
+        return true;
     static bool             lookedUp = false;
     static void            *display  = nullptr;
     static unsigned long    root     = 0;
@@ -3016,6 +3118,7 @@ static void connectShown(gpointer plugin)
             g_shownConversations.insert(conv);
     }
     g_tracksShown = true;
+    connectScreenLockers();
     refreshShown();
 }
 
@@ -3033,6 +3136,7 @@ static void disconnectShown()
     for (GList *item = purple_get_conversations(); item; item = item->next)
         stopViewCheck(static_cast<PurpleConversation *>(item->data));
     g_shownConversations.clear();
+    disconnectScreenLockers();
     g_tracksShown = false;
 }
 
