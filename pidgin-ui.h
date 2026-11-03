@@ -174,7 +174,8 @@ using ShownHandler = void (*)(PurpleConversation *conv, bool shown);
 void setShownHandler(ShownHandler handler);
 
 // Told which messages are on screen in a shown tab, once it has not scrolled for a while: after it
-// comes to be shown, is scrolled or is written to. Only where viewsMessages() is true.
+// comes to be shown, is scrolled or is written to, or its window is given the focus. Only while its
+// window has the focus and the screen is not blanked, and where viewsMessages() is true.
 bool viewsMessages(PurpleConversation *conv);
 using ViewedHandler = void (*)(PurpleConversation *conv, const std::vector<MessageId> &messageIds);
 void setViewedHandler(ViewedHandler handler);

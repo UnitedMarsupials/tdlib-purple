@@ -4,7 +4,7 @@
 
 ### Features
 
-- **In Pidgin, a chat's reactions are kept up to date while its tab is shown, as the phone app does for the chat on its screen, and its messages are read as they come into view.** A tab is shown while it is the one chosen in its window and the window is not minimized: Telegram tells the reactions in channels and big groups only to those looking at them. A message is in view once its tab has not scrolled for a second, and, as Telegram has it, reading it reads those before it too; a tab not shown leaves its messages unread. Elsewhere, a chat is kept up to date while its conversation is open.
+- **In Pidgin, a chat's reactions are kept up to date while its tab is shown, as the phone app does for the chat on its screen, and its messages are read as they come into view.** A tab is shown while it is the one chosen in its window and the window is not minimized: Telegram tells the reactions in channels and big groups only to those looking at them. A message is in view once its tab has not scrolled for a second, while its window has the focus and the screen is not blanked by the X server, nor its monitor asleep; as Telegram has it, reading it reads those before it too. A tab not shown, or left in a window without the focus, leaves its messages unread. Elsewhere, a chat is kept up to date while its conversation is open.
 
 ## 0.9.5 (2026-11-01)
 

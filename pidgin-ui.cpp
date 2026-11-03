@@ -169,6 +169,7 @@ FRONT_END_FUNCTION(gdk_pixbuf_get_height);
 FRONT_END_FUNCTION(pidgin_conv_window_get_active_conversation);
 FRONT_END_FUNCTION(gdk_window_get_state);
 FRONT_END_FUNCTION(gtk_text_view_get_visible_rect);
+FRONT_END_FUNCTION(gtk_window_is_active);
 
 static bool g_pidginUi = false;
 
@@ -2717,6 +2718,8 @@ static ShownHandler                   g_shownHandler      = nullptr;
 static ViewedHandler                  g_viewedHandler     = nullptr;
 static guint                          g_windowStateSignal = 0;
 static gulong                         g_windowStateHook   = 0;
+static guint                          g_notifySignal      = 0;
+static gulong                         g_focusHook         = 0;
 static guint                          g_shownSource       = 0;
 static const char                     VIEW_SOURCE_KEY[]   = "tdlib-purple-view-source";
 
@@ -2764,6 +2767,66 @@ static bool findShown(PurpleConversation *conv)
            !(p_gdk_window_get_state(window->window) & GDK_WINDOW_STATE_ICONIFIED);
 }
 
+// The screen blanked by the X server, or its monitor put to sleep, as asked of its extensions, which
+// Pidgin links against for its idle time: without them, or without X, it is taken not to be. Only
+// the server's own saver tells it; a screensaver program grabs the keyboard instead, which takes the
+// focus from Pidgin's windows.
+struct ScreenSaverInfo {        // XScreenSaverInfo, as in X11/extensions/scrnsaver.h
+    unsigned long window;
+    int           state;
+    int           kind;
+    unsigned long tilOrSince;
+    unsigned long idle;
+    unsigned long eventMask;
+};
+enum { SCREEN_SAVER_ON = 1, DPMS_MODE_ON = 0 };
+using GetDisplay        = void *(*)();
+using GetRootWindow     = unsigned long (*)();
+using QueryExtension    = int (*)(void *display, int *eventBase, int *errorBase);
+using QueryScreenSaver  = int (*)(void *display, unsigned long drawable, ScreenSaverInfo *info);
+using DpmsCapable       = int (*)(void *display);
+using DpmsInfo          = int (*)(void *display, unsigned short *powerLevel, unsigned char *state);
+
+static bool isScreenBlanked()
+{
+    static bool             lookedUp = false;
+    static void            *display  = nullptr;
+    static unsigned long    root     = 0;
+    static QueryScreenSaver querySaver = nullptr;
+    static DpmsInfo         dpmsInfo   = nullptr;
+    if (!lookedUp) {
+        lookedUp = true;
+        GetDisplay    getDisplay = reinterpret_cast<GetDisplay>(findFrontEndSymbol("gdk_x11_get_default_xdisplay"));
+        GetRootWindow getRoot    = reinterpret_cast<GetRootWindow>(findFrontEndSymbol("gdk_x11_get_default_root_xwindow"));
+        display = getDisplay ? getDisplay() : nullptr;
+        root    = (display && getRoot) ? getRoot() : 0;
+        int eventBase, errorBase;
+        QueryExtension saverExtension = reinterpret_cast<QueryExtension>(findFrontEndSymbol("XScreenSaverQueryExtension"));
+        if (root && saverExtension && saverExtension(display, &eventBase, &errorBase))
+            querySaver = reinterpret_cast<QueryScreenSaver>(findFrontEndSymbol("XScreenSaverQueryInfo"));
+        QueryExtension dpmsExtension = reinterpret_cast<QueryExtension>(findFrontEndSymbol("DPMSQueryExtension"));
+        DpmsCapable    dpmsCapable   = reinterpret_cast<DpmsCapable>(findFrontEndSymbol("DPMSCapable"));
+        if (display && dpmsExtension && dpmsCapable && dpmsExtension(display, &eventBase, &errorBase) &&
+            dpmsCapable(display))
+            dpmsInfo = reinterpret_cast<DpmsInfo>(findFrontEndSymbol("DPMSInfo"));
+        purple_debug_misc(config::pluginId, "Screen blanking %s told by the X server's saver, %s by DPMS\n",
+                          querySaver ? "is" : "is not", dpmsInfo ? "is" : "is not");
+    }
+    ScreenSaverInfo info;
+    if (querySaver && querySaver(display, root, &info) && (info.state == SCREEN_SAVER_ON))
+        return true;
+    unsigned short powerLevel;
+    unsigned char  enabled;
+    return dpmsInfo && dpmsInfo(display, &powerLevel, &enabled) && enabled && (powerLevel != DPMS_MODE_ON);
+}
+
+// Whether the tab, shown, is before the user's eyes: its window has the focus
+static bool isWindowFocused(PurpleConversation *conv)
+{
+    PidginWindow *win = getIMHtml(conv) ? PIDGIN_CONVERSATION(conv)->win : nullptr;
+    return win && win->window && p_gtk_window_is_active(reinterpret_cast<GtkWindow *>(win->window));
+}
+
 // The messages any of which is between the top and the bottom of the tab's text on screen
 static std::vector<MessageId> findViewedMessages(GtkIMHtml *imhtml)
 {
@@ -2797,11 +2860,14 @@ static gboolean checkViewed(gpointer data)
     // Its source is removed with it
     PurpleConversation *conv   = static_cast<PurpleConversation *>(data);
     GtkIMHtml          *imhtml = getIMHtml(conv);
-    // Still scrolling to the end, written to
-    if (imhtml && imhtml->scroll_src)
+    // Not focused: checked again once it is
+    bool focused = imhtml && g_shownConversations.count(conv) && isWindowFocused(conv);
+    // Still scrolling to the end, written to; or nobody sees it until the screen is woken up, which
+    // nothing tells
+    if (imhtml && (imhtml->scroll_src || (focused && isScreenBlanked())))
         return G_SOURCE_CONTINUE;
     purple_conversation_set_data(conv, VIEW_SOURCE_KEY, nullptr);
-    if (imhtml && g_shownConversations.count(conv) && g_viewedHandler) {
+    if (focused && g_viewedHandler) {
         std::vector<MessageId> messageIds = findViewedMessages(imhtml);
         if (!messageIds.empty())
             g_viewedHandler(conv, messageIds);
@@ -2894,11 +2960,24 @@ static gboolean windowStateChanged(GSignalInvocationHint *, guint, const GValue 
     return TRUE;
 }
 
+// Any window given the focus or losing it, Pidgin's or not: the shown tabs of those focused are
+// looked at again, and none of the others is
+static gboolean focusChanged(GSignalInvocationHint *, guint, const GValue *, gpointer)
+{
+    for (PurpleConversation *conv: g_shownConversations)
+        if (isWindowFocused(conv))
+            scheduleViewCheck(conv);
+        else
+            stopViewCheck(conv);
+    return TRUE;
+}
+
 static void connectShown(gpointer plugin)
 {
     if (!LOOK_UP(pidgin_conv_window_get_active_conversation) || !LOOK_UP(gdk_window_get_state) ||
         !LOOK_UP(gtk_text_view_get_visible_rect) || !LOOK_UP(gtk_text_view_get_iter_at_location) ||
         !LOOK_UP(gtk_text_iter_get_marks) || !LOOK_UP(gtk_text_mark_get_name) || !LOOK_UP(gtk_widget_get_type) ||
+        !LOOK_UP(gtk_window_is_active) ||
         !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
         !LOOK_UP(g_signal_remove_emission_hook))
     {
@@ -2909,7 +2988,18 @@ static void connectShown(gpointer plugin)
     if (g_windowStateSignal)
         g_windowStateHook = p_g_signal_add_emission_hook(g_windowStateSignal, 0, windowStateChanged, nullptr,
                                                          nullptr);
-    if (!g_windowStateHook) {
+    // GtkWindow's is-active, said by GObject's notify
+    g_notifySignal = p_g_signal_lookup("notify", G_TYPE_OBJECT);
+    if (g_notifySignal)
+        g_focusHook = p_g_signal_add_emission_hook(g_notifySignal, g_quark_from_static_string("is-active"),
+                                                   focusChanged, nullptr, nullptr);
+    if (!g_windowStateHook || !g_focusHook) {
+        if (g_windowStateHook)
+            p_g_signal_remove_emission_hook(g_windowStateSignal, g_windowStateHook);
+        if (g_focusHook)
+            p_g_signal_remove_emission_hook(g_notifySignal, g_focusHook);
+        g_windowStateHook = 0;
+        g_focusHook       = 0;
         purple_debug_warning(config::pluginId, "Cannot tell which tabs are shown: windows cannot be followed\n");
         return;
     }
@@ -2933,7 +3023,10 @@ static void disconnectShown()
 {
     if (g_windowStateHook)
         p_g_signal_remove_emission_hook(g_windowStateSignal, g_windowStateHook);
+    if (g_focusHook)
+        p_g_signal_remove_emission_hook(g_notifySignal, g_focusHook);
     g_windowStateHook = 0;
+    g_focusHook       = 0;
     if (g_shownSource)
         g_source_remove(g_shownSource);
     g_shownSource = 0;
