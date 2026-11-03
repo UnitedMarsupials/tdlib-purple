@@ -45,6 +45,8 @@ public:
     // fetches only for open chats; its messages on screen, then, are seen, and so read
     void conversationShown(PurpleConversation *conv, bool shown);
     void messagesViewed(PurpleConversation *conv, const std::vector<MessageId> &messageIds);
+    // Online, for Telegram, while the user is not idle, as libpurple tells
+    void setIdle(bool idle);
     void showEarlierMessages(PurpleConversation *conv, double filling = 0);
     bool getReactionTip(PurpleConversation *conv, MessageId messageId, const std::string &key, std::string &tip);
     bool hasUnreadReactions(PurpleBuddy *buddy);
@@ -219,6 +221,8 @@ private:
     void        setTwoFactorAuthResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void        requestRecoveryEmailConfirmation(const std::string &emailInfo);
     static void verifyRecoveryEmail(PurpleTdClient *self, const char *code);
+    void        updateOnline();
+    void        sendViewedMessages(ChatId chatId, const std::vector<MessageId> &messageIds);
     void        verifyRecoveryEmailResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
 
     PurpleAccount        *m_account;
@@ -229,6 +233,8 @@ private:
     bool                  m_chatListReady = false;
     // Chats opened, and which of their messages were last told to be seen
     std::map<ChatId, std::vector<MessageId>>    m_openChats;
+    bool                  m_idle   = false;
+    bool                  m_online = false; // as last told to TDLib, which starts offline
     bool                  m_isProxyAdded = false;
     std::vector<PurpleRoomlist *>               m_pendingRoomLists;
 #if TDLIB_API_ADDED_PROXY

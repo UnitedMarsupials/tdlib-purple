@@ -369,6 +369,8 @@ TEST_F(PrivateChatTest, ContactWithoutChatAtLogin)
 {
     auto userUpdate = standardUpdateUser(0);
     userUpdate->user_->is_contact_ = true;
+    // Only once the contact's chat is
+    chatListReadyAtLogin = false;
     login(
         {std::move(userUpdate)},
         make_object<users>(1, std::vector<int64_t>(1, userIds[0])),
@@ -390,6 +392,7 @@ TEST_F(PrivateChatTest, ContactWithoutChatAtLogin)
         userFirstNames[0] + " " + userLastNames[0],
         nullptr, 0, 0, 0
     ));
+    tgl.verifyRequest(setOption("online", make_object<optionValueBoolean>(true)));
     prpl.verifyEvents(
         UserStatusEvent(account, purpleUserName(0), PURPLE_STATUS_AWAY),
         AccountSetAliasEvent(account, selfFirstName + " " + selfLastName),
@@ -1646,4 +1649,30 @@ TEST_F(PrivateChatTest, OpenWhileShown)
     tgl.verifyRequest(openChat(chatIds[0]));
     client->messagesViewed(conv, {MessageId::fromString("2"), MessageId::fromString("3")});
     tgl.verifyRequest(viewMessages(chatIds[0], {2, 3}, nullptr, false));
+}
+
+TEST_F(PrivateChatTest, OfflineWhileIdle)
+{
+    loginWithOneContact();
+    PurpleTdClient     *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    PurpleConversation *conv   = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, purpleUserName(0).c_str());
+    ASSERT_NE(nullptr, client);
+    prpl.discardEvents();
+    client->conversationShown(conv, true);
+    tgl.verifyRequest(openChat(chatIds[0]));
+    client->messagesViewed(conv, {MessageId::fromString("1"), MessageId::fromString("2")});
+    tgl.verifyRequest(viewMessages(chatIds[0], {1, 2}, nullptr, false));
+
+    pluginInfo().set_idle(connection, 300);
+    tgl.verifyRequest(setOption("online", make_object<optionValueBoolean>(false)));
+    tgl.reply(make_object<ok>());
+    tgl.verifyNoRequests();
+    pluginInfo().set_idle(connection, 310);
+    tgl.verifyNoRequests();
+
+    // Back: the messages seen are told again, for TDLib to poll them
+    pluginInfo().set_idle(connection, 0);
+    tgl.verifyRequest(setOption("online", make_object<optionValueBoolean>(true)));
+    tgl.reply(make_object<ok>());
+    tgl.verifyRequest(viewMessages(chatIds[0], {1, 2}, nullptr, false));
 }

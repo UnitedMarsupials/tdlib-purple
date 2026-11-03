@@ -608,6 +608,14 @@ static void tgprpl_set_status (PurpleAccount *acct, PurpleStatus *status)
 {
 }
 
+// Told by libpurple, by Pidgin's setting of when the user is idle; never, if told not to report it
+static void tgprpl_set_idle (PurpleConnection *gc, int idleTime)
+{
+    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    if (tdClient)
+        tdClient->setIdle(idleTime != 0);
+}
+
 static void tgprpl_add_buddy (PurpleConnection *gc, PurpleBuddy *buddy, PurpleGroup *group)
 {
     const char  *phoneNumber = purple_buddy_get_name(buddy);
@@ -1148,7 +1156,7 @@ static PurplePluginProtocolInfo prpl_info = {
     .send_typing              = tgprpl_send_typing,
     .get_info                 = tgprpl_info_show,
     .set_status               = tgprpl_set_status,
-    .set_idle                 = NULL,
+    .set_idle                 = tgprpl_set_idle,
     .change_passwd            = NULL,
     .add_buddy                = tgprpl_add_buddy,
     .add_buddies              = NULL,

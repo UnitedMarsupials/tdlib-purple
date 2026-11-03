@@ -149,6 +149,9 @@ void CommTest::login(std::initializer_list<object_ptr<Object>> extraUpdates, obj
         tgl.verifyRequest(*getChatsRequest());
         tgl.reply(getChatsNoChatsResponse());
     }
+    // Not idle, the user is online once the chats are known
+    if (chatListReadyAtLogin)
+        tgl.verifyRequestAmong(setOption("online", make_object<optionValueBoolean>(true)));
 
     if ((postChatListEvents.size() == 1) && (*postChatListEvents.begin() == nullptr))
         prpl.verifyEvents(

@@ -940,6 +940,8 @@ void PurpleTdClient::checkBuddyDeletedResponse(TdObjectPtr object)
 void PurpleTdClient::onChatListReady()
 {
     m_chatListReady = true;
+    m_idle          = purple_presence_is_idle(purple_account_get_presence(m_account));
+    updateOnline();
     checkTempFileUploads();
     // Follows a change of translation
     getDeletedAccountsGroup(false);
@@ -2058,12 +2060,42 @@ void PurpleTdClient::messagesViewed(PurpleConversation *conv, const std::vector<
         !isReadReceiptsEnabled(m_account))
         return;
     it->second = messageIds;
+    sendViewedMessages(it->first, messageIds);
+}
+
+void PurpleTdClient::sendViewedMessages(ChatId chatId, const std::vector<MessageId> &messageIds)
+{
     auto request = td::td_api::make_object<td::td_api::viewMessages>();
-    request->chat_id_ = it->first.value();
+    request->chat_id_ = chatId.value();
     for (MessageId messageId: messageIds)
         request->message_ids_.push_back(messageId.value());
     request->force_read_ = false;
     m_transceiver.sendQuery(std::move(request), nullptr);
+}
+
+void PurpleTdClient::setIdle(bool idle)
+{
+    m_idle = idle;
+    updateOnline();
+}
+
+// TDLib polls the reactions and views of the messages last seen in an open chat only while online.
+// Once it is, it is told of them again, for it to start; they are read already.
+void PurpleTdClient::updateOnline()
+{
+    bool online = m_chatListReady && !m_idle;
+    if (online == m_online)
+        return;
+    m_online = online;
+    purple_debug_misc(config::pluginId, "Going %s\n", online ? "online" : "offline");
+    auto request = td::td_api::make_object<td::td_api::setOption>(
+        "online", td::td_api::make_object<td::td_api::optionValueBoolean>(online));
+    m_transceiver.sendQuery(std::move(request), [this](uint64_t, td::td_api::object_ptr<td::td_api::Object>) {
+        if (m_online)
+            for (const auto &chat: m_openChats)
+                if (!chat.second.empty())
+                    sendViewedMessages(chat.first, chat.second);
+    });
 }
 
 bool PurpleTdClient::hasUnreadReactions(PurpleBuddy *buddy)

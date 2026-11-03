@@ -120,6 +120,16 @@ PurpleConnection *purple_account_get_connection(const PurpleAccount *account)
     return account->gc;
 }
 
+PurplePresence *purple_account_get_presence(const PurpleAccount *account)
+{
+    return NULL;
+}
+
+gboolean purple_presence_is_idle(const PurplePresence *presence)
+{
+    return FALSE;
+}
+
 gboolean purple_account_is_connected(const PurpleAccount *account)
 {
     return PURPLE_CONNECTION_IS_CONNECTED(account->gc);

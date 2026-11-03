@@ -1336,6 +1336,7 @@ TEST_F(GroupChatTest, Roomlist)
     prpl.verifyEvents(RoomlistInProgressEvent(earlyRoomlist, TRUE));
 
     tgl.reply(getChatsNoChatsResponse());
+    tgl.verifyRequest(setOption("online", make_object<optionValueBoolean>(true)));
 
     prpl.verifyEvents(
         RoomlistAddRoomEvent(superEarlyRoomlist, "id", groupChatPurpleName.c_str()),
