@@ -19,6 +19,8 @@ public:
     std::vector<uint64_t> verifyRequests(std::initializer_list<td::td_api::object_ptr<td::td_api::Function>> requests);
     void verifyRequests(const std::vector<const td::td_api::Function *> requests);
     void verifyNoRequests();
+    // One request among those sent, wherever it is: the others are left to be verified
+    void verifyRequestAmong(const td::td_api::Function &request);
 
     void update(td::td_api::object_ptr<td::td_api::Object> object);
 

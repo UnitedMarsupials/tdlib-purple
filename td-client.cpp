@@ -100,6 +100,12 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         break;
     }
 
+    case td::td_api::updateChatReadInbox::ID: {
+        auto &readUpdate = static_cast<const td::td_api::updateChatReadInbox &>(update);
+        readChatInbox(m_data, getChatId(readUpdate), getLastReadMessageId(readUpdate), readUpdate.unread_count_);
+        break;
+    }
+
     case td::td_api::updateUserFullInfo::ID: {
         // Blocked or unblocked, maybe from another client
         auto &fullInfoUpdate = static_cast<const td::td_api::updateUserFullInfo &>(update);
@@ -940,6 +946,8 @@ void PurpleTdClient::checkBuddyDeletedResponse(TdObjectPtr object)
 void PurpleTdClient::onChatListReady()
 {
     m_chatListReady = true;
+    m_idle          = purple_presence_is_idle(purple_account_get_presence(m_account));
+    updateOnline();
     checkTempFileUploads();
     // Follows a change of translation
     getDeletedAccountsGroup(false);
@@ -975,6 +983,16 @@ void PurpleTdClient::onChatListReady()
             purple_account_get_username(m_account));
 
     purple_blist_add_account(m_account);
+    refreshOpenChats();
+}
+
+void PurpleTdClient::refreshOpenChats()
+{
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
+        if (purple_conversation_get_account(conv) == m_account)
+            conversationShown(conv, isConversationShown(conv));
+    }
 }
 
 // A second click within this long after the first does not open the file again: the program for it
@@ -2022,6 +2040,84 @@ void PurpleTdClient::markConversation(PurpleConversation *conv)
     markConversationTitle(m_data, conv);
 }
 
+void PurpleTdClient::conversationShown(PurpleConversation *conv, bool shown)
+{
+    // Those shown by then are opened once the chats are known; a disconnection closes them all.
+    // Nobody looks at them while the user is idle.
+    const td::td_api::chat *chat = m_chatListReady ? findConversationChat(m_data, conv) : nullptr;
+    if (!chat)
+        return;
+    shown = shown && !m_idle;
+    ChatId chatId = getId(*chat);
+    if (shown == (m_openChats.count(chatId) != 0))
+        return;
+    purple_debug_misc(config::pluginId, "%s chat %" G_GINT64_FORMAT "\n", shown ? "Opening" : "Closing",
+                      chatId.value());
+    if (shown) {
+        m_openChats[chatId];
+        // Not open, if TDLib would not have it: tried again when next shown
+        m_transceiver.sendQuery(td::td_api::make_object<td::td_api::openChat>(chatId.value()),
+                                [this, chatId](uint64_t, TdObjectPtr object) {
+            if (object && (object->get_id() == td::td_api::error::ID))
+                m_openChats.erase(chatId);
+        });
+        checkViewedLater(conv);
+    } else {
+        m_openChats.erase(chatId);
+        m_transceiver.sendQuery(td::td_api::make_object<td::td_api::closeChat>(chatId.value()), nullptr);
+    }
+}
+
+void PurpleTdClient::messagesViewed(PurpleConversation *conv, const std::vector<MessageId> &messageIds)
+{
+    // Seen messages of an open chat are read, which is the account's to allow
+    const td::td_api::chat *chat = findConversationChat(m_data, conv);
+    auto                    it   = chat ? m_openChats.find(getId(*chat)) : m_openChats.end();
+    if ((it == m_openChats.end()) || messageIds.empty() || (it->second == messageIds) ||
+        !isReadReceiptsEnabled(m_account))
+        return;
+    it->second = messageIds;
+    ChatId chatId  = it->first;
+    auto   request = td::td_api::make_object<td::td_api::viewMessages>();
+    request->chat_id_ = chatId.value();
+    for (MessageId messageId: messageIds)
+        request->message_ids_.push_back(messageId.value());
+    request->force_read_ = false;
+    // Told again when next seen, if TDLib would not take them
+    m_transceiver.sendQuery(std::move(request), [this, chatId, messageIds](uint64_t, TdObjectPtr object) {
+        auto it = m_openChats.find(chatId);
+        if (object && (object->get_id() == td::td_api::error::ID) && (it != m_openChats.end()) &&
+            (it->second == messageIds))
+            it->second.clear();
+    });
+}
+
+void PurpleTdClient::setIdle(bool idle)
+{
+    if (idle == m_idle)
+        return;
+    m_idle = idle;
+    updateOnline();
+    refreshOpenChats();
+}
+
+// TDLib polls the reactions and views of the messages last seen in an open chat only while online:
+// once the user is back, the chats are opened again, and their messages on screen told anew
+void PurpleTdClient::updateOnline()
+{
+    bool online = m_chatListReady && !m_idle;
+    if (online == m_online)
+        return;
+    m_online = online;
+    purple_debug_misc(config::pluginId, "Going %s\n", online ? "online" : "offline");
+    auto value     = td::td_api::make_object<td::td_api::optionValueBoolean>();
+    value->value_  = online;
+    auto request   = td::td_api::make_object<td::td_api::setOption>();
+    request->name_  = "online";
+    request->value_ = std::move(value);
+    m_transceiver.sendQuery(std::move(request), nullptr);
+}
+
 bool PurpleTdClient::hasUnreadReactions(PurpleBuddy *buddy)
 {
     const td::td_api::chat *chat = m_data.getPrivateChatByUserId(purpleBuddyNameToUserId(purple_buddy_get_name(buddy)));
@@ -2433,6 +2529,12 @@ void PurpleTdClient::addChat(td::td_api::object_ptr<td::td_api::chat> chat)
     m_data.addChat(std::move(chat));
     updateChat(m_data.getChat(chatId));
     setUnreadReactionCount(m_data, chatId, unreadReactions);
+    // Its conversation may have been shown before the chat was known, as when one is begun with a
+    // contact who has none yet
+    const td::td_api::chat *added = m_data.getChat(chatId);
+    PurpleConversation     *conv  = added ? findMessageConversation(m_data, *added) : nullptr;
+    if (conv)
+        conversationShown(conv, isConversationShown(conv));
 }
 
 void PurpleTdClient::handleUserChatAction(const td::td_api::updateChatAction &updateChatAction)

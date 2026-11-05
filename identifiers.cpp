@@ -130,6 +130,11 @@ ChatId getChatId(const td::td_api::updateChatUnreadReactionCount &update)
     return ChatId(update.chat_id_);
 }
 
+ChatId getChatId(const td::td_api::updateChatReadInbox &update)
+{
+    return ChatId(update.chat_id_);
+}
+
 ChatId getChatId(const td::td_api::updateChatAction &update)
 {
     return ChatId(update.chat_id_);
@@ -202,6 +207,11 @@ MessageId getReplyMessageId(const td::td_api::message &message)
 MessageId getLastReadMessageId(const td::td_api::chat &chat)
 {
     return MessageId(chat.last_read_inbox_message_id_);
+}
+
+MessageId getLastReadMessageId(const td::td_api::updateChatReadInbox &update)
+{
+    return MessageId(update.last_read_inbox_message_id_);
 }
 
 MessageId getMessageId(const td::td_api::updateMessageContent &update)

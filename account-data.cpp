@@ -496,6 +496,15 @@ void TdAccountData::updateChatTitle(ChatId chatId, const std::string &title)
         it->second.chat->title_ = title;
 }
 
+void TdAccountData::updateChatReadInbox(ChatId chatId, MessageId lastRead, int32_t unreadCount)
+{
+    auto it = m_chatInfo.find(chatId);
+    if (it != m_chatInfo.end()) {
+        it->second.chat->last_read_inbox_message_id_ = lastRead.value();
+        it->second.chat->unread_count_               = unreadCount;
+    }
+}
+
 void TdAccountData::updateChatActionBar(ChatId chatId, td::td_api::object_ptr<td::td_api::ChatActionBar> actionBar)
 {
     auto it = m_chatInfo.find(chatId);

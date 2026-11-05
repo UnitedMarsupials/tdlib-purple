@@ -18,6 +18,7 @@ void CommTest::SetUp()
     setImageLoaders({"webp"});
     setCustomSmileys(false);
     clearConversationData();
+    setPresenceIdle(false);
     gdkPixbufGetFileInfoName = "gdk_pixbuf_get_file_info";
     setMessageLinksEnabled(false);
     setJumpLinksEnabled(false);
@@ -149,6 +150,11 @@ void CommTest::login(std::initializer_list<object_ptr<Object>> extraUpdates, obj
         tgl.verifyRequest(*getChatsRequest());
         tgl.reply(getChatsNoChatsResponse());
     }
+    // Not idle, the user is online once the chats are known
+    if (chatListReadyAtLogin)
+        tgl.verifyRequestAmong(setOption("online", make_object<optionValueBoolean>(true)));
+    for (int64_t chatId: chatsOpenedAtLogin)
+        tgl.verifyRequestAmong(openChat(chatId));
 
     if ((postChatListEvents.size() == 1) && (*postChatListEvents.begin() == nullptr))
         prpl.verifyEvents(

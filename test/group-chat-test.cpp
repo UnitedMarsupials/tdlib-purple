@@ -207,6 +207,7 @@ TEST_F(GroupChatTest, ExistingBasicGroupReceiveMessageAtLogin_WithMemberList_Rem
     );
     chat->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
 
+    chatsOpenedAtLogin = {groupChatId};
     login(
         {
             // Private chat with the contact
@@ -1336,6 +1337,7 @@ TEST_F(GroupChatTest, Roomlist)
     prpl.verifyEvents(RoomlistInProgressEvent(earlyRoomlist, TRUE));
 
     tgl.reply(getChatsNoChatsResponse());
+    tgl.verifyRequest(setOption("online", make_object<optionValueBoolean>(true)));
 
     prpl.verifyEvents(
         RoomlistAddRoomEvent(superEarlyRoomlist, "id", groupChatPurpleName.c_str()),
@@ -1449,6 +1451,7 @@ TEST_F(GroupChatTest, OpenLeftGroupChat_ReceiveMessageAtLogin)
         groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0
     );
     chat->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
+    chatsOpenedAtLogin = {groupChatId};
     login(
         {
             // Private chat with the contact
@@ -1526,11 +1529,14 @@ TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListMainRightAway)
     );
     groupChat->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
     tgl.update(make_object<updateNewChat>(std::move(groupChat)));
-    // Now that updateNewChat has happened, joining
+    // Now that updateNewChat has happened, joining; the conversation kept is shown
     prpl.verifyEvents(
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle)
     );
-    tgl.verifyRequest(getBasicGroupFullInfo(groupId));
+    tgl.verifyRequests({
+        make_object<getBasicGroupFullInfo>(groupId),
+        make_object<openChat>(groupChatId)
+    });
 }
 
 TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListNullFirst)
@@ -1576,6 +1582,8 @@ TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListNullFirst)
     // Also for that reason, still not joining, otherwise conversation title will be changed to
     // chat-XXXXXXXXXX.
     prpl.verifyEvents(RemoveChatEvent(groupChatPurpleName, ""));
+    // The conversation kept is shown
+    tgl.verifyRequest(openChat(groupChatId));
 
     tgl.update(makeUpdateChatList(groupChatId, make_object<chatListMain>()));
     // Chat is re-added to buddy list, and now joining

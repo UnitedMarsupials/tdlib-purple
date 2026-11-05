@@ -413,6 +413,7 @@ public:
     void addChat(TdChatPtr chat); // Updates existing chat if any
     void updateChatPosition(ChatId chatId, td::td_api::object_ptr<td::td_api::chatPosition> &&position);
     void updateChatTitle(ChatId chatId, const std::string &title);
+    void updateChatReadInbox(ChatId chatId, MessageId lastRead, int32_t unreadCount);
     void updateChatActionBar(ChatId chatId, td::td_api::object_ptr<td::td_api::ChatActionBar> actionBar);
     void updateSmallChatPhoto(ChatId chatId, td::td_api::object_ptr<td::td_api::file> photo);
     void setContacts(const td::td_api::users &users);

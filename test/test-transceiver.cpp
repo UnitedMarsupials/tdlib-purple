@@ -681,6 +681,28 @@ static void compare(const readAllChatReactions &actual, const readAllChatReactio
     COMPARE(chat_id_);
 }
 
+static void compare(const openChat &actual, const openChat &expected)
+{
+    COMPARE(chat_id_);
+}
+
+static void compare(const closeChat &actual, const closeChat &expected)
+{
+    COMPARE(chat_id_);
+}
+
+static void compare(const setOption &actual, const setOption &expected)
+{
+    COMPARE(name_);
+    ASSERT_EQ(expected.value_ != nullptr, actual.value_ != nullptr);
+    if (expected.value_) {
+        ASSERT_EQ(optionValueBoolean::ID, expected.value_->get_id()) << "Only boolean options compared";
+        ASSERT_EQ(expected.value_->get_id(), actual.value_->get_id());
+        ASSERT_EQ(static_cast<const optionValueBoolean &>(*expected.value_).value_,
+                  static_cast<const optionValueBoolean &>(*actual.value_).value_);
+    }
+}
+
 static void compare(const getMessageAddedReactions &actual, const getMessageAddedReactions &expected)
 {
     COMPARE(chat_id_);
@@ -754,6 +776,9 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(setMessageSenderBlockList)
         C(reportChat)
         C(readAllChatReactions)
+        C(openChat)
+        C(closeChat)
+        C(setOption)
         C(getMessageAddedReactions)
         case editMessageMedia::ID:
             compare(static_cast<const editMessageMedia &>(actual), static_cast<const editMessageMedia &>(expected),
@@ -777,6 +802,21 @@ void TestTransceiver::verifyRequestImpl(const Function &request)
 
     std::cout << "Received request " << m_requests.front().id << ": " << requestToString(*m_requests.front().function) << "\n";
     compareRequests(*m_requests.front().function, request, m_inputPhotoPaths);
+}
+
+void TestTransceiver::verifyRequestAmong(const Function &request)
+{
+    std::queue<td::Client::Request> others;
+    bool                            found = false;
+    for (; !m_requests.empty(); m_requests.pop())
+        if (!found && (m_requests.front().function->get_id() == request.get_id())) {
+            found = true;
+            std::cout << "Received request " << m_requests.front().id << ": " << requestToString(*m_requests.front().function) << "\n";
+            compareRequests(*m_requests.front().function, request, m_inputPhotoPaths);
+        } else
+            others.push(std::move(m_requests.front()));
+    m_requests = std::move(others);
+    ASSERT_TRUE(found) << "Missing request: expected " << requestToString(request);
 }
 
 void TestTransceiver::verifyNoRequests()

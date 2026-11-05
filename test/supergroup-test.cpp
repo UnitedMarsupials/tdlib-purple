@@ -231,6 +231,7 @@ TEST_F(SupergroupTest, ExistingSupergroupReceiveMessageAtLogin_WithMemberList_Op
     ));
     admins->members_.push_back(nullptr);
 
+    chatsOpenedAtLogin = {groupChatId};
     login(
         {
             make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusMember>(), 2)),
