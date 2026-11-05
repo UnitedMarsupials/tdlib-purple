@@ -26,6 +26,8 @@ void setImageLoaders(std::initializer_list<std::string> formats);
 // Whether the front-end takes custom smileys, as Pidgin does; off by default
 void setCustomSmileys(bool supported);
 void clearConversationData();
+// Whether the account's presence is idle, as libpurple tells; not by default
+void setPresenceIdle(bool idle);
 
 using RoomlistData = std::vector<std::pair<PurpleRoomlistFieldType, std::string>>;
 

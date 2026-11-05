@@ -2055,7 +2055,12 @@ void PurpleTdClient::conversationShown(PurpleConversation *conv, bool shown)
                       chatId.value());
     if (shown) {
         m_openChats[chatId];
-        m_transceiver.sendQuery(td::td_api::make_object<td::td_api::openChat>(chatId.value()), nullptr);
+        // Not open, if TDLib would not have it: tried again when next shown
+        m_transceiver.sendQuery(td::td_api::make_object<td::td_api::openChat>(chatId.value()),
+                                [this, chatId](uint64_t, TdObjectPtr object) {
+            if (object && (object->get_id() == td::td_api::error::ID))
+                m_openChats.erase(chatId);
+        });
         checkViewedLater(conv);
     } else {
         m_openChats.erase(chatId);
@@ -2072,12 +2077,19 @@ void PurpleTdClient::messagesViewed(PurpleConversation *conv, const std::vector<
         !isReadReceiptsEnabled(m_account))
         return;
     it->second = messageIds;
-    auto request = td::td_api::make_object<td::td_api::viewMessages>();
-    request->chat_id_ = it->first.value();
+    ChatId chatId  = it->first;
+    auto   request = td::td_api::make_object<td::td_api::viewMessages>();
+    request->chat_id_ = chatId.value();
     for (MessageId messageId: messageIds)
         request->message_ids_.push_back(messageId.value());
     request->force_read_ = false;
-    m_transceiver.sendQuery(std::move(request), nullptr);
+    // Told again when next seen, if TDLib would not take them
+    m_transceiver.sendQuery(std::move(request), [this, chatId, messageIds](uint64_t, TdObjectPtr object) {
+        auto it = m_openChats.find(chatId);
+        if (object && (object->get_id() == td::td_api::error::ID) && (it != m_openChats.end()) &&
+            (it->second == messageIds))
+            it->second.clear();
+    });
 }
 
 void PurpleTdClient::setIdle(bool idle)
@@ -2098,8 +2110,11 @@ void PurpleTdClient::updateOnline()
         return;
     m_online = online;
     purple_debug_misc(config::pluginId, "Going %s\n", online ? "online" : "offline");
-    auto request = td::td_api::make_object<td::td_api::setOption>(
-        "online", td::td_api::make_object<td::td_api::optionValueBoolean>(online));
+    auto value     = td::td_api::make_object<td::td_api::optionValueBoolean>();
+    value->value_  = online;
+    auto request   = td::td_api::make_object<td::td_api::setOption>();
+    request->name_  = "online";
+    request->value_ = std::move(value);
     m_transceiver.sendQuery(std::move(request), nullptr);
 }
 
@@ -2514,6 +2529,12 @@ void PurpleTdClient::addChat(td::td_api::object_ptr<td::td_api::chat> chat)
     m_data.addChat(std::move(chat));
     updateChat(m_data.getChat(chatId));
     setUnreadReactionCount(m_data, chatId, unreadReactions);
+    // Its conversation may have been shown before the chat was known, as when one is begun with a
+    // contact who has none yet
+    const td::td_api::chat *added = m_data.getChat(chatId);
+    PurpleConversation     *conv  = added ? findMessageConversation(m_data, *added) : nullptr;
+    if (conv)
+        conversationShown(conv, isConversationShown(conv));
 }
 
 void PurpleTdClient::handleUserChatAction(const td::td_api::updateChatAction &updateChatAction)

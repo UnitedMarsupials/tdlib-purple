@@ -78,6 +78,8 @@ TEST_F(SecretChatTest, CreateSecretChat_Lifecycle)
         ),
         UserStatusEvent(account, secretChatBuddyName, PURPLE_STATUS_OFFLINE)
     );
+    // Its conversation, opened by then, is shown
+    tgl.verifyRequest(openChat(secretChatChatId));
 
     tgl.update(make_object<updateSecretChat>(make_object<secretChat>(
         secretChatId, userIds[0], make_object<secretChatStateReady>(), false, "whatever", 60

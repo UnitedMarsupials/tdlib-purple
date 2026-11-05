@@ -120,6 +120,13 @@ PurpleConnection *purple_account_get_connection(const PurpleAccount *account)
     return account->gc;
 }
 
+static bool g_presenceIdle = false;
+
+extern "C++" void setPresenceIdle(bool idle)
+{
+    g_presenceIdle = idle;
+}
+
 PurplePresence *purple_account_get_presence(const PurpleAccount *account)
 {
     return NULL;
@@ -127,7 +134,7 @@ PurplePresence *purple_account_get_presence(const PurpleAccount *account)
 
 gboolean purple_presence_is_idle(const PurplePresence *presence)
 {
-    return FALSE;
+    return g_presenceIdle;
 }
 
 gboolean purple_account_is_connected(const PurpleAccount *account)
