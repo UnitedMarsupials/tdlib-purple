@@ -1684,3 +1684,24 @@ TEST_F(PrivateChatTest, OfflineWhileIdle)
     client->messagesViewed(conv, {MessageId::fromString("1"), MessageId::fromString("2")});
     tgl.verifyRequest(viewMessages(chatIds[0], {1, 2}, nullptr, false));
 }
+
+TEST_F(PrivateChatTest, ReadElsewhere)
+{
+    loginWithOneContact();
+    PurpleConversation *conv = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, purpleUserName(0).c_str());
+    prpl.discardEvents();
+    // As Pidgin keeps them, for a conversation not in a window
+    purple_conversation_set_data(conv, "unseen-count", GINT_TO_POINTER(3));
+    purple_conversation_set_data(conv, "unseen-state", GINT_TO_POINTER(2));
+
+    // Still some unread: Pidgin's count stays, being its own
+    tgl.update(make_object<updateChatReadInbox>(chatIds[0], 2, 1));
+    EXPECT_EQ(3, GPOINTER_TO_INT(purple_conversation_get_data(conv, "unseen-count")));
+    EXPECT_EQ(2, GPOINTER_TO_INT(purple_conversation_get_data(conv, "unseen-state")));
+
+    tgl.update(make_object<updateChatReadInbox>(chatIds[0], 3, 0));
+    EXPECT_EQ(0, GPOINTER_TO_INT(purple_conversation_get_data(conv, "unseen-count")));
+    EXPECT_EQ(0, GPOINTER_TO_INT(purple_conversation_get_data(conv, "unseen-state")));
+    tgl.verifyNoRequests();
+    prpl.verifyNoEvents();
+}

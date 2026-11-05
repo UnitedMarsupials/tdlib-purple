@@ -164,6 +164,10 @@ void scrollToMessageLater(PurpleConversation *conv, MessageId messageId);
 using TopReachedHandler = void (*)(PurpleConversation *conv, double filling);
 void setTopReachedHandler(TopReachedHandler handler);
 
+// The conversation shows no messages as unseen any more, as when its tab is looked at: its tab,
+// and Pidgin's counts of unread messages, in the buddy list's menu and the tray. False if it showed none.
+bool clearUnseen(PurpleConversation *conv);
+
 // Whether the conversation is shown: the tab chosen in its window, which is not minimized. Without
 // Pidgin's window to tell, every conversation there is is taken to be.
 bool tracksShownConversations();

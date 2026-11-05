@@ -100,6 +100,12 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         break;
     }
 
+    case td::td_api::updateChatReadInbox::ID: {
+        auto &readUpdate = static_cast<const td::td_api::updateChatReadInbox &>(update);
+        readChatInbox(m_data, getChatId(readUpdate), getLastReadMessageId(readUpdate), readUpdate.unread_count_);
+        break;
+    }
+
     case td::td_api::updateUserFullInfo::ID: {
         // Blocked or unblocked, maybe from another client
         auto &fullInfoUpdate = static_cast<const td::td_api::updateUserFullInfo &>(update);

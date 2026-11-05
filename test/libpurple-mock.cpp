@@ -880,6 +880,10 @@ gpointer purple_conversation_get_data(PurpleConversation *conv, const char *key)
     return (it != g_conversationData.end()) ? it->second : NULL;
 }
 
+void purple_conversation_update(PurpleConversation *conv, PurpleConvUpdateType type)
+{
+}
+
 void purple_imgstore_unref_by_id(int id)
 {
 }

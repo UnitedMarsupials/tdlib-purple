@@ -2726,6 +2726,27 @@ static const char                     VIEW_SOURCE_KEY[]   = "tdlib-purple-view-s
 // Not on screen until it has stood still this long
 enum { VIEW_SETTLE_MS = 1000 };
 
+bool clearUnseen(PurpleConversation *conv)
+{
+    // As Pidgin's gtkconv_set_unseen() does, which it does not export: the tab's state is what
+    // the tab and the tray's menu go by, the conversation's data what the counts do
+    PidginConversation *gtkconv = getIMHtml(conv) ? PIDGIN_CONVERSATION(conv) : nullptr;
+    if (gtkconv && (gtkconv->active_conv != conv))
+        return false;
+    bool unseen = gtkconv ? (gtkconv->unseen_state != PIDGIN_UNSEEN_NONE)
+                          : (purple_conversation_get_data(conv, "unseen-state") != nullptr);
+    if (!unseen)
+        return false;
+    if (gtkconv) {
+        gtkconv->unseen_count = 0;
+        gtkconv->unseen_state = PIDGIN_UNSEEN_NONE;
+    }
+    purple_conversation_set_data(conv, "unseen-count", GINT_TO_POINTER(0));
+    purple_conversation_set_data(conv, "unseen-state", GINT_TO_POINTER(PIDGIN_UNSEEN_NONE));
+    purple_conversation_update(conv, PURPLE_CONV_UPDATE_UNSEEN);
+    return true;
+}
+
 bool tracksShownConversations()
 {
     return g_tracksShown;
@@ -3333,6 +3354,11 @@ bool copyFileToClipboard(const std::string &path, bool picture)
 
 void setDraggedFileHandler(DraggedFileHandler handler)
 {
+}
+
+bool clearUnseen(PurpleConversation *conv)
+{
+    return false;
 }
 
 bool tracksShownConversations()
