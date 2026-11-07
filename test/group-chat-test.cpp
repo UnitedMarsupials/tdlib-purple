@@ -1587,3 +1587,52 @@ TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListNullFirst)
 }
 
 // TODO: test non-user member
+
+// The time a message was sent at, as a notice about it shows it (formatMessageTime)
+static std::string messageTime(time_t timestamp)
+{
+    char buf[80];
+    strftime(buf, sizeof(buf), "%x %X", localtime(&timestamp));
+    return buf;
+}
+
+// Two members' messages sent in the same second, then deleted: each notice names whose message it
+// was. Without the sender the two notices were the same words, and the same banner twice.
+TEST_F(GroupChatTest, MessagesSentTogetherDeleted)
+{
+    constexpr int32_t date         = 12345;
+    constexpr int64_t messageId[]  = {10000, 10001};
+    constexpr int     purpleChatId = 1;
+    loginWithBasicGroup();
+
+    tgl.update(standardUpdateUserNoPhone(0));
+    tgl.update(standardUpdateUserNoPhone(1));
+    tgl.update(make_object<updateNewMessage>(
+        makeMessage(messageId[0], userIds[0], groupChatId, false, date, makeTextMessage("Same"))
+    ));
+    tgl.verifyRequest(viewMessages(groupChatId, {messageId[0]}, nullptr, true));
+    prpl.verifyEvents(
+        ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
+        ServGotChatEvent(connection, purpleChatId,
+                         purpleUserName(0),
+                         "Same", PURPLE_MESSAGE_RECV, date)
+    );
+    tgl.update(make_object<updateNewMessage>(
+        makeMessage(messageId[1], userIds[1], groupChatId, false, date, makeTextMessage("Same"))
+    ));
+    tgl.verifyRequest(viewMessages(groupChatId, {messageId[1]}, nullptr, true));
+    prpl.verifyEvents(
+        ServGotChatEvent(connection, purpleChatId,
+                         purpleUserName(1),
+                         "Same", PURPLE_MESSAGE_RECV, date)
+    );
+
+    tgl.update(makeUpdateDeleteMessages(groupChatId, messageId[0], true, false));
+    prpl.verifyEvents(ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+        "The message " + userFirstNames[0] + " " + userLastNames[0] + " sent at " + messageTime(date) +
+        " has been deleted", PURPLE_MESSAGE_SYSTEM, 0));
+    tgl.update(makeUpdateDeleteMessages(groupChatId, messageId[1], true, false));
+    prpl.verifyEvents(ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+        "The message " + userFirstNames[1] + " " + userLastNames[1] + " sent at " + messageTime(date) +
+        " has been deleted", PURPLE_MESSAGE_SYSTEM, 0));
+}

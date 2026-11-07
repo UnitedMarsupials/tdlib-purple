@@ -2562,10 +2562,20 @@ void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
         account.addShownMessage(chatId, getId(*message), std::move(shownMessage));
     }
 
+    MessageId messageId = getId(*message);
     IncomingMessage fullMessage;
     makeFullMessage(chat, std::move(message), fullMessage, account);
     fullMessage.messageInfo.fromHistory = (action == PendingMessageQueue::Prepend) || redrawn;
     fullMessage.messageInfo.redrawn     = redrawn;
+    // Who sent it in a group, for a notice about it later: several members' messages sent in the
+    // same second are otherwise reported deleted in the same words. A private chat has only the
+    // one sender, and a channel post signed by nobody has no one to name.
+    if (!fullMessage.messageInfo.outgoing && !fullMessage.messageInfo.anonymousChannelPost &&
+        (getBasicGroupId(chat).valid() || getSupergroupId(chat).valid())) {
+        ShownMessage *shownMessage = account.findShownMessage(chatId, messageId);
+        if (shownMessage)
+            shownMessage->sender = getSenderDisplayName(chat, fullMessage.messageInfo, account.purpleAccount);
+    }
     queueMessage(account, chat, std::move(fullMessage), action);
 }
 
@@ -2678,6 +2688,7 @@ void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messa
                           (editedMessage.content == shownMessage->content);
     edit.previous    = *shownMessage;
     editedMessage.timestamp = shownMessage->timestamp;
+    editedMessage.sender    = shownMessage->sender;
     // Edits leave reactions be
     editedMessage.reactions = shownMessage->reactions;
     editedMessage.givers    = shownMessage->givers;
@@ -2714,7 +2725,8 @@ void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessag
         ShownMessage *shownMessage = account.findShownMessage(chatId, messageId);
         if (!shownMessage)
             continue;
-        time_t messageTime = shownMessage->timestamp;
+        time_t      messageTime = shownMessage->timestamp;
+        std::string sender      = shownMessage->sender;
         account.removeShownMessage(chatId, messageId);
 
         PendingEdit edit;
@@ -2730,11 +2742,20 @@ void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessag
                 strikeOutMessage(conv, messageId);
             else
                 removeMessage(conv, messageId);
-            // Telegram does not say who deleted it, so the notice cannot either.
-            std::string notice = formatMessage(
-                // TRANSLATOR: In-chat notification. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
-                _("Message from {} has been deleted"),
-                linkToMessage(account.purpleAccount, chatId, messageId, formatMessageTime(messageTime)));
+            // Telegram does not say who deleted it, so the notice cannot either; in a group it
+            // names who sent it, which tells apart messages several members sent at once.
+            std::string notice;
+            if (!sender.empty())
+                notice = formatMessage(
+                    // TRANSLATOR: In-chat notification. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
+                    _("The message {0} sent at {1} has been deleted"),
+                    {escapeForDisplay(sender),
+                     linkToMessage(account.purpleAccount, chatId, messageId, formatMessageTime(messageTime))});
+            else
+                notice = formatMessage(
+                    // TRANSLATOR: In-chat notification. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
+                    _("Message from {} has been deleted"),
+                    linkToMessage(account.purpleAccount, chatId, messageId, formatMessageTime(messageTime)));
             showChatNotification(account, *chat, notice.c_str());
         }
     }
