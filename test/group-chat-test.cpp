@@ -475,13 +475,8 @@ TEST_F(GroupChatTest, JoinBasicGroupByInviteLink)
     prpl.verifyEvents(
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
         ConversationWriteEvent(groupChatPurpleName, NotificationWho,
-                               selfFirstName + " " + selfLastName + ": " +
-                               "Unsupported message type messageChatJoinByLink",
-                               PURPLE_MESSAGE_SYSTEM, 12345),
-        // ...followed by what the message holds, which for this type is nothing at all
-        ConversationWriteEvent(groupChatPurpleName, selfFirstName + " " + selfLastName,
-                               "\n<font face=\"monospace\">messageChatJoinByLink {\n}</font>",
-                               PURPLE_MESSAGE_SEND, 12345)
+                               selfFirstName + " " + selfLastName + " joined by an invite link",
+                               PURPLE_MESSAGE_SYSTEM, 12345)
     );
 
     // Now reply to join group - original chat is removed
@@ -634,14 +629,8 @@ TEST_F(GroupChatTest, CreateRemoveBasicGroupInAnotherClient)
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
         ConvSetTitleEvent(groupChatPurpleName, groupChatTitle),
         ConversationWriteEvent(groupChatPurpleName, NotificationWho,
-                               selfFirstName + " " + selfLastName +
-                               ": Unsupported message type messageBasicGroupChatCreate",
-                               PURPLE_MESSAGE_SYSTEM, date[0]),
-        ConversationWriteEvent(groupChatPurpleName, selfFirstName + " " + selfLastName,
-                               "\n<font face=\"monospace\">messageBasicGroupChatCreate {\n"
-                               "  title = \"Title\"\n"
-                               "  member_user_ids = vector[2] {\n    1\n    100\n  }\n}</font>",
-                               PURPLE_MESSAGE_SEND, date[0])
+                               selfFirstName + " " + selfLastName + " created " + groupChatTitle,
+                               PURPLE_MESSAGE_SYSTEM, date[0])
     );
 
     tgl.update(makeUpdateChatListMain(groupChatId));
@@ -671,13 +660,8 @@ TEST_F(GroupChatTest, CreateRemoveBasicGroupInAnotherClient)
         ChatSetTopicEvent(groupChatPurpleName, "basic group", ""),
         ChatClearUsersEvent(groupChatPurpleName),
         ConversationWriteEvent(groupChatPurpleName, NotificationWho,
-                               selfFirstName + " " + selfLastName +
-                               ": Unsupported message type messageChatDeleteMember",
-                               PURPLE_MESSAGE_SYSTEM, date[1]),
-        ConversationWriteEvent(groupChatPurpleName, selfFirstName + " " + selfLastName,
-                               "\n<font face=\"monospace\">messageChatDeleteMember {\n"
-                               "  user_id = 1\n}</font>",
-                               PURPLE_MESSAGE_SEND, date[1])
+                               selfFirstName + " " + selfLastName + " left",
+                               PURPLE_MESSAGE_SYSTEM, date[1])
     );
 
     tgl.update(makeUpdateRemoveFromChatList(groupChatId, make_object<chatListMain>()));

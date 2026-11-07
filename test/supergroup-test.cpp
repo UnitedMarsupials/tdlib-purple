@@ -367,15 +367,8 @@ TEST_F(SupergroupTest, LeaveSupergroup)
         ChatSetTopicEvent(groupChatPurpleName, "", ""),
         ChatClearUsersEvent(groupChatPurpleName),
         ConversationWriteEvent(groupChatPurpleName, NotificationWho,
-                               selfFirstName + " " + selfLastName +
-                               ": Unsupported message type messageChatDeleteMember",
-                               PURPLE_MESSAGE_SYSTEM, date),
-        // ...followed by what the message holds, as TDLib describes it. The message is outgoing,
-        // so it is written to the conversation rather than arriving through serv_got_chat_in.
-        ConversationWriteEvent(groupChatPurpleName, selfFirstName + " " + selfLastName,
-                               "\n<font face=\"monospace\">messageChatDeleteMember {\n"
-                               "  user_id = 1\n}</font>",
-                               PURPLE_MESSAGE_SEND, date)
+                               selfFirstName + " " + selfLastName + " left",
+                               PURPLE_MESSAGE_SYSTEM, date)
     );
 
     // There is a check that fails message sending if we are not a group member

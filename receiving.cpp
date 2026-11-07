@@ -1534,6 +1534,79 @@ private:
     std::vector<ReactionCount> m_counts;
 };
 
+// A member named in a group event, as markup. TDLib tells of every user it names, ourselves too,
+// before the message that names them.
+static std::string getMemberName(TdAccountData &account, int64_t userId)
+{
+    std::string name = account.getDisplayName(UserId::fromString(std::to_string(userId).c_str()));
+    // TRANSLATOR: In-chat placeholder for a group member whose name is not known.
+    return escapeForDisplay(name.empty() ? std::string(_("Unknown user")) : name);
+}
+
+// What a group's own news says: who made it, who came and went, what was pinned. These came in as
+// "Unsupported message type" - the first of them opening the chat of a group just made.
+static std::string makeGroupEventNotice(const td::td_api::chat &chat, const TgMessageInfo &messageInfo,
+                                        const td::td_api::message &message, TdAccountData &account)
+{
+    std::string sender = messageInfo.anonymousChannelPost ? std::string() :
+                         escapeForDisplay(getSenderDisplayName(chat, messageInfo, account.purpleAccount));
+    UserId      senderId = getSenderUserId(message);
+    const td::td_api::MessageContent &content = *message.content_;
+
+    switch (content.get_id()) {
+    case td::td_api::messageBasicGroupChatCreate::ID:
+    case td::td_api::messageSupergroupChatCreate::ID: {
+        std::string title = escapeForDisplay(
+            (content.get_id() == td::td_api::messageBasicGroupChatCreate::ID) ?
+            static_cast<const td::td_api::messageBasicGroupChatCreate &>(content).title_ :
+            static_cast<const td::td_api::messageSupergroupChatCreate &>(content).title_);
+        if (sender.empty())
+            // TRANSLATOR: In-chat status update. Argument is a group or channel name.
+            return formatMessage(_("{} was created"), title);
+        // TRANSLATOR: In-chat status update. Arguments are a user name and a group or channel name.
+        return formatMessage(_("{0} created {1}"), {sender, title});
+    }
+    case td::td_api::messageChatAddMembers::ID: {
+        const auto &added = static_cast<const td::td_api::messageChatAddMembers &>(content);
+        std::string names;
+        for (int64_t userId: added.member_user_ids_) {
+            // Who adds themselves has joined
+            if (senderId.valid() && (userId == senderId.value()))
+                continue;
+            if (!names.empty())
+                names += ", ";
+            names += getMemberName(account, userId);
+        }
+        if (names.empty())
+            // TRANSLATOR: In-chat status update. Argument is a user name.
+            return formatMessage(_("{} joined"), sender);
+        // TRANSLATOR: In-chat status update. Arguments are a user name and a list of user names.
+        return formatMessage(_("{0} added {1}"), {sender, names});
+    }
+    case td::td_api::messageChatJoinByLink::ID:
+        // TRANSLATOR: In-chat status update. Argument is a user name.
+        return formatMessage(_("{} joined by an invite link"), sender);
+    case td::td_api::messageChatJoinByRequest::ID:
+        // TRANSLATOR: In-chat status update. Argument is a user name.
+        return formatMessage(_("{} joined"), sender);
+    case td::td_api::messageChatDeleteMember::ID: {
+        int64_t userId = static_cast<const td::td_api::messageChatDeleteMember &>(content).user_id_;
+        if (senderId.valid() && (userId == senderId.value()))
+            // TRANSLATOR: In-chat status update. Argument is a user name.
+            return formatMessage(_("{} left"), sender);
+        // TRANSLATOR: In-chat status update. Arguments are user names.
+        return formatMessage(_("{0} removed {1}"), {sender, getMemberName(account, userId)});
+    }
+    case td::td_api::messagePinMessage::ID:
+        if (sender.empty())
+            // TRANSLATOR: In-chat status update.
+            return _("A message was pinned");
+        // TRANSLATOR: In-chat status update. Argument is a user name.
+        return formatMessage(_("{} pinned a message"), sender);
+    }
+    return std::string();
+}
+
 void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
                 TdTransceiver &transceiver, TdAccountData &account)
 {
@@ -1655,6 +1728,17 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
             std::string notice = formatMessage(_("{} joined Telegram"),
                                                escapeForDisplay(getSenderDisplayName(chat, messageInfo,
                                                                                      account.purpleAccount)));
+            showMessageText(account, chat, messageInfo, NULL, notice.c_str());
+            break;
+        }
+        case td::td_api::messageBasicGroupChatCreate::ID:
+        case td::td_api::messageSupergroupChatCreate::ID:
+        case td::td_api::messageChatAddMembers::ID:
+        case td::td_api::messageChatJoinByLink::ID:
+        case td::td_api::messageChatJoinByRequest::ID:
+        case td::td_api::messageChatDeleteMember::ID:
+        case td::td_api::messagePinMessage::ID: {
+            std::string notice = makeGroupEventNotice(chat, messageInfo, message, account);
             showMessageText(account, chat, messageInfo, NULL, notice.c_str());
             break;
         }
