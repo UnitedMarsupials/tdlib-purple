@@ -1,3 +1,4 @@
+#include "buildopt.h"
 #include "fixture.h"
 #include "sticker.h"
 #include "libpurple-mock.h"
@@ -1700,8 +1701,13 @@ TEST_F(PrivateChatTest, ReadElsewhere)
     EXPECT_EQ(2, GPOINTER_TO_INT(purple_conversation_get_data(conv, "unseen-state")));
 
     tgl.update(make_object<updateChatReadInbox>(chatIds[0], 3, 0));
+#ifndef NoPidgin
     EXPECT_EQ(0, GPOINTER_TO_INT(purple_conversation_get_data(conv, "unseen-count")));
     EXPECT_EQ(0, GPOINTER_TO_INT(purple_conversation_get_data(conv, "unseen-state")));
+#else
+    // Built without Pidgin, for which the counts are
+    EXPECT_EQ(3, GPOINTER_TO_INT(purple_conversation_get_data(conv, "unseen-count")));
+#endif
     tgl.verifyNoRequests();
     prpl.verifyNoEvents();
 }
