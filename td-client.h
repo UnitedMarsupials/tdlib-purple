@@ -61,7 +61,8 @@ public:
     std::string getChatMemberAlias(const char *name);
     std::string getChatMemberImName(const char *name);
 
-    bool joinChat(const char *chatName);
+    // A chat not known yet is asked for, and joined once found
+    bool joinChat(const char *chatName, bool lookUp = true);
     void joinChatByInviteLink(const char *inviteLink);
     void joinChatByGroupName(const char *joinString, const char *groupName);
     void createGroup(const char *name, int type, const std::vector<std::string> &basicGroupMembers);
@@ -205,6 +206,11 @@ private:
     void       notifyFailedContact(const std::string &errorMessage);
     void       joinChatResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void       joinGroupSearchChatResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
+    // A chat of the buddy list that TDLib has not told of: by its id, from what TDLib has stored,
+    // then by its public name, if saved, from Telegram
+    void       lookUpChat(ChatId chatId, const std::string &chatName);
+    void       chatLookedUp(ChatId chatId, const std::string &chatName, td::td_api::object_ptr<td::td_api::Object> object,
+                            bool byName);
     void       deleteSupergroupResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void       setGroupDescriptionResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void       chatActionResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);

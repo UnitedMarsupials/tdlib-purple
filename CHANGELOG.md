@@ -8,6 +8,7 @@
 
 ### Fixes
 
+- **A group or channel in the buddy list that TDLib has not told of opens all the same, if it can be found, rather than nothing happening.** TDLib is asked for it by its id, from what it has stored, and then Telegram by its public name, which the buddy list now keeps for a public group or channel; only a chat with the same id counts, a name being free to go to another. If neither finds it, a dialog says so.
 - **A chat read to its end on another device no longer shows as having unread messages, in Pidgin's tab and the counts of the tray and the buddy list's menu, once Telegram tells that.** It tells every session, connected but offline too; a chat read only in part keeps Pidgin's mark, which counts what came since its tab was looked at.
 
 ## 0.9.5 (2026-11-01)

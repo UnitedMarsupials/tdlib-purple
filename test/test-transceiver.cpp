@@ -686,6 +686,11 @@ static void compare(const openChat &actual, const openChat &expected)
     COMPARE(chat_id_);
 }
 
+static void compare(const getChat &actual, const getChat &expected)
+{
+    COMPARE(chat_id_);
+}
+
 static void compare(const closeChat &actual, const closeChat &expected)
 {
     COMPARE(chat_id_);
@@ -777,6 +782,7 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(reportChat)
         C(readAllChatReactions)
         C(openChat)
+        C(getChat)
         C(closeChat)
         C(setOption)
         C(getMessageAddedReactions)

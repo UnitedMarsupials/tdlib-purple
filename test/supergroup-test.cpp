@@ -883,3 +883,87 @@ TEST_F(SupergroupTest, UnjoinedChannelShownOnRequest)
     ASSERT_FALSE(purple_blist_node_get_flags(&purpleChat->node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
     prpl.verifyEvents(AddChatEvent(groupChatPurpleName, newTitle, account, NULL, NULL));
 }
+
+TEST_F(SupergroupTest, PublicNameSaved)
+{
+    loginWithSupergroup();
+    PurpleChat *chat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
+    ASSERT_NE(nullptr, chat);
+    EXPECT_EQ(nullptr, purple_blist_node_get_string(&chat->node, "tdlib-public-name"));
+
+    auto group = makeSupergroup(groupId, make_object<chatMemberStatusMember>(), 2);
+    group->usernames_ = make_object<usernames>();
+    group->usernames_->active_usernames_.push_back("somechannel");
+    tgl.update(make_object<updateSupergroup>(std::move(group)));
+    ASSERT_NE(nullptr, purple_blist_node_get_string(&chat->node, "tdlib-public-name"));
+    EXPECT_EQ(std::string("somechannel"), purple_blist_node_get_string(&chat->node, "tdlib-public-name"));
+
+    // Given up
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusMember>(), 2)));
+    EXPECT_EQ(nullptr, purple_blist_node_get_string(&chat->node, "tdlib-public-name"));
+    prpl.verifyNoEvents();
+}
+
+TEST_F(SupergroupTest, UnknownChatLookedUp)
+{
+    // In the buddy list from before, but not told of by TDLib
+    GHashTable *components = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
+    g_hash_table_insert(components, (char *)"id", g_strdup(groupChatPurpleName.c_str()));
+    PurpleChat *purpleChat = purple_chat_new(account, groupChatTitle.c_str(), components);
+    purple_blist_add_chat(purpleChat, NULL, NULL);
+    purple_blist_node_set_string(&purpleChat->node, "tdlib-public-name", "somechannel");
+    prpl.discardEvents();
+    login();
+
+    components = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
+    g_hash_table_insert(components, (char *)"id", g_strdup(groupChatPurpleName.c_str()));
+    pluginInfo().join_chat(connection, components);
+    g_hash_table_destroy(components);
+    prpl.discardEvents();
+
+    // Not stored, but found by its public name
+    uint64_t requestId = tgl.verifyRequest(getChat(groupChatId));
+    tgl.reply(requestId, make_object<error>(400, "Chat not found"));
+    requestId = tgl.verifyRequest(searchPublicChat("somechannel"));
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusMember>(), 2)));
+    auto chat = makeChat(groupChatId, make_object<chatTypeSupergroup>(groupId, false), groupChatTitle,
+                         nullptr, 0, 0, 0);
+    chat->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
+    tgl.update(make_object<updateNewChat>(std::move(chat)));
+    tgl.verifyRequests({
+        make_object<getSupergroupFullInfo>(groupId),
+        make_object<getSupergroupMembers>(groupId, make_object<supergroupMembersFilterRecent>(), 0, 200),
+    });
+    tgl.reply(requestId, makeChat(groupChatId, make_object<chatTypeSupergroup>(groupId, false), groupChatTitle,
+                                  nullptr, 0, 0, 0));
+    prpl.verifyEvents(
+        ServGotJoinedChatEvent(connection, 1, groupChatPurpleName, groupChatTitle),
+        PresentConversationEvent(groupChatPurpleName)
+    );
+}
+
+TEST_F(SupergroupTest, UnknownChatTakenName)
+{
+    GHashTable *components = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
+    g_hash_table_insert(components, (char *)"id", g_strdup(groupChatPurpleName.c_str()));
+    PurpleChat *purpleChat = purple_chat_new(account, groupChatTitle.c_str(), components);
+    purple_blist_add_chat(purpleChat, NULL, NULL);
+    purple_blist_node_set_string(&purpleChat->node, "tdlib-public-name", "somechannel");
+    prpl.discardEvents();
+    login();
+
+    components = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
+    g_hash_table_insert(components, (char *)"id", g_strdup(groupChatPurpleName.c_str()));
+    pluginInfo().join_chat(connection, components);
+    g_hash_table_destroy(components);
+    prpl.discardEvents();
+
+    // The public name now another chat's: not joined
+    uint64_t requestId = tgl.verifyRequest(getChat(groupChatId));
+    tgl.reply(requestId, make_object<error>(400, "Chat not found"));
+    requestId = tgl.verifyRequest(searchPublicChat("somechannel"));
+    tgl.reply(requestId, makeChat(groupChatId + 1, make_object<chatTypeSupergroup>(groupId + 1, false), "Other",
+                                  nullptr, 0, 0, 0));
+    tgl.verifyNoRequests();
+    prpl.verifyNoEvents();
+}

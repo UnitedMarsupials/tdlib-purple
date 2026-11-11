@@ -2842,7 +2842,7 @@ std::string PurpleTdClient::getChatMemberImName(const char *name)
     return purple_find_buddy(m_account, buddyName.c_str()) ? buddyName : m_data.getDisplayName(*user);
 }
 
-bool PurpleTdClient::joinChat(const char *chatName)
+bool PurpleTdClient::joinChat(const char *chatName, bool lookUp)
 {
     ChatId                  id       = getTdlibChatId(chatName);
     const td::td_api::chat *chat     = m_data.getChat(id);
@@ -2860,7 +2860,9 @@ bool PurpleTdClient::joinChat(const char *chatName)
             purple_debug_misc(config::pluginId, "Scheduling to rejoin group chat %s - "
                               "no telegram chat found at the moment\n", chatName);
             m_data.addExpectedChat(id);
-        } else
+        } else if (lookUp && id.valid())
+            lookUpChat(id, chatName);
+        else
             purple_debug_warning(config::pluginId, "No telegram chat found for purple name %s\n", chatName);
     } else if (!m_data.isGroupChatWithMembership(*chat))
         purple_debug_warning(config::pluginId, "Chat %s (%s) is not a group we a member of\n",
@@ -2939,6 +2941,52 @@ void PurpleTdClient::joinChatResponse(uint64_t requestId, td::td_api::object_ptr
         purple_notify_error(purple_account_get_connection(m_account), _("Failed to join chat"),
                             message.c_str(), NULL);
     }
+}
+
+void PurpleTdClient::lookUpChat(ChatId chatId, const std::string &chatName)
+{
+    purple_debug_misc(config::pluginId, "Asking TDLib for chat %s, not told of\n", chatName.c_str());
+    m_transceiver.sendQuery(td::td_api::make_object<td::td_api::getChat>(chatId.value()),
+                            [this, chatId, chatName](uint64_t, TdObjectPtr object) {
+        chatLookedUp(chatId, chatName, std::move(object), false);
+    });
+}
+
+void PurpleTdClient::chatLookedUp(ChatId chatId, const std::string &chatName, td::td_api::object_ptr<td::td_api::Object> object,
+                                  bool byName)
+{
+    // TDLib tells of a chat it returns with updateNewChat first. A public name may since have gone
+    // to another chat.
+    if (object && (object->get_id() == td::td_api::chat::ID) &&
+        (getId(static_cast<const td::td_api::chat &>(*object)) == chatId) && m_data.getChat(chatId))
+    {
+        const td::td_api::chat *chat = m_data.getChat(chatId);
+        purple_debug_misc(config::pluginId, "Chat %s found %s, in %zu lists\n", chatName.c_str(),
+                          byName ? "by its public name" : "by its id", chat->positions_.size());
+        if (!joinChat(chatName.c_str(), false))
+            // TRANSLATOR: Error dialog, title
+            purple_notify_error(purple_account_get_connection(m_account), _("Failed to join chat"),
+                                // TRANSLATOR: Error dialog, content
+                                _("You are no longer a member of this group or channel"), NULL);
+        return;
+    }
+    purple_debug_misc(config::pluginId, "Chat %s not found %s: %s\n", chatName.c_str(),
+                      byName ? "by its public name" : "by its id", getDisplayedError(object).c_str());
+    PurpleChat *purpleChat = byName ? nullptr : purple_blist_find_chat(m_account, chatName.c_str());
+    const char *publicName = purpleChat ? purple_blist_node_get_string(PURPLE_BLIST_NODE(purpleChat),
+                                                                       BuddyOptions::PublicName)
+                                        : nullptr;
+    if (publicName && *publicName) {
+        m_transceiver.sendQuery(td::td_api::make_object<td::td_api::searchPublicChat>(publicName),
+                                [this, chatId, chatName](uint64_t, TdObjectPtr object) {
+            chatLookedUp(chatId, chatName, std::move(object), true);
+        });
+        return;
+    }
+    // TRANSLATOR: Error dialog, title
+    purple_notify_error(purple_account_get_connection(m_account), _("Failed to join chat"),
+                        // TRANSLATOR: Error dialog, content
+                        _("Telegram does not know this group or channel"), NULL);
 }
 
 void PurpleTdClient::joinChatByGroupName(const char *joinString, const char *groupName)
