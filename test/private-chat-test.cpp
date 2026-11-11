@@ -418,11 +418,31 @@ TEST_F(PrivateChatTest, ManyContactsWithoutChatsAtLogin)
     contacts->user_ids_    = ids;
     login({contact(0), contact(1), contact(2), contact(3), contact(4), contact(5), contact(6), contact(7), contact(8), contact(9), contact(10), contact(11), contact(12), contact(13), contact(14), contact(15), contact(16)}, std::move(contacts), make_object<chats>(), {}, {}, {});
 
-    // From the last of the list
-    std::vector<uint64_t> requestIds;
-    for (int i = 0; i < WINDOW; i++)
-        requestIds.push_back(tgl.verifyRequest(createPrivateChat(FIRST_ID + CONTACTS - 1 - i, false)));
-    tgl.verifyNoRequests();
+    // From the last of the list, all at once
+    auto request = [](int index) {
+        auto result = make_object<createPrivateChat>();
+        result->user_id_ = FIRST_ID + CONTACTS - 1 - index;
+        return result;
+    };
+    static_assert(WINDOW == 16, "as many requested as listed");
+    std::vector<uint64_t> requestIds = tgl.verifyRequests({
+        request(0),
+        request(1),
+        request(2),
+        request(3),
+        request(4),
+        request(5),
+        request(6),
+        request(7),
+        request(8),
+        request(9),
+        request(10),
+        request(11),
+        request(12),
+        request(13),
+        request(14),
+        request(15)
+    });
 
     // One answered out of order, failed: the last one goes out
     tgl.reply(requestIds[2], makeError(400, "Failed"));
