@@ -1521,8 +1521,12 @@ TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListMainRightAway)
     g_hash_table_insert(components, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
     pluginInfo().join_chat(connection, components);
     g_hash_table_destroy(components);
-    // updateNewChat hasn't happened yet, so not joining at the moment
+    // updateNewChat hasn't happened yet, so not joining at the moment; the chats being told of by
+    // now, TDLib is asked for it, which tells of it before it answers
     prpl.verifyNoEvents();
+    auto lookUp = make_object<getChat>();
+    lookUp->chat_id_ = groupChatId;
+    tgl.verifyRequest(*lookUp);
 
     auto groupChat = makeChat(
         groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0
@@ -1568,8 +1572,12 @@ TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListNullFirst)
     g_hash_table_insert(components, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
     pluginInfo().join_chat(connection, components);
     g_hash_table_destroy(components);
-    // updateNewChat hasn't happened yet, so not joining at the moment
+    // updateNewChat hasn't happened yet, so not joining at the moment; the chats being told of by
+    // now, TDLib is asked for it, which tells of it before it answers
     prpl.verifyNoEvents();
+    auto lookUp = make_object<getChat>();
+    lookUp->chat_id_ = groupChatId;
+    tgl.verifyRequest(*lookUp);
 
     auto groupChat = makeChat(
         groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0
