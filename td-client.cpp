@@ -486,9 +486,12 @@ void PurpleTdClient::sendTdlibParameters()
     // option. TDLib queues it until the database is open.
     bool useStorageOptimizer = (purple_account_get_bool(m_account, AccountOptions::KeepInlineDownloads,
                                                         AccountOptions::KeepInlineDownloadsDefault) == FALSE);
-    m_transceiver.sendQuery(td::td_api::make_object<td::td_api::setOption>("use_storage_optimizer",
-                                td::td_api::make_object<td::td_api::optionValueBoolean>(useStorageOptimizer)),
-                            nullptr);
+    auto value      = td::td_api::make_object<td::td_api::optionValueBoolean>();
+    value->value_   = useStorageOptimizer;
+    auto option     = td::td_api::make_object<td::td_api::setOption>();
+    option->name_   = "use_storage_optimizer";
+    option->value_  = std::move(value);
+    m_transceiver.sendQuery(std::move(option), nullptr);
 }
 
 void PurpleTdClient::sendPhoneNumber()
