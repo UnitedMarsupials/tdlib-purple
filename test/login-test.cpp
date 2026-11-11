@@ -570,3 +570,187 @@ TEST_F(LoginTest, IncomingGroupChatMessageAtLoginWhileChatListStillNull)
         }
     );
 }
+
+// Without request dialogs, the login code and the password are asked for in a conversation with
+// "Telegram", which is kept out of the log meanwhile.
+class LoginThroughChatTest: public CommTest {
+protected:
+    const std::string codePrompt = "Enter authentication code\n"
+                                   "Code sent via: Telegram message (length: 5)\n"
+                                   "Next code will be: SMS (length: 5)\n"
+                                   "\n"
+                                   "Reply to this chat with the value above to continue.";
+    const std::string passwordPrompt = "Enter password for two-factor authentication\n"
+                                       "Hint: hint\n"
+                                       "Recovery e-mail may have been sent to user@example.com\n"
+                                       "The password is sent as a message: it will be visible on screen as you type it.\n"
+                                       "Reply to this chat with the value above to continue.";
+
+    void SetUp() override
+    {
+        CommTest::SetUp();
+        setRequestInputSupported(false);
+    }
+
+    PurpleConversation *telegramConversation()
+    {
+        return purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, "Telegram", account);
+    }
+
+    int send(const char *who, const char *message)
+    {
+        return pluginInfo().send_im(connection, who, message, PURPLE_MESSAGE_SEND);
+    }
+
+    void loginUntilCode()
+    {
+        purple_account_set_alias(account, (selfFirstName + " " + selfLastName).c_str());
+        prpl.discardEvents();
+        pluginInfo().login(account);
+        prpl.verifyEvents(
+            ConnectionSetStateEvent(connection, PURPLE_CONNECTING),
+            ConnectionUpdateProgressEvent(connection, 1, 2)
+        );
+
+        tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitTdlibParameters>()));
+        tgl.verifyRequests({
+            make_object<disableProxy>(),
+            make_object<getProxies>(),
+            makeTdlibParameters(
+                std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
+                "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
+                true // use secret chats
+            )
+        });
+        tgl.reply(make_object<ok>());
+
+        tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitPhoneNumber>()));
+        tgl.verifyRequest(setAuthenticationPhoneNumber("+" + selfPhoneNumber, nullptr));
+
+        tgl.update(make_object<updateAuthorizationState>(
+            make_object<authorizationStateWaitCode>(
+                make_object<authenticationCodeInfo>(
+                    selfPhoneNumber,
+                    make_object<authenticationCodeTypeTelegramMessage>(5),
+                    make_object<authenticationCodeTypeSms>(5),
+                    1800
+                )
+            )
+        ));
+    }
+
+    void finishLogin()
+    {
+        tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateReady>()));
+        prpl.verifyEvents(ConnectionSetStateEvent(connection, PURPLE_CONNECTED));
+        tgl.reply(make_object<ok>());
+        tgl.verifyRequest(getContacts());
+    }
+};
+
+TEST_F(LoginThroughChatTest, AnswersOnlyFromTelegramChat)
+{
+    loginUntilCode();
+    prpl.verifyEvents(
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, "Telegram"),
+        ServGotImEvent(connection, "Telegram", codePrompt, PURPLE_MESSAGE_RECV, 0)
+    );
+
+    // To anyone else, a message goes as usual, here to nobody yet known
+    ASSERT_GT(0, send(purpleUserName(0).c_str(), "12345"));
+    prpl.verifyEvents(NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+                      ConversationWriteEvent(purpleUserName(0), purpleUserName(0), "User not found",
+                                             PURPLE_MESSAGE_ERROR, 0));
+    tgl.verifyNoRequests();
+
+    // The code is shown as sent
+    ASSERT_LT(0, send("Telegram", "<b>12345</b> "));
+    tgl.verifyRequest(checkAuthenticationCode("12345"));
+
+    tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitPassword>(
+        "hint", true, false, "user@example.com"
+    )));
+    tgl.reply(make_object<ok>());
+    prpl.verifyEvents(ServGotImEvent(connection, "Telegram", passwordPrompt, PURPLE_MESSAGE_RECV, 0));
+
+    ASSERT_GT(0, send(purpleUserName(1).c_str(), "password"));
+    prpl.verifyEvents(NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(1)),
+                      ConversationWriteEvent(purpleUserName(1), purpleUserName(1), "User not found",
+                                             PURPLE_MESSAGE_ERROR, 0));
+    tgl.verifyNoRequests();
+
+    // The password is not
+    ASSERT_EQ(0, send("Telegram", "password"));
+    tgl.verifyRequest(checkAuthenticationPassword("password"));
+
+    finishLogin();
+
+    // Nothing is waited for any more
+    ASSERT_GT(0, send("Telegram", "12345"));
+    prpl.verifyEvents(ConversationWriteEvent("Telegram", "Telegram", "User not found",
+                                             PURPLE_MESSAGE_ERROR, 0));
+}
+
+TEST_F(LoginThroughChatTest, NotLoggedWhileWaiting)
+{
+    loginUntilCode();
+    prpl.verifyEvents(
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, "Telegram"),
+        ServGotImEvent(connection, "Telegram", codePrompt, PURPLE_MESSAGE_RECV, 0)
+    );
+    PurpleConversation *conv = telegramConversation();
+    ASSERT_NE(nullptr, conv);
+    EXPECT_FALSE(purple_conversation_is_logging(conv));
+
+    // Taken until the next authorization state, as libpurple writes the code after send_im
+    ASSERT_LT(0, send("Telegram", "12345"));
+    tgl.verifyRequest(checkAuthenticationCode("12345"));
+    EXPECT_FALSE(purple_conversation_is_logging(conv));
+
+    tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitPassword>(
+        "hint", true, false, "user@example.com"
+    )));
+    tgl.reply(make_object<ok>());
+    prpl.verifyEvents(ServGotImEvent(connection, "Telegram", passwordPrompt, PURPLE_MESSAGE_RECV, 0));
+    EXPECT_FALSE(purple_conversation_is_logging(conv));
+
+    // Closed and opened anew while the password is waited for
+    purple_conversation_destroy(conv);
+    conv = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, "Telegram");
+    prpl.verifyEvents(NewConversationEvent(PURPLE_CONV_TYPE_IM, account, "Telegram"));
+    ASSERT_TRUE(purple_conversation_is_logging(conv));
+    ASSERT_EQ(0, send("Telegram", "password"));
+    tgl.verifyRequest(checkAuthenticationPassword("password"));
+    EXPECT_FALSE(purple_conversation_is_logging(conv));
+
+    finishLogin();
+    EXPECT_TRUE(purple_conversation_is_logging(conv));
+}
+
+TEST_F(LoginThroughChatTest, LoggingLeftOffWhenItWasOff)
+{
+    PurpleConversation *conv = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, "Telegram");
+    purple_conversation_set_logging(conv, FALSE);
+    loginUntilCode();
+    prpl.verifyEvents(ServGotImEvent(connection, "Telegram", codePrompt, PURPLE_MESSAGE_RECV, 0));
+
+    ASSERT_LT(0, send("Telegram", "12345"));
+    tgl.verifyRequest(checkAuthenticationCode("12345"));
+    finishLogin();
+    EXPECT_FALSE(purple_conversation_is_logging(conv));
+}
+
+TEST_F(LoginThroughChatTest, LoggedAgainAfterDisconnectWhileWaiting)
+{
+    loginUntilCode();
+    prpl.verifyEvents(
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, "Telegram"),
+        ServGotImEvent(connection, "Telegram", codePrompt, PURPLE_MESSAGE_RECV, 0)
+    );
+    PurpleConversation *conv = telegramConversation();
+    ASSERT_NE(nullptr, conv);
+    EXPECT_FALSE(purple_conversation_is_logging(conv));
+
+    pluginInfo().close(connection);
+    EXPECT_TRUE(purple_conversation_is_logging(conv));
+}

@@ -155,6 +155,9 @@ private:
     // Fallback: prompt for an auth value through a "Telegram" IM conversation
     // and remember which value we're waiting for (see m_authInputPending).
     void       promptAuthInputViaChat(AuthInput type, const std::string &message);
+    // Keep the "Telegram" conversation out of the log while a value is asked for in it, and end that
+    void       keepAuthInputUnlogged();
+    void       endAuthInput();
     void       authResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void       notifyAuthError(const td::td_api::object_ptr<td::td_api::Object> &response);
     void       setPurpleConnectionInProgress();
@@ -227,6 +230,9 @@ private:
     // capturing the user's reply in tgprpl_send_im -> sendMessage. This tracks which auth value
     // we're waiting for.
     AuthInput             m_authInputPending = AuthInput::None;
+    // Whether logging of the "Telegram" conversation was turned off for the value, and was on before
+    bool                  m_authInputUnlogged = false;
+    bool                  m_authInputWasLogging = false;
 
     PurpleAccount        *m_account;
     TdTransceiver         m_transceiver;

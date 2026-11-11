@@ -56,6 +56,7 @@ PurpleTdClient::~PurpleTdClient()
         fullMessage.inlineDownloadTimeout = true;
 
     showMessages(messages, m_data);
+    endAuthInput();
 }
 
 void PurpleTdClient::setLogLevel(int level)
@@ -309,6 +310,9 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
 
 void PurpleTdClient::processAuthorizationState(td::td_api::AuthorizationState &authState)
 {
+    // Whatever was asked for in the "Telegram" chat has been answered, or is no longer wanted
+    endAuthInput();
+
     switch (authState.get_id()) {
     // Database encryption is handled automatically in newer tdlib versions
     // case td::td_api::authorizationStateWaitEncryptionKey::ID:
@@ -516,11 +520,20 @@ static std::string getAuthCodeDesc(const td::td_api::AuthenticationCodeType &cod
     }
 }
 
+// The buddy, not a Telegram user, who asks for login input when there are no request dialogs
+static const char AUTH_INPUT_BUDDY[] = "Telegram";
+
 // No request UI ops: prompt for the value through a "Telegram" IM conversation instead. The
 // user's reply is captured in sendMessage() (tgprpl_send_im).
 void PurpleTdClient::promptAuthInputViaChat(AuthInput type, const std::string &message)
 {
     m_authInputPending = type;
+    // The conversation is opened here, rather than by serv_got_im, so that its logging is off
+    // before anything is written to it: the prompt, then the value typed, which libpurple would
+    // log in plain text.
+    if (!purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, AUTH_INPUT_BUDDY, m_account))
+        purple_conversation_new(PURPLE_CONV_TYPE_IM, m_account, AUTH_INPUT_BUDDY);
+    keepAuthInputUnlogged();
     std::string prompt = message;
     // TRANSLATOR: appended to the auth prompt shown in the fallback "Telegram" chat.
     prompt += std::string("\n") + _("Reply to this chat with the value above to continue.");
@@ -536,7 +549,35 @@ void PurpleTdClient::promptAuthInputViaChat(AuthInput type, const std::string &m
     // sendMessage() is waiting for.
     PurpleConnection *gc = purple_account_get_connection(m_account);
     if (gc)
-        serv_got_im(gc, "Telegram", prompt.c_str(), PURPLE_MESSAGE_RECV, time(NULL));
+        serv_got_im(gc, AUTH_INPUT_BUDDY, prompt.c_str(), PURPLE_MESSAGE_RECV, time(NULL));
+}
+
+void PurpleTdClient::keepAuthInputUnlogged()
+{
+    PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM,
+                                                                     AUTH_INPUT_BUDDY, m_account);
+    if (!conv)
+        return;
+    if (!m_authInputUnlogged) {
+        m_authInputWasLogging = purple_conversation_is_logging(conv);
+        m_authInputUnlogged   = true;
+    }
+    purple_conversation_set_logging(conv, FALSE);
+}
+
+// Stop waiting for a value from the "Telegram" chat, and log the conversation again if it was.
+// Not done as the value is taken in sendMessage(): libpurple writes it to the conversation, and
+// so to the log, only once send_im has returned.
+void PurpleTdClient::endAuthInput()
+{
+    m_authInputPending = AuthInput::None;
+    if (m_authInputUnlogged) {
+        m_authInputUnlogged = false;
+        PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM,
+                                                                         AUTH_INPUT_BUDDY, m_account);
+        if (conv)
+            purple_conversation_set_logging(conv, m_authInputWasLogging);
+    }
 }
 
 void PurpleTdClient::requestAuthCode(const td::td_api::authenticationCodeInfo *codeInfo)
@@ -645,6 +686,8 @@ void PurpleTdClient::requestPassword(const td::td_api::authorizationStateWaitPas
         std::string pwMessage = _("Enter password for two-factor authentication");
         if (!hints.empty())
             pwMessage += std::string("\n") + hints;
+        // TRANSLATOR: 2FA prompt in the "Telegram" chat, which stands in for the password dialog, in a new line
+        pwMessage += std::string("\n") + _("The password is sent as a message: it will be visible on screen as you type it.");
         promptAuthInputViaChat(AuthInput::Password, pwMessage);
     }
 }
@@ -2149,12 +2192,14 @@ void PurpleTdClient::updateChatLastMessage(td::td_api::updateChatLastMessage &la
 int PurpleTdClient::sendMessage(const char *buddyName, const char *message)
 {
     // Auth-input fallback: while waiting for a login code, 2FA password or display name (asked
-    // for through the "Telegram" chat because there is no request UI), take this outgoing message
-    // as that value instead of sending it to anyone.
-    if (m_authInputPending != AuthInput::None) {
+    // for through the "Telegram" chat because there is no request UI), take a message sent to that
+    // chat as the value instead of sending it to anyone. Messages to anyone else go as usual.
+    if ((m_authInputPending != AuthInput::None) && !g_strcmp0(buddyName, AUTH_INPUT_BUDDY)) {
         // OTR/other plugins may inject non-code messages; ignore those.
         if (message && g_str_has_prefix(message, "?OTR"))
             return -1;
+        // Should the conversation have been closed and opened anew meanwhile
+        keepAuthInputUnlogged();
         char *stripped = purple_markup_strip_html(message ? message : "");
         g_strstrip(stripped);
         AuthInput type = m_authInputPending;
@@ -2166,7 +2211,10 @@ int PurpleTdClient::sendMessage(const char *buddyName, const char *message)
             default: break;
         }
         g_free(stripped);
-        return 1;
+        // The password is not echoed: libpurple writes a message sent into its conversation only
+        // when send_im returns more than 0. A front-end that shows what is typed by itself, as
+        // webOS Messaging does, still shows it, which the prompt says.
+        return (type == AuthInput::Password) ? 0 : 1;
     }
 
     SecretChatId secretChatId           = purpleBuddyNameToSecretChatId(buddyName);

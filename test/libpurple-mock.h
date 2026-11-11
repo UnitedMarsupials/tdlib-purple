@@ -25,6 +25,8 @@ void clearGroups();
 void setImageLoaders(std::initializer_list<std::string> formats);
 // Whether the front-end takes custom smileys, as Pidgin does; off by default
 void setCustomSmileys(bool supported);
+// Whether the front-end has request dialogs, so that purple_request_input asks; on by default
+void setRequestInputSupported(bool supported);
 void clearConversationData();
 
 using RoomlistData = std::vector<std::pair<PurpleRoomlistFieldType, std::string>>;

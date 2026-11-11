@@ -951,6 +951,13 @@ void *purple_request_action(void *handle, const char *title, const char *primary
     return NULL;
 }
 
+static bool g_requestInputSupported = true;
+
+extern "C++" void setRequestInputSupported(bool supported)
+{
+    g_requestInputSupported = supported;
+}
+
 void *purple_request_input(void *handle, const char *title, const char *primary,
 	const char *secondary, const char *default_value, gboolean multiline,
 	gboolean masked, gchar *hint,
@@ -959,6 +966,9 @@ void *purple_request_input(void *handle, const char *title, const char *primary,
 	PurpleAccount *account, const char *who, PurpleConversation *conv,
 	void *user_data)
 {
+    // No request ui-ops: libpurple asks nothing and returns NULL
+    if (!g_requestInputSupported)
+        return NULL;
     EVENT(RequestInputEvent, handle, title, primary, secondary, default_value, ok_text, ok_cb,
           cancel_text, cancel_cb, account, who, conv, user_data);
 
