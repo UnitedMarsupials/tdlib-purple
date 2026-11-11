@@ -13,6 +13,8 @@ protected:
     void loginWithSupergroup(object_ptr<supergroupFullInfo> fullInfo = nullptr,
                              object_ptr<chatMembers> recentMembers = nullptr,
                              object_ptr<chatMembers> administrators = nullptr);
+    // A member's message received, which opens the conversation if it is the first
+    void receiveMemberMessage(int64_t messageId, unsigned userIndex, int32_t date, bool first);
 };
 
 #endif

@@ -2722,7 +2722,7 @@ struct DeletedMessage {
 
 // Says the message is gone: who deleted it, if known, whether they sent it or someone else did
 static void showDeletionNotice(TdAccountData &account, ChatId chatId, const DeletedMessage &deleted,
-                               const std::string &deleter)
+                               const std::string &deleter, bool deletedOwn)
 {
     const td::td_api::chat *chat = account.getChat(chatId);
     if (!chat)
@@ -2730,7 +2730,7 @@ static void showDeletionNotice(TdAccountData &account, ChatId chatId, const Dele
     std::string when = linkToMessage(account.purpleAccount, chatId, deleted.messageId,
                                      formatMessageTime(deleted.timestamp));
     std::string notice;
-    if (!deleter.empty() && (deleter == deleted.sender))
+    if (!deleter.empty() && deletedOwn)
         notice = formatMessage(
             // TRANSLATOR: In-chat notification. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
             _("{0} deleted their message sent at {1}"), {escapeForDisplay(deleter), when});
@@ -2772,28 +2772,41 @@ static std::string getEventMemberName(TdAccountData &account, const td::td_api::
         const td::td_api::chat *chat = account.getChat(getChatId(static_cast<const td::td_api::messageSenderChat &>(*member)));
         return chat ? chat->title_ : std::string();
     }
-    return account.getDisplayName(getUserId(member));
+    // Us, as our own messages are named
+    UserId userId = getUserId(member);
+    if (userId.valid() && (userId.value() == account.options.myUserId))
+        return purple_account_get_name_for_display(account.purpleAccount);
+    return account.getDisplayName(userId);
 }
 
 // The notices, once the log tells who deleted the messages; those it does not name, without
 static void eventLogResponse(TdAccountData &account, ChatId chatId, const std::vector<DeletedMessage> &deleted,
                              td::td_api::object_ptr<td::td_api::Object> response)
 {
-    std::map<int64_t, std::string> deleters;
+    // Who deleted each message, and whether they sent it: told by who they are, not by their names,
+    // which two people may share; a message the chat itself sent, such as a channel's post, is no
+    // one's own
+    std::map<int64_t, std::pair<std::string, bool>> deleters;
     if (response && (response->get_id() == td::td_api::chatEvents::ID)) {
         for (const auto &event: static_cast<const td::td_api::chatEvents &>(*response).events_)
             if (event && event->action_ &&
                 (event->action_->get_id() == td::td_api::chatEventMessageDeleted::ID)) {
                 const auto &action = static_cast<const td::td_api::chatEventMessageDeleted &>(*event->action_);
                 if (action.message_)
-                    deleters.emplace(action.message_->id_, getEventMemberName(account, event->member_id_));
+                    deleters.emplace(action.message_->id_, std::make_pair(
+                        getEventMemberName(account, event->member_id_),
+                        event->member_id_ && action.message_->sender_id_ &&
+                        isSameUser(*event->member_id_, *action.message_->sender_id_)));
             }
     } else
         purple_debug_misc(config::pluginId, "No log of events of chat %" G_GINT64_FORMAT ": %s\n",
                           chatId.value(), getDisplayedError(response).c_str());
     for (const DeletedMessage &message: deleted) {
         auto it = deleters.find(message.messageId.value());
-        showDeletionNotice(account, chatId, message, (it != deleters.end()) ? it->second : std::string());
+        if (it != deleters.end())
+            showDeletionNotice(account, chatId, message, it->second.first, it->second.second);
+        else
+            showDeletionNotice(account, chatId, message, std::string(), false);
     }
 }
 
@@ -2838,7 +2851,7 @@ void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessag
     // sent at once; and who deleted it, where the log of events tells
     if (!readsEventLog(account, *chat)) {
         for (const DeletedMessage &message: deleted)
-            showDeletionNotice(account, chatId, message, std::string());
+            showDeletionNotice(account, chatId, message, std::string(), false);
         return;
     }
     auto filters = td::td_api::make_object<td::td_api::chatEventLogFilters>();
@@ -2846,12 +2859,15 @@ void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessag
     auto request = td::td_api::make_object<td::td_api::getChatEventLog>();
     request->chat_id_       = chatId.value();
     request->from_event_id_ = 0;
-    request->limit_         = 100;
+    // The latest deletions, these among them, and a few made meanwhile
+    enum { EXTRA_EVENTS = 10, MAX_EVENTS = 100, EVENT_LOG_WAIT_SECONDS = 5 };
+    request->limit_         = static_cast<int32_t>(std::min<size_t>(deleted.size() + EXTRA_EVENTS, MAX_EVENTS));
     request->filters_       = std::move(filters);
-    account.transceiver.sendQuery(std::move(request),
+    // Not answered in time, as while offline, the notices are written without it
+    account.transceiver.sendQueryWithTimeout(std::move(request),
         [&account, chatId, deleted](uint64_t, td::td_api::object_ptr<td::td_api::Object> response) {
             eventLogResponse(account, chatId, deleted, std::move(response));
-        });
+        }, EVENT_LOG_WAIT_SECONDS);
 }
 
 static void fetchHistoryRequest(TdAccountData &account, ChatId chatId, unsigned messagesFetched,
