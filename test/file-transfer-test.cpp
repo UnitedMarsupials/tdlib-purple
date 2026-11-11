@@ -1655,6 +1655,72 @@ TEST_F(PasteTest, KindsByContent)
     g_free(dir);
 }
 
+// An Opus recording goes as a voice message, by its content, its length read from its last page;
+// Vorbis, though in Ogg too, goes as a file
+TEST_F(PasteTest, VoiceByContent)
+{
+    loginWithOneContact();
+    gchar *dir = g_dir_make_tmp("paste-voice-XXXXXX", nullptr);
+    ASSERT_NE(nullptr, dir);
+    std::string voice  = std::string(dir) + "/note.dat";
+    std::string vorbis = std::string(dir) + "/song.ogg";
+    // An Ogg page: capture pattern, version, type, granule position, serial number, sequence, CRC
+    // (not checked), one segment of the length of the packet, which follows
+    auto page = [](unsigned type, uint64_t granule, unsigned sequence, const std::string &packet) {
+        std::string result("OggS", 4);
+        result += '\0';
+        result += char(type);
+        for (int b = 0; b < 8; b++)
+            result += char((granule >> (8 * b)) & 0xFF);
+        result += std::string("\1\0\0\0", 4);
+        result += char(sequence);
+        result += std::string(3, '\0');
+        result += std::string(4, '\0');
+        result += '\1';
+        result += char(packet.size());
+        return result + packet;
+    };
+    // Version 1, one channel, 312 samples to skip, recorded at 48 kHz, no gain, mapping 0
+    std::string opusHead("OpusHead\1\1\x38\x01\x80\xbb\0\0\0\0\0", 19);
+    std::string content = page(2, 0, 0, opusHead) + page(0, 0, 1, std::string("OpusTags\0\0\0\0\0\0\0\0", 16)) +
+                          page(4, 312 + 48000 * 3 - 100, 2, std::string(1, 'x'));
+    ASSERT_TRUE(g_file_set_contents(voice.c_str(), content.data(), content.size(), nullptr));
+    std::string vorbisHead("\x01vorbis\0\0\0\0\x01\x44\xac\0\0\0\0\0\0\0\xee\x02\0\0\0\0\0\0\xb8\x01", 30);
+    std::string vorbisContent = page(2, 0, 0, vorbisHead);
+    ASSERT_TRUE(g_file_set_contents(vorbis.c_str(), vorbisContent.data(), vorbisContent.size(), nullptr));
+
+    std::string list = "file://" + voice + "\\r\\nfile://" + vorbis + "\\r\\n";
+    paste("TARGETS\\ntext/uri-list\\n", list.c_str());
+    prpl.verifyEvents(ConversationWriteEvent(
+        purpleUserName(0), "",
+        "Pasted [Voice#1] (or [note.dat#1], as a file), [song.ogg#2]: "
+        "write it into the message, where it goes, to send it there.",
+        (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), 0
+    ));
+
+    // Alone, though next to another; three seconds, rounded up
+    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "[Voice#1] [song.ogg#2]",
+                                      PURPLE_MESSAGE_SEND));
+    tgl.verifyRequests({
+        makeSendMessage(chatIds[0], 0, nullptr, nullptr, nullptr,
+                        makeInputMessageVoiceNote(make_object<inputFileLocal>(voice), 3, make_object<formattedText>())),
+        makeSendMessage(chatIds[0], 0, nullptr, nullptr, nullptr,
+                        makeInputMessageDocument(make_object<inputFileLocal>(vorbis), nullptr, false,
+                                                 make_object<formattedText>()))
+    });
+
+    // By its name, as a file
+    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "[note.dat#1]", PURPLE_MESSAGE_SEND));
+    tgl.verifyRequest(*makeSendMessage(chatIds[0], 0, nullptr, nullptr, nullptr,
+                                       makeInputMessageDocument(make_object<inputFileLocal>(voice), nullptr, false,
+                                                                make_object<formattedText>())));
+
+    for (const std::string &file: {voice, vorbis})
+        g_unlink(file.c_str());
+    g_rmdir(dir);
+    g_free(dir);
+}
+
 // A photo of ours, shown as it is sent, is uploaded: that is no edit, nor is it shown again
 TEST_F(FileTransferTest, SentPhotoUploaded)
 {

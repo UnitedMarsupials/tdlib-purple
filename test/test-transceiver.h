@@ -170,6 +170,8 @@ object_ptr<inputMessageDocument> makeInputMessageDocument(object_ptr<InputFile> 
                                                           bool disable_content_type_detection_,
                                                           object_ptr<formattedText> &&caption_);
 object_ptr<inputMessageVideo> makeInputMessageVideo(object_ptr<InputFile> &&video_, object_ptr<formattedText> &&caption_);
+object_ptr<inputMessageVoiceNote> makeInputMessageVoiceNote(object_ptr<InputFile> &&voiceNote_, int32_t duration_,
+                                                            object_ptr<formattedText> &&caption_);
 }
 }
 

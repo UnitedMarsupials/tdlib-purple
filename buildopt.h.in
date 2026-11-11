@@ -21,6 +21,9 @@
 // a live location is a messageLiveLocation, no longer a messageLocation with a
 // live_period (1.8.65)
 #define TDLIB_API_LIVE_LOCATION    ${TDLIB_API_LIVE_LOCATION}
+// inputMessageVoiceNote wraps its file in an inputVoiceNote, which also holds
+// its duration and waveform (1.8.66)
+#define TDLIB_API_INPUT_VOICE_NOTE ${TDLIB_API_INPUT_VOICE_NOTE}
 
 
 #define TEST_SOURCE_DIR "${CMAKE_SOURCE_DIR}/test"

@@ -1289,6 +1289,49 @@ static void parseMessage(const char *message, std::vector<MessagePart> &parts, T
     appendText(parts, textStart, s-textStart, account);
 }
 
+// An Opus recording's length, in whole seconds, at least one; 0 if it cannot be told. Its last Ogg
+// page's granule position counts the samples, at 48 kHz whatever the recording's rate, from the start
+// of the stream, less those its header says to skip.
+static int getOpusDuration(const std::string &path)
+{
+    enum { HEADER = 27, PRE_SKIP = 10, MAX_PAGE = 65307, RATE = 48000 };
+    FILE *file = fopen(path.c_str(), "rb");
+    if (!file)
+        return 0;
+    // The first page, whose stream the rest belong to, holds the identification header alone
+    std::vector<unsigned char> first(HEADER + 255 + 19);
+    size_t length = fread(first.data(), 1, first.size(), file);
+    unsigned segments = (length > HEADER) ? first[26] : 0;
+    size_t   head     = HEADER + segments;
+    if ((length < head + 19) || memcmp(first.data(), "OggS", 4) || memcmp(&first[head], "OpusHead", 8)) {
+        fclose(file);
+        return 0;
+    }
+    uint32_t serial  = first[14] | (first[15] << 8) | (first[16] << 16) | (uint32_t(first[17]) << 24);
+    unsigned preSkip = first[head + PRE_SKIP] | (first[head + PRE_SKIP + 1] << 8);
+
+    std::vector<unsigned char> tail(MAX_PAGE);
+    long size = (fseek(file, 0, SEEK_END) == 0) ? ftell(file) : -1;
+    long from = (size > MAX_PAGE) ? size - MAX_PAGE : 0;
+    length = ((size > 0) && (fseek(file, from, SEEK_SET) == 0)) ? fread(tail.data(), 1, tail.size(), file) : 0;
+    fclose(file);
+    // The last page of the stream with a position: a capture pattern, version 0, the same serial number
+    for (size_t i = (length >= HEADER) ? length - HEADER + 1 : 0; i-- > 0;) {
+        const unsigned char *page = &tail[i];
+        if (memcmp(page, "OggS", 4) || page[4] ||
+            ((page[14] | (page[15] << 8) | (page[16] << 16) | (uint32_t(page[17]) << 24)) != serial))
+            continue;
+        uint64_t granule = 0;
+        for (int b = 7; b >= 0; b--)
+            granule = (granule << 8) | page[6 + b];
+        if ((granule == UINT64_MAX) || (granule <= preSkip))
+            continue;
+        uint64_t samples = granule - preSkip;
+        return int(std::max<uint64_t>((samples + RATE - 1) / RATE, 1));
+    }
+    return 0;
+}
+
 td::td_api::object_ptr<td::td_api::InputMessageContent>
 makeAttachmentContent(const PlaceholderUse &use, const std::string &uploadPath,
                       td::td_api::object_ptr<td::td_api::formattedText> caption)
@@ -1314,6 +1357,20 @@ makeAttachmentContent(const PlaceholderUse &use, const std::string &uploadPath,
         content->video_->video_ = std::move(file);
 #else
         content->video_ = std::move(file);
+#endif
+        content->caption_ = std::move(caption);
+        return std::move(content);
+    }
+    case AttachmentKind::Voice: {
+        // Telegram draws the waveform of one sent without it flat
+        auto content = td::td_api::make_object<td::td_api::inputMessageVoiceNote>();
+#if TDLIB_API_INPUT_VOICE_NOTE
+        content->voice_note_ = td::td_api::make_object<td::td_api::inputVoiceNote>();
+        content->voice_note_->voice_note_ = std::move(file);
+        content->voice_note_->duration_   = getOpusDuration(use.attachment->path);
+#else
+        content->voice_note_ = std::move(file);
+        content->duration_   = getOpusDuration(use.attachment->path);
 #endif
         content->caption_ = std::move(caption);
         return std::move(content);
@@ -1365,16 +1422,22 @@ ParsedEdit parseEdit(const char *message, const TdAccountData &account)
 }
 
 // How many attachments from the first go together as an album: one after another, captioned only by
-// the last, pictures and videos or documents only, as many as Telegram takes
+// the last, pictures and videos or documents only, as many as Telegram takes; a voice message goes alone
 static size_t getAlbumSize(const std::vector<MessagePart> &parts, size_t first)
 {
     enum { MAX_ALBUM_SIZE = 10 };
     auto isDocument = [](const MessagePart &part) {
         return part.attachment.asFile || (part.attachment.attachment->kind == AttachmentKind::Document);
     };
+    auto isVoice = [](const MessagePart &part) {
+        return !part.attachment.asFile && (part.attachment.attachment->kind == AttachmentKind::Voice);
+    };
+    if (isVoice(parts[first]))
+        return 1;
     size_t size = 1;
     while (parts[first + size - 1].text.empty() && (first + size < parts.size()) && (size < MAX_ALBUM_SIZE) &&
-           parts[first + size].attachment.attachment && (isDocument(parts[first + size]) == isDocument(parts[first])))
+           parts[first + size].attachment.attachment && !isVoice(parts[first + size]) &&
+           (isDocument(parts[first + size]) == isDocument(parts[first])))
         size++;
     return size;
 }
