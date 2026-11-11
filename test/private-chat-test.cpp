@@ -397,6 +397,56 @@ TEST_F(PrivateChatTest, ContactWithoutChatAtLogin)
     );
 }
 
+// More contacts without chats than are asked for at once: sixteen at a time, another as each answer
+// comes, in whatever order, failed or not; the login done only with the last
+TEST_F(PrivateChatTest, ManyContactsWithoutChatsAtLogin)
+{
+    enum { CONTACTS = 17, WINDOW = 16, FIRST_ID = 1000 };
+    auto contact = [](int index) {
+        auto user = makeUser(FIRST_ID + index, "First" + std::to_string(index), "Last", "",
+                             make_object<userStatusOffline>());
+        user->is_contact_ = true;
+        auto update = make_object<updateUser>();
+        update->user_ = std::move(user);
+        return update;
+    };
+    std::vector<int64_t> ids;
+    for (int i = 0; i < CONTACTS; i++)
+        ids.push_back(FIRST_ID + i);
+    auto contacts = make_object<users>();
+    contacts->total_count_ = CONTACTS;
+    contacts->user_ids_    = ids;
+    login({contact(0), contact(1), contact(2), contact(3), contact(4), contact(5), contact(6), contact(7), contact(8), contact(9), contact(10), contact(11), contact(12), contact(13), contact(14), contact(15), contact(16)}, std::move(contacts), make_object<chats>(), {}, {}, {});
+
+    // From the last of the list
+    std::vector<uint64_t> requestIds;
+    for (int i = 0; i < WINDOW; i++)
+        requestIds.push_back(tgl.verifyRequest(createPrivateChat(FIRST_ID + CONTACTS - 1 - i, false)));
+    tgl.verifyNoRequests();
+
+    // One answered out of order, failed: the last one goes out
+    tgl.reply(requestIds[2], makeError(400, "Failed"));
+    requestIds.push_back(tgl.verifyRequest(createPrivateChat(FIRST_ID, false)));
+    tgl.verifyNoRequests();
+    prpl.verifyNoEvents();
+
+    // Not done until all have answered
+    for (size_t i = 0; i < requestIds.size(); i++) {
+        if (i == 2)
+            continue;
+        if (i + 1 == requestIds.size())
+            prpl.discardEvents();
+        tgl.reply(requestIds[i], makeError(400, "Failed"));
+        tgl.verifyNoRequests();
+        if (i + 1 < requestIds.size())
+            prpl.verifyNoEvents();
+    }
+    prpl.verifyEvents(
+        AccountSetAliasEvent(account, selfFirstName + " " + selfLastName),
+        ShowAccountEvent(account)
+    );
+}
+
 TEST_F(PrivateChatTest, Document)
 {
     const int64_t messageId = 1;
