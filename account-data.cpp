@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <stdio.h>
 #include <unistd.h>
-#include <cctype>
 
 static bool isCanonicalPhoneNumber(const char *s)
 {
@@ -647,15 +646,11 @@ void TdAccountData::getUsersByUsername(const char *username,
         return;
     if (*username == '@')
         username++;
-    std::string want(username);
-    std::transform(want.begin(), want.end(), want.begin(), ::tolower);
-    if (want.empty())
+    if (*username == '\0')
         return;
-
-    auto equalsIgnoreCase = [&want](const std::string &candidate) {
-        std::string s(candidate);
-        std::transform(s.begin(), s.end(), s.begin(), ::tolower);
-        return s == want;
+    // Usernames are ASCII: comparing them so leaves other bytes, as of a display name, alone
+    auto equalsIgnoreCase = [username](const std::string &candidate) {
+        return !g_ascii_strcasecmp(candidate.c_str(), username);
     };
 
     for (const UserMap::value_type &entry: m_userInfo) {
