@@ -131,6 +131,17 @@ static void compare(const loadChats &actual, const loadChats &expected)
     COMPARE(limit_);
 }
 
+static void compare(const getChatEventLog &actual, const getChatEventLog &expected)
+{
+    COMPARE(chat_id_);
+    COMPARE(query_);
+    COMPARE(from_event_id_);
+    COMPARE(limit_);
+    ASSERT_EQ(nullptr == expected.filters_, nullptr == actual.filters_);
+    if (expected.filters_)
+        ASSERT_EQ(expected.filters_->message_deletions_, actual.filters_->message_deletions_);
+}
+
 static void compare(const viewMessages &actual, const viewMessages &expected)
 {
     COMPARE(chat_id_);
@@ -707,6 +718,7 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(getChats)
         C(loadChats)
         C(viewMessages)
+        C(getChatEventLog)
         C(downloadFile)
         case sendMessage::ID:
             compare(static_cast<const sendMessage &>(actual), static_cast<const sendMessage &>(expected),
