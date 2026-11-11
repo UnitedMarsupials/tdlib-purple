@@ -927,7 +927,7 @@ void TdAccountData::getTempFileUploads(std::vector<std::pair<ChatId, int64_t>> &
         messages.emplace_back(item.chatId, item.messageId);
 }
 
-void TdAccountData::addFileTransfer(int32_t fileId, PurpleXfer *xfer, ChatId chatId)
+void TdAccountData::addFileTransfer(int32_t fileId, PurpleXfer *xfer, ChatId chatId, AttachmentKind kind)
 {
     if (std::find_if(m_fileTransfers.begin(), m_fileTransfers.end(),
                     [fileId](const FileTransferInfo &upload) {
@@ -937,16 +937,19 @@ void TdAccountData::addFileTransfer(int32_t fileId, PurpleXfer *xfer, ChatId cha
         m_fileTransfers.back().fileId = fileId;
         m_fileTransfers.back().xfer = xfer;
         m_fileTransfers.back().chatId = chatId;
+        m_fileTransfers.back().kind = kind;
     }
 }
 
-bool TdAccountData::getFileTransfer(int32_t fileId, PurpleXfer *&xfer, ChatId &chatId)
+bool TdAccountData::getFileTransfer(int32_t fileId, PurpleXfer *&xfer, ChatId &chatId, AttachmentKind *kind)
 {
     auto it = std::find_if(m_fileTransfers.begin(), m_fileTransfers.end(),
                            [fileId](const FileTransferInfo &upload) { return (upload.fileId == fileId); });
     if (it != m_fileTransfers.end()) {
         xfer = it->xfer;
         chatId = it->chatId;
+        if (kind)
+            *kind = it->kind;
         return true;
     }
 

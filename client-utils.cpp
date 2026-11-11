@@ -1333,12 +1333,10 @@ static int getOpusDuration(const std::string &path)
 }
 
 td::td_api::object_ptr<td::td_api::InputMessageContent>
-makeAttachmentContent(const PlaceholderUse &use, const std::string &uploadPath,
-                      td::td_api::object_ptr<td::td_api::formattedText> caption)
+makeMediaContent(AttachmentKind kind, td::td_api::object_ptr<td::td_api::InputFile> file, const std::string &path,
+                 td::td_api::object_ptr<td::td_api::formattedText> caption)
 {
-    auto file = td::td_api::make_object<td::td_api::inputFileLocal>(uploadPath);
-    purple_debug_misc(config::pluginId, "Sending %s\n", uploadPath.c_str());
-    switch (use.asFile ? AttachmentKind::Document : use.attachment->kind) {
+    switch (kind) {
     case AttachmentKind::Photo: {
         auto content = td::td_api::make_object<td::td_api::inputMessagePhoto>();
 #if TDLIB_API_INPUT_PHOTO
@@ -1367,10 +1365,10 @@ makeAttachmentContent(const PlaceholderUse &use, const std::string &uploadPath,
 #if TDLIB_API_INPUT_VOICE_NOTE
         content->voice_note_ = td::td_api::make_object<td::td_api::inputVoiceNote>();
         content->voice_note_->voice_note_ = std::move(file);
-        content->voice_note_->duration_   = getOpusDuration(use.attachment->path);
+        content->voice_note_->duration_   = getOpusDuration(path);
 #else
         content->voice_note_ = std::move(file);
-        content->duration_   = getOpusDuration(use.attachment->path);
+        content->duration_   = getOpusDuration(path);
 #endif
         content->caption_ = std::move(caption);
         return std::move(content);
@@ -1387,6 +1385,16 @@ makeAttachmentContent(const PlaceholderUse &use, const std::string &uploadPath,
 #endif
     content->caption_ = std::move(caption);
     return std::move(content);
+}
+
+td::td_api::object_ptr<td::td_api::InputMessageContent>
+makeAttachmentContent(const PlaceholderUse &use, const std::string &uploadPath,
+                      td::td_api::object_ptr<td::td_api::formattedText> caption)
+{
+    purple_debug_misc(config::pluginId, "Sending %s\n", uploadPath.c_str());
+    return makeMediaContent(use.asFile ? AttachmentKind::Document : use.attachment->kind,
+                            td::td_api::make_object<td::td_api::inputFileLocal>(uploadPath), use.attachment->path,
+                            std::move(caption));
 }
 
 // A pasted attachment, the part's text its caption

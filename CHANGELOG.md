@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- **An account option sends a file sent by file transfer ("Send File...") as what its content is, as a pasted one goes: a picture as a photo, a video as a video, an Opus recording as a voice message, with its length, anything else as a file.** Off, as by default, every file goes as a file, as before. It is for front-ends that send everything they attach as a file transfer, having no placeholders to choose by.
+
 ## 0.9.5 (2026-11-01)
 
 ### Features

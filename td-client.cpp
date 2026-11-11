@@ -3464,7 +3464,7 @@ void PurpleTdClient::uploadResponse(uint64_t requestId, td::td_api::object_ptr<t
 
     if (request) {
         if (file)
-            startDocumentUploadProgress(request->chatId, request->xfer, *file, m_transceiver, m_data,
+            startDocumentUploadProgress(request->chatId, request->xfer, request->kind, *file, m_transceiver, m_data,
                                         &PurpleTdClient::sendMessageResponse);
         else
             uploadResponseError(request->xfer, getDisplayedError(object), m_data);

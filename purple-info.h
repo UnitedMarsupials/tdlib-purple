@@ -63,6 +63,8 @@ namespace AccountOptions {
     const char           *DownloadBehaviourDefault();
     constexpr const char *KeepInlineDownloads        = "keep-inline-downloads";
     constexpr gboolean    KeepInlineDownloadsDefault = FALSE;
+    constexpr const char *SendFilesByContent         = "send-files-by-content";
+    constexpr gboolean    SendFilesByContentDefault  = FALSE;
     constexpr const char *ReadReceipts               = "read-receipts";
     constexpr gboolean    ReadReceiptsDefault        = TRUE;
 };

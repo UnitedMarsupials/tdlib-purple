@@ -6,7 +6,37 @@
 #include "client-utils.h"
 #include <glib/gstdio.h>
 
-class FileTransferTest: public CommTest {};
+class FileTransferTest: public CommTest {
+protected:
+    // Sends the file to the first contact by file transfer, uploaded as the type given, and checks
+    // the message it goes in once uploaded
+    void sendFile(const std::string &path, object_ptr<FileType> uploadedAs,
+                  object_ptr<InputMessageContent> message);
+};
+
+void FileTransferTest::sendFile(const std::string &path, object_ptr<FileType> uploadedAs,
+                                object_ptr<InputMessageContent> message)
+{
+    const int32_t fileId = 1234;
+    setFakeFileSize(path.c_str(), 10000);
+    pluginInfo().send_file(connection, purpleUserName(0).c_str(), path.c_str());
+    prpl.verifyEvents(XferAcceptedEvent(purpleUserName(0), path.c_str()));
+    tgl.verifyRequest(preliminaryUploadFile(make_object<inputFileLocal>(path), std::move(uploadedAs), 1));
+
+    tgl.reply(make_object<file>(
+        fileId, 10000, 10000,
+        make_object<localFile>(path, false, false, false, true, 0, 10000, 10000),
+        make_object<remoteFile>("", "", true, false, 0)
+    ));
+    prpl.verifyEvents(XferStartEvent(path.c_str()), XferProgressEvent(path.c_str(), 0));
+    tgl.update(make_object<updateFile>(make_object<file>(
+        fileId, 10000, 10000,
+        make_object<localFile>(path, false, false, false, true, 0, 10000, 10000),
+        make_object<remoteFile>("", "", false, false, 10000)
+    )));
+    prpl.verifyEvents(XferCompletedEvent(path.c_str(), TRUE, 10000), XferEndEvent(path.c_str()));
+    tgl.verifyRequest(*makeSendMessage(chatIds[0], 0, nullptr, nullptr, nullptr, std::move(message)));
+}
 
 TEST_F(FileTransferTest, Document_AlreadyDownloaded)
 {
@@ -1655,6 +1685,33 @@ TEST_F(PasteTest, KindsByContent)
     g_free(dir);
 }
 
+// An Ogg page: capture pattern, version, type, granule position, serial number, sequence, CRC (not
+// checked), one segment of the length of the packet, which follows
+static std::string makeOggPage(unsigned type, uint64_t granule, unsigned sequence, const std::string &packet)
+{
+    std::string result("OggS", 4);
+    result += '\0';
+    result += char(type);
+    for (int b = 0; b < 8; b++)
+        result += char((granule >> (8 * b)) & 0xFF);
+    result += std::string("\1\0\0\0", 4);
+    result += char(sequence);
+    result += std::string(3, '\0');
+    result += std::string(4, '\0');
+    result += '\1';
+    result += char(packet.size());
+    return result + packet;
+}
+
+// An Opus recording, its last page at the granule position
+static std::string makeOpusFile(uint64_t lastGranule)
+{
+    // Version 1, one channel, 312 samples to skip, recorded at 48 kHz, no gain, mapping 0
+    std::string opusHead("OpusHead\1\1\x38\x01\x80\xbb\0\0\0\0\0", 19);
+    return makeOggPage(2, 0, 0, opusHead) + makeOggPage(0, 0, 1, std::string("OpusTags\0\0\0\0\0\0\0\0", 16)) +
+           makeOggPage(4, lastGranule, 2, std::string(1, 'x'));
+}
+
 // An Opus recording goes as a voice message, by its content, its length read from its last page;
 // Vorbis, though in Ogg too, goes as a file
 TEST_F(PasteTest, VoiceByContent)
@@ -1664,29 +1721,10 @@ TEST_F(PasteTest, VoiceByContent)
     ASSERT_NE(nullptr, dir);
     std::string voice  = std::string(dir) + "/note.dat";
     std::string vorbis = std::string(dir) + "/song.ogg";
-    // An Ogg page: capture pattern, version, type, granule position, serial number, sequence, CRC
-    // (not checked), one segment of the length of the packet, which follows
-    auto page = [](unsigned type, uint64_t granule, unsigned sequence, const std::string &packet) {
-        std::string result("OggS", 4);
-        result += '\0';
-        result += char(type);
-        for (int b = 0; b < 8; b++)
-            result += char((granule >> (8 * b)) & 0xFF);
-        result += std::string("\1\0\0\0", 4);
-        result += char(sequence);
-        result += std::string(3, '\0');
-        result += std::string(4, '\0');
-        result += '\1';
-        result += char(packet.size());
-        return result + packet;
-    };
-    // Version 1, one channel, 312 samples to skip, recorded at 48 kHz, no gain, mapping 0
-    std::string opusHead("OpusHead\1\1\x38\x01\x80\xbb\0\0\0\0\0", 19);
-    std::string content = page(2, 0, 0, opusHead) + page(0, 0, 1, std::string("OpusTags\0\0\0\0\0\0\0\0", 16)) +
-                          page(4, 312 + 48000 * 3 - 100, 2, std::string(1, 'x'));
+    std::string content = makeOpusFile(312 + 48000 * 3 - 100);
     ASSERT_TRUE(g_file_set_contents(voice.c_str(), content.data(), content.size(), nullptr));
     std::string vorbisHead("\x01vorbis\0\0\0\0\x01\x44\xac\0\0\0\0\0\0\0\xee\x02\0\0\0\0\0\0\xb8\x01", 30);
-    std::string vorbisContent = page(2, 0, 0, vorbisHead);
+    std::string vorbisContent = makeOggPage(2, 0, 0, vorbisHead);
     ASSERT_TRUE(g_file_set_contents(vorbis.c_str(), vorbisContent.data(), vorbisContent.size(), nullptr));
 
     std::string list = "file://" + voice + "\\r\\nfile://" + vorbis + "\\r\\n";
@@ -1830,6 +1868,48 @@ TEST_F(PasteTest, MediaEdited)
     }
 
     for (const std::string &file: {photo, doc, later})
+        g_unlink(file.c_str());
+    g_rmdir(dir);
+    g_free(dir);
+}
+
+// A file sent by file transfer goes as a document, whatever it is; with the account set to send
+// files by their content, as what that is, as a pasted one does, whatever its name: a recording as a
+// voice message, with its length, a video as a video, a picture as a photo, each uploaded as such
+TEST_F(FileTransferTest, SendFile_ByContent)
+{
+    loginWithOneContact();
+    gchar *dir = g_dir_make_tmp("send-kinds-XXXXXX", nullptr);
+    ASSERT_NE(nullptr, dir);
+    std::string voice = std::string(dir) + "/note.bin";
+    std::string video = std::string(dir) + "/movie.ogg";
+    std::string photo = std::string(dir) + "/picture.mp4";
+    std::string notes = std::string(dir) + "/notes.png";
+    std::string opus  = makeOpusFile(312 + 48000 * 12 - 100);
+    static const char png[] = "\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
+    static const char mp4[] = "\0\0\0\x20" "ftypisom\0\0\x02\0isomiso2avc1mp41";
+    ASSERT_TRUE(g_file_set_contents(voice.c_str(), opus.data(), opus.size(), nullptr));
+    ASSERT_TRUE(g_file_set_contents(video.c_str(), mp4, sizeof(mp4) - 1, nullptr));
+    ASSERT_TRUE(g_file_set_contents(photo.c_str(), png, sizeof(png) - 1, nullptr));
+    ASSERT_TRUE(g_file_set_contents(notes.c_str(), "Notes, of no picture at all\n", -1, nullptr));
+
+    for (const std::string &file: {voice, video, photo, notes})
+        sendFile(file, make_object<fileTypeDocument>(),
+                 makeInputMessageDocument(make_object<inputFileId>(1234), nullptr, false,
+                                          make_object<formattedText>()));
+
+    purple_account_set_bool(account, "send-files-by-content", TRUE);
+    sendFile(voice, make_object<fileTypeVoiceNote>(),
+             makeInputMessageVoiceNote(make_object<inputFileId>(1234), 12, make_object<formattedText>()));
+    sendFile(video, make_object<fileTypeVideo>(),
+             makeInputMessageVideo(make_object<inputFileId>(1234), make_object<formattedText>()));
+    sendFile(photo, make_object<fileTypePhoto>(),
+             makeInputMessagePhoto(make_object<inputFileId>(1234), nullptr, std::vector<std::int32_t>(), 0, 0,
+                                   make_object<formattedText>(), false, nullptr, false));
+    sendFile(notes, make_object<fileTypeDocument>(),
+             makeInputMessageDocument(make_object<inputFileId>(1234), nullptr, false, make_object<formattedText>()));
+
+    for (const std::string &file: {voice, video, photo, notes})
         g_unlink(file.c_str());
     g_rmdir(dir);
     g_free(dir);

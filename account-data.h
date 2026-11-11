@@ -123,11 +123,12 @@ public:
 
 class UploadRequest: public PendingRequest {
 public:
-    PurpleXfer *xfer;
-    ChatId      chatId;
+    PurpleXfer    *xfer;
+    ChatId         chatId;
+    AttachmentKind kind; // what it is uploaded, and to be sent, as
 
-    UploadRequest(uint64_t requestId, PurpleXfer *xfer, ChatId chatId)
-    : PendingRequest(requestId), xfer(xfer), chatId(chatId) {}
+    UploadRequest(uint64_t requestId, PurpleXfer *xfer, ChatId chatId, AttachmentKind kind)
+    : PendingRequest(requestId), xfer(xfer), chatId(chatId), kind(kind) {}
 };
 
 struct TgMessageInfo {
@@ -476,8 +477,11 @@ public:
     DownloadRequest *          findDownloadRequest(int32_t fileId);
     void                       extractFileTransferRequests(std::vector<PurpleXfer *> &transfers);
 
-    void                       addFileTransfer(int32_t fileId, PurpleXfer *xfer, ChatId chatId);
-    bool                       getFileTransfer(int32_t fileId, PurpleXfer *&xfer, ChatId &chatId);
+    // An upload's kind is what it is to be sent as
+    void                       addFileTransfer(int32_t fileId, PurpleXfer *xfer, ChatId chatId,
+                                               AttachmentKind kind = AttachmentKind::Document);
+    bool                       getFileTransfer(int32_t fileId, PurpleXfer *&xfer, ChatId &chatId,
+                                               AttachmentKind *kind = nullptr);
     bool                       getFileIdForTransfer(PurpleXfer *xfer, int &fileId);
     void                       removeFileTransfer(int32_t fileId);
     void                       removeAllFileTransfers(std::vector<PurpleXfer *> &transfers);
@@ -549,9 +553,10 @@ private:
     };
 
     struct FileTransferInfo {
-        int32_t     fileId;
-        ChatId      chatId;
-        PurpleXfer *xfer;
+        int32_t        fileId;
+        ChatId         chatId;
+        PurpleXfer    *xfer;
+        AttachmentKind kind;
     };
 
     using ChatMap = std::map<ChatId, ChatInfo>;

@@ -112,6 +112,11 @@ void updateSupergroupChatMembers(PurpleConvChat *purpleChat, const td::td_api::c
 // the rest of it dropped
 td::td_api::object_ptr<td::td_api::formattedText> parseFormattedText(const std::string &html);
 
+// A file going as the kind given, with its caption; the local file at the path is read for what the
+// kind needs of it, a recording's length
+td::td_api::object_ptr<td::td_api::InputMessageContent>
+makeMediaContent(AttachmentKind kind, td::td_api::object_ptr<td::td_api::InputFile> file, const std::string &path,
+                 td::td_api::object_ptr<td::td_api::formattedText> caption);
 // What a pasted attachment goes as, from the file uploaded, with its caption
 td::td_api::object_ptr<td::td_api::InputMessageContent>
 makeAttachmentContent(const PlaceholderUse &use, const std::string &uploadPath,

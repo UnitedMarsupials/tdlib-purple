@@ -1675,6 +1675,12 @@ static void tgprpl_init (PurplePlugin *plugin)
                                          AccountOptions::ShowUnjoinedChatsDefault);
     prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
 
+    // TRANSLATOR: Account settings, key (boolean). Of a file sent by file transfer ("Send File..."): told by its content, as a pasted one is; otherwise it goes as a file.
+    opt = purple_account_option_bool_new(_("Send a file as a picture, video or voice message when it is one"),
+                                         AccountOptions::SendFilesByContent,
+                                         AccountOptions::SendFilesByContentDefault);
+    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+
     // TRANSLATOR: Account settings, key (boolean). Custom emoji are pictures of their own, each standing for an ordinary emoji.
     opt = purple_account_option_bool_new(_("Show custom emoji in reactions as ordinary emoji"),
                                          AccountOptions::FoldCustomEmoji,
