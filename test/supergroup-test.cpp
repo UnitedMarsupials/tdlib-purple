@@ -1070,8 +1070,11 @@ TEST_F(SupergroupTest, MessagesDeletedTogether)
     loginWithSupergroup();
     tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, makeChatMemberStatusCreator("", false, true), 2)));
     prpl.discardEvents();
+    // Each told apart: sent by different members at different times, one deleted by another member,
+    // the other by its sender
+    constexpr int32_t later = date + 5;
     receiveMemberMessage(messageId[0], 0, date, true);
-    receiveMemberMessage(messageId[1], 0, date, false);
+    receiveMemberMessage(messageId[1], 1, later, false);
 
     auto update = make_object<updateDeleteMessages>();
     update->chat_id_      = groupChatId;
@@ -1086,15 +1089,19 @@ TEST_F(SupergroupTest, MessagesDeletedTogether)
     auto events = make_object<chatEvents>();
     events->events_.push_back(makeDeletionEvent(3, date + 70, make_object<messageSenderUser>(userIds[0]),
         makeMessage(9999, userIds[0], groupChatId, false, date, makeTextMessage("Other"))));
-    for (int64_t id: {messageId[1], messageId[0]})
-        events->events_.push_back(makeDeletionEvent(id, date + 60, make_object<messageSenderUser>(userIds[1]),
-            makeMessage(id, userIds[0], groupChatId, false, date, makeTextMessage("Hello"))));
+    events->events_.push_back(makeDeletionEvent(messageId[1], date + 60, make_object<messageSenderUser>(userIds[1]),
+        makeMessage(messageId[1], userIds[1], groupChatId, false, later, makeTextMessage("Hello"))));
+    events->events_.push_back(makeDeletionEvent(messageId[0], date + 60, make_object<messageSenderUser>(userIds[1]),
+        makeMessage(messageId[0], userIds[0], groupChatId, false, date, makeTextMessage("Hello"))));
     tgl.reply(requestId, std::move(events));
-    std::string notice = userFirstNames[1] + " " + userLastNames[1] + " deleted the message " +
-                         userFirstNames[0] + " " + userLastNames[0] + " sent at " + deletedMessageTime(date);
+    const std::string deleter = userFirstNames[1] + " " + userLastNames[1];
     prpl.verifyEvents(
-        ConversationWriteEvent(groupChatPurpleName, NotificationWho, notice, PURPLE_MESSAGE_SYSTEM, 0),
-        ConversationWriteEvent(groupChatPurpleName, NotificationWho, notice, PURPLE_MESSAGE_SYSTEM, 0)
+        ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+                               deleter + " deleted the message " + userFirstNames[0] + " " + userLastNames[0] +
+                               " sent at " + deletedMessageTime(date), PURPLE_MESSAGE_SYSTEM, 0),
+        ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+                               deleter + " deleted their message sent at " + deletedMessageTime(later),
+                               PURPLE_MESSAGE_SYSTEM, 0)
     );
 }
 
