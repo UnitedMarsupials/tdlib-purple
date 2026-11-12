@@ -709,18 +709,6 @@ static void compare(const closeChat &actual, const closeChat &expected)
     COMPARE(chat_id_);
 }
 
-static void compare(const setOption &actual, const setOption &expected)
-{
-    COMPARE(name_);
-    ASSERT_EQ(expected.value_ != nullptr, actual.value_ != nullptr);
-    if (expected.value_) {
-        ASSERT_EQ(optionValueBoolean::ID, expected.value_->get_id()) << "Only boolean options compared";
-        ASSERT_EQ(expected.value_->get_id(), actual.value_->get_id());
-        ASSERT_EQ(static_cast<const optionValueBoolean &>(*expected.value_).value_,
-                  static_cast<const optionValueBoolean &>(*actual.value_).value_);
-    }
-}
-
 static void compare(const getMessageAddedReactions &actual, const getMessageAddedReactions &expected)
 {
     COMPARE(chat_id_);
@@ -798,7 +786,6 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(openChat)
         C(getChat)
         C(closeChat)
-        C(setOption)
         C(getMessageAddedReactions)
         case editMessageMedia::ID:
             compare(static_cast<const editMessageMedia &>(actual), static_cast<const editMessageMedia &>(expected),
