@@ -1200,6 +1200,35 @@ TEST_F(PrivateChatTest, DeleteContact)
 
 // TODO: test moving from main to archive or vice versa now that it's not atomic
 
+// A contact written to by their username, in any case, with or without the "@"; a name that could be
+// no username, as one in another alphabet, is not looked for as one
+TEST_F(PrivateChatTest, SendToUsername)
+{
+    loginWithOneContact();
+    auto user = makeUser(userIds[0], userFirstNames[0], userLastNames[0], userPhones[0],
+                         make_object<userStatusOffline>());
+    user->is_contact_ = true;
+    user->usernames_  = make_object<usernames>();
+    user->usernames_->active_usernames_.push_back("galileo_g");
+    user->usernames_->editable_username_ = "galileo_g";
+    auto update = make_object<updateUser>();
+    update->user_ = std::move(user);
+    tgl.update(std::move(update));
+    prpl.discardEvents();
+
+    for (const char *name: {"@Galileo_G", "GALILEO_G"}) {
+        ASSERT_EQ(0, pluginInfo().send_im(connection, name, "message", PURPLE_MESSAGE_SEND));
+        auto text = make_object<inputMessageText>();
+        text->text_ = makeFormattedText("message");
+        tgl.verifyRequest(*makeSendMessage(chatIds[0], 0, nullptr, nullptr, nullptr, std::move(text)));
+    }
+
+    pluginInfo().send_im(connection, "\xd0\x93\xd0\xb0\xd0\xbb\xd0\xb8\xd0\xbb\xd0\xb5\xd0\xb9", "message",
+                         PURPLE_MESSAGE_SEND);
+    tgl.verifyNoRequests();
+    prpl.discardEvents();
+}
+
 TEST_F(PrivateChatTest, MessageSendResponseError)
 {
     loginWithOneContact();

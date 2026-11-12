@@ -5,6 +5,7 @@
 #include <purple.h>
 #include <algorithm>
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 
 static bool isCanonicalPhoneNumber(const char *s)
@@ -643,6 +644,40 @@ void TdAccountData::getUsersByDisplayName(const char *displayName,
     for (const UserMap::value_type &entry: m_userInfo)
         if (entry.second.displayName == displayName)
             users.push_back(entry.second.user.get());
+}
+
+// Match by Telegram @username. Telegram usernames are case-insensitive; accept an optional leading
+// '@'. Checks the editable username and any active usernames.
+void TdAccountData::getUsersByUsername(const char *username,
+                                       std::vector<const td::td_api::user*> &users)
+{
+    users.clear();
+    if (!username || (*username == '\0'))
+        return;
+    if (*username == '@')
+        username++;
+    // A username is of Latin letters, digits and underscores, 32 of them at most: anything else, as a
+    // display name in another alphabet, is none
+    enum { MAX_USERNAME = 32 };
+    static const char USERNAME_CHARACTERS[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
+    size_t length = strlen(username);
+    if ((length == 0) || (length > MAX_USERNAME) || (strspn(username, USERNAME_CHARACTERS) != length))
+        return;
+    auto equalsIgnoreCase = [username](const std::string &candidate) {
+        return !g_ascii_strcasecmp(candidate.c_str(), username);
+    };
+
+    for (const UserMap::value_type &entry: m_userInfo) {
+        const td::td_api::user *u = entry.second.user.get();
+        if (!u || !u->usernames_)
+            continue;
+        bool hit = equalsIgnoreCase(u->usernames_->editable_username_);
+        if (!hit)
+            for (const std::string &active: u->usernames_->active_usernames_)
+                if (equalsIgnoreCase(active)) { hit = true; break; }
+        if (hit)
+            users.push_back(u);
+    }
 }
 
 const td::td_api::basicGroup *TdAccountData::getBasicGroup(BasicGroupId groupId) const
