@@ -1571,3 +1571,53 @@ TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListNullFirst)
 }
 
 // TODO: test non-user member
+
+// A group's own news, as members tell it: who added whom, who joined by request, who pinned a
+// message, who removed whom; a member not known is named as such
+TEST_F(GroupChatTest, GroupNewsInWords)
+{
+    constexpr int32_t date         = 12345;
+    constexpr int     purpleChatId = 1;
+    constexpr int64_t unknownUser  = 999;
+    loginWithBasicGroup();
+    tgl.update(standardUpdateUserNoPhone(0));
+    tgl.update(standardUpdateUserNoPhone(1));
+    const std::string sender = userFirstNames[0] + " " + userLastNames[0];
+    const std::string other  = userFirstNames[1] + " " + userLastNames[1];
+
+    auto added = make_object<messageChatAddMembers>();
+    added->member_user_ids_ = {userIds[1], unknownUser};
+    auto joined = make_object<messageChatJoinByRequest>();
+    auto pinned = make_object<messagePinMessage>();
+    pinned->message_id_ = 10000;
+    auto removed = make_object<messageChatDeleteMember>();
+    removed->user_id_ = userIds[1];
+
+    std::vector<object_ptr<MessageContent>> contents;
+    contents.push_back(std::move(added));
+    contents.push_back(std::move(joined));
+    contents.push_back(std::move(pinned));
+    contents.push_back(std::move(removed));
+    const std::vector<std::string> notices = {
+        sender + " added " + other + ", Unknown user",
+        sender + " joined",
+        sender + " pinned a message",
+        sender + " removed " + other,
+    };
+    for (size_t i = 0; i < contents.size(); i++) {
+        int64_t messageId = 10001 + i;
+        tgl.update(make_object<updateNewMessage>(
+            makeMessage(messageId, userIds[0], groupChatId, false, date, std::move(contents[i]))
+        ));
+        tgl.verifyRequest(viewMessages(groupChatId, {messageId}, nullptr, true));
+        if (i == 0)
+            prpl.verifyEvents(
+                ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
+                ConversationWriteEvent(groupChatPurpleName, NotificationWho, notices[i], PURPLE_MESSAGE_SYSTEM, date)
+            );
+        else
+            prpl.verifyEvents(
+                ConversationWriteEvent(groupChatPurpleName, NotificationWho, notices[i], PURPLE_MESSAGE_SYSTEM, date)
+            );
+    }
+}

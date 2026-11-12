@@ -875,3 +875,25 @@ TEST_F(SupergroupTest, UnjoinedChannelShownOnRequest)
     ASSERT_FALSE(purple_blist_node_get_flags(&purpleChat->node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
     prpl.verifyEvents(AddChatEvent(groupChatPurpleName, newTitle, account, NULL, NULL));
 }
+
+// A message pinned in a channel, by nobody named: in words all the same
+TEST_F(SupergroupTest, ChannelPinInWords)
+{
+    constexpr int32_t date         = 12345;
+    constexpr int64_t messageId    = 10001;
+    constexpr int     purpleChatId = 1;
+    loginWithSupergroup();
+
+    auto pinned = make_object<messagePinMessage>();
+    pinned->message_id_ = 10000;
+    auto message = makeMessage(messageId, 0, groupChatId, false, date, std::move(pinned));
+    message->is_channel_post_ = true;
+    tgl.update(make_object<updateNewMessage>(std::move(message)));
+    tgl.verifyRequest(viewMessages(groupChatId, {messageId}, nullptr, true));
+    prpl.verifyEvents(
+        ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
+        ChatSetTopicEvent(groupChatPurpleName, "", ""),
+        ChatClearUsersEvent(groupChatPurpleName),
+        ConversationWriteEvent(groupChatPurpleName, NotificationWho, "A message was pinned", PURPLE_MESSAGE_SYSTEM, date)
+    );
+}
