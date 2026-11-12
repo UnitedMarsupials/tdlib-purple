@@ -5,6 +5,7 @@
 #include <purple.h>
 #include <algorithm>
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 
 static bool isCanonicalPhoneNumber(const char *s)
@@ -646,9 +647,13 @@ void TdAccountData::getUsersByUsername(const char *username,
         return;
     if (*username == '@')
         username++;
-    if (*username == '\0')
+    // A username is of Latin letters, digits and underscores, 32 of them at most: anything else, as a
+    // display name in another alphabet, is none
+    enum { MAX_USERNAME = 32 };
+    static const char USERNAME_CHARACTERS[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
+    size_t length = strlen(username);
+    if ((length == 0) || (length > MAX_USERNAME) || (strspn(username, USERNAME_CHARACTERS) != length))
         return;
-    // Usernames are ASCII: comparing them so leaves other bytes, as of a display name, alone
     auto equalsIgnoreCase = [username](const std::string &candidate) {
         return !g_ascii_strcasecmp(candidate.c_str(), username);
     };
