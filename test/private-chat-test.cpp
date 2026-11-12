@@ -1215,7 +1215,7 @@ TEST_F(PrivateChatTest, SendToUsername)
     for (const char *name: {"@Galileo_G", "GALILEO_G"}) {
         ASSERT_EQ(0, pluginInfo().send_im(connection, name, "message", PURPLE_MESSAGE_SEND));
         auto text = make_object<inputMessageText>();
-        text->text_ = make_object<formattedText>("message", std::vector<object_ptr<textEntity>>());
+        text->text_ = makeFormattedText("message");
         tgl.verifyRequest(*makeSendMessage(chatIds[0], 0, nullptr, nullptr, nullptr, std::move(text)));
     }
 
