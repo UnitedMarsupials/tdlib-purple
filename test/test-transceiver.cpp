@@ -956,7 +956,12 @@ object_ptr<setTdlibParameters> makeTdlibParameters(const std::string &databaseDi
 // downloads" is set (it is not, by default).
 object_ptr<setOption> makeStorageOptimizerOption(bool useStorageOptimizer)
 {
-    return make_object<setOption>("use_storage_optimizer", make_object<optionValueBoolean>(useStorageOptimizer));
+    auto value     = make_object<optionValueBoolean>();
+    value->value_  = useStorageOptimizer;
+    auto option    = make_object<setOption>();
+    option->name_  = "use_storage_optimizer";
+    option->value_ = std::move(value);
+    return option;
 }
 
 object_ptr<Object> getChatsNoChatsResponse()
