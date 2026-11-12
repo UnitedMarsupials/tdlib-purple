@@ -534,9 +534,12 @@ void PurpleTdClient::promptAuthInputViaChat(AuthInput type, const std::string &m
     if (!purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, AUTH_INPUT_BUDDY, m_account))
         purple_conversation_new(PURPLE_CONV_TYPE_IM, m_account, AUTH_INPUT_BUDDY);
     keepAuthInputUnlogged();
+    // Unlike the request dialog's text, this goes into conversation markup: a password hint with
+    // "<" in it is to be shown as such
     std::string prompt = message;
     // TRANSLATOR: appended to the auth prompt shown in the fallback "Telegram" chat.
     prompt += std::string("\n") + _("Reply to this chat with the value above to continue.");
+    prompt = escapeForDisplay(prompt);
 
     // Deliver it the way a real incoming message arrives - serv_got_im - rather than by writing
     // straight into a conversation. serv_got_im is the whole receive path and not just its last
@@ -2200,9 +2203,11 @@ int PurpleTdClient::sendMessage(const char *buddyName, const char *message)
             return -1;
         // Should the conversation have been closed and opened anew meanwhile
         keepAuthInputUnlogged();
-        char *stripped = purple_markup_strip_html(message ? message : "");
-        g_strstrip(stripped);
         AuthInput type = m_authInputPending;
+        char *stripped = purple_markup_strip_html(message ? message : "");
+        // A password is taken as typed, spaces included: only the code and the name are trimmed
+        if (type != AuthInput::Password)
+            g_strstrip(stripped);
         m_authInputPending = AuthInput::None;
         switch (type) {
             case AuthInput::Code:        requestCodeEntered(this, stripped);  break;
