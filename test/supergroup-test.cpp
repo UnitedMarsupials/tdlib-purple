@@ -884,6 +884,271 @@ TEST_F(SupergroupTest, UnjoinedChannelShownOnRequest)
     prpl.verifyEvents(AddChatEvent(groupChatPurpleName, newTitle, account, NULL, NULL));
 }
 
+// The time a message was sent at, as a notice about it shows it (formatMessageTime)
+static std::string deletedMessageTime(time_t timestamp)
+{
+    char buf[80];
+    strftime(buf, sizeof(buf), "%x %X", localtime(&timestamp));
+    return buf;
+}
+
+void SupergroupTest::receiveMemberMessage(int64_t messageId, unsigned userIndex, int32_t date, bool first)
+{
+    constexpr int purpleChatId = 1;
+    tgl.update(make_object<updateNewMessage>(
+        makeMessage(messageId, userIds[userIndex], groupChatId, false, date, makeTextMessage("Hello"))
+    ));
+    tgl.verifyRequest(viewMessages(groupChatId, {messageId}, nullptr, true));
+    if (first)
+        prpl.verifyEvents(
+            ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
+            ChatSetTopicEvent(groupChatPurpleName, "", ""),
+            ChatClearUsersEvent(groupChatPurpleName),
+            ServGotChatEvent(connection, purpleChatId, purpleUserName(userIndex), "Hello", PURPLE_MESSAGE_RECV, date)
+        );
+    else
+        prpl.verifyEvents(ServGotChatEvent(connection, purpleChatId, purpleUserName(userIndex), "Hello",
+                                           PURPLE_MESSAGE_RECV, date));
+}
+
+// The request for the latest deletions in the log of events
+static object_ptr<getChatEventLog> makeDeletionsLogRequest(int64_t chatId, int32_t limit)
+{
+    auto filters = make_object<chatEventLogFilters>();
+    filters->message_deletions_ = true;
+    auto request = make_object<getChatEventLog>();
+    request->chat_id_ = chatId;
+    request->limit_   = limit;
+    request->filters_ = std::move(filters);
+    return request;
+}
+
+// A deletion as the log of events has it: the message, and who deleted it
+static object_ptr<chatEvent> makeDeletionEvent(int64_t eventId, int32_t date, object_ptr<MessageSender> &&deleter,
+                                               object_ptr<message> &&deleted)
+{
+    auto action = make_object<chatEventMessageDeleted>();
+    action->message_ = std::move(deleted);
+    auto event = make_object<chatEvent>();
+    event->id_        = eventId;
+    event->date_      = date;
+    event->member_id_ = std::move(deleter);
+    event->action_    = std::move(action);
+    return event;
+}
+
+static object_ptr<chatEvents> makeDeletionEvents(object_ptr<chatEvent> &&event)
+{
+    auto events = make_object<chatEvents>();
+    events->events_.push_back(std::move(event));
+    return events;
+}
+
+// An administrator reads who deleted a message in the log of events
+TEST_F(SupergroupTest, MessageDeletedByAnother)
+{
+    constexpr int32_t date      = 12345;
+    constexpr int64_t messageId = 10000;
+    loginWithSupergroup();
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusAdministrator>(), 2)));
+    prpl.discardEvents();
+    receiveMemberMessage(messageId, 0, date, true);
+
+    tgl.update(makeUpdateDeleteMessages(groupChatId, messageId, true, false));
+    uint64_t requestId = tgl.verifyRequest(*makeDeletionsLogRequest(groupChatId, 11));
+    prpl.verifyNoEvents();
+
+    tgl.reply(requestId, makeDeletionEvents(makeDeletionEvent(1, date + 60, make_object<messageSenderUser>(userIds[1]),
+        makeMessage(messageId, userIds[0], groupChatId, false, date, makeTextMessage("Hello")))));
+    prpl.verifyEvents(ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+        userFirstNames[1] + " " + userLastNames[1] + " deleted the message " + userFirstNames[0] + " " +
+        userLastNames[0] + " sent at " + deletedMessageTime(date), PURPLE_MESSAGE_SYSTEM, 0));
+}
+
+// The sender deleted it
+TEST_F(SupergroupTest, MessageDeletedBySender)
+{
+    constexpr int32_t date      = 12345;
+    constexpr int64_t messageId = 10000;
+    loginWithSupergroup();
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusAdministrator>(), 2)));
+    prpl.discardEvents();
+    receiveMemberMessage(messageId, 0, date, true);
+
+    tgl.update(makeUpdateDeleteMessages(groupChatId, messageId, true, false));
+    uint64_t requestId = tgl.verifyRequest(*makeDeletionsLogRequest(groupChatId, 11));
+    tgl.reply(requestId, makeDeletionEvents(makeDeletionEvent(1, date + 60, make_object<messageSenderUser>(userIds[0]),
+        makeMessage(messageId, userIds[0], groupChatId, false, date, makeTextMessage("Hello")))));
+    prpl.verifyEvents(ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+        userFirstNames[0] + " " + userLastNames[0] + " deleted their message sent at " + deletedMessageTime(date),
+        PURPLE_MESSAGE_SYSTEM, 0));
+}
+
+// The sender deleted it after changing their name: who they are, not their names, tell it was theirs
+TEST_F(SupergroupTest, MessageDeletedBySenderRenamed)
+{
+    constexpr int32_t date      = 12345;
+    constexpr int64_t messageId = 10000;
+    loginWithSupergroup();
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusAdministrator>(), 2)));
+    prpl.discardEvents();
+    receiveMemberMessage(messageId, 0, date, true);
+    tgl.update(make_object<updateUser>(makeUser(userIds[0], "Renamed", userLastNames[0], "",
+                                                make_object<userStatusOffline>())));
+    prpl.discardEvents();
+
+    tgl.update(makeUpdateDeleteMessages(groupChatId, messageId, true, false));
+    uint64_t requestId = tgl.verifyRequest(*makeDeletionsLogRequest(groupChatId, 11));
+    tgl.reply(requestId, makeDeletionEvents(makeDeletionEvent(1, date + 60, make_object<messageSenderUser>(userIds[0]),
+        makeMessage(messageId, userIds[0], groupChatId, false, date, makeTextMessage("Hello")))));
+    prpl.verifyEvents(ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+        "Renamed " + userLastNames[0] + " deleted their message sent at " + deletedMessageTime(date),
+        PURPLE_MESSAGE_SYSTEM, 0));
+}
+
+// We deleted it, and are named as our own messages are
+TEST_F(SupergroupTest, MessageDeletedByUs)
+{
+    constexpr int32_t date      = 12345;
+    constexpr int64_t messageId = 10000;
+    loginWithSupergroup();
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusAdministrator>(), 2)));
+    purple_account_set_alias(account, "Me");
+    prpl.discardEvents();
+    receiveMemberMessage(messageId, 0, date, true);
+
+    tgl.update(makeUpdateDeleteMessages(groupChatId, messageId, true, false));
+    uint64_t requestId = tgl.verifyRequest(*makeDeletionsLogRequest(groupChatId, 11));
+    tgl.reply(requestId, makeDeletionEvents(makeDeletionEvent(1, date + 60, make_object<messageSenderUser>(selfId),
+        makeMessage(messageId, userIds[0], groupChatId, false, date, makeTextMessage("Hello")))));
+    prpl.verifyEvents(ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+        "Me deleted the message " + userFirstNames[0] + " " + userLastNames[0] + " sent at " +
+        deletedMessageTime(date), PURPLE_MESSAGE_SYSTEM, 0));
+}
+
+// A signed post is the channel's own message, as the log has it, so it is no one's own even when
+// whoever deleted it has the name it is signed with
+TEST_F(SupergroupTest, SignedPostDeleted)
+{
+    constexpr int32_t date         = 12345;
+    constexpr int64_t messageId    = 10000;
+    constexpr int     purpleChatId = 1;
+    const std::string signer       = userFirstNames[1] + " " + userLastNames[1];
+    loginWithSupergroup();
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusAdministrator>(), 2)));
+    prpl.discardEvents();
+
+    auto post = makeMessage(messageId, 0, groupChatId, false, date, makeTextMessage("Post"));
+    post->is_channel_post_  = true;
+    post->author_signature_ = signer;
+    tgl.update(make_object<updateNewMessage>(std::move(post)));
+    tgl.verifyRequest(viewMessages(groupChatId, {messageId}, nullptr, true));
+    prpl.verifyEvents(
+        ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
+        ChatSetTopicEvent(groupChatPurpleName, "", ""),
+        ChatClearUsersEvent(groupChatPurpleName),
+        ServGotChatEvent(connection, purpleChatId, signer, "Post", PURPLE_MESSAGE_RECV, date)
+    );
+
+    tgl.update(makeUpdateDeleteMessages(groupChatId, messageId, true, false));
+    uint64_t requestId = tgl.verifyRequest(*makeDeletionsLogRequest(groupChatId, 11));
+    auto logged = makeMessage(messageId, 0, groupChatId, false, date, makeTextMessage("Post"));
+    logged->sender_id_        = make_object<messageSenderChat>(groupChatId);
+    logged->is_channel_post_  = true;
+    logged->author_signature_ = signer;
+    tgl.reply(requestId, makeDeletionEvents(makeDeletionEvent(1, date + 60, make_object<messageSenderUser>(userIds[1]),
+                                                              std::move(logged))));
+    prpl.verifyEvents(ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+        signer + " deleted the message " + signer + " sent at " + deletedMessageTime(date), PURPLE_MESSAGE_SYSTEM, 0));
+}
+
+// Two messages deleted at once: one request for both, and a deletion made meanwhile, newer, is not
+// taken for theirs
+TEST_F(SupergroupTest, MessagesDeletedTogether)
+{
+    constexpr int32_t date        = 12345;
+    constexpr int64_t messageId[] = {10000, 10001};
+    loginWithSupergroup();
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, makeChatMemberStatusCreator("", false, true), 2)));
+    prpl.discardEvents();
+    // Each told apart: sent by different members at different times, one deleted by another member,
+    // the other by its sender
+    constexpr int32_t later = date + 5;
+    receiveMemberMessage(messageId[0], 0, date, true);
+    receiveMemberMessage(messageId[1], 1, later, false);
+
+    auto update = make_object<updateDeleteMessages>();
+    update->chat_id_      = groupChatId;
+    update->message_ids_  = {messageId[0], messageId[1]};
+    update->is_permanent_ = true;
+    update->from_cache_   = false;
+    tgl.update(std::move(update));
+    uint64_t requestId = tgl.verifyRequest(*makeDeletionsLogRequest(groupChatId, 12));
+    tgl.verifyNoRequests();
+    prpl.verifyNoEvents();
+
+    auto events = make_object<chatEvents>();
+    events->events_.push_back(makeDeletionEvent(3, date + 70, make_object<messageSenderUser>(userIds[0]),
+        makeMessage(9999, userIds[0], groupChatId, false, date, makeTextMessage("Other"))));
+    events->events_.push_back(makeDeletionEvent(messageId[1], date + 60, make_object<messageSenderUser>(userIds[1]),
+        makeMessage(messageId[1], userIds[1], groupChatId, false, later, makeTextMessage("Hello"))));
+    events->events_.push_back(makeDeletionEvent(messageId[0], date + 60, make_object<messageSenderUser>(userIds[1]),
+        makeMessage(messageId[0], userIds[0], groupChatId, false, date, makeTextMessage("Hello"))));
+    tgl.reply(requestId, std::move(events));
+    const std::string deleter = userFirstNames[1] + " " + userLastNames[1];
+    prpl.verifyEvents(
+        ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+                               deleter + " deleted the message " + userFirstNames[0] + " " + userLastNames[0] +
+                               " sent at " + deletedMessageTime(date), PURPLE_MESSAGE_SYSTEM, 0),
+        ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+                               deleter + " deleted their message sent at " + deletedMessageTime(later),
+                               PURPLE_MESSAGE_SYSTEM, 0)
+    );
+}
+
+// The log fails, or does not answer in time: the notice names whose message it was, as without it
+TEST_F(SupergroupTest, MessageDeletedWithoutLog)
+{
+    constexpr int32_t date        = 12345;
+    constexpr int64_t messageId[] = {10000, 10001};
+    loginWithSupergroup();
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusAdministrator>(), 2)));
+    prpl.discardEvents();
+    receiveMemberMessage(messageId[0], 0, date, true);
+    receiveMemberMessage(messageId[1], 1, date, false);
+
+    tgl.update(makeUpdateDeleteMessages(groupChatId, messageId[0], true, false));
+    uint64_t requestId = tgl.verifyRequest(*makeDeletionsLogRequest(groupChatId, 11));
+    prpl.verifyNoEvents();
+    tgl.reply(requestId, makeError(400, "CHAT_ADMIN_REQUIRED"));
+    prpl.verifyEvents(ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+        "The message " + userFirstNames[0] + " " + userLastNames[0] + " sent at " + deletedMessageTime(date) +
+        " has been deleted", PURPLE_MESSAGE_SYSTEM, 0));
+
+    tgl.update(makeUpdateDeleteMessages(groupChatId, messageId[1], true, false));
+    tgl.verifyRequest(*makeDeletionsLogRequest(groupChatId, 11));
+    prpl.verifyNoEvents();
+    tgl.runTimeouts();
+    prpl.verifyEvents(ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+        "The message " + userFirstNames[1] + " " + userLastNames[1] + " sent at " + deletedMessageTime(date) +
+        " has been deleted", PURPLE_MESSAGE_SYSTEM, 0));
+}
+
+// Not an administrator, we cannot read the log, so it is not asked
+TEST_F(SupergroupTest, MessageDeletedNotAdministrator)
+{
+    constexpr int32_t date      = 12345;
+    constexpr int64_t messageId = 10000;
+    loginWithSupergroup();
+    receiveMemberMessage(messageId, 0, date, true);
+
+    tgl.update(makeUpdateDeleteMessages(groupChatId, messageId, true, false));
+    tgl.verifyNoRequests();
+    prpl.verifyEvents(ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+        "The message " + userFirstNames[0] + " " + userLastNames[0] + " sent at " + deletedMessageTime(date) +
+        " has been deleted", PURPLE_MESSAGE_SYSTEM, 0));
+}
+
 // Requests and updates of the lookups, built by their fields' names
 static object_ptr<getChat> makeGetChat(int64_t chatId)
 {
