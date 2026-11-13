@@ -120,6 +120,23 @@ PurpleConnection *purple_account_get_connection(const PurpleAccount *account)
     return account->gc;
 }
 
+static bool g_presenceIdle = false;
+
+extern "C++" void setPresenceIdle(bool idle)
+{
+    g_presenceIdle = idle;
+}
+
+PurplePresence *purple_account_get_presence(const PurpleAccount *account)
+{
+    return NULL;
+}
+
+gboolean purple_presence_is_idle(const PurplePresence *presence)
+{
+    return g_presenceIdle;
+}
+
 gboolean purple_account_is_connected(const PurpleAccount *account)
 {
     return PURPLE_CONNECTION_IS_CONNECTED(account->gc);
@@ -805,8 +822,14 @@ PurpleConversation *purple_find_conversation_with_account(
 
 GList *purple_get_conversations(void)
 {
-    // Only wanted for Pidgin's window, which the tests do not have
-    return NULL;
+    // libpurple's own list, not to be freed by the caller: made anew each time
+    static GList *conversations = NULL;
+    g_list_free(conversations);
+    conversations = NULL;
+    for (const AccountInfo &info: g_accounts)
+        for (PurpleConversation *conv: info.conversations)
+            conversations = g_list_append(conversations, conv);
+    return conversations;
 }
 
 void *purple_notify_message(void *handle, PurpleNotifyMsgType type,
@@ -862,6 +885,10 @@ gpointer purple_conversation_get_data(PurpleConversation *conv, const char *key)
 {
     auto it = g_conversationData.find(std::make_pair(conv, std::string(key)));
     return (it != g_conversationData.end()) ? it->second : NULL;
+}
+
+void purple_conversation_update(PurpleConversation *conv, PurpleConvUpdateType type)
+{
 }
 
 void purple_imgstore_unref_by_id(int id)
@@ -928,6 +955,11 @@ int purple_prefs_get_int(const char *name)
     return 0;
 }
 
+PurpleIdleUiOps *purple_idle_get_ui_ops(void)
+{
+    return NULL;
+}
+
 void purple_conversation_clear_message_history(PurpleConversation *conv)
 {
 }
@@ -951,6 +983,13 @@ void *purple_request_action(void *handle, const char *title, const char *primary
     return NULL;
 }
 
+static bool g_requestInputSupported = true;
+
+extern "C++" void setRequestInputSupported(bool supported)
+{
+    g_requestInputSupported = supported;
+}
+
 void *purple_request_input(void *handle, const char *title, const char *primary,
 	const char *secondary, const char *default_value, gboolean multiline,
 	gboolean masked, gchar *hint,
@@ -959,6 +998,9 @@ void *purple_request_input(void *handle, const char *title, const char *primary,
 	PurpleAccount *account, const char *who, PurpleConversation *conv,
 	void *user_data)
 {
+    // No request ui-ops: libpurple asks nothing and returns NULL
+    if (!g_requestInputSupported)
+        return NULL;
     EVENT(RequestInputEvent, handle, title, primary, secondary, default_value, ok_text, ok_cb,
           cancel_text, cancel_cb, account, who, conv, user_data);
 

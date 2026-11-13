@@ -414,6 +414,7 @@ public:
     void addChat(TdChatPtr chat); // Updates existing chat if any
     void updateChatPosition(ChatId chatId, td::td_api::object_ptr<td::td_api::chatPosition> &&position);
     void updateChatTitle(ChatId chatId, const std::string &title);
+    void updateChatReadInbox(ChatId chatId, MessageId lastRead, int32_t unreadCount);
     void updateChatActionBar(ChatId chatId, td::td_api::object_ptr<td::td_api::ChatActionBar> actionBar);
     void updateSmallChatPhoto(ChatId chatId, td::td_api::object_ptr<td::td_api::file> photo);
     void setContacts(const td::td_api::users &users);
@@ -435,6 +436,10 @@ public:
     std::string                   getDisplayName(UserId userId) const;
     void                          getUsersByDisplayName(const char *displayName,
                                                         std::vector<const td::td_api::user*> &users);
+    // Resolve a Telegram @username (case-insensitive, optional leading '@') to loaded users, so
+    // that a message addressed to a handle rather than an "id<n>" buddy can find its user.
+    void                          getUsersByUsername(const char *username,
+                                                     std::vector<const td::td_api::user*> &users);
 
     const td::td_api::basicGroup *getBasicGroup(BasicGroupId groupId) const;
     const td::td_api::basicGroupFullInfo *getBasicGroupInfo(BasicGroupId groupId) const;

@@ -251,11 +251,25 @@ std::vector<const td::td_api::user *> getUsersByPurpleName(const char *buddyName
         const td::td_api::user *self = account.getUserByPhone(purple_account_get_username(account.purpleAccount));
         if (self)
             result.push_back(self);
+    } else if (isPhoneNumber(buddyName)) {
+        // A front-end may address a contact by phone number (e.g. "+15555550100", as a dialer or an
+        // address book would) rather than by an "id<n>" buddy or a display name. Resolve the number
+        // to the Telegram user through the phone index.
+        const td::td_api::user *tdUser = account.getUserByPhone(buddyName);
+        if (tdUser != nullptr)
+            result.push_back(tdUser);
+        else if (action)
+            purple_debug_warning(config::pluginId, "Cannot %s: no Telegram user with phone number %s\n", action, buddyName);
     } else {
         account.getUsersByDisplayName(buddyName, result);
+        // A conversation may also be addressed by Telegram @username rather than an "id<n>" buddy
+        // or the display name; fall back to a username match so those sends resolve instead of
+        // failing with "User not found".
+        if (result.empty())
+            account.getUsersByUsername(buddyName, result);
         if (action) {
             if (result.empty())
-                purple_debug_warning(config::pluginId, "Cannot %s: no user with display name '%s'\n",
+                purple_debug_warning(config::pluginId, "Cannot %s: no user with display name or username '%s'\n",
                                     action, buddyName);
             else if (result.size() != 1)
                 purple_debug_warning(config::pluginId, "Cannot %s: more than one user with display name '%s'\n",
@@ -671,8 +685,18 @@ void updateSupergroupChat(TdAccountData &account, SupergroupId groupId)
         purpleDebug("Supergroup {} does not exist yet\n", groupId.value());
     else if (!chat)
         purpleDebug("Chat for supergroup {} does not exist yet\n", groupId.value());
-    else
+    else {
         updateGroupChat(account, *chat, group->status_, "supergroup", std::to_string(groupId.value()));
+        PurpleChat *purpleChat = purple_blist_find_chat(account.purpleAccount, getPurpleChatName(*chat).c_str());
+        if (!purpleChat)
+            return;
+        PurpleBlistNode *node = PURPLE_BLIST_NODE(purpleChat);
+        if (group->usernames_ && !group->usernames_->active_usernames_.empty())
+            purple_blist_node_set_string(node, BuddyOptions::PublicName,
+                                         group->usernames_->active_usernames_.front().c_str());
+        else if (purple_blist_node_get_string(node, BuddyOptions::PublicName))
+            purple_blist_node_remove_setting(node, BuddyOptions::PublicName);
+    }
 }
 
 bool isInviteLinkActive(const td::td_api::chatInviteLink &linkInfo)
