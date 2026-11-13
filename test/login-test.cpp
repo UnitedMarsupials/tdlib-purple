@@ -52,7 +52,7 @@ TEST_F(LoginTest, ConnectionReadyBeforeAuthReady)
     tgl.verifyRequest(*getChatsRequest());
     prpl.verifyNoEvents();
     tgl.reply(getChatsNoChatsResponse());
-    tgl.verifyRequest(setOption("online", make_object<optionValueBoolean>(true)));
+    tgl.verifyRequest(*makeOnlineOption(true));
 
     prpl.verifyEvents(
         AccountSetAliasEvent(account, selfFirstName + " " + selfLastName),
@@ -137,7 +137,7 @@ TEST_F(LoginTest, RegisterNewAccount_WithAlias_ConnectionReadyBeforeAuthReady)
     tgl.verifyRequest(*getChatsRequest());
     prpl.verifyNoEvents();
     tgl.reply(getChatsNoChatsResponse());
-    tgl.verifyRequest(setOption("online", make_object<optionValueBoolean>(true)));
+    tgl.verifyRequest(*makeOnlineOption(true));
 
     prpl.verifyEvents(
         AccountSetAliasEvent(account, selfFirstName + " " + selfLastName),
@@ -497,7 +497,7 @@ TEST_F(LoginTest, getChatsSequence)
     tgl.verifyRequest(*getChatsRequest());
     tgl.update(standardPrivateChat(1));
     tgl.reply(getChatsNoChatsResponse());
-    tgl.verifyRequest(setOption("online", make_object<optionValueBoolean>(true)));
+    tgl.verifyRequest(*makeOnlineOption(true));
 
     // updateUser were missing (not realistic though), so no buddies
     prpl.verifyEvents(

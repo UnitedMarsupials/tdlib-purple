@@ -1085,6 +1085,47 @@ object_ptr<chatInviteLink> makeChatInviteLink(const std::string &link)
     return result;
 }
 
+object_ptr<openChat> makeOpenChat(int64_t chatId)
+{
+    auto result = make_object<openChat>();
+    result->chat_id_ = chatId;
+    return result;
+}
+
+object_ptr<closeChat> makeCloseChat(int64_t chatId)
+{
+    auto result = make_object<closeChat>();
+    result->chat_id_ = chatId;
+    return result;
+}
+
+object_ptr<getBasicGroupFullInfo> makeGetBasicGroupFullInfo(int64_t groupId)
+{
+    auto result = make_object<getBasicGroupFullInfo>();
+    result->basic_group_id_ = groupId;
+    return result;
+}
+
+object_ptr<setOption> makeOnlineOption(bool online)
+{
+    auto value = make_object<optionValueBoolean>();
+    value->value_ = online;
+    auto result = make_object<setOption>();
+    result->name_  = "online";
+    result->value_ = std::move(value);
+    return result;
+}
+
+object_ptr<updateChatReadInbox> makeUpdateChatReadInbox(int64_t chatId, int64_t lastReadInboxMessageId,
+                                                        int32_t unreadCount)
+{
+    auto result = make_object<updateChatReadInbox>();
+    result->chat_id_                    = chatId;
+    result->last_read_inbox_message_id_ = lastReadInboxMessageId;
+    result->unread_count_               = unreadCount;
+    return result;
+}
+
 object_ptr<importContacts> makeImportContacts(const std::string &phoneNumber)
 {
     auto result = make_object<importContacts>();

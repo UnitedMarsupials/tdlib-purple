@@ -98,6 +98,12 @@ object_ptr<chatMember> makeChatMember(int32_t userId, int32_t inviteUserId, time
                                       object_ptr<ChatMemberStatus> &&memberStatus, const void *);
 object_ptr<createChatInviteLink> makeInviteLinkRequest(int64_t chatId);
 object_ptr<chatInviteLink> makeChatInviteLink(const std::string &link);
+object_ptr<openChat> makeOpenChat(int64_t chatId);
+object_ptr<closeChat> makeCloseChat(int64_t chatId);
+object_ptr<getBasicGroupFullInfo> makeGetBasicGroupFullInfo(int64_t groupId);
+object_ptr<setOption> makeOnlineOption(bool online);
+object_ptr<updateChatReadInbox> makeUpdateChatReadInbox(int64_t chatId, int64_t lastReadInboxMessageId,
+                                                        int32_t unreadCount);
 
 // Requests and replies whose shape depends on the TDLib version (see buildopt.h).
 object_ptr<importContacts> makeImportContacts(const std::string &phoneNumber);

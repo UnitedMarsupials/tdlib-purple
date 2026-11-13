@@ -1337,7 +1337,7 @@ TEST_F(GroupChatTest, Roomlist)
     prpl.verifyEvents(RoomlistInProgressEvent(earlyRoomlist, TRUE));
 
     tgl.reply(getChatsNoChatsResponse());
-    tgl.verifyRequest(setOption("online", make_object<optionValueBoolean>(true)));
+    tgl.verifyRequest(*makeOnlineOption(true));
 
     prpl.verifyEvents(
         RoomlistAddRoomEvent(superEarlyRoomlist, "id", groupChatPurpleName.c_str()),
@@ -1534,8 +1534,8 @@ TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListMainRightAway)
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle)
     );
     tgl.verifyRequests({
-        make_object<getBasicGroupFullInfo>(groupId),
-        make_object<openChat>(groupChatId)
+        makeGetBasicGroupFullInfo(groupId),
+        makeOpenChat(groupChatId)
     });
 }
 

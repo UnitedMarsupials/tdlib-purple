@@ -2056,8 +2056,9 @@ void PurpleTdClient::conversationShown(PurpleConversation *conv, bool shown)
     if (shown) {
         m_openChats[chatId];
         // Not open, if TDLib would not have it: tried again when next shown
-        m_transceiver.sendQuery(td::td_api::make_object<td::td_api::openChat>(chatId.value()),
-                                [this, chatId](uint64_t, TdObjectPtr object) {
+        auto request = td::td_api::make_object<td::td_api::openChat>();
+        request->chat_id_ = chatId.value();
+        m_transceiver.sendQuery(std::move(request), [this, chatId](uint64_t, TdObjectPtr object) {
             if (object && (object->get_id() == td::td_api::error::ID))
                 m_openChats.erase(chatId);
         });

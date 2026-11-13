@@ -393,7 +393,7 @@ TEST_F(PrivateChatTest, ContactWithoutChatAtLogin)
         userFirstNames[0] + " " + userLastNames[0],
         nullptr, 0, 0, 0
     ));
-    tgl.verifyRequest(setOption("online", make_object<optionValueBoolean>(true)));
+    tgl.verifyRequest(*makeOnlineOption(true));
     prpl.verifyEvents(
         UserStatusEvent(account, purpleUserName(0), PURPLE_STATUS_AWAY),
         AccountSetAliasEvent(account, selfFirstName + " " + selfLastName),
@@ -1695,8 +1695,8 @@ TEST_F(PrivateChatTest, OfflineWhileIdle)
 
     pluginInfo().set_idle(connection, 300);
     tgl.verifyRequests({
-        make_object<setOption>("online", make_object<optionValueBoolean>(false)),
-        make_object<closeChat>(chatIds[0])
+        makeOnlineOption(false),
+        makeCloseChat(chatIds[0])
     });
     pluginInfo().set_idle(connection, 310);
     tgl.verifyNoRequests();
@@ -1708,8 +1708,8 @@ TEST_F(PrivateChatTest, OfflineWhileIdle)
     // Back: the chat is opened again, and the messages seen told anew, for TDLib to poll them
     pluginInfo().set_idle(connection, 0);
     tgl.verifyRequests({
-        make_object<setOption>("online", make_object<optionValueBoolean>(true)),
-        make_object<openChat>(chatIds[0])
+        makeOnlineOption(true),
+        makeOpenChat(chatIds[0])
     });
     client->messagesViewed(conv, {MessageId::fromString("1"), MessageId::fromString("2")});
     tgl.verifyRequest(viewMessages(chatIds[0], {1, 2}, nullptr, false));
@@ -1725,11 +1725,11 @@ TEST_F(PrivateChatTest, ReadElsewhere)
     purple_conversation_set_data(conv, "unseen-state", GINT_TO_POINTER(2));
 
     // Still some unread: Pidgin's count stays, being its own
-    tgl.update(make_object<updateChatReadInbox>(chatIds[0], 2, 1));
+    tgl.update(makeUpdateChatReadInbox(chatIds[0], 2, 1));
     EXPECT_EQ(3, GPOINTER_TO_INT(purple_conversation_get_data(conv, "unseen-count")));
     EXPECT_EQ(2, GPOINTER_TO_INT(purple_conversation_get_data(conv, "unseen-state")));
 
-    tgl.update(make_object<updateChatReadInbox>(chatIds[0], 3, 0));
+    tgl.update(makeUpdateChatReadInbox(chatIds[0], 3, 0));
 #ifndef NoPidgin
     EXPECT_EQ(0, GPOINTER_TO_INT(purple_conversation_get_data(conv, "unseen-count")));
     EXPECT_EQ(0, GPOINTER_TO_INT(purple_conversation_get_data(conv, "unseen-state")));
@@ -1757,8 +1757,8 @@ TEST_F(PrivateChatTest, IdleAtLogin)
 
     pluginInfo().set_idle(connection, 0);
     tgl.verifyRequests({
-        make_object<setOption>("online", make_object<optionValueBoolean>(true)),
-        make_object<openChat>(chatIds[0])
+        makeOnlineOption(true),
+        makeOpenChat(chatIds[0])
     });
 }
 
@@ -1791,7 +1791,7 @@ TEST_F(PrivateChatTest, OpenOrViewRejected)
     // Not open, so opened again when next shown
     client->conversationShown(conv, true);
     uint64_t requestId = tgl.verifyRequest(openChat(chatIds[0]));
-    tgl.reply(requestId, make_object<error>(400, "Chat not found"));
+    tgl.reply(requestId, makeError(400, "Chat not found"));
     client->conversationShown(conv, true);
     requestId = tgl.verifyRequest(openChat(chatIds[0]));
     tgl.reply(requestId, make_object<ok>());
@@ -1800,7 +1800,7 @@ TEST_F(PrivateChatTest, OpenOrViewRejected)
     std::vector<MessageId> seen = {MessageId::fromString("1"), MessageId::fromString("2")};
     client->messagesViewed(conv, seen);
     requestId = tgl.verifyRequest(viewMessages(chatIds[0], {1, 2}, nullptr, false));
-    tgl.reply(requestId, make_object<error>(400, "Bad request"));
+    tgl.reply(requestId, makeError(400, "Bad request"));
     client->messagesViewed(conv, seen);
     requestId = tgl.verifyRequest(viewMessages(chatIds[0], {1, 2}, nullptr, false));
     tgl.reply(requestId, make_object<ok>());

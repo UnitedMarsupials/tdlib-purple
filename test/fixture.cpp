@@ -152,7 +152,7 @@ void CommTest::login(std::initializer_list<object_ptr<Object>> extraUpdates, obj
     }
     // Not idle, the user is online once the chats are known
     if (chatListReadyAtLogin)
-        tgl.verifyRequestAmong(setOption("online", make_object<optionValueBoolean>(true)));
+        tgl.verifyRequestAmong(*makeOnlineOption(true));
     for (int64_t chatId: chatsOpenedAtLogin)
         tgl.verifyRequestAmong(openChat(chatId));
 
