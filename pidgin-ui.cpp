@@ -4,6 +4,7 @@
 #include "client-utils.h"
 #include "config.h"
 #include <algorithm>
+#include <set>
 #include <string>
 
 #ifndef NoPidgin
@@ -165,6 +166,10 @@ FRONT_END_FUNCTION(gtk_image_get_pixbuf);
 FRONT_END_FUNCTION(gdk_pixbuf_scale_simple);
 FRONT_END_FUNCTION(gdk_pixbuf_get_width);
 FRONT_END_FUNCTION(gdk_pixbuf_get_height);
+FRONT_END_FUNCTION(pidgin_conv_window_get_active_conversation);
+FRONT_END_FUNCTION(gdk_window_get_state);
+FRONT_END_FUNCTION(gtk_text_view_get_visible_rect);
+FRONT_END_FUNCTION(gtk_window_is_active);
 
 static bool g_pidginUi = false;
 
@@ -465,6 +470,8 @@ static gboolean displayingMessage(PurpleAccount *account, const char *who, char 
     return FALSE;
 }
 
+static void scheduleViewCheck(PurpleConversation *conv);
+
 // Emitted by Pidgin once it has written into a tab; not if another plugin stopped the writing.
 // The marks are set (again) after each part of the message, while the conversation surely exists.
 static void displayedMessage(PurpleAccount *account, const char *who, char *message,
@@ -493,6 +500,8 @@ static void displayedMessage(PurpleAccount *account, const char *who, char *mess
         }
         g_messageBeingWritten->bodyMarked = true;
     }
+    if (conv)
+        scheduleViewCheck(conv);
 }
 
 static BuddyMarkHandler g_buddyMarkHandler = nullptr;
@@ -522,6 +531,7 @@ static guint g_connectSource = 0;
 static void connectPaste(gpointer plugin);
 static void connectPopup();
 static void connectScroll();
+static void connectShown(gpointer plugin);
 
 static gboolean connectSignals(gpointer plugin)
 {
@@ -542,6 +552,7 @@ static gboolean connectSignals(gpointer plugin)
     connectPaste(plugin);
     connectPopup();
     connectScroll();
+    connectShown(plugin);
     return FALSE;
 }
 
@@ -595,9 +606,11 @@ static void disconnectPaste();
 static void disconnectPopup();
 static void disconnectScroll();
 static void disconnectReactionTips();
+static void disconnectShown();
 
 void pidginUiUnload()
 {
+    disconnectShown();
     disconnectReactionTips();
     disconnectPaste();
     disconnectPopup();
@@ -2626,7 +2639,7 @@ void setTopReachedHandler(TopReachedHandler handler)
 static gboolean scrolled(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
 {
     GtkAdjustment *adjustment = paramCount ? static_cast<GtkAdjustment *>(p_g_value_get_object(&params[0])) : nullptr;
-    if (!adjustment || !g_topReachedHandler)
+    if (!adjustment)
         return TRUE;
     for (GList *item = purple_get_conversations(); item; item = item->next) {
         PurpleConversation *conv   = static_cast<PurpleConversation *>(item->data);
@@ -2634,6 +2647,9 @@ static gboolean scrolled(GSignalInvocationHint *, guint paramCount, const GValue
                                             config::pluginId) ? nullptr : getIMHtml(conv);
         if (!imhtml || (reinterpret_cast<GtkTextView *>(imhtml)->vadjustment != adjustment))
             continue;
+        scheduleViewCheck(conv);
+        if (!g_topReachedHandler)
+            break;
         bool atTop  = adjustment->value <= adjustment->lower;
         bool wasTop = purple_conversation_get_data(conv, AT_TOP_KEY) != nullptr;
         if (atTop && (adjustment->upper <= adjustment->page_size))
@@ -2692,6 +2708,457 @@ static void disconnectScroll()
         p_g_signal_remove_emission_hook(g_wheelSignal, g_wheelHook);
     g_scrollHook = 0;
     g_wheelHook  = 0;
+}
+
+// The tabs shown, as last told, worked out anew whenever that may have changed: until it can be,
+// every tab is taken to be shown
+static bool                           g_tracksShown       = false;
+static std::set<PurpleConversation *> g_shownConversations;
+static ShownHandler                   g_shownHandler      = nullptr;
+static ViewedHandler                  g_viewedHandler     = nullptr;
+static guint                          g_windowStateSignal = 0;
+static gulong                         g_windowStateHook   = 0;
+static guint                          g_notifySignal      = 0;
+static gulong                         g_focusHook         = 0;
+static guint                          g_shownSource       = 0;
+static const char                     VIEW_SOURCE_KEY[]   = "tdlib-purple-view-source";
+
+// Not on screen until it has stood still this long
+enum { VIEW_SETTLE_MS = 1000 };
+
+bool clearUnseen(PurpleConversation *conv)
+{
+    // As Pidgin's gtkconv_set_unseen() does, which it does not export: the tab's state is what
+    // the tab and the tray's menu go by, the conversation's data what the counts do
+    PidginConversation *gtkconv = getIMHtml(conv) ? PIDGIN_CONVERSATION(conv) : nullptr;
+    if (gtkconv && (gtkconv->active_conv != conv))
+        return false;
+    bool unseen = gtkconv ? (gtkconv->unseen_state != PIDGIN_UNSEEN_NONE)
+                          : (purple_conversation_get_data(conv, "unseen-state") != nullptr);
+    if (!unseen)
+        return false;
+    if (gtkconv) {
+        gtkconv->unseen_count = 0;
+        gtkconv->unseen_state = PIDGIN_UNSEEN_NONE;
+    }
+    purple_conversation_set_data(conv, "unseen-count", GINT_TO_POINTER(0));
+    purple_conversation_set_data(conv, "unseen-state", GINT_TO_POINTER(PIDGIN_UNSEEN_NONE));
+    purple_conversation_update(conv, PURPLE_CONV_UPDATE_UNSEEN);
+    return true;
+}
+
+bool tracksShownConversations()
+{
+    return g_tracksShown;
+}
+
+bool isConversationShown(PurpleConversation *conv)
+{
+    return !g_tracksShown || g_shownConversations.count(conv);
+}
+
+void setShownHandler(ShownHandler handler)
+{
+    g_shownHandler = handler;
+}
+
+bool viewsMessages(PurpleConversation *conv)
+{
+    return g_tracksShown && getIMHtml(conv);
+}
+
+void setViewedHandler(ViewedHandler handler)
+{
+    g_viewedHandler = handler;
+}
+
+static bool isOurConversation(PurpleConversation *conv)
+{
+    return !strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId);
+}
+
+static bool findShown(PurpleConversation *conv)
+{
+    if (!getIMHtml(conv))
+        return false;
+    PidginWindow *win    = PIDGIN_CONVERSATION(conv)->win;
+    GtkWidget    *window = win ? win->window : nullptr;
+    return window && (p_pidgin_conv_window_get_active_conversation(win) == conv) &&
+           (reinterpret_cast<GtkObject *>(window)->flags & GTK_MAPPED) && window->window &&
+           !(p_gdk_window_get_state(window->window) & GDK_WINDOW_STATE_ICONIFIED);
+}
+
+// Screen lockers say whether they are on over the session's D-Bus, each desktop's under a name of its
+// own, all alike: asked once, and followed after. One not there never answers.
+struct ScreenLocker {
+    const char *name; // its interface too
+    const char *path;
+};
+static const ScreenLocker SCREEN_LOCKERS[] = {
+    {"org.freedesktop.ScreenSaver", "/org/freedesktop/ScreenSaver"}, // KDE's, xfce4-screensaver, light-locker
+    {"org.gnome.ScreenSaver",       "/org/gnome/ScreenSaver"},
+    {"org.mate.ScreenSaver",        "/org/mate/ScreenSaver"},
+    {"org.cinnamon.ScreenSaver",    "/org/cinnamon/ScreenSaver"},
+    {"org.xfce.ScreenSaver",        "/org/xfce/ScreenSaver"},
+};
+enum { SCREEN_LOCKER_COUNT = G_N_ELEMENTS(SCREEN_LOCKERS) };
+static GDBusConnection *g_sessionBus                              = nullptr;
+static GCancellable    *g_busCancellable                          = nullptr;
+static guint            g_lockerSubscriptions[SCREEN_LOCKER_COUNT] = {};
+static bool             g_lockerActive[SCREEN_LOCKER_COUNT]        = {};
+
+static void setLockerActive(size_t index, GVariant *value)
+{
+    if (!value || !g_variant_is_of_type(value, G_VARIANT_TYPE("(b)")))
+        return;
+    gboolean active = FALSE;
+    g_variant_get(value, "(b)", &active);
+    if (active != g_lockerActive[index])
+        purple_debug_misc(config::pluginId, "%s is %s\n", SCREEN_LOCKERS[index].name, active ? "on" : "off");
+    g_lockerActive[index] = active;
+}
+
+static void lockerChanged(GDBusConnection *, const gchar *, const gchar *, const gchar *, const gchar *,
+                          GVariant *parameters, gpointer data)
+{
+    setLockerActive(GPOINTER_TO_SIZE(data), parameters);
+}
+
+static void lockerAnswered(GObject *source, GAsyncResult *result, gpointer data)
+{
+    GError   *error = nullptr;
+    GVariant *reply = g_dbus_connection_call_finish(G_DBUS_CONNECTION(source), result, &error);
+    if (!reply) {
+        g_error_free(error);
+        return;
+    }
+    // Gone meanwhile
+    if (g_sessionBus) {
+        purple_debug_misc(config::pluginId, "Screen locking is told by %s\n", SCREEN_LOCKERS[GPOINTER_TO_SIZE(data)].name);
+        setLockerActive(GPOINTER_TO_SIZE(data), reply);
+    }
+    g_variant_unref(reply);
+}
+
+static void sessionBusFound(GObject *, GAsyncResult *result, gpointer)
+{
+    GError          *error = nullptr;
+    GDBusConnection *bus   = g_bus_get_finish(result, &error);
+    if (!bus) {
+        if (!g_error_matches(error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+            purple_debug_misc(config::pluginId, "No session bus to ask screen lockers on: %s\n", error->message);
+        g_error_free(error);
+        return;
+    }
+    g_sessionBus = bus;
+    for (size_t i = 0; i < SCREEN_LOCKER_COUNT; i++) {
+        // On any path: KDE's says it on two
+        g_lockerSubscriptions[i] = g_dbus_connection_signal_subscribe(bus, SCREEN_LOCKERS[i].name,
+            SCREEN_LOCKERS[i].name, "ActiveChanged", nullptr, nullptr, G_DBUS_SIGNAL_FLAGS_NONE, lockerChanged,
+            GSIZE_TO_POINTER(i), nullptr);
+        g_dbus_connection_call(bus, SCREEN_LOCKERS[i].name, SCREEN_LOCKERS[i].path, SCREEN_LOCKERS[i].name,
+                               "GetActive", nullptr, G_VARIANT_TYPE("(b)"), G_DBUS_CALL_FLAGS_NO_AUTO_START, -1,
+                               g_busCancellable, lockerAnswered, GSIZE_TO_POINTER(i));
+    }
+}
+
+static void connectScreenLockers()
+{
+    g_busCancellable = g_cancellable_new();
+    g_bus_get(G_BUS_TYPE_SESSION, g_busCancellable, sessionBusFound, nullptr);
+}
+
+static void disconnectScreenLockers()
+{
+    if (g_busCancellable) {
+        g_cancellable_cancel(g_busCancellable);
+        g_object_unref(g_busCancellable);
+    }
+    g_busCancellable = nullptr;
+    if (g_sessionBus) {
+        for (guint &subscription: g_lockerSubscriptions)
+            if (subscription)
+                g_dbus_connection_signal_unsubscribe(g_sessionBus, subscription);
+        g_object_unref(g_sessionBus);
+    }
+    g_sessionBus = nullptr;
+    for (size_t i = 0; i < SCREEN_LOCKER_COUNT; i++) {
+        g_lockerSubscriptions[i] = 0;
+        g_lockerActive[i]        = false;
+    }
+}
+
+// The screen locked, as above; or blanked by the X server, or its monitor put to sleep, as asked of
+// its extensions, which Pidgin links against for its idle time: without them, or without X, it is
+// taken not to be. A screensaver program that tells neither grabs the keyboard, which takes the
+// focus from Pidgin's windows.
+struct ScreenSaverInfo {        // XScreenSaverInfo, as in X11/extensions/scrnsaver.h
+    unsigned long window;
+    int           state;
+    int           kind;
+    unsigned long tilOrSince;
+    unsigned long idle;
+    unsigned long eventMask;
+};
+enum { SCREEN_SAVER_ON = 1, DPMS_MODE_ON = 0 };
+using GetDisplay        = void *(*)();
+using GetRootWindow     = unsigned long (*)();
+using QueryExtension    = int (*)(void *display, int *eventBase, int *errorBase);
+using QueryScreenSaver  = int (*)(void *display, unsigned long drawable, ScreenSaverInfo *info);
+using DpmsCapable       = int (*)(void *display);
+using DpmsInfo          = int (*)(void *display, unsigned short *powerLevel, unsigned char *state);
+
+static bool isScreenBlanked()
+{
+    if (std::find(std::begin(g_lockerActive), std::end(g_lockerActive), true) != std::end(g_lockerActive))
+        return true;
+    static bool             lookedUp = false;
+    static void            *display  = nullptr;
+    static unsigned long    root     = 0;
+    static QueryScreenSaver querySaver = nullptr;
+    static DpmsInfo         dpmsInfo   = nullptr;
+    if (!lookedUp) {
+        lookedUp = true;
+        GetDisplay    getDisplay = reinterpret_cast<GetDisplay>(findFrontEndSymbol("gdk_x11_get_default_xdisplay"));
+        GetRootWindow getRoot    = reinterpret_cast<GetRootWindow>(findFrontEndSymbol("gdk_x11_get_default_root_xwindow"));
+        display = getDisplay ? getDisplay() : nullptr;
+        root    = (display && getRoot) ? getRoot() : 0;
+        int eventBase, errorBase;
+        QueryExtension saverExtension = reinterpret_cast<QueryExtension>(findFrontEndSymbol("XScreenSaverQueryExtension"));
+        if (root && saverExtension && saverExtension(display, &eventBase, &errorBase))
+            querySaver = reinterpret_cast<QueryScreenSaver>(findFrontEndSymbol("XScreenSaverQueryInfo"));
+        QueryExtension dpmsExtension = reinterpret_cast<QueryExtension>(findFrontEndSymbol("DPMSQueryExtension"));
+        DpmsCapable    dpmsCapable   = reinterpret_cast<DpmsCapable>(findFrontEndSymbol("DPMSCapable"));
+        if (display && dpmsExtension && dpmsCapable && dpmsExtension(display, &eventBase, &errorBase) &&
+            dpmsCapable(display))
+            dpmsInfo = reinterpret_cast<DpmsInfo>(findFrontEndSymbol("DPMSInfo"));
+        purple_debug_misc(config::pluginId, "Screen blanking %s told by the X server's saver, %s by DPMS\n",
+                          querySaver ? "is" : "is not", dpmsInfo ? "is" : "is not");
+    }
+    ScreenSaverInfo info;
+    if (querySaver && querySaver(display, root, &info) && (info.state == SCREEN_SAVER_ON))
+        return true;
+    unsigned short powerLevel;
+    unsigned char  enabled;
+    return dpmsInfo && dpmsInfo(display, &powerLevel, &enabled) && enabled && (powerLevel != DPMS_MODE_ON);
+}
+
+// Whether the tab, shown, is before the user's eyes: its window has the focus
+static bool isWindowFocused(PurpleConversation *conv)
+{
+    PidginWindow *win = getIMHtml(conv) ? PIDGIN_CONVERSATION(conv)->win : nullptr;
+    return win && win->window && p_gtk_window_is_active(reinterpret_cast<GtkWindow *>(win->window));
+}
+
+// The messages any of which is between the top and the bottom of the tab's text on screen
+static std::vector<MessageId> findViewedMessages(GtkIMHtml *imhtml)
+{
+    GtkTextView *view = reinterpret_cast<GtkTextView *>(imhtml);
+    GdkRectangle rect;
+    GtkTextIter  iter, last;
+    p_gtk_text_view_get_visible_rect(view, &rect);
+    p_gtk_text_view_get_iter_at_location(view, &iter, rect.x, rect.y);
+    p_gtk_text_view_get_iter_at_location(view, &last, rect.x + rect.width, rect.y + rect.height - 1);
+
+    std::vector<MessageId> messageIds;
+    MessageId              first = findMessageAt(imhtml->text_buffer, iter);
+    if (first.valid())
+        messageIds.push_back(first);
+    do {
+        GSList *marks = p_gtk_text_iter_get_marks(&iter);
+        for (GSList *item = marks; item; item = item->next) {
+            const char *name = p_gtk_text_mark_get_name(static_cast<GtkTextMark *>(item->data));
+            MessageId   messageId = (name && g_str_has_prefix(name, START_MARK_PREFIX))
+                                    ? MessageId::fromString(name + strlen(START_MARK_PREFIX)) : MessageId();
+            if (messageId.valid() && (messageIds.empty() || !(messageIds.back() == messageId)))
+                messageIds.push_back(messageId);
+        }
+        g_slist_free(marks);
+    } while ((p_gtk_text_iter_compare(&iter, &last) < 0) && p_gtk_text_iter_forward_char(&iter));
+    return messageIds;
+}
+
+static gboolean checkViewed(gpointer data)
+{
+    // Its source is removed with it
+    PurpleConversation *conv   = static_cast<PurpleConversation *>(data);
+    GtkIMHtml          *imhtml = getIMHtml(conv);
+    // Not focused: checked again once it is
+    bool focused = imhtml && g_shownConversations.count(conv) && isWindowFocused(conv);
+    // Still scrolling to the end, written to; or nobody sees it until the screen is woken up, which
+    // nothing tells
+    if (imhtml && (imhtml->scroll_src || (focused && isScreenBlanked())))
+        return G_SOURCE_CONTINUE;
+    purple_conversation_set_data(conv, VIEW_SOURCE_KEY, nullptr);
+    if (focused && g_viewedHandler) {
+        std::vector<MessageId> messageIds = findViewedMessages(imhtml);
+        if (!messageIds.empty())
+            g_viewedHandler(conv, messageIds);
+    }
+    return G_SOURCE_REMOVE;
+}
+
+static void stopViewCheck(PurpleConversation *conv)
+{
+    guint source = GPOINTER_TO_UINT(purple_conversation_get_data(conv, VIEW_SOURCE_KEY));
+    if (source) {
+        g_source_remove(source);
+        purple_conversation_set_data(conv, VIEW_SOURCE_KEY, nullptr);
+    }
+}
+
+static void scheduleViewCheck(PurpleConversation *conv)
+{
+    if (!g_tracksShown || !g_shownConversations.count(conv))
+        return;
+    stopViewCheck(conv);
+    guint source = g_timeout_add(VIEW_SETTLE_MS, checkViewed, conv);
+    purple_conversation_set_data(conv, VIEW_SOURCE_KEY, GUINT_TO_POINTER(source));
+}
+
+void checkViewedLater(PurpleConversation *conv)
+{
+    scheduleViewCheck(conv);
+}
+
+static void refreshShown()
+{
+    std::set<PurpleConversation *> shown;
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
+        if (isOurConversation(conv) && findShown(conv))
+            shown.insert(conv);
+    }
+    std::vector<PurpleConversation *> hidden, revealed;
+    for (PurpleConversation *conv: g_shownConversations)
+        if (!shown.count(conv))
+            hidden.push_back(conv);
+    for (PurpleConversation *conv: shown)
+        if (!g_shownConversations.count(conv))
+            revealed.push_back(conv);
+    g_shownConversations = std::move(shown);
+    for (PurpleConversation *conv: hidden) {
+        stopViewCheck(conv);
+        if (g_shownHandler)
+            g_shownHandler(conv, false);
+    }
+    for (PurpleConversation *conv: revealed) {
+        if (g_shownHandler)
+            g_shownHandler(conv, true);
+        scheduleViewCheck(conv);
+    }
+}
+
+static gboolean refreshShownNow(gpointer)
+{
+    g_shownSource = 0;
+    refreshShown();
+    return G_SOURCE_REMOVE;
+}
+
+// Once Pidgin is done: its window's chosen tab is not changed yet when it says it is switching
+static void refreshShownLater()
+{
+    if (!g_shownSource)
+        g_shownSource = g_idle_add(refreshShownNow, nullptr);
+}
+
+static void conversationSwitched(gpointer)
+{
+    refreshShownLater();
+}
+
+static void deletingConversation(PurpleConversation *conv)
+{
+    stopViewCheck(conv);
+    if (g_shownConversations.erase(conv) && g_shownHandler)
+        g_shownHandler(conv, false);
+    refreshShownLater();
+}
+
+// Any window minimized or restored, Pidgin's or not
+static gboolean windowStateChanged(GSignalInvocationHint *, guint, const GValue *, gpointer)
+{
+    refreshShownLater();
+    return TRUE;
+}
+
+// Any window given the focus or losing it, Pidgin's or not: the shown tabs of those focused are
+// looked at again, and none of the others is
+static gboolean focusChanged(GSignalInvocationHint *, guint, const GValue *, gpointer)
+{
+    for (PurpleConversation *conv: g_shownConversations)
+        if (isWindowFocused(conv))
+            scheduleViewCheck(conv);
+        else
+            stopViewCheck(conv);
+    return TRUE;
+}
+
+static void connectShown(gpointer plugin)
+{
+    if (!LOOK_UP(pidgin_conv_window_get_active_conversation) || !LOOK_UP(gdk_window_get_state) ||
+        !LOOK_UP(gtk_text_view_get_visible_rect) || !LOOK_UP(gtk_text_view_get_iter_at_location) ||
+        !LOOK_UP(gtk_text_iter_get_marks) || !LOOK_UP(gtk_text_mark_get_name) || !LOOK_UP(gtk_widget_get_type) ||
+        !LOOK_UP(gtk_window_is_active) ||
+        !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
+        !LOOK_UP(g_signal_remove_emission_hook))
+    {
+        purple_debug_warning(config::pluginId, "Cannot tell which tabs are shown: some of GTK is not found\n");
+        return;
+    }
+    g_windowStateSignal = p_g_signal_lookup("window-state-event", p_gtk_widget_get_type());
+    if (g_windowStateSignal)
+        g_windowStateHook = p_g_signal_add_emission_hook(g_windowStateSignal, 0, windowStateChanged, nullptr,
+                                                         nullptr);
+    // GtkWindow's is-active, said by GObject's notify
+    g_notifySignal = p_g_signal_lookup("notify", G_TYPE_OBJECT);
+    if (g_notifySignal)
+        g_focusHook = p_g_signal_add_emission_hook(g_notifySignal, g_quark_from_static_string("is-active"),
+                                                   focusChanged, nullptr, nullptr);
+    if (!g_windowStateHook || !g_focusHook) {
+        if (g_windowStateHook)
+            p_g_signal_remove_emission_hook(g_windowStateSignal, g_windowStateHook);
+        if (g_focusHook)
+            p_g_signal_remove_emission_hook(g_notifySignal, g_focusHook);
+        g_windowStateHook = 0;
+        g_focusHook       = 0;
+        purple_debug_warning(config::pluginId, "Cannot tell which tabs are shown: windows cannot be followed\n");
+        return;
+    }
+    purple_signal_connect(p_pidgin_conversations_get_handle(), "conversation-switched", plugin,
+                          PURPLE_CALLBACK(conversationSwitched), NULL);
+    purple_signal_connect(p_pidgin_conversations_get_handle(), "conversation-displayed", plugin,
+                          PURPLE_CALLBACK(conversationSwitched), NULL);
+    purple_signal_connect(purple_conversations_get_handle(), "deleting-conversation", plugin,
+                          PURPLE_CALLBACK(deletingConversation), NULL);
+    // Those that have been taken to be shown so far, which most are not
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
+        if (isOurConversation(conv) && getIMHtml(conv))
+            g_shownConversations.insert(conv);
+    }
+    g_tracksShown = true;
+    connectScreenLockers();
+    refreshShown();
+}
+
+static void disconnectShown()
+{
+    if (g_windowStateHook)
+        p_g_signal_remove_emission_hook(g_windowStateSignal, g_windowStateHook);
+    if (g_focusHook)
+        p_g_signal_remove_emission_hook(g_notifySignal, g_focusHook);
+    g_windowStateHook = 0;
+    g_focusHook       = 0;
+    if (g_shownSource)
+        g_source_remove(g_shownSource);
+    g_shownSource = 0;
+    for (GList *item = purple_get_conversations(); item; item = item->next)
+        stopViewCheck(static_cast<PurpleConversation *>(item->data));
+    g_shownConversations.clear();
+    disconnectScreenLockers();
+    g_tracksShown = false;
 }
 
 static void connectPopup()
@@ -2886,6 +3353,38 @@ bool copyFileToClipboard(const std::string &path, bool picture)
 }
 
 void setDraggedFileHandler(DraggedFileHandler handler)
+{
+}
+
+bool clearUnseen(PurpleConversation *conv)
+{
+    return false;
+}
+
+bool tracksShownConversations()
+{
+    return false;
+}
+
+bool isConversationShown(PurpleConversation *conv)
+{
+    return true;
+}
+
+void setShownHandler(ShownHandler handler)
+{
+}
+
+bool viewsMessages(PurpleConversation *conv)
+{
+    return false;
+}
+
+void setViewedHandler(ViewedHandler handler)
+{
+}
+
+void checkViewedLater(PurpleConversation *conv)
 {
 }
 

@@ -19,6 +19,8 @@ public:
     std::vector<uint64_t> verifyRequests(std::initializer_list<td::td_api::object_ptr<td::td_api::Function>> requests);
     void verifyRequests(const std::vector<const td::td_api::Function *> requests);
     void verifyNoRequests();
+    // One request among those sent, wherever it is: the others are left to be verified
+    void verifyRequestAmong(const td::td_api::Function &request);
 
     void update(td::td_api::object_ptr<td::td_api::Object> object);
 
@@ -96,6 +98,12 @@ object_ptr<chatMember> makeChatMember(int32_t userId, int32_t inviteUserId, time
                                       object_ptr<ChatMemberStatus> &&memberStatus, const void *);
 object_ptr<createChatInviteLink> makeInviteLinkRequest(int64_t chatId);
 object_ptr<chatInviteLink> makeChatInviteLink(const std::string &link);
+object_ptr<openChat> makeOpenChat(int64_t chatId);
+object_ptr<closeChat> makeCloseChat(int64_t chatId);
+object_ptr<getBasicGroupFullInfo> makeGetBasicGroupFullInfo(int64_t groupId);
+object_ptr<setOption> makeOnlineOption(bool online);
+object_ptr<updateChatReadInbox> makeUpdateChatReadInbox(int64_t chatId, int64_t lastReadInboxMessageId,
+                                                        int32_t unreadCount);
 
 // Requests and replies whose shape depends on the TDLib version (see buildopt.h).
 object_ptr<importContacts> makeImportContacts(const std::string &phoneNumber);

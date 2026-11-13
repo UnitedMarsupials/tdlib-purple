@@ -985,6 +985,16 @@ msgstr ""
 msgid "The name belongs to a user, not a group"
 msgstr ""
 
+#. TRANSLATOR: Error dialog, content
+#: ../td-client.cpp:2970
+msgid "You are no longer a member of this group or channel"
+msgstr ""
+
+#. TRANSLATOR: Error dialog, content
+#: ../td-client.cpp:2989
+msgid "Telegram does not know this group or channel"
+msgstr ""
+
 #. TRANSLATOR: Error dialog, content, argument is a reason (text)
 #: ../td-client.cpp:2795
 #, c++-format

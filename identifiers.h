@@ -79,6 +79,7 @@ DEFINE_ID_CLASS(ChatId, int64_t)
     friend ChatId getChatId(const td::td_api::message &message);
     friend ChatId getChatId(const td::td_api::updateChatAction &update);
     friend ChatId getChatId(const td::td_api::updateChatUnreadReactionCount &update);
+    friend ChatId getChatId(const td::td_api::updateChatReadInbox &update);
     friend ChatId getChatId(const td::td_api::updateChatLastMessage &update);
     friend ChatId getChatId(const td::td_api::updateMessageContent &update);
     friend ChatId getChatId(const td::td_api::updateDeleteMessages &update);
@@ -113,6 +114,7 @@ DEFINE_ID_CLASS(MessageId, int64_t)
     friend MessageId getMessageId(const td::td_api::updateMessageUnreadReactions &update);
     friend MessageId getOldMessageId(const td::td_api::updateMessageSendSucceeded &update);
     friend MessageId getLastReadMessageId(const td::td_api::chat &chat);
+    friend MessageId getLastReadMessageId(const td::td_api::updateChatReadInbox &update);
 };
 
 #undef DEFINE_ID_CLASS
@@ -144,6 +146,7 @@ ChatId       getChatId(const td::td_api::messageOriginChannel &forwardOrigin);
 ChatId       getChatId(const td::td_api::message &message);
 ChatId       getChatId(const td::td_api::updateChatAction &update);
 ChatId       getChatId(const td::td_api::updateChatUnreadReactionCount &update);
+ChatId       getChatId(const td::td_api::updateChatReadInbox &update);
 ChatId       getChatId(const td::td_api::updateChatLastMessage &update);
 ChatId       getChatId(const td::td_api::updateMessageContent &update);
 ChatId       getChatId(const td::td_api::updateDeleteMessages &update);
@@ -167,6 +170,7 @@ MessageId    getMessageId(const td::td_api::updateMessageUnreadReactions &update
 MessageId    getOldMessageId(const td::td_api::updateMessageSendSucceeded &update);
 // Of those received
 MessageId    getLastReadMessageId(const td::td_api::chat &chat);
+MessageId    getLastReadMessageId(const td::td_api::updateChatReadInbox &update);
 
 namespace std {
     static inline std::string to_string(UserId id) { return to_string(id.value()); }

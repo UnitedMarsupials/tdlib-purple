@@ -207,6 +207,7 @@ TEST_F(GroupChatTest, ExistingBasicGroupReceiveMessageAtLogin_WithMemberList_Rem
     );
     chat->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
 
+    chatsOpenedAtLogin = {groupChatId};
     login(
         {
             // Private chat with the contact
@@ -1336,6 +1337,7 @@ TEST_F(GroupChatTest, Roomlist)
     prpl.verifyEvents(RoomlistInProgressEvent(earlyRoomlist, TRUE));
 
     tgl.reply(getChatsNoChatsResponse());
+    tgl.verifyRequest(*makeOnlineOption(true));
 
     prpl.verifyEvents(
         RoomlistAddRoomEvent(superEarlyRoomlist, "id", groupChatPurpleName.c_str()),
@@ -1449,6 +1451,7 @@ TEST_F(GroupChatTest, OpenLeftGroupChat_ReceiveMessageAtLogin)
         groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0
     );
     chat->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
+    chatsOpenedAtLogin = {groupChatId};
     login(
         {
             // Private chat with the contact
@@ -1518,19 +1521,26 @@ TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListMainRightAway)
     g_hash_table_insert(components, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
     pluginInfo().join_chat(connection, components);
     g_hash_table_destroy(components);
-    // updateNewChat hasn't happened yet, so not joining at the moment
+    // updateNewChat hasn't happened yet, so not joining at the moment; the chats being told of by
+    // now, TDLib is asked for it, which tells of it before it answers
     prpl.verifyNoEvents();
+    auto lookUp = make_object<getChat>();
+    lookUp->chat_id_ = groupChatId;
+    tgl.verifyRequest(*lookUp);
 
     auto groupChat = makeChat(
         groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0
     );
     groupChat->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
     tgl.update(make_object<updateNewChat>(std::move(groupChat)));
-    // Now that updateNewChat has happened, joining
+    // Now that updateNewChat has happened, joining; the conversation kept is shown
     prpl.verifyEvents(
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle)
     );
-    tgl.verifyRequest(getBasicGroupFullInfo(groupId));
+    tgl.verifyRequests({
+        makeGetBasicGroupFullInfo(groupId),
+        makeOpenChat(groupChatId)
+    });
 }
 
 TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListNullFirst)
@@ -1562,8 +1572,12 @@ TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListNullFirst)
     g_hash_table_insert(components, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
     pluginInfo().join_chat(connection, components);
     g_hash_table_destroy(components);
-    // updateNewChat hasn't happened yet, so not joining at the moment
+    // updateNewChat hasn't happened yet, so not joining at the moment; the chats being told of by
+    // now, TDLib is asked for it, which tells of it before it answers
     prpl.verifyNoEvents();
+    auto lookUp = make_object<getChat>();
+    lookUp->chat_id_ = groupChatId;
+    tgl.verifyRequest(*lookUp);
 
     auto groupChat = makeChat(
         groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0
@@ -1576,6 +1590,8 @@ TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListNullFirst)
     // Also for that reason, still not joining, otherwise conversation title will be changed to
     // chat-XXXXXXXXXX.
     prpl.verifyEvents(RemoveChatEvent(groupChatPurpleName, ""));
+    // The conversation kept is shown
+    tgl.verifyRequest(openChat(groupChatId));
 
     tgl.update(makeUpdateChatList(groupChatId, make_object<chatListMain>()));
     // Chat is re-added to buddy list, and now joining

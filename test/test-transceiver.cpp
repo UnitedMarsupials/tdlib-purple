@@ -681,6 +681,33 @@ static void compare(const readAllChatReactions &actual, const readAllChatReactio
     COMPARE(chat_id_);
 }
 
+static void compare(const openChat &actual, const openChat &expected)
+{
+    COMPARE(chat_id_);
+}
+
+static void compare(const getChat &actual, const getChat &expected)
+{
+    COMPARE(chat_id_);
+}
+
+static void compare(const closeChat &actual, const closeChat &expected)
+{
+    COMPARE(chat_id_);
+}
+
+static void compare(const setOption &actual, const setOption &expected)
+{
+    COMPARE(name_);
+    ASSERT_EQ(expected.value_ != nullptr, actual.value_ != nullptr);
+    if (expected.value_) {
+        ASSERT_EQ(optionValueBoolean::ID, expected.value_->get_id()) << "Only boolean options compared";
+        ASSERT_EQ(expected.value_->get_id(), actual.value_->get_id());
+        ASSERT_EQ(static_cast<const optionValueBoolean &>(*expected.value_).value_,
+                  static_cast<const optionValueBoolean &>(*actual.value_).value_);
+    }
+}
+
 static void compare(const getMessageAddedReactions &actual, const getMessageAddedReactions &expected)
 {
     COMPARE(chat_id_);
@@ -754,6 +781,10 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(setMessageSenderBlockList)
         C(reportChat)
         C(readAllChatReactions)
+        C(openChat)
+        C(getChat)
+        C(closeChat)
+        C(setOption)
         C(getMessageAddedReactions)
         case editMessageMedia::ID:
             compare(static_cast<const editMessageMedia &>(actual), static_cast<const editMessageMedia &>(expected),
@@ -777,6 +808,21 @@ void TestTransceiver::verifyRequestImpl(const Function &request)
 
     std::cout << "Received request " << m_requests.front().id << ": " << requestToString(*m_requests.front().function) << "\n";
     compareRequests(*m_requests.front().function, request, m_inputPhotoPaths);
+}
+
+void TestTransceiver::verifyRequestAmong(const Function &request)
+{
+    std::queue<td::Client::Request> others;
+    bool                            found = false;
+    for (; !m_requests.empty(); m_requests.pop())
+        if (!found && (m_requests.front().function->get_id() == request.get_id())) {
+            found = true;
+            std::cout << "Received request " << m_requests.front().id << ": " << requestToString(*m_requests.front().function) << "\n";
+            compareRequests(*m_requests.front().function, request, m_inputPhotoPaths);
+        } else
+            others.push(std::move(m_requests.front()));
+    m_requests = std::move(others);
+    ASSERT_TRUE(found) << "Missing request: expected " << requestToString(request);
 }
 
 void TestTransceiver::verifyNoRequests()
@@ -1042,6 +1088,47 @@ object_ptr<chatInviteLink> makeChatInviteLink(const std::string &link)
 {
     auto result = make_object<chatInviteLink>();
     result->invite_link_ = link;
+    return result;
+}
+
+object_ptr<openChat> makeOpenChat(int64_t chatId)
+{
+    auto result = make_object<openChat>();
+    result->chat_id_ = chatId;
+    return result;
+}
+
+object_ptr<closeChat> makeCloseChat(int64_t chatId)
+{
+    auto result = make_object<closeChat>();
+    result->chat_id_ = chatId;
+    return result;
+}
+
+object_ptr<getBasicGroupFullInfo> makeGetBasicGroupFullInfo(int64_t groupId)
+{
+    auto result = make_object<getBasicGroupFullInfo>();
+    result->basic_group_id_ = groupId;
+    return result;
+}
+
+object_ptr<setOption> makeOnlineOption(bool online)
+{
+    auto value = make_object<optionValueBoolean>();
+    value->value_ = online;
+    auto result = make_object<setOption>();
+    result->name_  = "online";
+    result->value_ = std::move(value);
+    return result;
+}
+
+object_ptr<updateChatReadInbox> makeUpdateChatReadInbox(int64_t chatId, int64_t lastReadInboxMessageId,
+                                                        int32_t unreadCount)
+{
+    auto result = make_object<updateChatReadInbox>();
+    result->chat_id_                    = chatId;
+    result->last_read_inbox_message_id_ = lastReadInboxMessageId;
+    result->unread_count_               = unreadCount;
     return result;
 }
 

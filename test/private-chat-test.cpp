@@ -1,3 +1,4 @@
+#include "buildopt.h"
 #include "fixture.h"
 #include "sticker.h"
 #include "libpurple-mock.h"
@@ -369,6 +370,8 @@ TEST_F(PrivateChatTest, ContactWithoutChatAtLogin)
 {
     auto userUpdate = standardUpdateUser(0);
     userUpdate->user_->is_contact_ = true;
+    // Only once the contact's chat is
+    chatListReadyAtLogin = false;
     login(
         {std::move(userUpdate)},
         make_object<users>(1, std::vector<int64_t>(1, userIds[0])),
@@ -390,6 +393,7 @@ TEST_F(PrivateChatTest, ContactWithoutChatAtLogin)
         userFirstNames[0] + " " + userLastNames[0],
         nullptr, 0, 0, 0
     ));
+    tgl.verifyRequest(*makeOnlineOption(true));
     prpl.verifyEvents(
         UserStatusEvent(account, purpleUserName(0), PURPLE_STATUS_AWAY),
         AccountSetAliasEvent(account, selfFirstName + " " + selfLastName),
@@ -1637,4 +1641,169 @@ TEST_F(PrivateChatTest, FindOurselvesByAccountName)
         ASSERT_EQ(1u, users.size());
         EXPECT_EQ(selfId, users[0]->id_);
     }
+}
+
+TEST_F(PrivateChatTest, OpenWhileShown)
+{
+    loginWithOneContact();
+    PurpleTdClient     *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    PurpleConversation *conv   = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, purpleUserName(0).c_str());
+    ASSERT_NE(nullptr, client);
+    prpl.discardEvents();
+
+    // Not open yet, so not seen
+    client->messagesViewed(conv, {MessageId::fromString("1")});
+    tgl.verifyNoRequests();
+
+    client->conversationShown(conv, true);
+    tgl.verifyRequest(openChat(chatIds[0]));
+    client->conversationShown(conv, true);
+    tgl.verifyNoRequests();
+
+    client->messagesViewed(conv, {MessageId::fromString("1"), MessageId::fromString("2")});
+    tgl.verifyRequest(viewMessages(chatIds[0], {1, 2}, nullptr, false));
+    // The same again: TDLib knows
+    client->messagesViewed(conv, {MessageId::fromString("1"), MessageId::fromString("2")});
+    tgl.verifyNoRequests();
+    client->messagesViewed(conv, {MessageId::fromString("2"), MessageId::fromString("3")});
+    tgl.verifyRequest(viewMessages(chatIds[0], {2, 3}, nullptr, false));
+
+    client->conversationShown(conv, false);
+    tgl.verifyRequest(closeChat(chatIds[0]));
+    client->conversationShown(conv, false);
+    client->messagesViewed(conv, {MessageId::fromString("3")});
+    tgl.verifyNoRequests();
+
+    // Seen anew once opened again
+    client->conversationShown(conv, true);
+    tgl.verifyRequest(openChat(chatIds[0]));
+    client->messagesViewed(conv, {MessageId::fromString("2"), MessageId::fromString("3")});
+    tgl.verifyRequest(viewMessages(chatIds[0], {2, 3}, nullptr, false));
+}
+
+TEST_F(PrivateChatTest, OfflineWhileIdle)
+{
+    loginWithOneContact();
+    PurpleTdClient     *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    PurpleConversation *conv   = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, purpleUserName(0).c_str());
+    ASSERT_NE(nullptr, client);
+    prpl.discardEvents();
+    client->conversationShown(conv, true);
+    tgl.verifyRequest(openChat(chatIds[0]));
+    client->messagesViewed(conv, {MessageId::fromString("1"), MessageId::fromString("2")});
+    tgl.verifyRequest(viewMessages(chatIds[0], {1, 2}, nullptr, false));
+
+    pluginInfo().set_idle(connection, 300);
+    tgl.verifyRequests({
+        makeOnlineOption(false),
+        makeCloseChat(chatIds[0])
+    });
+    pluginInfo().set_idle(connection, 310);
+    tgl.verifyNoRequests();
+    // Still shown, but nobody looks
+    client->conversationShown(conv, true);
+    client->messagesViewed(conv, {MessageId::fromString("2"), MessageId::fromString("3")});
+    tgl.verifyNoRequests();
+
+    // Back: the chat is opened again, and the messages seen told anew, for TDLib to poll them
+    pluginInfo().set_idle(connection, 0);
+    tgl.verifyRequests({
+        makeOnlineOption(true),
+        makeOpenChat(chatIds[0])
+    });
+    client->messagesViewed(conv, {MessageId::fromString("1"), MessageId::fromString("2")});
+    tgl.verifyRequest(viewMessages(chatIds[0], {1, 2}, nullptr, false));
+}
+
+TEST_F(PrivateChatTest, ReadElsewhere)
+{
+    loginWithOneContact();
+    PurpleConversation *conv = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, purpleUserName(0).c_str());
+    prpl.discardEvents();
+    // As Pidgin keeps them, for a conversation not in a window
+    purple_conversation_set_data(conv, "unseen-count", GINT_TO_POINTER(3));
+    purple_conversation_set_data(conv, "unseen-state", GINT_TO_POINTER(2));
+
+    // Still some unread: Pidgin's count stays, being its own
+    tgl.update(makeUpdateChatReadInbox(chatIds[0], 2, 1));
+    EXPECT_EQ(3, GPOINTER_TO_INT(purple_conversation_get_data(conv, "unseen-count")));
+    EXPECT_EQ(2, GPOINTER_TO_INT(purple_conversation_get_data(conv, "unseen-state")));
+
+    tgl.update(makeUpdateChatReadInbox(chatIds[0], 3, 0));
+#ifndef NoPidgin
+    EXPECT_EQ(0, GPOINTER_TO_INT(purple_conversation_get_data(conv, "unseen-count")));
+    EXPECT_EQ(0, GPOINTER_TO_INT(purple_conversation_get_data(conv, "unseen-state")));
+#else
+    // Built without Pidgin, for which the counts are
+    EXPECT_EQ(3, GPOINTER_TO_INT(purple_conversation_get_data(conv, "unseen-count")));
+#endif
+    tgl.verifyNoRequests();
+    prpl.verifyNoEvents();
+}
+
+TEST_F(PrivateChatTest, IdleAtLogin)
+{
+    // Neither online nor any chat open, until the user is back
+    setPresenceIdle(true);
+    chatListReadyAtLogin = false;
+    loginWithOneContact();
+    tgl.verifyNoRequests();
+    PurpleTdClient     *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    PurpleConversation *conv   = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, purpleUserName(0).c_str());
+    ASSERT_NE(nullptr, client);
+    prpl.discardEvents();
+    client->conversationShown(conv, true);
+    tgl.verifyNoRequests();
+
+    pluginInfo().set_idle(connection, 0);
+    tgl.verifyRequests({
+        makeOnlineOption(true),
+        makeOpenChat(chatIds[0])
+    });
+}
+
+TEST_F(PrivateChatTest, ShownBeforeChatKnown)
+{
+    login();
+    // A contact in the buddy list whose chat TDLib tells of only later
+    tgl.update(standardUpdateUser(1));
+    purple_blist_add_buddy(purple_buddy_new(account, purpleUserName(1).c_str(), NULL), NULL, NULL, NULL);
+    PurpleTdClient     *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    PurpleConversation *conv   = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, purpleUserName(1).c_str());
+    ASSERT_NE(nullptr, client);
+    client->conversationShown(conv, true);
+    tgl.verifyNoRequests();
+
+    // Opened once known
+    tgl.update(standardPrivateChat(1, make_object<chatListMain>()));
+    tgl.verifyRequest(openChat(chatIds[1]));
+    prpl.discardEvents();
+}
+
+TEST_F(PrivateChatTest, OpenOrViewRejected)
+{
+    loginWithOneContact();
+    PurpleTdClient     *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    PurpleConversation *conv   = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, purpleUserName(0).c_str());
+    ASSERT_NE(nullptr, client);
+    prpl.discardEvents();
+
+    // Not open, so opened again when next shown
+    client->conversationShown(conv, true);
+    uint64_t requestId = tgl.verifyRequest(openChat(chatIds[0]));
+    tgl.reply(requestId, makeError(400, "Chat not found"));
+    client->conversationShown(conv, true);
+    requestId = tgl.verifyRequest(openChat(chatIds[0]));
+    tgl.reply(requestId, make_object<ok>());
+
+    // The same messages told again once seen again
+    std::vector<MessageId> seen = {MessageId::fromString("1"), MessageId::fromString("2")};
+    client->messagesViewed(conv, seen);
+    requestId = tgl.verifyRequest(viewMessages(chatIds[0], {1, 2}, nullptr, false));
+    tgl.reply(requestId, makeError(400, "Bad request"));
+    client->messagesViewed(conv, seen);
+    requestId = tgl.verifyRequest(viewMessages(chatIds[0], {1, 2}, nullptr, false));
+    tgl.reply(requestId, make_object<ok>());
+    client->messagesViewed(conv, seen);
+    tgl.verifyNoRequests();
 }

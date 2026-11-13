@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- **In Pidgin, a chat's reactions are kept up to date while its tab is shown, as the phone app does for the chat on its screen, and its messages are read as they come into view.** A tab is shown while it is the one chosen in its window and the window is not minimized: Telegram tells the reactions in channels and big groups only to those looking at them. A message is in view once its tab has not scrolled for a second, while its window has the focus and the screen is not locked, as the desktop's screen locker tells over D-Bus, nor blanked by the X server, nor its monitor asleep; as Telegram has it, reading it reads those before it too. A tab not shown, or left in a window without the focus, leaves its messages unread. Elsewhere, a chat is kept up to date while its conversation is open. While libpurple takes the user to be idle, by Pidgin's setting, the chats are closed, and nothing is read; otherwise Telegram is told the user is online, as it needs to keep the reactions of messages seen up to date: contacts may see that, and the phone gives no notifications meanwhile.
+
+### Fixes
+
+- **A group or channel in the buddy list that TDLib has not told of opens all the same, if it can be found, rather than nothing happening.** TDLib is asked for it by its id, from what it has stored, and then Telegram by its public name, which the buddy list now keeps for a public group or channel; only a chat with the same id counts, a name being free to go to another. If neither finds it, a dialog says so.
+- **A chat read to its end on another device no longer shows as having unread messages, in Pidgin's tab and the counts of the tray and the buddy list's menu, once Telegram tells that.** It tells every session, connected but offline too; a chat read only in part keeps Pidgin's mark, which counts what came since its tab was looked at.
+
 ## 0.9.5 (2026-11-01)
 
 ### Features
