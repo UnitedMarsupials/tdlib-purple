@@ -1147,6 +1147,8 @@ TEST_F(SupergroupTest, MessageDeletedNotAdministrator)
     prpl.verifyEvents(ConversationWriteEvent(groupChatPurpleName, NotificationWho,
         "The message " + userFirstNames[0] + " " + userLastNames[0] + " sent at " + deletedMessageTime(date) +
         " has been deleted", PURPLE_MESSAGE_SYSTEM, 0));
+}
+
 // Requests and updates of the lookups, built by their fields' names
 static object_ptr<getChat> makeGetChat(int64_t chatId)
 {
