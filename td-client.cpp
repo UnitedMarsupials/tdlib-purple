@@ -489,9 +489,19 @@ void PurpleTdClient::sendTdlibParameters()
     parameters->device_model_ = "Desktop";
     parameters->system_version_ = "Unknown";
     parameters->application_version_ = "1.0";
-    // enable_storage_optimizer was removed in newer tdlib versions
     m_transceiver.sendQuery(std::move(parameters),
                             &PurpleTdClient::authResponse);
+
+    // enable_storage_optimizer is no longer a TDLib parameter but the use_storage_optimizer
+    // option. TDLib queues it until the database is open.
+    bool useStorageOptimizer = (purple_account_get_bool(m_account, AccountOptions::KeepInlineDownloads,
+                                                        AccountOptions::KeepInlineDownloadsDefault) == FALSE);
+    auto value      = td::td_api::make_object<td::td_api::optionValueBoolean>();
+    value->value_   = useStorageOptimizer;
+    auto option     = td::td_api::make_object<td::td_api::setOption>();
+    option->name_   = "use_storage_optimizer";
+    option->value_  = std::move(value);
+    m_transceiver.sendQuery(std::move(option), nullptr);
 }
 
 void PurpleTdClient::sendPhoneNumber()

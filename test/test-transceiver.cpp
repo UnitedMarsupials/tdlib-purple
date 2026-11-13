@@ -110,6 +110,19 @@ static void compare(const setTdlibParameters &actual, const setTdlibParameters &
     COMPARE(use_secret_chats_);
 }
 
+static void compare(const setOption &actual, const setOption &expected)
+{
+    COMPARE(name_);
+    ASSERT_EQ(expected.value_ != nullptr, actual.value_ != nullptr);
+    if (expected.value_) {
+        ASSERT_EQ(expected.value_->get_id(), actual.value_->get_id());
+        if (expected.value_->get_id() == optionValueBoolean::ID) {
+            ASSERT_EQ(static_cast<const optionValueBoolean &>(*expected.value_).value_,
+                      static_cast<const optionValueBoolean &>(*actual.value_).value_);
+        }
+    }
+}
+
 static void compare(const setAuthenticationPhoneNumber &actual, const setAuthenticationPhoneNumber &expected)
 {
     COMPARE(phone_number_);
@@ -730,6 +743,7 @@ static void compareRequests(const Function &actual, const Function &expected,
     switch (actual.get_id()) {
         C(setTdlibParameters)
         C(setAuthenticationPhoneNumber)
+        C(setOption)
         case getContacts::ID: break;
         C(getChats)
         C(loadChats)
@@ -982,6 +996,18 @@ object_ptr<setTdlibParameters> makeTdlibParameters(const std::string &databaseDi
     result->use_secret_chats_   = useSecretChats;
 
     return result;
+}
+
+// Sent after setTdlibParameters at every login: the storage optimizer is on unless "Keep inline
+// downloads" is set (it is not, by default).
+object_ptr<setOption> makeStorageOptimizerOption(bool useStorageOptimizer)
+{
+    auto value     = make_object<optionValueBoolean>();
+    value->value_  = useStorageOptimizer;
+    auto option    = make_object<setOption>();
+    option->name_  = "use_storage_optimizer";
+    option->value_ = std::move(value);
+    return option;
 }
 
 object_ptr<Object> getChatsNoChatsResponse()
