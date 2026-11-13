@@ -17,6 +17,7 @@ void CommTest::SetUp()
 {
     setImageLoaders({"webp"});
     setCustomSmileys(false);
+    setRequestInputSupported(true);
     clearConversationData();
     setPresenceIdle(false);
     gdkPixbufGetFileInfoName = "gdk_pixbuf_get_file_info";
