@@ -685,8 +685,18 @@ void updateSupergroupChat(TdAccountData &account, SupergroupId groupId)
         purpleDebug("Supergroup {} does not exist yet\n", groupId.value());
     else if (!chat)
         purpleDebug("Chat for supergroup {} does not exist yet\n", groupId.value());
-    else
+    else {
         updateGroupChat(account, *chat, group->status_, "supergroup", std::to_string(groupId.value()));
+        PurpleChat *purpleChat = purple_blist_find_chat(account.purpleAccount, getPurpleChatName(*chat).c_str());
+        if (!purpleChat)
+            return;
+        PurpleBlistNode *node = PURPLE_BLIST_NODE(purpleChat);
+        if (group->usernames_ && !group->usernames_->active_usernames_.empty())
+            purple_blist_node_set_string(node, BuddyOptions::PublicName,
+                                         group->usernames_->active_usernames_.front().c_str());
+        else if (purple_blist_node_get_string(node, BuddyOptions::PublicName))
+            purple_blist_node_remove_setting(node, BuddyOptions::PublicName);
+    }
 }
 
 bool isInviteLinkActive(const td::td_api::chatInviteLink &linkInfo)
