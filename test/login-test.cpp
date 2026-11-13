@@ -656,7 +656,8 @@ protected:
                 std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
                 "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
                 true // use secret chats
-            )
+            ),
+            makeStorageOptimizerOption()
         });
         tgl.reply(make_object<ok>());
 

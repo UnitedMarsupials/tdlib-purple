@@ -420,6 +420,8 @@ TEST_F(PrivateChatTest, ManyContactsWithoutChatsAtLogin)
     auto contacts = make_object<users>();
     contacts->total_count_ = CONTACTS;
     contacts->user_ids_    = ids;
+    // Online only once the chats are all known
+    chatListReadyAtLogin = false;
     login({contact(0), contact(1), contact(2), contact(3), contact(4), contact(5), contact(6), contact(7), contact(8), contact(9), contact(10), contact(11), contact(12), contact(13), contact(14), contact(15), contact(16)}, std::move(contacts), make_object<chats>(), {}, {}, {});
 
     // From the last of the list, all at once
@@ -461,9 +463,11 @@ TEST_F(PrivateChatTest, ManyContactsWithoutChatsAtLogin)
         if (i + 1 == requestIds.size())
             prpl.discardEvents();
         tgl.reply(requestIds[i], makeError(400, "Failed"));
-        tgl.verifyNoRequests();
-        if (i + 1 < requestIds.size())
+        if (i + 1 < requestIds.size()) {
+            tgl.verifyNoRequests();
             prpl.verifyNoEvents();
+        } else
+            tgl.verifyRequest(setOption("online", make_object<optionValueBoolean>(true)));
     }
     prpl.verifyEvents(
         AccountSetAliasEvent(account, selfFirstName + " " + selfLastName),
