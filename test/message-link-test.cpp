@@ -4,6 +4,7 @@
 #include "client-utils.h"
 #include "buildopt.h"
 #include "td-client.h"
+#include "config.h"
 
 // Files linked to by their messages, which the plugin fetches and opens when clicked, as it does
 // where the front-end lets it handle a scheme of its own: in Pidgin
@@ -708,4 +709,105 @@ TEST_F(MessageLinkTest, SentMessageRenamed)
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
     tgl.reply(makeDocumentMessage(10000, "/path/video.mp4", true));
     prpl.verifyEvents(NotifyUriEvent("file:///path/video.mp4"));
+}
+
+TEST_F(MessageLinkTest, ForwardWithinTelegram)
+{
+    loginWithOneContact();
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    const ChatId    chat    = ChatId::fromString(std::to_string(chatIds[0]).c_str());
+    const MessageId message = MessageId::fromString("1");
+
+    // To a buddy of this account: Telegram forwards it, and nothing is said unless that fails
+    PurpleTdClient::ForwardDestination to;
+    to.accountName = "+" + selfPhoneNumber;
+    to.protocolId  = config::pluginId;
+    to.name        = purpleUserName(0);
+    to.label       = "Gottfried Leibniz (+" + selfPhoneNumber + ")";
+    client->forwardMessage(chat, message, to);
+    tgl.verifyRequest(*makeForwardMessages(chatIds[0], chatIds[0], messageId));
+    tgl.reply(make_object<messages>());
+    prpl.verifyNoEvents();
+
+    // To a group chat, by its name; Telegram's refusal is told in the message's chat
+    to.isChat = true;
+    to.name   = "chat" + std::to_string(chatIds[1]);
+    to.label  = "Group (+" + selfPhoneNumber + ")";
+    client->forwardMessage(chat, message, to);
+    tgl.verifyRequest(*makeForwardMessages(chatIds[1], chatIds[0], messageId));
+    tgl.reply(makeError(400, "CHAT_FORWARDS_RESTRICTED"));
+    prpl.verifyEvents(
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+        ConversationWriteEvent(
+            purpleUserName(0), purpleUserName(0),
+            "The message was not forwarded to Group (+" + selfPhoneNumber + "): code 400 (CHAT_FORWARDS_RESTRICTED)",
+            PURPLE_MESSAGE_ERROR, 0
+        )
+    );
+
+    // To a buddy unknown to Telegram
+    to.isChat = false;
+    to.name   = "id999";
+    to.label  = "Nobody (+" + selfPhoneNumber + ")";
+    client->forwardMessage(chat, message, to);
+    tgl.verifyNoRequests();
+    prpl.verifyEvents(ConversationWriteEvent(
+        purpleUserName(0), purpleUserName(0), "The message was not forwarded to Nobody (+" + selfPhoneNumber + "): no such user",
+        PURPLE_MESSAGE_ERROR, 0
+    ));
+}
+
+TEST_F(MessageLinkTest, ForwardToAnotherAccount)
+{
+    loginWithOneContact();
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    const ChatId    chat    = ChatId::fromString(std::to_string(chatIds[0]).c_str());
+    const MessageId message = MessageId::fromString("1");
+
+    // A buddy of another, connected, account
+    PurpleAccount   *other = purple_account_new("other", "prpl-other");
+    PurpleConnection otherConnection;
+    otherConnection.state   = PURPLE_CONNECTED;
+    otherConnection.account = other;
+    other->gc = &otherConnection;
+    PurpleTdClient::ForwardDestination to;
+    to.accountName = "other";
+    to.protocolId  = "prpl-other";
+    to.name        = "friend";
+    to.label       = "Friend (other)";
+
+    // The message's text is told again, through that account, headed by whom it came from
+    client->forwardMessage(chat, message, to);
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(makeMessage(messageId, userIds[0], chatIds[0], false, date, makeTextMessage("hello")));
+    prpl.verifyEvents(
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, other, "friend"),
+        ConversationSendEvent(PURPLE_CONV_TYPE_IM, other, "friend",
+                              "<b>Forwarded from Gottfried Leibniz:</b>\nhello")
+    );
+
+    // A file cannot go where files cannot be sent: said so, in the message's chat
+    client->forwardMessage(chat, message, to);
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(makeDocumentMessage(10000, "", false));
+    prpl.verifyEvents(
+        ConversationSendEvent(PURPLE_CONV_TYPE_IM, other, "friend", "<b>Forwarded from Gottfried Leibniz:</b>\ncaption"),
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+        ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                               "The file of the message was not forwarded to Friend (other): files cannot be sent there.",
+                               PURPLE_MESSAGE_ERROR, 0)
+    );
+
+    // Not while that account is off
+    otherConnection.state = PURPLE_DISCONNECTED;
+    client->forwardMessage(chat, message, to);
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(makeMessage(messageId, userIds[0], chatIds[0], false, date, makeTextMessage("hello")));
+    prpl.verifyEvents(ConversationWriteEvent(
+        purpleUserName(0), purpleUserName(0), "The message was not forwarded to Friend (other): the account is not connected",
+        PURPLE_MESSAGE_ERROR, 0
+    ));
+    other->gc = NULL;
 }

@@ -243,4 +243,10 @@ using DraggedFileHandler = void (*)(PurpleConversation *conv, MessageId messageI
                                     DraggedFileFound found);
 void setDraggedFileHandler(DraggedFileHandler handler);
 
+// A dialog choosing one of the labels, which what is typed into its field narrows down: the index
+// of the one chosen is told, nothing if the dialog is given up. False if there is no such dialog,
+// without Pidgin, for a libpurple one to be used instead.
+bool chooseFromList(const std::string &title, const std::string &prompt, const std::vector<std::string> &labels,
+                    std::function<void(int index)> chosen);
+
 #endif

@@ -695,6 +695,13 @@ static void compare(const deleteMessages &actual, const deleteMessages &expected
     COMPARE(revoke_);
 }
 
+static void compare(const forwardMessages &actual, const forwardMessages &expected)
+{
+    COMPARE(chat_id_);
+    COMPARE(from_chat_id_);
+    COMPARE(message_ids_);
+}
+
 static void compare(const getUserFullInfo &actual, const getUserFullInfo &expected)
 {
     COMPARE(user_id_);
@@ -807,6 +814,7 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(getMessageProperties)
         C(editMessageCaption)
         C(deleteMessages)
+        C(forwardMessages)
         C(getUserFullInfo)
         C(setMessageSenderBlockList)
         C(reportChat)
@@ -1160,6 +1168,15 @@ object_ptr<setOption> makeOnlineOption(bool online)
     auto result = make_object<setOption>();
     result->name_  = "online";
     result->value_ = std::move(value);
+    return result;
+}
+
+object_ptr<forwardMessages> makeForwardMessages(int64_t chatId, int64_t fromChatId, int64_t messageId)
+{
+    auto result = make_object<forwardMessages>();
+    result->chat_id_      = chatId;
+    result->from_chat_id_ = fromChatId;
+    result->message_ids_.push_back(messageId);
     return result;
 }
 

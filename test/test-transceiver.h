@@ -103,6 +103,7 @@ object_ptr<openChat> makeOpenChat(int64_t chatId);
 object_ptr<closeChat> makeCloseChat(int64_t chatId);
 object_ptr<getBasicGroupFullInfo> makeGetBasicGroupFullInfo(int64_t groupId);
 object_ptr<setOption> makeOnlineOption(bool online);
+object_ptr<forwardMessages> makeForwardMessages(int64_t chatId, int64_t fromChatId, int64_t messageId);
 object_ptr<updateChatReadInbox> makeUpdateChatReadInbox(int64_t chatId, int64_t lastReadInboxMessageId,
                                                         int32_t unreadCount);
 

@@ -1780,6 +1780,49 @@ void *purple_request_fields(void *handle, const char *title, const char *primary
     return NULL;
 }
 
+PurpleRequestField *purple_request_field_list_new(const char *id, const char *text)
+{
+    return NULL;
+}
+
+void purple_request_field_list_add(PurpleRequestField *field, const char *item, void *data)
+{
+}
+
+GList *purple_request_field_list_get_selected(const PurpleRequestField *field)
+{
+    return NULL;
+}
+
+PurpleRequestField *purple_request_fields_get_field(const PurpleRequestFields *fields, const char *id)
+{
+    return NULL;
+}
+
+GList *purple_get_chats(void)
+{
+    return NULL;
+}
+
+PurplePlugin *purple_connection_get_prpl(const PurpleConnection *gc)
+{
+    return NULL;
+}
+
+void serv_send_file(PurpleConnection *gc, const char *who, const char *file)
+{
+}
+
+void purple_conv_im_send(PurpleConvIm *im, const char *message)
+{
+    EVENT(ConversationSendEvent, PURPLE_CONV_TYPE_IM, im->conv->account, im->conv->name, message);
+}
+
+void purple_conv_chat_send(PurpleConvChat *chat, const char *message)
+{
+    EVENT(ConversationSendEvent, PURPLE_CONV_TYPE_CHAT, chat->conv->account, chat->conv->name, message);
+}
+
 PurpleMenuAction *purple_menu_action_new(const char *label, PurpleCallback callback,
                                      gpointer data, GList *children)
 {

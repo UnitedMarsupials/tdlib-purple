@@ -95,6 +95,7 @@ enum class PurpleEventType: uint8_t {
     JoinChatFailed,
     ServGotChat,
     ServGotIm,
+    ConversationSend,
     ServGotJoinedChat,
     BuddyTypingStart,
     BuddyTypingStop,
@@ -419,6 +420,18 @@ struct ServGotImEvent: PurpleEvent {
                    PurpleMessageFlags flags, time_t mtime)
     : PurpleEvent(PurpleEventType::ServGotIm), connection(connection), username(username),
       message(message), flags(flags), mtime(mtime) {}
+};
+
+// A message sent through a conversation, by purple_conv_im_send or purple_conv_chat_send
+struct ConversationSendEvent: PurpleEvent {
+    PurpleConversationType  type;
+    PurpleAccount          *account;
+    std::string             name;
+    std::string             message;
+
+    ConversationSendEvent(PurpleConversationType type, PurpleAccount *account, const std::string &name,
+                          const std::string &message)
+    : PurpleEvent(PurpleEventType::ConversationSend), type(type), account(account), name(name), message(message) {}
 };
 
 struct ServGotJoinedChatEvent: public PurpleEvent {
