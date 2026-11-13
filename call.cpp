@@ -16,7 +16,7 @@ static td::td_api::object_ptr<td::td_api::callProtocol> getCallProtocol()
     return protocol;
 }
 
-bool initiateCall(int32_t userId, TdAccountData &account, TdTransceiver &transceiver)
+bool initiateCall(int64_t userId, TdAccountData &account, TdTransceiver &transceiver)
 {
 #ifndef NoVoip
     if (!account.hasActiveCall()) {

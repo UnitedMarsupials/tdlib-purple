@@ -556,6 +556,9 @@ void sendConversationReadReceipts(TdAccountData &account, PurpleConversation *co
 
     std::vector<ReadReceipt> receipts;
     account.extractPendingReadReceipts(chatId, receipts);
+    // Read as they are seen on screen, rather than all at once
+    if (viewsMessages(conv))
+        receipts.clear();
 
     // Seen now, as the phone app takes them to be once the chat is opened
     if (hasUnreadReactions(account, conv)) {
@@ -3487,6 +3490,17 @@ void markConversationTitle(TdAccountData &account, PurpleConversation *conv)
         purple_conversation_set_title(conv, newTitle.c_str());
     } else if (!hasUnreadReactions(account, conv) && marked)
         purple_conversation_set_title(conv, title + strlen(UNREAD_REACTIONS_MARK));
+}
+
+void readChatInbox(TdAccountData &account, ChatId chatId, MessageId lastRead, int32_t unreadCount)
+{
+    account.updateChatReadInbox(chatId, lastRead, unreadCount);
+    if (unreadCount != 0)
+        return;
+    const td::td_api::chat *chat = account.getChat(chatId);
+    PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+    if (conv && clearUnseen(conv))
+        purple_debug_misc(config::pluginId, "Chat %" G_GINT64_FORMAT " read elsewhere\n", chatId.value());
 }
 
 void setUnreadReactionCount(TdAccountData &account, ChatId chatId, int32_t count)

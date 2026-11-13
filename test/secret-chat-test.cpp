@@ -78,6 +78,8 @@ TEST_F(SecretChatTest, CreateSecretChat_Lifecycle)
         ),
         UserStatusEvent(account, secretChatBuddyName, PURPLE_STATUS_OFFLINE)
     );
+    // Its conversation, opened by then, is shown
+    tgl.verifyRequest(openChat(secretChatChatId));
 
     tgl.update(make_object<updateSecretChat>(make_object<secretChat>(
         secretChatId, userIds[0], make_object<secretChatStateReady>(), false, "whatever", 60
@@ -120,7 +122,8 @@ TEST_F(SecretChatTest, SecretChatsDisabled)
             std::string(purple_user_dir()) + G_DIR_SEPARATOR_S +
             "tdlib" + G_DIR_SEPARATOR_S + "+" + selfPhoneNumber,
             false // this test turns secret chats off
-        )
+        ),
+        makeStorageOptimizerOption()
     });
 }
 
