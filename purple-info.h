@@ -63,12 +63,16 @@ namespace AccountOptions {
     const char           *DownloadBehaviourDefault();
     constexpr const char *KeepInlineDownloads        = "keep-inline-downloads";
     constexpr gboolean    KeepInlineDownloadsDefault = FALSE;
+    constexpr const char *SendFilesByContent         = "send-files-by-content";
+    constexpr gboolean    SendFilesByContentDefault  = FALSE;
     constexpr const char *ReadReceipts               = "read-receipts";
     constexpr gboolean    ReadReceiptsDefault        = TRUE;
 };
 
 namespace BuddyOptions {
     constexpr const char *ProfilePhotoId = "tdlib-profile-photo-id";
+    // Of a public group or channel: its public name, to find it by should TDLib not know its id
+    constexpr const char *PublicName = "tdlib-public-name";
     // Of a deleted account: the group it was in, and its name
     constexpr const char *GroupBeforeDeletion = "tdlib-group-before-deletion";
     constexpr const char *AliasBeforeDeletion = "tdlib-alias-before-deletion";

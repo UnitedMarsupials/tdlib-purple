@@ -56,6 +56,7 @@ PurpleTdClient::~PurpleTdClient()
         fullMessage.inlineDownloadTimeout = true;
 
     showMessages(messages, m_data);
+    endAuthInput();
 }
 
 void PurpleTdClient::setLogLevel(int level)
@@ -97,6 +98,12 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
     case td::td_api::updateChatUnreadReactionCount::ID: {
         auto &countUpdate = static_cast<const td::td_api::updateChatUnreadReactionCount &>(update);
         setUnreadReactionCount(m_data, getChatId(countUpdate), countUpdate.unread_reaction_count_);
+        break;
+    }
+
+    case td::td_api::updateChatReadInbox::ID: {
+        auto &readUpdate = static_cast<const td::td_api::updateChatReadInbox &>(update);
+        readChatInbox(m_data, getChatId(readUpdate), getLastReadMessageId(readUpdate), readUpdate.unread_count_);
         break;
     }
 
@@ -309,6 +316,9 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
 
 void PurpleTdClient::processAuthorizationState(td::td_api::AuthorizationState &authState)
 {
+    // Whatever was asked for in the "Telegram" chat has been answered, or is no longer wanted
+    endAuthInput();
+
     switch (authState.get_id()) {
     // Database encryption is handled automatically in newer tdlib versions
     // case td::td_api::authorizationStateWaitEncryptionKey::ID:
@@ -479,9 +489,19 @@ void PurpleTdClient::sendTdlibParameters()
     parameters->device_model_ = "Desktop";
     parameters->system_version_ = "Unknown";
     parameters->application_version_ = "1.0";
-    // enable_storage_optimizer was removed in newer tdlib versions
     m_transceiver.sendQuery(std::move(parameters),
                             &PurpleTdClient::authResponse);
+
+    // enable_storage_optimizer is no longer a TDLib parameter but the use_storage_optimizer
+    // option. TDLib queues it until the database is open.
+    bool useStorageOptimizer = (purple_account_get_bool(m_account, AccountOptions::KeepInlineDownloads,
+                                                        AccountOptions::KeepInlineDownloadsDefault) == FALSE);
+    auto value      = td::td_api::make_object<td::td_api::optionValueBoolean>();
+    value->value_   = useStorageOptimizer;
+    auto option     = td::td_api::make_object<td::td_api::setOption>();
+    option->name_   = "use_storage_optimizer";
+    option->value_  = std::move(value);
+    m_transceiver.sendQuery(std::move(option), nullptr);
 }
 
 void PurpleTdClient::sendPhoneNumber()
@@ -516,6 +536,69 @@ static std::string getAuthCodeDesc(const td::td_api::AuthenticationCodeType &cod
     }
 }
 
+// The buddy, not a Telegram user, who asks for login input when there are no request dialogs
+static const char AUTH_INPUT_BUDDY[] = "Telegram";
+
+// No request UI ops: prompt for the value through a "Telegram" IM conversation instead. The
+// user's reply is captured in sendMessage() (tgprpl_send_im).
+void PurpleTdClient::promptAuthInputViaChat(AuthInput type, const std::string &message)
+{
+    m_authInputPending = type;
+    // The conversation is opened here, rather than by serv_got_im, so that its logging is off
+    // before anything is written to it: the prompt, then the value typed, which libpurple would
+    // log in plain text.
+    if (!purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, AUTH_INPUT_BUDDY, m_account))
+        purple_conversation_new(PURPLE_CONV_TYPE_IM, m_account, AUTH_INPUT_BUDDY);
+    keepAuthInputUnlogged();
+    // Unlike the request dialog's text, this goes into conversation markup: a password hint with
+    // "<" in it is to be shown as such
+    std::string prompt = message;
+    // TRANSLATOR: appended to the auth prompt shown in the fallback "Telegram" chat.
+    prompt += std::string("\n") + _("Reply to this chat with the value above to continue.");
+    prompt = escapeForDisplay(prompt);
+
+    // Deliver it the way a real incoming message arrives - serv_got_im - rather than by writing
+    // straight into a conversation. serv_got_im is the whole receive path and not just its last
+    // step: it runs purple_privacy_check, emits receiving-im-msg and received-im-msg so anything
+    // hooked there sees the message, finds or creates the conversation itself, and sets
+    // PURPLE_MESSAGE_RECV on the way.
+    //
+    // PURPLE_MESSAGE_SYSTEM is deliberately NOT passed: the front-end should treat this as an
+    // ordinary received IM from a buddy called "Telegram", which is what the reply in
+    // sendMessage() is waiting for.
+    PurpleConnection *gc = purple_account_get_connection(m_account);
+    if (gc)
+        serv_got_im(gc, AUTH_INPUT_BUDDY, prompt.c_str(), PURPLE_MESSAGE_RECV, time(NULL));
+}
+
+void PurpleTdClient::keepAuthInputUnlogged()
+{
+    PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM,
+                                                                     AUTH_INPUT_BUDDY, m_account);
+    if (!conv)
+        return;
+    if (!m_authInputUnlogged) {
+        m_authInputWasLogging = purple_conversation_is_logging(conv);
+        m_authInputUnlogged   = true;
+    }
+    purple_conversation_set_logging(conv, FALSE);
+}
+
+// Stop waiting for a value from the "Telegram" chat, and log the conversation again if it was.
+// Not done as the value is taken in sendMessage(): libpurple writes it to the conversation, and
+// so to the log, only once send_im has returned.
+void PurpleTdClient::endAuthInput()
+{
+    m_authInputPending = AuthInput::None;
+    if (m_authInputUnlogged) {
+        m_authInputUnlogged = false;
+        PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM,
+                                                                         AUTH_INPUT_BUDDY, m_account);
+        if (conv)
+            purple_conversation_set_logging(conv, m_authInputWasLogging);
+    }
+}
+
 void PurpleTdClient::requestAuthCode(const td::td_api::authenticationCodeInfo *codeInfo)
 {
     // TRANSLATOR: Authentication dialog, primary content. Will be followed by instructions and an input box.
@@ -532,7 +615,7 @@ void PurpleTdClient::requestAuthCode(const td::td_api::authenticationCodeInfo *c
         }
     }
 
-    purple_request_input (purple_account_get_connection(m_account),
+    if (!purple_request_input (purple_account_get_connection(m_account),
                                // TRANSLATOR: Authentication dialog, title.
                                _("Login code"),
                                message.c_str(),
@@ -548,7 +631,11 @@ void PurpleTdClient::requestAuthCode(const td::td_api::authenticationCodeInfo *c
                                m_account,
                                NULL, // buddy
                                NULL, // conversation
-                               this);
+                               this))
+    {
+        // Request UI unavailable: ask for the code through the "Telegram" chat.
+        promptAuthInputViaChat(AuthInput::Code, message);
+    }
 }
 
 void PurpleTdClient::requestCodeEntered(PurpleTdClient *self, const gchar *code)
@@ -614,9 +701,13 @@ void PurpleTdClient::requestPassword(const td::td_api::authorizationStateWaitPas
                                NULL, // conversation
                                this))
     {
-        // Only happens with like empathy, not worth translating
-        purple_connection_error(purple_account_get_connection(m_account),
-            "Authentication code is required but this libpurple doesn't support input requests");
+        // Request UI unavailable: ask for the 2FA password through the "Telegram" chat.
+        std::string pwMessage = _("Enter password for two-factor authentication");
+        if (!hints.empty())
+            pwMessage += std::string("\n") + hints;
+        // TRANSLATOR: 2FA prompt in the "Telegram" chat, which stands in for the password dialog, in a new line
+        pwMessage += std::string("\n") + _("The password is sent as a message: it will be visible on screen as you type it.");
+        promptAuthInputViaChat(AuthInput::Password, pwMessage);
     }
 }
 
@@ -645,9 +736,9 @@ void PurpleTdClient::registerUser()
                                 NULL, // conversation
                                 this))
         {
-            // Same as when requesting authentication code - not worth translating
-            purple_connection_error(purple_account_get_connection(m_account),
-                "Registration is required but this libpurple doesn't support input requests");
+            // Request UI unavailable: ask for the display name through the "Telegram" chat.
+            promptAuthInputViaChat(AuthInput::DisplayName,
+                _("New account is being created. Please enter your display name."));
         }
     } else
         m_transceiver.sendQuery(td::td_api::make_object<td::td_api::registerUser>(firstName, lastName, false),
@@ -746,18 +837,30 @@ void PurpleTdClient::getChatsResponse(uint64_t requestId, td::td_api::object_ptr
     }
 }
 
+// How many createPrivateChat requests to keep in flight at once during login. Serial (1) was the
+// original behaviour and is very slow for large contact lists; a modest window batches the
+// round-trips without risking Telegram flood limits.
+static const int LOGIN_PRIVATE_CHAT_WINDOW = 16;
+
 void PurpleTdClient::requestMissingPrivateChats()
 {
-    if (m_usersForNewPrivateChats.empty()) {
-        purple_debug_misc(config::pluginId, "Login sequence complete\n");
-        onChatListReady();
-    } else {
+    // Fill the in-flight window with new createPrivateChat requests (batching instead of a
+    // strictly serial one-at-a-time chain).
+    while (!m_usersForNewPrivateChats.empty() &&
+           m_privateChatRequestsInFlight < LOGIN_PRIVATE_CHAT_WINDOW)
+    {
         UserId userId = m_usersForNewPrivateChats.back();
         m_usersForNewPrivateChats.pop_back();
+        m_privateChatRequestsInFlight++;
         purpleDebug("Requesting private chat for user id {}", userId.value());
         td::td_api::object_ptr<td::td_api::createPrivateChat> createChat =
             td::td_api::make_object<td::td_api::createPrivateChat>(userId.value(), false);
         m_transceiver.sendQuery(std::move(createChat), &PurpleTdClient::loginCreatePrivateChatResponse);
+    }
+
+    if (m_usersForNewPrivateChats.empty() && (m_privateChatRequestsInFlight == 0)) {
+        purple_debug_misc(config::pluginId, "Login sequence complete\n");
+        onChatListReady();
     }
 }
 
@@ -772,6 +875,9 @@ void PurpleTdClient::loginCreatePrivateChatResponse(uint64_t requestId, td::td_a
         m_data.addChat(std::move(chat));
     } else
         purple_debug_misc(config::pluginId, "Failed to get requested private chat\n");
+    // This request left the window; refill it (and finish login once the queue drains).
+    if (m_privateChatRequestsInFlight > 0)
+        m_privateChatRequestsInFlight--;
     requestMissingPrivateChats();
 }
 
@@ -940,6 +1046,8 @@ void PurpleTdClient::checkBuddyDeletedResponse(TdObjectPtr object)
 void PurpleTdClient::onChatListReady()
 {
     m_chatListReady = true;
+    m_idle          = purple_presence_is_idle(purple_account_get_presence(m_account));
+    updateOnline();
     checkTempFileUploads();
     // Follows a change of translation
     getDeletedAccountsGroup(false);
@@ -975,6 +1083,16 @@ void PurpleTdClient::onChatListReady()
             purple_account_get_username(m_account));
 
     purple_blist_add_account(m_account);
+    refreshOpenChats();
+}
+
+void PurpleTdClient::refreshOpenChats()
+{
+    for (GList *item = purple_get_conversations(); item; item = item->next) {
+        PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
+        if (purple_conversation_get_account(conv) == m_account)
+            conversationShown(conv, isConversationShown(conv));
+    }
 }
 
 // A second click within this long after the first does not open the file again: the program for it
@@ -2022,6 +2140,85 @@ void PurpleTdClient::markConversation(PurpleConversation *conv)
     markConversationTitle(m_data, conv);
 }
 
+void PurpleTdClient::conversationShown(PurpleConversation *conv, bool shown)
+{
+    // Those shown by then are opened once the chats are known; a disconnection closes them all.
+    // Nobody looks at them while the user is idle.
+    const td::td_api::chat *chat = m_chatListReady ? findConversationChat(m_data, conv) : nullptr;
+    if (!chat)
+        return;
+    shown = shown && !m_idle;
+    ChatId chatId = getId(*chat);
+    if (shown == (m_openChats.count(chatId) != 0))
+        return;
+    purple_debug_misc(config::pluginId, "%s chat %" G_GINT64_FORMAT "\n", shown ? "Opening" : "Closing",
+                      chatId.value());
+    if (shown) {
+        m_openChats[chatId];
+        // Not open, if TDLib would not have it: tried again when next shown
+        auto request = td::td_api::make_object<td::td_api::openChat>();
+        request->chat_id_ = chatId.value();
+        m_transceiver.sendQuery(std::move(request), [this, chatId](uint64_t, TdObjectPtr object) {
+            if (object && (object->get_id() == td::td_api::error::ID))
+                m_openChats.erase(chatId);
+        });
+        checkViewedLater(conv);
+    } else {
+        m_openChats.erase(chatId);
+        m_transceiver.sendQuery(td::td_api::make_object<td::td_api::closeChat>(chatId.value()), nullptr);
+    }
+}
+
+void PurpleTdClient::messagesViewed(PurpleConversation *conv, const std::vector<MessageId> &messageIds)
+{
+    // Seen messages of an open chat are read, which is the account's to allow
+    const td::td_api::chat *chat = findConversationChat(m_data, conv);
+    auto                    it   = chat ? m_openChats.find(getId(*chat)) : m_openChats.end();
+    if ((it == m_openChats.end()) || messageIds.empty() || (it->second == messageIds) ||
+        !isReadReceiptsEnabled(m_account))
+        return;
+    it->second = messageIds;
+    ChatId chatId  = it->first;
+    auto   request = td::td_api::make_object<td::td_api::viewMessages>();
+    request->chat_id_ = chatId.value();
+    for (MessageId messageId: messageIds)
+        request->message_ids_.push_back(messageId.value());
+    request->force_read_ = false;
+    // Told again when next seen, if TDLib would not take them
+    m_transceiver.sendQuery(std::move(request), [this, chatId, messageIds](uint64_t, TdObjectPtr object) {
+        auto it = m_openChats.find(chatId);
+        if (object && (object->get_id() == td::td_api::error::ID) && (it != m_openChats.end()) &&
+            (it->second == messageIds))
+            it->second.clear();
+    });
+}
+
+void PurpleTdClient::setIdle(bool idle)
+{
+    if (idle == m_idle)
+        return;
+    m_idle = idle;
+    updateOnline();
+    refreshOpenChats();
+}
+
+// TDLib polls the reactions and views of the messages last seen in an open chat only while online:
+// once the user is back, the chats are opened again, and their messages on screen told anew
+void PurpleTdClient::updateOnline()
+{
+    bool online = m_chatListReady && !m_idle;
+    if (online == m_online)
+        return;
+    m_online = online;
+    purple_debug_misc(config::pluginId, "Going %s\n", online ? "online" : "offline");
+    auto value     = td::td_api::make_object<td::td_api::optionValueBoolean>();
+    value->value_  = online;
+    auto request   = td::td_api::make_object<td::td_api::setOption>();
+    request->name_  = "online";
+    request->value_ = std::move(value);
+    m_transceiver.sendQuery(std::move(request), nullptr);
+}
+
 bool PurpleTdClient::hasUnreadReactions(PurpleBuddy *buddy)
 {
     const td::td_api::chat *chat = m_data.getPrivateChatByUserId(purpleBuddyNameToUserId(purple_buddy_get_name(buddy)));
@@ -2119,6 +2316,34 @@ void PurpleTdClient::updateChatLastMessage(td::td_api::updateChatLastMessage &la
 
 int PurpleTdClient::sendMessage(const char *buddyName, const char *message)
 {
+    // Auth-input fallback: while waiting for a login code, 2FA password or display name (asked
+    // for through the "Telegram" chat because there is no request UI), take a message sent to that
+    // chat as the value instead of sending it to anyone. Messages to anyone else go as usual.
+    if ((m_authInputPending != AuthInput::None) && !g_strcmp0(buddyName, AUTH_INPUT_BUDDY)) {
+        // OTR/other plugins may inject non-code messages; ignore those.
+        if (message && g_str_has_prefix(message, "?OTR"))
+            return -1;
+        // Should the conversation have been closed and opened anew meanwhile
+        keepAuthInputUnlogged();
+        AuthInput type = m_authInputPending;
+        char *stripped = purple_markup_strip_html(message ? message : "");
+        // A password is taken as typed, spaces included: only the code and the name are trimmed
+        if (type != AuthInput::Password)
+            g_strstrip(stripped);
+        m_authInputPending = AuthInput::None;
+        switch (type) {
+            case AuthInput::Code:        requestCodeEntered(this, stripped);  break;
+            case AuthInput::Password:    passwordEntered(this, stripped);     break;
+            case AuthInput::DisplayName: displayNameEntered(this, stripped);  break;
+            default: break;
+        }
+        g_free(stripped);
+        // The password is not echoed: libpurple writes a message sent into its conversation only
+        // when send_im returns more than 0. A front-end that shows what is typed by itself, as
+        // webOS Messaging does, still shows it, which the prompt says.
+        return (type == AuthInput::Password) ? 0 : 1;
+    }
+
     SecretChatId secretChatId           = purpleBuddyNameToSecretChatId(buddyName);
     const td::td_api::user *privateUser = nullptr;
     const td::td_api::chat *chat        = nullptr;
@@ -2433,6 +2658,12 @@ void PurpleTdClient::addChat(td::td_api::object_ptr<td::td_api::chat> chat)
     m_data.addChat(std::move(chat));
     updateChat(m_data.getChat(chatId));
     setUnreadReactionCount(m_data, chatId, unreadReactions);
+    // Its conversation may have been shown before the chat was known, as when one is begun with a
+    // contact who has none yet
+    const td::td_api::chat *added = m_data.getChat(chatId);
+    PurpleConversation     *conv  = added ? findMessageConversation(m_data, *added) : nullptr;
+    if (conv)
+        conversationShown(conv, isConversationShown(conv));
 }
 
 void PurpleTdClient::handleUserChatAction(const td::td_api::updateChatAction &updateChatAction)
@@ -2740,7 +2971,7 @@ std::string PurpleTdClient::getChatMemberImName(const char *name)
     return purple_find_buddy(m_account, buddyName.c_str()) ? buddyName : m_data.getDisplayName(*user);
 }
 
-bool PurpleTdClient::joinChat(const char *chatName)
+bool PurpleTdClient::joinChat(const char *chatName, bool lookUp)
 {
     ChatId                  id       = getTdlibChatId(chatName);
     const td::td_api::chat *chat     = m_data.getChat(id);
@@ -2754,11 +2985,17 @@ bool PurpleTdClient::joinChat(const char *chatName)
         // Check if the latter is the case and if it is, schedule to rejoin when telegram chat appears
         PurpleConversation *baseConv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_CHAT,
                                                                              chatName, m_account);
-        if (baseConv && purple_conv_chat_has_left(purple_conversation_get_chat_data(baseConv))) {
+        bool left = baseConv && purple_conv_chat_has_left(purple_conversation_get_chat_data(baseConv));
+        if (left) {
             purple_debug_misc(config::pluginId, "Scheduling to rejoin group chat %s - "
                               "no telegram chat found at the moment\n", chatName);
             m_data.addExpectedChat(id);
-        } else
+        }
+        // Not told of, though all the chats have been by now, the tab kept from before too: TDLib
+        // may have it stored all the same
+        if (lookUp && id.valid() && m_chatListReady)
+            lookUpChat(id, chatName);
+        else if (!left)
             purple_debug_warning(config::pluginId, "No telegram chat found for purple name %s\n", chatName);
     } else if (!m_data.isGroupChatWithMembership(*chat))
         purple_debug_warning(config::pluginId, "Chat %s (%s) is not a group we a member of\n",
@@ -2837,6 +3074,54 @@ void PurpleTdClient::joinChatResponse(uint64_t requestId, td::td_api::object_ptr
         purple_notify_error(purple_account_get_connection(m_account), _("Failed to join chat"),
                             message.c_str(), NULL);
     }
+}
+
+void PurpleTdClient::lookUpChat(ChatId chatId, const std::string &chatName)
+{
+    purple_debug_misc(config::pluginId, "Asking TDLib for chat %s, not told of\n", chatName.c_str());
+    auto request = td::td_api::make_object<td::td_api::getChat>();
+    request->chat_id_ = chatId.value();
+    m_transceiver.sendQuery(std::move(request), [this, chatId, chatName](uint64_t, TdObjectPtr object) {
+        chatLookedUp(chatId, chatName, std::move(object), false);
+    });
+}
+
+void PurpleTdClient::chatLookedUp(ChatId chatId, const std::string &chatName, td::td_api::object_ptr<td::td_api::Object> object,
+                                  bool byName)
+{
+    // TDLib tells of a chat it returns with updateNewChat first. A public name may since have gone
+    // to another chat.
+    if (object && (object->get_id() == td::td_api::chat::ID) &&
+        (getId(static_cast<const td::td_api::chat &>(*object)) == chatId) && m_data.getChat(chatId))
+    {
+        const td::td_api::chat *chat = m_data.getChat(chatId);
+        purple_debug_misc(config::pluginId, "Chat %s found %s, in %zu lists\n", chatName.c_str(),
+                          byName ? "by its public name" : "by its id", chat->positions_.size());
+        if (!joinChat(chatName.c_str(), false))
+            // TRANSLATOR: Error dialog, title
+            purple_notify_error(purple_account_get_connection(m_account), _("Failed to join chat"),
+                                // TRANSLATOR: Error dialog, content
+                                _("You are no longer a member of this group or channel"), NULL);
+        return;
+    }
+    purple_debug_misc(config::pluginId, "Chat %s not found %s: %s\n", chatName.c_str(),
+                      byName ? "by its public name" : "by its id", getDisplayedError(object).c_str());
+    PurpleChat *purpleChat = byName ? nullptr : purple_blist_find_chat(m_account, chatName.c_str());
+    const char *publicName = purpleChat ? purple_blist_node_get_string(PURPLE_BLIST_NODE(purpleChat),
+                                                                       BuddyOptions::PublicName)
+                                        : nullptr;
+    if (publicName && *publicName) {
+        auto request = td::td_api::make_object<td::td_api::searchPublicChat>();
+        request->username_ = publicName;
+        m_transceiver.sendQuery(std::move(request), [this, chatId, chatName](uint64_t, TdObjectPtr object) {
+            chatLookedUp(chatId, chatName, std::move(object), true);
+        });
+        return;
+    }
+    // TRANSLATOR: Error dialog, title
+    purple_notify_error(purple_account_get_connection(m_account), _("Failed to join chat"),
+                        // TRANSLATOR: Error dialog, content
+                        _("Telegram does not know this group or channel"), NULL);
 }
 
 void PurpleTdClient::joinChatByGroupName(const char *joinString, const char *groupName)
@@ -3464,7 +3749,7 @@ void PurpleTdClient::uploadResponse(uint64_t requestId, td::td_api::object_ptr<t
 
     if (request) {
         if (file)
-            startDocumentUploadProgress(request->chatId, request->xfer, *file, m_transceiver, m_data,
+            startDocumentUploadProgress(request->chatId, request->xfer, request->kind, *file, m_transceiver, m_data,
                                         &PurpleTdClient::sendMessageResponse);
         else
             uploadResponseError(request->xfer, getDisplayedError(object), m_data);

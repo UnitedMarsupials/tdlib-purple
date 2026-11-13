@@ -40,24 +40,47 @@ bool saveImage(int id, char **fileName)
     return true;
 }
 
+AttachmentKind getSentFileKind(PurpleAccount *account, const std::string &path)
+{
+    if (purple_account_get_bool(account, AccountOptions::SendFilesByContent,
+                                AccountOptions::SendFilesByContentDefault))
+        return guessAttachmentKind(path);
+    return AttachmentKind::Document;
+}
+
 void startDocumentUpload(ChatId chatId, const std::string &filename, PurpleXfer *xfer,
                          TdTransceiver &transceiver, TdAccountData &account,
                          TdTransceiver::ResponseCb response)
 {
-    auto uploadRequest = td::td_api::make_object<td::td_api::preliminaryUploadFile>();
+    // Uploaded as what it is to be sent as: TDLib takes a file uploaded as a document for no photo
+    AttachmentKind kind          = getSentFileKind(account.purpleAccount, filename);
+    auto           uploadRequest = td::td_api::make_object<td::td_api::preliminaryUploadFile>();
     uploadRequest->file_ = td::td_api::make_object<td::td_api::inputFileLocal>(filename);
-    uploadRequest->file_type_ = td::td_api::make_object<td::td_api::fileTypeDocument>();
+    switch (kind) {
+    case AttachmentKind::Photo:
+        uploadRequest->file_type_ = td::td_api::make_object<td::td_api::fileTypePhoto>();
+        break;
+    case AttachmentKind::Video:
+        uploadRequest->file_type_ = td::td_api::make_object<td::td_api::fileTypeVideo>();
+        break;
+    case AttachmentKind::Voice:
+        uploadRequest->file_type_ = td::td_api::make_object<td::td_api::fileTypeVoiceNote>();
+        break;
+    case AttachmentKind::Document:
+        uploadRequest->file_type_ = td::td_api::make_object<td::td_api::fileTypeDocument>();
+        break;
+    }
     uploadRequest->priority_ = FILE_UPLOAD_PRIORITY;
     purple_xfer_ref(xfer);
     uint64_t requestId = transceiver.sendQuery(std::move(uploadRequest), response);
-    account.addPendingRequest<UploadRequest>(requestId, xfer, chatId);
+    account.addPendingRequest<UploadRequest>(requestId, xfer, chatId, kind);
 }
 
 static void updateDocumentUploadProgress(const td::td_api::file &file, PurpleXfer *xfer, ChatId chatId,
-                                         TdTransceiver &transceiver, TdAccountData &account,
+                                         AttachmentKind kind, TdTransceiver &transceiver, TdAccountData &account,
                                          TdTransceiver::ResponseCb sendMessageResponse);
 
-void startDocumentUploadProgress(ChatId chatId, PurpleXfer *xfer, const td::td_api::file &file,
+void startDocumentUploadProgress(ChatId chatId, PurpleXfer *xfer, AttachmentKind kind, const td::td_api::file &file,
                                  TdTransceiver &transceiver, TdAccountData &account,
                                  TdTransceiver::ResponseCb sendMessageResponse)
 {
@@ -69,8 +92,8 @@ void startDocumentUploadProgress(ChatId chatId, PurpleXfer *xfer, const td::td_a
     } else {
         purple_debug_misc(config::pluginId, "Got file id %d for uploading %s\n", (int)file.id_,
                             purple_xfer_get_local_filename(xfer));
-        account.addFileTransfer(file.id_, xfer, chatId);
-        updateDocumentUploadProgress(file, xfer, chatId, transceiver, account, sendMessageResponse);
+        account.addFileTransfer(file.id_, xfer, chatId, kind);
+        updateDocumentUploadProgress(file, xfer, chatId, kind, transceiver, account, sendMessageResponse);
     }
 }
 
@@ -83,7 +106,7 @@ void uploadResponseError(PurpleXfer *xfer, const std::string &message, TdAccount
 }
 
 static void updateDocumentUploadProgress(const td::td_api::file &file, PurpleXfer *upload, ChatId chatId,
-                                         TdTransceiver &transceiver, TdAccountData &account,
+                                         AttachmentKind kind, TdTransceiver &transceiver, TdAccountData &account,
                                          TdTransceiver::ResponseCb sendMessageResponse)
 {
     size_t fileSize = purple_xfer_get_size(upload);
@@ -98,22 +121,20 @@ static void updateDocumentUploadProgress(const td::td_api::file &file, PurpleXfe
             purple_xfer_set_bytes_sent(upload, std::min(fileSize, bytesSent));
             purple_xfer_update_progress(upload);
         } else if (file.local_ && (file.remote_->uploaded_size_ == file.local_->downloaded_size_)) {
-            purple_debug_misc(config::pluginId, "Finishing uploading %s\n", purple_xfer_get_local_filename(upload));
+            // Its file, read for a recording's length, is named before the transfer ends, which can
+            // free it
+            const char       *localName = purple_xfer_get_local_filename(upload);
+            const std::string path      = localName ? localName : "";
+            purple_debug_misc(config::pluginId, "Finishing uploading %s\n", path.c_str());
             purple_xfer_set_bytes_sent(upload, fileSize);
             purple_xfer_set_completed(upload, TRUE);
             purple_xfer_end(upload);
             purple_xfer_unref(upload);
             account.removeFileTransfer(file.id_);
             auto sendMessageRequest = td::td_api::make_object<td::td_api::sendMessage>();
-            auto content = td::td_api::make_object<td::td_api::inputMessageDocument>();
-            content->caption_ = td::td_api::make_object<td::td_api::formattedText>();
-#if TDLIB_API_INPUT_PHOTO
-            content->document_ = td::td_api::make_object<td::td_api::inputDocument>();
-            content->document_->document_ = td::td_api::make_object<td::td_api::inputFileId>(file.id_);
-#else
-            content->document_ = td::td_api::make_object<td::td_api::inputFileId>(file.id_);
-#endif
-            sendMessageRequest->input_message_content_ = std::move(content);
+            sendMessageRequest->input_message_content_ =
+                makeMediaContent(kind, td::td_api::make_object<td::td_api::inputFileId>(file.id_), path,
+                                 td::td_api::make_object<td::td_api::formattedText>());
             sendMessageRequest->chat_id_ = chatId.value();
 
             uint64_t requestId = transceiver.sendQuery(std::move(sendMessageRequest), sendMessageResponse);
@@ -376,11 +397,12 @@ static void updateDownloadProgress(const td::td_api::file &file, PurpleXfer *xfe
 void updateFileTransferProgress(const td::td_api::file &file, TdTransceiver &transceiver,
                                 TdAccountData &account, TdTransceiver::ResponseCb sendMessageResponse)
 {
-    PurpleXfer *xfer = NULL;
-    ChatId      chatId;
-    if (account.getFileTransfer(file.id_, xfer, chatId)) {
+    PurpleXfer    *xfer = NULL;
+    ChatId         chatId;
+    AttachmentKind kind = AttachmentKind::Document;
+    if (account.getFileTransfer(file.id_, xfer, chatId, &kind)) {
         if (xfer && (purple_xfer_get_type(xfer) == PURPLE_XFER_SEND))
-            updateDocumentUploadProgress(file, xfer, chatId, transceiver, account, sendMessageResponse);
+            updateDocumentUploadProgress(file, xfer, chatId, kind, transceiver, account, sendMessageResponse);
     }
 
     updateDownloadProgress(file, xfer, account);

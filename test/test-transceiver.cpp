@@ -110,6 +110,19 @@ static void compare(const setTdlibParameters &actual, const setTdlibParameters &
     COMPARE(use_secret_chats_);
 }
 
+static void compare(const setOption &actual, const setOption &expected)
+{
+    COMPARE(name_);
+    ASSERT_EQ(expected.value_ != nullptr, actual.value_ != nullptr);
+    if (expected.value_) {
+        ASSERT_EQ(expected.value_->get_id(), actual.value_->get_id());
+        if (expected.value_->get_id() == optionValueBoolean::ID) {
+            ASSERT_EQ(static_cast<const optionValueBoolean &>(*expected.value_).value_,
+                      static_cast<const optionValueBoolean &>(*actual.value_).value_);
+        }
+    }
+}
+
 static void compare(const setAuthenticationPhoneNumber &actual, const setAuthenticationPhoneNumber &expected)
 {
     COMPARE(phone_number_);
@@ -129,6 +142,17 @@ static void compare(const loadChats &actual, const loadChats &expected)
 {
     COMPARE(chat_list_->get_id());
     COMPARE(limit_);
+}
+
+static void compare(const getChatEventLog &actual, const getChatEventLog &expected)
+{
+    COMPARE(chat_id_);
+    COMPARE(query_);
+    COMPARE(from_event_id_);
+    COMPARE(limit_);
+    ASSERT_EQ(nullptr == expected.filters_, nullptr == actual.filters_);
+    if (expected.filters_)
+        ASSERT_EQ(expected.filters_->message_deletions_, actual.filters_->message_deletions_);
 }
 
 static void compare(const viewMessages &actual, const viewMessages &expected)
@@ -291,6 +315,22 @@ static void compare(const object_ptr<InputMessageContent> &actual,
             compare(actualVideo.video_, expectedVideo.video_);
 #endif
             compare(actualVideo.caption_, expectedVideo.caption_);
+            break;
+        }
+        case inputMessageVoiceNote::ID: {
+            const inputMessageVoiceNote &actualVoice   = static_cast<const inputMessageVoiceNote &>(*actual);
+            const inputMessageVoiceNote &expectedVoice = static_cast<const inputMessageVoiceNote &>(*expected);
+#if TDLIB_API_INPUT_VOICE_NOTE
+            ASSERT_EQ(expectedVoice.voice_note_ != nullptr, actualVoice.voice_note_ != nullptr);
+            if (actualVoice.voice_note_) {
+                compare(actualVoice.voice_note_->voice_note_, expectedVoice.voice_note_->voice_note_);
+                ASSERT_EQ(expectedVoice.voice_note_->duration_, actualVoice.voice_note_->duration_);
+            }
+#else
+            compare(actualVoice.voice_note_, expectedVoice.voice_note_);
+            ASSERT_EQ(expectedVoice.duration_, actualVoice.duration_);
+#endif
+            compare(actualVoice.caption_, expectedVoice.caption_);
             break;
         }
         default:
@@ -681,6 +721,21 @@ static void compare(const readAllChatReactions &actual, const readAllChatReactio
     COMPARE(chat_id_);
 }
 
+static void compare(const openChat &actual, const openChat &expected)
+{
+    COMPARE(chat_id_);
+}
+
+static void compare(const getChat &actual, const getChat &expected)
+{
+    COMPARE(chat_id_);
+}
+
+static void compare(const closeChat &actual, const closeChat &expected)
+{
+    COMPARE(chat_id_);
+}
+
 static void compare(const getMessageAddedReactions &actual, const getMessageAddedReactions &expected)
 {
     COMPARE(chat_id_);
@@ -703,10 +758,12 @@ static void compareRequests(const Function &actual, const Function &expected,
     switch (actual.get_id()) {
         C(setTdlibParameters)
         C(setAuthenticationPhoneNumber)
+        C(setOption)
         case getContacts::ID: break;
         C(getChats)
         C(loadChats)
         C(viewMessages)
+        C(getChatEventLog)
         C(downloadFile)
         case sendMessage::ID:
             compare(static_cast<const sendMessage &>(actual), static_cast<const sendMessage &>(expected),
@@ -754,6 +811,9 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(setMessageSenderBlockList)
         C(reportChat)
         C(readAllChatReactions)
+        C(openChat)
+        C(getChat)
+        C(closeChat)
         C(getMessageAddedReactions)
         case editMessageMedia::ID:
             compare(static_cast<const editMessageMedia &>(actual), static_cast<const editMessageMedia &>(expected),
@@ -777,6 +837,21 @@ void TestTransceiver::verifyRequestImpl(const Function &request)
 
     std::cout << "Received request " << m_requests.front().id << ": " << requestToString(*m_requests.front().function) << "\n";
     compareRequests(*m_requests.front().function, request, m_inputPhotoPaths);
+}
+
+void TestTransceiver::verifyRequestAmong(const Function &request)
+{
+    std::queue<td::Client::Request> others;
+    bool                            found = false;
+    for (; !m_requests.empty(); m_requests.pop())
+        if (!found && (m_requests.front().function->get_id() == request.get_id())) {
+            found = true;
+            std::cout << "Received request " << m_requests.front().id << ": " << requestToString(*m_requests.front().function) << "\n";
+            compareRequests(*m_requests.front().function, request, m_inputPhotoPaths);
+        } else
+            others.push(std::move(m_requests.front()));
+    m_requests = std::move(others);
+    ASSERT_TRUE(found) << "Missing request: expected " << requestToString(request);
 }
 
 void TestTransceiver::verifyNoRequests()
@@ -938,6 +1013,18 @@ object_ptr<setTdlibParameters> makeTdlibParameters(const std::string &databaseDi
     return result;
 }
 
+// Sent after setTdlibParameters at every login: the storage optimizer is on unless "Keep inline
+// downloads" is set (it is not, by default).
+object_ptr<setOption> makeStorageOptimizerOption(bool useStorageOptimizer)
+{
+    auto value     = make_object<optionValueBoolean>();
+    value->value_  = useStorageOptimizer;
+    auto option    = make_object<setOption>();
+    option->name_  = "use_storage_optimizer";
+    option->value_ = std::move(value);
+    return option;
+}
+
 object_ptr<Object> getChatsNoChatsResponse()
 {
     return make_object<error>(404, "No more chats");
@@ -1042,6 +1129,47 @@ object_ptr<chatInviteLink> makeChatInviteLink(const std::string &link)
 {
     auto result = make_object<chatInviteLink>();
     result->invite_link_ = link;
+    return result;
+}
+
+object_ptr<openChat> makeOpenChat(int64_t chatId)
+{
+    auto result = make_object<openChat>();
+    result->chat_id_ = chatId;
+    return result;
+}
+
+object_ptr<closeChat> makeCloseChat(int64_t chatId)
+{
+    auto result = make_object<closeChat>();
+    result->chat_id_ = chatId;
+    return result;
+}
+
+object_ptr<getBasicGroupFullInfo> makeGetBasicGroupFullInfo(int64_t groupId)
+{
+    auto result = make_object<getBasicGroupFullInfo>();
+    result->basic_group_id_ = groupId;
+    return result;
+}
+
+object_ptr<setOption> makeOnlineOption(bool online)
+{
+    auto value = make_object<optionValueBoolean>();
+    value->value_ = online;
+    auto result = make_object<setOption>();
+    result->name_  = "online";
+    result->value_ = std::move(value);
+    return result;
+}
+
+object_ptr<updateChatReadInbox> makeUpdateChatReadInbox(int64_t chatId, int64_t lastReadInboxMessageId,
+                                                        int32_t unreadCount)
+{
+    auto result = make_object<updateChatReadInbox>();
+    result->chat_id_                    = chatId;
+    result->last_read_inbox_message_id_ = lastReadInboxMessageId;
+    result->unread_count_               = unreadCount;
     return result;
 }
 
@@ -1454,6 +1582,22 @@ object_ptr<inputMessageVideo> makeInputMessageVideo(object_ptr<InputFile> &&vide
     result->video_->video_ = std::move(video_);
 #else
     result->video_ = std::move(video_);
+#endif
+    result->caption_ = std::move(caption_);
+    return result;
+}
+
+object_ptr<inputMessageVoiceNote> makeInputMessageVoiceNote(object_ptr<InputFile> &&voiceNote_, int32_t duration_,
+                                                            object_ptr<formattedText> &&caption_)
+{
+    auto result = make_object<inputMessageVoiceNote>();
+#if TDLIB_API_INPUT_VOICE_NOTE
+    result->voice_note_ = make_object<inputVoiceNote>();
+    result->voice_note_->voice_note_ = std::move(voiceNote_);
+    result->voice_note_->duration_   = duration_;
+#else
+    result->voice_note_ = std::move(voiceNote_);
+    result->duration_   = duration_;
 #endif
     result->caption_ = std::move(caption_);
     return result;

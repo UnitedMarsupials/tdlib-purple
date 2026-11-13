@@ -123,11 +123,12 @@ public:
 
 class UploadRequest: public PendingRequest {
 public:
-    PurpleXfer *xfer;
-    ChatId      chatId;
+    PurpleXfer    *xfer;
+    ChatId         chatId;
+    AttachmentKind kind; // what it is uploaded, and to be sent, as
 
-    UploadRequest(uint64_t requestId, PurpleXfer *xfer, ChatId chatId)
-    : PendingRequest(requestId), xfer(xfer), chatId(chatId) {}
+    UploadRequest(uint64_t requestId, PurpleXfer *xfer, ChatId chatId, AttachmentKind kind)
+    : PendingRequest(requestId), xfer(xfer), chatId(chatId), kind(kind) {}
 };
 
 struct TgMessageInfo {
@@ -344,6 +345,7 @@ struct ShownMessage {
     std::string formatting; // of the text or caption, as an edit may change only that
     bool        quotable = false; // content is the text or caption, as written
     std::string kind;      // what the message is, to name it by where there is no text to quote
+    std::string sender;    // who sent it, as the conversation names them; empty if not known
     time_t      timestamp;
     // Who gave which reaction, as far as anyone has been named, and whether it was us
     std::map<std::string, bool> reactions;
@@ -413,6 +415,7 @@ public:
     void addChat(TdChatPtr chat); // Updates existing chat if any
     void updateChatPosition(ChatId chatId, td::td_api::object_ptr<td::td_api::chatPosition> &&position);
     void updateChatTitle(ChatId chatId, const std::string &title);
+    void updateChatReadInbox(ChatId chatId, MessageId lastRead, int32_t unreadCount);
     void updateChatActionBar(ChatId chatId, td::td_api::object_ptr<td::td_api::ChatActionBar> actionBar);
     void updateSmallChatPhoto(ChatId chatId, td::td_api::object_ptr<td::td_api::file> photo);
     void setContacts(const td::td_api::users &users);
@@ -434,6 +437,10 @@ public:
     std::string                   getDisplayName(UserId userId) const;
     void                          getUsersByDisplayName(const char *displayName,
                                                         std::vector<const td::td_api::user*> &users);
+    // Resolve a Telegram @username (case-insensitive, optional leading '@') to loaded users, so
+    // that a message addressed to a handle rather than an "id<n>" buddy can find its user.
+    void                          getUsersByUsername(const char *username,
+                                                     std::vector<const td::td_api::user*> &users);
 
     const td::td_api::basicGroup *getBasicGroup(BasicGroupId groupId) const;
     const td::td_api::basicGroupFullInfo *getBasicGroupInfo(BasicGroupId groupId) const;
@@ -476,8 +483,11 @@ public:
     DownloadRequest *          findDownloadRequest(int32_t fileId);
     void                       extractFileTransferRequests(std::vector<PurpleXfer *> &transfers);
 
-    void                       addFileTransfer(int32_t fileId, PurpleXfer *xfer, ChatId chatId);
-    bool                       getFileTransfer(int32_t fileId, PurpleXfer *&xfer, ChatId &chatId);
+    // An upload's kind is what it is to be sent as
+    void                       addFileTransfer(int32_t fileId, PurpleXfer *xfer, ChatId chatId,
+                                               AttachmentKind kind = AttachmentKind::Document);
+    bool                       getFileTransfer(int32_t fileId, PurpleXfer *&xfer, ChatId &chatId,
+                                               AttachmentKind *kind = nullptr);
     bool                       getFileIdForTransfer(PurpleXfer *xfer, int &fileId);
     void                       removeFileTransfer(int32_t fileId);
     void                       removeAllFileTransfers(std::vector<PurpleXfer *> &transfers);
@@ -549,9 +559,10 @@ private:
     };
 
     struct FileTransferInfo {
-        int32_t     fileId;
-        ChatId      chatId;
-        PurpleXfer *xfer;
+        int32_t        fileId;
+        ChatId         chatId;
+        PurpleXfer    *xfer;
+        AttachmentKind kind;
     };
 
     using ChatMap = std::map<ChatId, ChatInfo>;

@@ -556,6 +556,9 @@ void sendConversationReadReceipts(TdAccountData &account, PurpleConversation *co
 
     std::vector<ReadReceipt> receipts;
     account.extractPendingReadReceipts(chatId, receipts);
+    // Read as they are seen on screen, rather than all at once
+    if (viewsMessages(conv))
+        receipts.clear();
 
     // Seen now, as the phone app takes them to be once the chat is opened
     if (hasUnreadReactions(account, conv)) {
@@ -2646,10 +2649,20 @@ void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
         account.addShownMessage(chatId, getId(*message), std::move(shownMessage));
     }
 
+    MessageId messageId = getId(*message);
     IncomingMessage fullMessage;
     makeFullMessage(chat, std::move(message), fullMessage, account);
     fullMessage.messageInfo.fromHistory = (action == PendingMessageQueue::Prepend) || redrawn;
     fullMessage.messageInfo.redrawn     = redrawn;
+    // Who sent it in a group, for a notice about it later: several members' messages sent in the
+    // same second are otherwise reported deleted in the same words. A private chat has only the
+    // one sender, and a channel post signed by nobody has no one to name.
+    if (!fullMessage.messageInfo.outgoing && !fullMessage.messageInfo.anonymousChannelPost &&
+        (getBasicGroupId(chat).valid() || getSupergroupId(chat).valid())) {
+        ShownMessage *shownMessage = account.findShownMessage(chatId, messageId);
+        if (shownMessage)
+            shownMessage->sender = getSenderDisplayName(chat, fullMessage.messageInfo, account.purpleAccount);
+    }
     queueMessage(account, chat, std::move(fullMessage), action);
 }
 
@@ -2762,6 +2775,7 @@ void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messa
                           (editedMessage.content == shownMessage->content);
     edit.previous    = *shownMessage;
     editedMessage.timestamp = shownMessage->timestamp;
+    editedMessage.sender    = shownMessage->sender;
     // Edits leave reactions be
     editedMessage.reactions = shownMessage->reactions;
     editedMessage.givers    = shownMessage->givers;
@@ -2784,21 +2798,121 @@ void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messa
         requestEditedMessage(account, edit);
 }
 
+namespace {
+// A deleted message's notice, waiting for who deleted it, where that can be told
+struct DeletedMessage {
+    MessageId   messageId;
+    time_t      timestamp;
+    std::string sender; // as the conversation names them, if known
+};
+}
+
+// Says the message is gone: who deleted it, if known, whether they sent it or someone else did
+static void showDeletionNotice(TdAccountData &account, ChatId chatId, const DeletedMessage &deleted,
+                               const std::string &deleter, bool deletedOwn)
+{
+    const td::td_api::chat *chat = account.getChat(chatId);
+    if (!chat)
+        return;
+    std::string when = linkToMessage(account.purpleAccount, chatId, deleted.messageId,
+                                     formatMessageTime(deleted.timestamp));
+    std::string notice;
+    if (!deleter.empty() && deletedOwn)
+        notice = formatMessage(
+            // TRANSLATOR: In-chat notification. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
+            _("{0} deleted their message sent at {1}"), {escapeForDisplay(deleter), when});
+    else if (!deleter.empty() && !deleted.sender.empty())
+        notice = formatMessage(
+            // TRANSLATOR: In-chat notification. Arguments are the username of who deleted the message, that of who sent it, and the time (or date and time) it was sent at, as the conversation window shows it.
+            _("{0} deleted the message {1} sent at {2}"),
+            {escapeForDisplay(deleter), escapeForDisplay(deleted.sender), when});
+    else if (!deleter.empty())
+        notice = formatMessage(
+            // TRANSLATOR: In-chat notification. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
+            _("{0} deleted the message sent at {1}"), {escapeForDisplay(deleter), when});
+    else if (!deleted.sender.empty())
+        notice = formatMessage(
+            // TRANSLATOR: In-chat notification. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
+            _("The message {0} sent at {1} has been deleted"), {escapeForDisplay(deleted.sender), when});
+    else
+        notice = formatMessage(
+            // TRANSLATOR: In-chat notification. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
+            _("Message from {} has been deleted"), when);
+    showChatNotification(account, *chat, notice.c_str());
+}
+
+// Telegram does not say who deleted a message, but a supergroup's or channel's log of events,
+// which only its administrators can read, does
+static bool readsEventLog(TdAccountData &account, const td::td_api::chat &chat)
+{
+    const td::td_api::supergroup *group = account.getSupergroup(getSupergroupId(chat));
+    int32_t status = (group && group->status_) ? group->status_->get_id() : 0;
+    return (status == td::td_api::chatMemberStatusAdministrator::ID) ||
+           (status == td::td_api::chatMemberStatusCreator::ID);
+}
+
+static std::string getEventMemberName(TdAccountData &account, const td::td_api::object_ptr<td::td_api::MessageSender> &member)
+{
+    if (!member)
+        return std::string();
+    if (member->get_id() == td::td_api::messageSenderChat::ID) {
+        const td::td_api::chat *chat = account.getChat(getChatId(static_cast<const td::td_api::messageSenderChat &>(*member)));
+        return chat ? chat->title_ : std::string();
+    }
+    // Us, as our own messages are named
+    UserId userId = getUserId(member);
+    if (userId.valid() && (userId.value() == account.options.myUserId))
+        return purple_account_get_name_for_display(account.purpleAccount);
+    return account.getDisplayName(userId);
+}
+
+// The notices, once the log tells who deleted the messages; those it does not name, without
+static void eventLogResponse(TdAccountData &account, ChatId chatId, const std::vector<DeletedMessage> &deleted,
+                             td::td_api::object_ptr<td::td_api::Object> response)
+{
+    // Who deleted each message, and whether they sent it: told by who they are, not by their names,
+    // which two people may share; a message the chat itself sent, such as a channel's post, is no
+    // one's own
+    std::map<int64_t, std::pair<std::string, bool>> deleters;
+    if (response && (response->get_id() == td::td_api::chatEvents::ID)) {
+        for (const auto &event: static_cast<const td::td_api::chatEvents &>(*response).events_)
+            if (event && event->action_ &&
+                (event->action_->get_id() == td::td_api::chatEventMessageDeleted::ID)) {
+                const auto &action = static_cast<const td::td_api::chatEventMessageDeleted &>(*event->action_);
+                if (action.message_)
+                    deleters.emplace(action.message_->id_, std::make_pair(
+                        getEventMemberName(account, event->member_id_),
+                        event->member_id_ && action.message_->sender_id_ &&
+                        isSameUser(*event->member_id_, *action.message_->sender_id_)));
+            }
+    } else
+        purple_debug_misc(config::pluginId, "No log of events of chat %" G_GINT64_FORMAT ": %s\n",
+                          chatId.value(), getDisplayedError(response).c_str());
+    for (const DeletedMessage &message: deleted) {
+        auto it = deleters.find(message.messageId.value());
+        if (it != deleters.end())
+            showDeletionNotice(account, chatId, message, it->second.first, it->second.second);
+        else
+            showDeletionNotice(account, chatId, message, std::string(), false);
+    }
+}
+
 void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessages &update)
 {
     // Messages dropped from TDLib's cache are not deleted at all
     if (!update.is_permanent_ || update.from_cache_)
         return;
 
-    ChatId                  chatId = getChatId(update);
-    const td::td_api::chat *chat   = account.getChat(chatId);
+    ChatId                      chatId = getChatId(update);
+    const td::td_api::chat     *chat   = account.getChat(chatId);
+    std::vector<DeletedMessage> deleted;
 
     for (unsigned i = 0; i < update.message_ids_.size(); i++) {
         MessageId     messageId    = getMessageId(update, i);
         ShownMessage *shownMessage = account.findShownMessage(chatId, messageId);
         if (!shownMessage)
             continue;
-        time_t messageTime = shownMessage->timestamp;
+        DeletedMessage message{messageId, shownMessage->timestamp, shownMessage->sender};
         account.removeShownMessage(chatId, messageId);
 
         PendingEdit edit;
@@ -2814,14 +2928,33 @@ void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessag
                 strikeOutMessage(conv, messageId);
             else
                 removeMessage(conv, messageId);
-            // Telegram does not say who deleted it, so the notice cannot either.
-            std::string notice = formatMessage(
-                // TRANSLATOR: In-chat notification. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
-                _("Message from {} has been deleted"),
-                linkToMessage(account.purpleAccount, chatId, messageId, formatMessageTime(messageTime)));
-            showChatNotification(account, *chat, notice.c_str());
+            deleted.push_back(std::move(message));
         }
     }
+    if (deleted.empty())
+        return;
+
+    // In a group the notice names who sent the message, which tells apart those several members
+    // sent at once; and who deleted it, where the log of events tells
+    if (!readsEventLog(account, *chat)) {
+        for (const DeletedMessage &message: deleted)
+            showDeletionNotice(account, chatId, message, std::string(), false);
+        return;
+    }
+    auto filters = td::td_api::make_object<td::td_api::chatEventLogFilters>();
+    filters->message_deletions_ = true;
+    auto request = td::td_api::make_object<td::td_api::getChatEventLog>();
+    request->chat_id_       = chatId.value();
+    request->from_event_id_ = 0;
+    // The latest deletions, these among them, and a few made meanwhile
+    enum { EXTRA_EVENTS = 10, MAX_EVENTS = 100, EVENT_LOG_WAIT_SECONDS = 5 };
+    request->limit_         = static_cast<int32_t>(std::min<size_t>(deleted.size() + EXTRA_EVENTS, MAX_EVENTS));
+    request->filters_       = std::move(filters);
+    // Not answered in time, as while offline, the notices are written without it
+    account.transceiver.sendQueryWithTimeout(std::move(request),
+        [&account, chatId, deleted](uint64_t, td::td_api::object_ptr<td::td_api::Object> response) {
+            eventLogResponse(account, chatId, deleted, std::move(response));
+        }, EVENT_LOG_WAIT_SECONDS);
 }
 
 static void fetchHistoryRequest(TdAccountData &account, ChatId chatId, unsigned messagesFetched,
@@ -3441,6 +3574,17 @@ void markConversationTitle(TdAccountData &account, PurpleConversation *conv)
         purple_conversation_set_title(conv, newTitle.c_str());
     } else if (!hasUnreadReactions(account, conv) && marked)
         purple_conversation_set_title(conv, title + strlen(UNREAD_REACTIONS_MARK));
+}
+
+void readChatInbox(TdAccountData &account, ChatId chatId, MessageId lastRead, int32_t unreadCount)
+{
+    account.updateChatReadInbox(chatId, lastRead, unreadCount);
+    if (unreadCount != 0)
+        return;
+    const td::td_api::chat *chat = account.getChat(chatId);
+    PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+    if (conv && clearUnseen(conv))
+        purple_debug_misc(config::pluginId, "Chat %" G_GINT64_FORMAT " read elsewhere\n", chatId.value());
 }
 
 void setUnreadReactionCount(TdAccountData &account, ChatId chatId, int32_t count)

@@ -56,11 +56,15 @@ AttachmentKind guessAttachmentKind(const std::string &path)
             kind = AttachmentKind::Photo;
     if (g_str_has_prefix(mime.c_str(), "video/"))
         kind = AttachmentKind::Video;
+    // Telegram's voice messages are Opus in Ogg, as its apps record them; Vorbis and the rest go as files
+    if (mime == "audio/x-opus+ogg")
+        kind = AttachmentKind::Voice;
     return kind;
 }
 
 static const char IMAGE_LABEL[] = "Image";
 static const char VIDEO_LABEL[] = "Video";
+static const char VOICE_LABEL[] = "Voice";
 
 std::string PastedAttachment::placeholder() const
 {
@@ -68,6 +72,8 @@ std::string PastedAttachment::placeholder() const
         return std::string("[") + IMAGE_LABEL + "#" + std::to_string(number) + "]";
     if (kind == AttachmentKind::Video)
         return std::string("[") + VIDEO_LABEL + "#" + std::to_string(number) + "]";
+    if (kind == AttachmentKind::Voice)
+        return std::string("[") + VOICE_LABEL + "#" + std::to_string(number) + "]";
     return filePlaceholder();
 }
 
@@ -92,7 +98,7 @@ PastedAttachments::~PastedAttachments()
 std::string makeAttachmentName(AttachmentKind kind, unsigned number, const std::string &mimeType)
 {
     std::string name = (kind == AttachmentKind::Photo) ? "image" : (kind == AttachmentKind::Video) ? "video"
-                                                                                                  : "document";
+                     : (kind == AttachmentKind::Voice) ? "voice" : "document";
     name += "-" + std::to_string(number);
     // TDLib's, which it tells the type of a file it sends by
     std::string extension;
@@ -180,7 +186,8 @@ PlaceholderUse findPasted(const PastedAttachments &attachments, const std::strin
 
     std::string label = placeholder.substr(1, hash - 1);
     bool        media = (use.attachment->kind != AttachmentKind::Document);
-    if (media && (!g_ascii_strcasecmp(label.c_str(), IMAGE_LABEL) || !g_ascii_strcasecmp(label.c_str(), VIDEO_LABEL)))
+    if (media && (!g_ascii_strcasecmp(label.c_str(), IMAGE_LABEL) || !g_ascii_strcasecmp(label.c_str(), VIDEO_LABEL) ||
+                  !g_ascii_strcasecmp(label.c_str(), VOICE_LABEL)))
         return use;
     use.asFile = true;
     // A name it cannot go under, one of a directory, is its own

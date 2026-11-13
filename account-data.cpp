@@ -5,6 +5,7 @@
 #include <purple.h>
 #include <algorithm>
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 
 static bool isCanonicalPhoneNumber(const char *s)
@@ -496,6 +497,15 @@ void TdAccountData::updateChatTitle(ChatId chatId, const std::string &title)
         it->second.chat->title_ = title;
 }
 
+void TdAccountData::updateChatReadInbox(ChatId chatId, MessageId lastRead, int32_t unreadCount)
+{
+    auto it = m_chatInfo.find(chatId);
+    if (it != m_chatInfo.end()) {
+        it->second.chat->last_read_inbox_message_id_ = lastRead.value();
+        it->second.chat->unread_count_               = unreadCount;
+    }
+}
+
 void TdAccountData::updateChatActionBar(ChatId chatId, td::td_api::object_ptr<td::td_api::ChatActionBar> actionBar)
 {
     auto it = m_chatInfo.find(chatId);
@@ -634,6 +644,40 @@ void TdAccountData::getUsersByDisplayName(const char *displayName,
     for (const UserMap::value_type &entry: m_userInfo)
         if (entry.second.displayName == displayName)
             users.push_back(entry.second.user.get());
+}
+
+// Match by Telegram @username. Telegram usernames are case-insensitive; accept an optional leading
+// '@'. Checks the editable username and any active usernames.
+void TdAccountData::getUsersByUsername(const char *username,
+                                       std::vector<const td::td_api::user*> &users)
+{
+    users.clear();
+    if (!username || (*username == '\0'))
+        return;
+    if (*username == '@')
+        username++;
+    // A username is of Latin letters, digits and underscores, 32 of them at most: anything else, as a
+    // display name in another alphabet, is none
+    enum { MAX_USERNAME = 32 };
+    static const char USERNAME_CHARACTERS[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
+    size_t length = strlen(username);
+    if ((length == 0) || (length > MAX_USERNAME) || (strspn(username, USERNAME_CHARACTERS) != length))
+        return;
+    auto equalsIgnoreCase = [username](const std::string &candidate) {
+        return !g_ascii_strcasecmp(candidate.c_str(), username);
+    };
+
+    for (const UserMap::value_type &entry: m_userInfo) {
+        const td::td_api::user *u = entry.second.user.get();
+        if (!u || !u->usernames_)
+            continue;
+        bool hit = equalsIgnoreCase(u->usernames_->editable_username_);
+        if (!hit)
+            for (const std::string &active: u->usernames_->active_usernames_)
+                if (equalsIgnoreCase(active)) { hit = true; break; }
+        if (hit)
+            users.push_back(u);
+    }
 }
 
 const td::td_api::basicGroup *TdAccountData::getBasicGroup(BasicGroupId groupId) const
@@ -927,7 +971,7 @@ void TdAccountData::getTempFileUploads(std::vector<std::pair<ChatId, int64_t>> &
         messages.emplace_back(item.chatId, item.messageId);
 }
 
-void TdAccountData::addFileTransfer(int32_t fileId, PurpleXfer *xfer, ChatId chatId)
+void TdAccountData::addFileTransfer(int32_t fileId, PurpleXfer *xfer, ChatId chatId, AttachmentKind kind)
 {
     if (std::find_if(m_fileTransfers.begin(), m_fileTransfers.end(),
                     [fileId](const FileTransferInfo &upload) {
@@ -937,16 +981,19 @@ void TdAccountData::addFileTransfer(int32_t fileId, PurpleXfer *xfer, ChatId cha
         m_fileTransfers.back().fileId = fileId;
         m_fileTransfers.back().xfer = xfer;
         m_fileTransfers.back().chatId = chatId;
+        m_fileTransfers.back().kind = kind;
     }
 }
 
-bool TdAccountData::getFileTransfer(int32_t fileId, PurpleXfer *&xfer, ChatId &chatId)
+bool TdAccountData::getFileTransfer(int32_t fileId, PurpleXfer *&xfer, ChatId &chatId, AttachmentKind *kind)
 {
     auto it = std::find_if(m_fileTransfers.begin(), m_fileTransfers.end(),
                            [fileId](const FileTransferInfo &upload) { return (upload.fileId == fileId); });
     if (it != m_fileTransfers.end()) {
         xfer = it->xfer;
         chatId = it->chatId;
+        if (kind)
+            *kind = it->kind;
         return true;
     }
 

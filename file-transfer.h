@@ -12,11 +12,14 @@ enum {
 };
 
 bool saveImage(int id, char **fileName);
+// What a file sent by file transfer goes as: a document, or, if the account sends files by their
+// content, what that is, as for a pasted one
+AttachmentKind getSentFileKind(PurpleAccount *account, const std::string &path);
 void startDocumentUpload(ChatId chatId, const std::string &filename, PurpleXfer *xfer,
                          TdTransceiver &transceiver, TdAccountData &account,
                          TdTransceiver::ResponseCb response);
 void uploadResponseError(PurpleXfer *xfer, const std::string &message, TdAccountData &account);
-void startDocumentUploadProgress(ChatId chatId, PurpleXfer *xfer, const td::td_api::file &file,
+void startDocumentUploadProgress(ChatId chatId, PurpleXfer *xfer, AttachmentKind kind, const td::td_api::file &file,
                                  TdTransceiver &transceiver, TdAccountData &account,
                                  TdTransceiver::ResponseCb sendMessageResponse);
 void downloadFileInline(int32_t fileId, ChatId chatId, TgMessageInfo &message,

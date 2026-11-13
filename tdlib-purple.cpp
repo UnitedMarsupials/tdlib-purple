@@ -466,8 +466,10 @@ static void conversationCreated(PurpleConversation *conv, void *data)
     if (account != data)
         return;
     PurpleTdClient *tdClient = getTdClient(account);
-    if (tdClient)
+    if (tdClient) {
         tdClient->markConversation(conv);
+        tdClient->conversationShown(conv, isConversationShown(conv));
+    }
     if (!canRedrawConversation(conv) || purple_conversation_get_data(conv, FILL_PENDING_KEY))
         return;
     purple_conversation_set_data(conv, FILL_PENDING_KEY, conv);
@@ -476,6 +478,15 @@ static void conversationCreated(PurpleConversation *conv, void *data)
     info->convName    = purple_conversation_get_name(conv);
     info->type        = purple_conversation_get_type(conv);
     g_idle_add(fillConversation, info);
+}
+
+// Where which tabs are shown cannot be told, a conversation is shown for as long as it exists
+static void deletingConversation(PurpleConversation *conv, void *data)
+{
+    PurpleAccount  *account  = purple_conversation_get_account(conv);
+    PurpleTdClient *tdClient = (account == data) && !tracksShownConversations() ? getTdClient(account) : nullptr;
+    if (tdClient)
+        tdClient->conversationShown(conv, false);
 }
 
 static void tgprpl_login (PurpleAccount *acct)
@@ -499,6 +510,8 @@ static void tgprpl_login (PurpleAccount *acct)
                           acct, PURPLE_CALLBACK(conversationCreated), acct);
     purple_signal_connect(purple_conversations_get_handle(), "chat-joined",
                           acct, PURPLE_CALLBACK(conversationCreated), acct);
+    purple_signal_connect(purple_conversations_get_handle(), "deleting-conversation",
+                          acct, PURPLE_CALLBACK(deletingConversation), acct);
 }
 
 static void tgprpl_close (PurpleConnection *gc)
@@ -511,6 +524,8 @@ static void tgprpl_close (PurpleConnection *gc)
                              account, PURPLE_CALLBACK(conversationCreated));
     purple_signal_disconnect(purple_conversations_get_handle(), "chat-joined",
                              account, PURPLE_CALLBACK(conversationCreated));
+    purple_signal_disconnect(purple_conversations_get_handle(), "deleting-conversation",
+                             account, PURPLE_CALLBACK(deletingConversation));
     delete static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
     purple_connection_set_protocol_data(gc, NULL);
 }
@@ -591,6 +606,14 @@ static void tgprpl_info_show (PurpleConnection *gc, const char *who)
 
 static void tgprpl_set_status (PurpleAccount *acct, PurpleStatus *status)
 {
+}
+
+// Told by libpurple, by Pidgin's setting of when the user is idle; never, if told not to report it
+static void tgprpl_set_idle (PurpleConnection *gc, int idleTime)
+{
+    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    if (tdClient)
+        tdClient->setIdle(idleTime != 0);
 }
 
 static void tgprpl_add_buddy (PurpleConnection *gc, PurpleBuddy *buddy, PurpleGroup *group)
@@ -1033,6 +1056,9 @@ static bool placeholderClicked(PurpleConversation *conv, const std::string &plac
         else if (use.attachment->kind == AttachmentKind::Video)
             // TRANSLATOR: Item of the menu of a pasted video's placeholder by its file name, such as [holiday.mp4#2], in the message being written.
             forms.otherLabel = _("Send as a video");
+        else if (use.attachment->kind == AttachmentKind::Voice)
+            // TRANSLATOR: Item of the menu of a pasted recording's placeholder by its file name, such as [note.ogg#3], in the message being written.
+            forms.otherLabel = _("Send as a voice message");
         else
             // TRANSLATOR: Item of the menu of a pasted picture's placeholder by its file name, such as [holiday.jpg#1], in the message being written.
             forms.otherLabel = _("Send as a photo");
@@ -1133,7 +1159,7 @@ static PurplePluginProtocolInfo prpl_info = {
     .send_typing              = tgprpl_send_typing,
     .get_info                 = tgprpl_info_show,
     .set_status               = tgprpl_set_status,
-    .set_idle                 = NULL,
+    .set_idle                 = tgprpl_set_idle,
     .change_passwd            = NULL,
     .add_buddy                = tgprpl_add_buddy,
     .add_buddies              = NULL,
@@ -1329,6 +1355,22 @@ static void topReached(PurpleConversation *conv, double filling)
         tdClient->showEarlierMessages(conv, filling);
 }
 
+// A tab shown or no longer shown, in Pidgin
+static void conversationShown(PurpleConversation *conv, bool shown)
+{
+    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    if (tdClient)
+        tdClient->conversationShown(conv, shown);
+}
+
+// The messages on screen in a tab shown, in Pidgin
+static void messagesViewed(PurpleConversation *conv, const std::vector<MessageId> &messageIds)
+{
+    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    if (tdClient)
+        tdClient->messagesViewed(conv, messageIds);
+}
+
 // A reaction to a message, under the pointer
 static bool reactionTipAsked(PurpleConversation *conv, MessageId messageId, const std::string &key, std::string &tip)
 {
@@ -1388,6 +1430,8 @@ static void registerMessageLinks()
     setBuddyMarkHandler(buddyMarked, UNREAD_REACTIONS_MARK);
     setTopReachedHandler(topReached);
     setReactionTipHandler(reactionTipAsked);
+    setShownHandler(conversationShown);
+    setViewedHandler(messagesViewed);
 }
 
 static void unregisterMessageLinks()
@@ -1405,6 +1449,8 @@ static void unregisterMessageLinks()
     setBuddyMarkHandler(nullptr, nullptr);
     setTopReachedHandler(nullptr);
     setReactionTipHandler(nullptr);
+    setShownHandler(nullptr);
+    setViewedHandler(nullptr);
 }
 
 static gboolean tgprpl_unload (PurplePlugin *plugin)
@@ -1670,6 +1716,12 @@ static void tgprpl_init (PurplePlugin *plugin)
     opt = purple_account_option_bool_new(_("Show messages from channels and groups you have not joined"),
                                          AccountOptions::ShowUnjoinedChats,
                                          AccountOptions::ShowUnjoinedChatsDefault);
+    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+
+    // TRANSLATOR: Account settings, key (boolean). Of a file sent by file transfer ("Send File..."): told by its content, as a pasted one is; otherwise it goes as a file.
+    opt = purple_account_option_bool_new(_("Send a file as a picture, video or voice message when it is one"),
+                                         AccountOptions::SendFilesByContent,
+                                         AccountOptions::SendFilesByContentDefault);
     prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
 
     // TRANSLATOR: Account settings, key (boolean). Custom emoji are pictures of their own, each standing for an ordinary emoji.

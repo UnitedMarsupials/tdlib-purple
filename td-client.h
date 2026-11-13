@@ -7,6 +7,7 @@
 #include "pidgin-ui.h"
 #include <td/telegram/Client.h>
 #include <purple.h>
+#include <map>
 
 enum class BasicGroupMembership: uint8_t {
     Invalid,
@@ -40,6 +41,13 @@ public:
     bool fillConversation(PurpleConversation *conv);
     // Its title marked, or not, as its chat has reactions unread
     void markConversation(PurpleConversation *conv);
+    // The tab's chat is open in TDLib while it is shown, for the updates of its messages that TDLib
+    // fetches only for open chats; its messages on screen, then, are seen, and so read
+    void conversationShown(PurpleConversation *conv, bool shown);
+    void messagesViewed(PurpleConversation *conv, const std::vector<MessageId> &messageIds);
+    // Online, for Telegram, while the user is not idle, as libpurple tells; the chats shown are
+    // closed meanwhile
+    void setIdle(bool idle);
     void showEarlierMessages(PurpleConversation *conv, double filling = 0);
     bool getReactionTip(PurpleConversation *conv, MessageId messageId, const std::string &key, std::string &tip);
     bool hasUnreadReactions(PurpleBuddy *buddy);
@@ -53,7 +61,8 @@ public:
     std::string getChatMemberAlias(const char *name);
     std::string getChatMemberImName(const char *name);
 
-    bool joinChat(const char *chatName);
+    // A chat not known yet is asked for, and joined once found
+    bool joinChat(const char *chatName, bool lookUp = true);
     void joinChatByInviteLink(const char *inviteLink);
     void joinChatByGroupName(const char *joinString, const char *groupName);
     void createGroup(const char *name, int type, const std::vector<std::string> &basicGroupMembers);
@@ -138,6 +147,9 @@ private:
     void       addProxyResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void       getProxiesResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void       removeOldProxies();
+    // Auth-input fallback (see m_authInputPending); declared before first use.
+    enum class AuthInput { None, Code, Password, DisplayName };
+
     void       sendTdlibParameters();
     void       sendPhoneNumber();
     void       requestAuthCode(const td::td_api::authenticationCodeInfo *authCodeInfo);
@@ -149,6 +161,12 @@ private:
     static void passwordCancelled(PurpleTdClient *self);
     static void displayNameEntered(PurpleTdClient *self, const gchar *name);
     static void displayNameCancelled(PurpleTdClient *self);
+    // Fallback: prompt for an auth value through a "Telegram" IM conversation
+    // and remember which value we're waiting for (see m_authInputPending).
+    void       promptAuthInputViaChat(AuthInput type, const std::string &message);
+    // Keep the "Telegram" conversation out of the log while a value is asked for in it, and end that
+    void       keepAuthInputUnlogged();
+    void       endAuthInput();
     void       authResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void       notifyAuthError(const td::td_api::object_ptr<td::td_api::Object> &response);
     void       setPurpleConnectionInProgress();
@@ -197,6 +215,11 @@ private:
     void       notifyFailedContact(const std::string &errorMessage);
     void       joinChatResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void       joinGroupSearchChatResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
+    // A chat of the buddy list that TDLib has not told of: by its id, from what TDLib has stored,
+    // then by its public name, if saved, from Telegram
+    void       lookUpChat(ChatId chatId, const std::string &chatName);
+    void       chatLookedUp(ChatId chatId, const std::string &chatName, td::td_api::object_ptr<td::td_api::Object> object,
+                            bool byName);
     void       deleteSupergroupResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void       setGroupDescriptionResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void       chatActionResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
@@ -214,14 +237,34 @@ private:
     void        setTwoFactorAuthResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void        requestRecoveryEmailConfirmation(const std::string &emailInfo);
     static void verifyRecoveryEmail(PurpleTdClient *self, const char *code);
+    void        updateOnline();
+    void        refreshOpenChats();
     void        verifyRecoveryEmailResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
+
+    // A front-end without request UI ops makes purple_request_input (login code / 2FA password /
+    // display name) fail. Fall back to prompting through a "Telegram" IM conversation and
+    // capturing the user's reply in tgprpl_send_im -> sendMessage. This tracks which auth value
+    // we're waiting for.
+    AuthInput             m_authInputPending = AuthInput::None;
+    // Whether logging of the "Telegram" conversation was turned off for the value, and was on before
+    bool                  m_authInputUnlogged = false;
+    bool                  m_authInputWasLogging = false;
 
     PurpleAccount        *m_account;
     TdTransceiver         m_transceiver;
     TdAccountData         m_data;
     int32_t               m_lastAuthState = 0;
     std::vector<UserId>   m_usersForNewPrivateChats;
+    // At first login every contact needs a private chat materialized. Doing this strictly
+    // serially (one createPrivateChat per server round-trip) is very slow for large contact
+    // lists. Keep a window of concurrent requests in flight instead, which cuts N*RTT down to
+    // ~(N/window)*RTT. m_privateChatRequestsInFlight tracks the window.
+    int                   m_privateChatRequestsInFlight = 0;
     bool                  m_chatListReady = false;
+    // Chats opened, and which of their messages were last told to be seen
+    std::map<ChatId, std::vector<MessageId>>    m_openChats;
+    bool                  m_idle   = false;
+    bool                  m_online = false; // as last told to TDLib, which starts offline
     bool                  m_isProxyAdded = false;
     std::vector<PurpleRoomlist *>               m_pendingRoomLists;
 #if TDLIB_API_ADDED_PROXY

@@ -109,6 +109,9 @@ void updateUnreadReactions(TdAccountData &account, td::td_api::updateMessageUnre
 // conversation's title, and its contact in the buddy list, begin with a heart
 extern const char UNREAD_REACTIONS_MARK[];
 void setUnreadReactionCount(TdAccountData &account, ChatId chatId, int32_t count);
+// The chat's messages are read up to the one given, here or on another device: once none is left
+// unread, its conversation no longer shows any as unseen
+void readChatInbox(TdAccountData &account, ChatId chatId, MessageId lastRead, int32_t unreadCount);
 bool hasUnreadReactions(TdAccountData &account, PurpleConversation *conv);
 // Marks the title, or takes the mark away, as the chat has reactions unread or not
 void markConversationTitle(TdAccountData &account, PurpleConversation *conv);
