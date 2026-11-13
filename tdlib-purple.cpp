@@ -1056,6 +1056,9 @@ static bool placeholderClicked(PurpleConversation *conv, const std::string &plac
         else if (use.attachment->kind == AttachmentKind::Video)
             // TRANSLATOR: Item of the menu of a pasted video's placeholder by its file name, such as [holiday.mp4#2], in the message being written.
             forms.otherLabel = _("Send as a video");
+        else if (use.attachment->kind == AttachmentKind::Voice)
+            // TRANSLATOR: Item of the menu of a pasted recording's placeholder by its file name, such as [note.ogg#3], in the message being written.
+            forms.otherLabel = _("Send as a voice message");
         else
             // TRANSLATOR: Item of the menu of a pasted picture's placeholder by its file name, such as [holiday.jpg#1], in the message being written.
             forms.otherLabel = _("Send as a photo");
@@ -1713,6 +1716,12 @@ static void tgprpl_init (PurplePlugin *plugin)
     opt = purple_account_option_bool_new(_("Show messages from channels and groups you have not joined"),
                                          AccountOptions::ShowUnjoinedChats,
                                          AccountOptions::ShowUnjoinedChatsDefault);
+    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+
+    // TRANSLATOR: Account settings, key (boolean). Of a file sent by file transfer ("Send File..."): told by its content, as a pasted one is; otherwise it goes as a file.
+    opt = purple_account_option_bool_new(_("Send a file as a picture, video or voice message when it is one"),
+                                         AccountOptions::SendFilesByContent,
+                                         AccountOptions::SendFilesByContentDefault);
     prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
 
     // TRANSLATOR: Account settings, key (boolean). Custom emoji are pictures of their own, each standing for an ordinary emoji.

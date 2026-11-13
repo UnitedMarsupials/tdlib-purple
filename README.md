@@ -59,6 +59,11 @@ placeholders, to be written into the message where they go. The clipboard is rea
 [xclip](https://github.com/astrand/xclip), found in `PATH`, which is not
 otherwise required. Placeholders last as long as the account is connected.
 
+A file sent by file transfer ("Send File...") goes as a file. An account
+option, "Send a file as a picture, video or voice message when it is one",
+makes it go as what its content is instead, as a pasted one does, for
+front-ends whose only way of sending a file is a file transfer.
+
 ## Installation
 
 Binary packages for Debian, Fedora, openSUSE and Ubuntu are available at https://download.opensuse.org/repositories/home:/ars3n1y/ .

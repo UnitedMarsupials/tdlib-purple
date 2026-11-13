@@ -4,6 +4,7 @@
 
 ### Features
 
+- **An account option sends a file sent by file transfer ("Send File...") as what its content is, as a pasted one goes: a picture as a photo, a video as a video, an Opus recording as a voice message, with its length, anything else as a file.** Off, as by default, every file goes as a file, as before. It is for front-ends that send everything they attach as a file transfer, having no placeholders to choose by.
 - **In Pidgin, a chat's reactions are kept up to date while its tab is shown, as the phone app does for the chat on its screen, and its messages are read as they come into view.** A tab is shown while it is the one chosen in its window and the window is not minimized: Telegram tells the reactions in channels and big groups only to those looking at them. A message is in view once its tab has not scrolled for a second, while its window has the focus and the screen is not locked, as the desktop's screen locker tells over D-Bus, nor blanked by the X server, nor its monitor asleep; as Telegram has it, reading it reads those before it too. A tab not shown, or left in a window without the focus, leaves its messages unread. Elsewhere, a chat is kept up to date while its conversation is open. While libpurple takes the user to be idle, by Pidgin's setting, the chats are closed, and nothing is read; otherwise Telegram is told the user is online, as it needs to keep the reactions of messages seen up to date: contacts may see that, and the phone gives no notifications meanwhile.
 
 ### Fixes

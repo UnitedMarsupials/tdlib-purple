@@ -1313,13 +1313,130 @@ static void parseMessage(const char *message, std::vector<MessagePart> &parts, T
     appendText(parts, textStart, s-textStart, account);
 }
 
-td::td_api::object_ptr<td::td_api::InputMessageContent>
-makeAttachmentContent(const PlaceholderUse &use, const std::string &uploadPath,
-                      td::td_api::object_ptr<td::td_api::formattedText> caption)
+// Samples, at 48 kHz, an Opus packet decodes to, by its table of contents (RFC 6716, 3.1)
+static unsigned getOpusPacketSamples(const unsigned char *packet, size_t length)
 {
-    auto file = td::td_api::make_object<td::td_api::inputFileLocal>(uploadPath);
-    purple_debug_misc(config::pluginId, "Sending %s\n", uploadPath.c_str());
-    switch (use.asFile ? AttachmentKind::Document : use.attachment->kind) {
+    if (!length)
+        return 0;
+    static const unsigned silk[]   = {480, 960, 1920, 2880};
+    static const unsigned hybrid[] = {480, 960};
+    static const unsigned celt[]   = {120, 240, 480, 960};
+    unsigned config = packet[0] >> 3;
+    unsigned frame  = (config < 12) ? silk[config % 4] : (config < 16) ? hybrid[config % 2] : celt[config % 4];
+    unsigned code   = packet[0] & 3;
+    unsigned frames = (code == 0) ? 1 : (code < 3) ? 2 : (length > 1) ? (packet[1] & 0x3F) : 0;
+    return frame * frames;
+}
+
+namespace {
+// An Ogg page of a file read: where it is, its granule position, serial number and length
+struct OggPage {
+    size_t   offset;
+    uint64_t granule;
+    uint32_t serial;
+    bool     continued; // its first packet began on the page before
+    size_t   segments;
+    size_t   length;
+};
+}
+
+static bool readOggPage(const std::vector<unsigned char> &data, size_t offset, OggPage &page)
+{
+    enum { HEADER = 27 };
+    if ((offset + HEADER > data.size()) || memcmp(&data[offset], "OggS", 4) || data[offset + 4])
+        return false;
+    const unsigned char *p = &data[offset];
+    page.offset    = offset;
+    page.granule   = 0;
+    for (int b = 7; b >= 0; b--)
+        page.granule = (page.granule << 8) | p[6 + b];
+    page.serial    = p[14] | (p[15] << 8) | (p[16] << 16) | (uint32_t(p[17]) << 24);
+    page.continued = p[5] & 1;
+    page.segments  = p[26];
+    if (offset + HEADER + page.segments > data.size())
+        return false;
+    page.length = HEADER + page.segments;
+    for (size_t i = 0; i < page.segments; i++)
+        page.length += p[HEADER + i];
+    return offset + page.length <= data.size();
+}
+
+// An Opus recording's length, in whole seconds, at least one; 0 if it cannot be told. A granule
+// position counts the samples, at 48 kHz whatever the recording's rate, decoded up to the end of its
+// page: the last audio page's, less where the first audio page began, which need not be 0, as of a
+// recording cut out of a longer one, and less those the header says to skip (RFC 7845, 4).
+static int getOpusDuration(const std::string &path)
+{
+    enum { HEADER = 27, PRE_SKIP = 10, MAX_PAGE = 65307, RATE = 48000 };
+    FILE *file = fopen(path.c_str(), "rb");
+    if (!file)
+        return 0;
+    // The first pages: the identification header, the comments, and the first audio
+    std::vector<unsigned char> head(4 * MAX_PAGE);
+    head.resize(fread(head.data(), 1, head.size(), file));
+    OggPage first;
+    if (!readOggPage(head, 0, first) || (first.length < HEADER + first.segments + 19) ||
+        memcmp(&head[HEADER + first.segments], "OpusHead", 8))
+    {
+        fclose(file);
+        return 0;
+    }
+    const unsigned char *opusHead = &head[HEADER + first.segments];
+    uint64_t preSkip = opusHead[PRE_SKIP] | (opusHead[PRE_SKIP + 1] << 8);
+
+    // The comments' pages have no position, being no audio
+    uint64_t start = 0;
+    OggPage  page  = first;
+    while (readOggPage(head, page.offset + page.length, page))
+        if ((page.serial == first.serial) && page.granule && (page.granule != UINT64_MAX)) {
+            // Less the packets that end on it, those it begins with being the comments' or else
+            // the audio's before it
+            uint64_t samples = 0;
+            size_t   packet  = page.offset + HEADER + page.segments;
+            size_t   size    = 0;
+            bool     skip    = page.continued;
+            for (size_t i = 0; i < page.segments; i++) {
+                unsigned lacing = head[page.offset + HEADER + i];
+                size += lacing;
+                if (lacing < 255) {
+                    if (!skip)
+                        samples += getOpusPacketSamples(&head[packet], size);
+                    skip    = false;
+                    packet += size;
+                    size    = 0;
+                }
+            }
+            start = (page.granule > samples) ? page.granule - samples : 0;
+            break;
+        }
+
+    std::vector<unsigned char> tail(MAX_PAGE);
+    long size = (fseek(file, 0, SEEK_END) == 0) ? ftell(file) : -1;
+    long from = (size > MAX_PAGE) ? size - MAX_PAGE : 0;
+    tail.resize(((size > 0) && (fseek(file, from, SEEK_SET) == 0)) ? fread(tail.data(), 1, tail.size(), file) : 0);
+    fclose(file);
+    // The last page of the stream with a position: a capture pattern, version 0, the same serial number
+    for (size_t i = (tail.size() >= HEADER) ? tail.size() - HEADER + 1 : 0; i-- > 0;) {
+        const unsigned char *last = &tail[i];
+        if (memcmp(last, "OggS", 4) || last[4] ||
+            ((last[14] | (last[15] << 8) | (last[16] << 16) | (uint32_t(last[17]) << 24)) != first.serial))
+            continue;
+        uint64_t granule = 0;
+        for (int b = 7; b >= 0; b--)
+            granule = (granule << 8) | last[6 + b];
+        if ((granule == UINT64_MAX) || (granule <= start + preSkip))
+            continue;
+        uint64_t samples = granule - start - preSkip;
+        return int(std::max<uint64_t>((samples + RATE - 1) / RATE, 1));
+    }
+    return 0;
+}
+
+td::td_api::object_ptr<td::td_api::InputMessageContent>
+makeMediaContent(AttachmentKind kind, td::td_api::object_ptr<td::td_api::InputFile> file, const std::string &path,
+                 td::td_api::object_ptr<td::td_api::formattedText> caption)
+{
+    switch (kind) {
     case AttachmentKind::Photo: {
         auto content = td::td_api::make_object<td::td_api::inputMessagePhoto>();
 #if TDLIB_API_INPUT_PHOTO
@@ -1342,6 +1459,20 @@ makeAttachmentContent(const PlaceholderUse &use, const std::string &uploadPath,
         content->caption_ = std::move(caption);
         return std::move(content);
     }
+    case AttachmentKind::Voice: {
+        // Telegram draws the waveform of one sent without it flat
+        auto content = td::td_api::make_object<td::td_api::inputMessageVoiceNote>();
+#if TDLIB_API_INPUT_VOICE_NOTE
+        content->voice_note_ = td::td_api::make_object<td::td_api::inputVoiceNote>();
+        content->voice_note_->voice_note_ = std::move(file);
+        content->voice_note_->duration_   = getOpusDuration(path);
+#else
+        content->voice_note_ = std::move(file);
+        content->duration_   = getOpusDuration(path);
+#endif
+        content->caption_ = std::move(caption);
+        return std::move(content);
+    }
     case AttachmentKind::Document:
         break;
     }
@@ -1354,6 +1485,16 @@ makeAttachmentContent(const PlaceholderUse &use, const std::string &uploadPath,
 #endif
     content->caption_ = std::move(caption);
     return std::move(content);
+}
+
+td::td_api::object_ptr<td::td_api::InputMessageContent>
+makeAttachmentContent(const PlaceholderUse &use, const std::string &uploadPath,
+                      td::td_api::object_ptr<td::td_api::formattedText> caption)
+{
+    purple_debug_misc(config::pluginId, "Sending %s\n", uploadPath.c_str());
+    return makeMediaContent(use.asFile ? AttachmentKind::Document : use.attachment->kind,
+                            td::td_api::make_object<td::td_api::inputFileLocal>(uploadPath), use.attachment->path,
+                            std::move(caption));
 }
 
 // A pasted attachment, the part's text its caption
@@ -1389,16 +1530,22 @@ ParsedEdit parseEdit(const char *message, const TdAccountData &account)
 }
 
 // How many attachments from the first go together as an album: one after another, captioned only by
-// the last, pictures and videos or documents only, as many as Telegram takes
+// the last, pictures and videos or documents only, as many as Telegram takes; a voice message goes alone
 static size_t getAlbumSize(const std::vector<MessagePart> &parts, size_t first)
 {
     enum { MAX_ALBUM_SIZE = 10 };
     auto isDocument = [](const MessagePart &part) {
         return part.attachment.asFile || (part.attachment.attachment->kind == AttachmentKind::Document);
     };
+    auto isVoice = [](const MessagePart &part) {
+        return !part.attachment.asFile && (part.attachment.attachment->kind == AttachmentKind::Voice);
+    };
+    if (isVoice(parts[first]))
+        return 1;
     size_t size = 1;
     while (parts[first + size - 1].text.empty() && (first + size < parts.size()) && (size < MAX_ALBUM_SIZE) &&
-           parts[first + size].attachment.attachment && (isDocument(parts[first + size]) == isDocument(parts[first])))
+           parts[first + size].attachment.attachment && !isVoice(parts[first + size]) &&
+           (isDocument(parts[first + size]) == isDocument(parts[first])))
         size++;
     return size;
 }

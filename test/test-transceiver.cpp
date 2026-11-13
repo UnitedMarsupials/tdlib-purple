@@ -306,6 +306,22 @@ static void compare(const object_ptr<InputMessageContent> &actual,
             compare(actualVideo.caption_, expectedVideo.caption_);
             break;
         }
+        case inputMessageVoiceNote::ID: {
+            const inputMessageVoiceNote &actualVoice   = static_cast<const inputMessageVoiceNote &>(*actual);
+            const inputMessageVoiceNote &expectedVoice = static_cast<const inputMessageVoiceNote &>(*expected);
+#if TDLIB_API_INPUT_VOICE_NOTE
+            ASSERT_EQ(expectedVoice.voice_note_ != nullptr, actualVoice.voice_note_ != nullptr);
+            if (actualVoice.voice_note_) {
+                compare(actualVoice.voice_note_->voice_note_, expectedVoice.voice_note_->voice_note_);
+                ASSERT_EQ(expectedVoice.voice_note_->duration_, actualVoice.voice_note_->duration_);
+            }
+#else
+            compare(actualVoice.voice_note_, expectedVoice.voice_note_);
+            ASSERT_EQ(expectedVoice.duration_, actualVoice.duration_);
+#endif
+            compare(actualVoice.caption_, expectedVoice.caption_);
+            break;
+        }
         default:
             ASSERT_TRUE(false) << "Unsupported input message content";
     }
@@ -1554,6 +1570,22 @@ object_ptr<inputMessageVideo> makeInputMessageVideo(object_ptr<InputFile> &&vide
     result->video_->video_ = std::move(video_);
 #else
     result->video_ = std::move(video_);
+#endif
+    result->caption_ = std::move(caption_);
+    return result;
+}
+
+object_ptr<inputMessageVoiceNote> makeInputMessageVoiceNote(object_ptr<InputFile> &&voiceNote_, int32_t duration_,
+                                                            object_ptr<formattedText> &&caption_)
+{
+    auto result = make_object<inputMessageVoiceNote>();
+#if TDLIB_API_INPUT_VOICE_NOTE
+    result->voice_note_ = make_object<inputVoiceNote>();
+    result->voice_note_->voice_note_ = std::move(voiceNote_);
+    result->voice_note_->duration_   = duration_;
+#else
+    result->voice_note_ = std::move(voiceNote_);
+    result->duration_   = duration_;
 #endif
     result->caption_ = std::move(caption_);
     return result;

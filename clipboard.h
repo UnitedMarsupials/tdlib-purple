@@ -16,10 +16,10 @@ struct ClipboardContent {
 // referenced, numbered in one sequence, and written into the message by placeholders. [Image#N]
 // and [Video#N] send a picture or video as such, nameless; [name#N] sends what is numbered N as a
 // file of that name, its own to begin with, or one made for it.
-enum class AttachmentKind { Photo, Video, Document };
+enum class AttachmentKind { Photo, Video, Voice, Document };
 struct PastedAttachment {
     unsigned       number;
-    AttachmentKind kind;      // of its content: a picture or video can go as such
+    AttachmentKind kind;      // of its content: a picture, video or recording can go as such
     std::string    path;
     std::string    name;      // as a file
     bool           temporary; // a picture of the clipboard's, saved for it, removed with it
