@@ -695,6 +695,13 @@ static void compare(const deleteMessages &actual, const deleteMessages &expected
     COMPARE(revoke_);
 }
 
+static void compare(const forwardMessages &actual, const forwardMessages &expected)
+{
+    COMPARE(chat_id_);
+    COMPARE(from_chat_id_);
+    COMPARE(message_ids_);
+}
+
 static void compare(const getUserFullInfo &actual, const getUserFullInfo &expected)
 {
     COMPARE(user_id_);
@@ -807,6 +814,7 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(getMessageProperties)
         C(editMessageCaption)
         C(deleteMessages)
+        C(forwardMessages)
         C(getUserFullInfo)
         C(setMessageSenderBlockList)
         C(reportChat)
@@ -1163,6 +1171,15 @@ object_ptr<setOption> makeOnlineOption(bool online)
     return result;
 }
 
+object_ptr<forwardMessages> makeForwardMessages(int64_t chatId, int64_t fromChatId, int64_t messageId)
+{
+    auto result = make_object<forwardMessages>();
+    result->chat_id_      = chatId;
+    result->from_chat_id_ = fromChatId;
+    result->message_ids_.push_back(messageId);
+    return result;
+}
+
 object_ptr<updateChatReadInbox> makeUpdateChatReadInbox(int64_t chatId, int64_t lastReadInboxMessageId,
                                                         int32_t unreadCount)
 {
@@ -1286,6 +1303,25 @@ object_ptr<messages> makeMessages(std::vector<object_ptr<message>> &&list)
     auto result = make_object<messages>();
     result->total_count_ = list.size();
     result->messages_    = std::move(list);
+    return result;
+}
+
+object_ptr<deleteMessages> makeDeleteMessages(std::int64_t chatId, const std::vector<std::int64_t> &messageIds,
+                                              bool revoke)
+{
+    auto result = make_object<deleteMessages>();
+    result->chat_id_     = chatId;
+    result->message_ids_ = messageIds;
+    result->revoke_      = revoke;
+    return result;
+}
+
+object_ptr<updateMessageSendSucceeded> makeUpdateMessageSendSucceeded(object_ptr<message> &&message,
+                                                                      std::int64_t oldMessageId)
+{
+    auto result = make_object<updateMessageSendSucceeded>();
+    result->message_        = std::move(message);
+    result->old_message_id_ = oldMessageId;
     return result;
 }
 

@@ -1586,3 +1586,51 @@ msgstr "Потрібен Telegram Premium"
 #: ../td-client.cpp:1115
 msgid "Cannot change the reaction"
 msgstr "Не вдається змінити реакцію"
+
+msgid "Forward…"
+msgstr "Переслати…"
+
+msgid "{} ({})"
+msgstr "{} ({})"
+
+msgid "Nowhere to forward the message to: the buddy list is empty."
+msgstr "Нікуди пересилати повідомлення: список контактів порожній."
+
+msgid "Forward the message"
+msgstr "Переслати повідомлення"
+
+msgid "To whom, or to which chat?"
+msgstr "Кому, або до якого чату?"
+
+msgid "To"
+msgstr "Кому"
+
+msgid "_Forward"
+msgstr "_Переслати"
+
+msgid "The message was not forwarded to {}: {}"
+msgstr "Повідомлення не переслано до {}: {}"
+
+msgid "no such user"
+msgstr "немає такого користувача"
+
+msgid "no such chat"
+msgstr "немає такого чату"
+
+msgid "Telegram did not forward it"
+msgstr "Telegram його не переслав"
+
+msgid "it has neither text nor a file"
+msgstr "у ньому немає ні тексту, ні файлу"
+
+msgid "{} [{}]"
+msgstr "{} [{}]"
+
+msgid "the account is not connected"
+msgstr "обліковий запис не під'єднано"
+
+msgid "the chat is no longer open"
+msgstr "чат уже закрито"
+
+msgid "The file of the message was not forwarded to {}: files cannot be sent there."
+msgstr "Файл повідомлення не переслано до {}: туди не можна надсилати файли."

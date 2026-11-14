@@ -1,6 +1,7 @@
 #include "fixture.h"
 #include "libpurple-mock.h"
 #include "client-utils.h"
+#include "td-client.h"
 #include <fmt/format.h>
 #include <ctime>
 
@@ -94,6 +95,40 @@ TEST_F(MessageEditTest, EditNotFetched)
     prpl.verifyNoEvents();
 }
 
+TEST_F(MessageEditTest, DeletedFromHere)
+{
+    loginWithOneContact();
+    receiveText("text");
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+
+    // Not deleted when Telegram refuses, it is not by us when it is later
+    client->deleteMessage(ChatId::fromString(std::to_string(chatIds[0]).c_str()),
+                          MessageId::fromString(std::to_string(messageId).c_str()), true);
+    tgl.verifyRequest(*makeDeleteMessages(chatIds[0], {messageId}, true));
+    tgl.reply(makeError(400, "MESSAGE_DELETE_FORBIDDEN"));
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                                             "Cannot delete the message: code 400 (MESSAGE_DELETE_FORBIDDEN)",
+                                             PURPLE_MESSAGE_ERROR, 0));
+    tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                                             "The message " + userFirstNames[0] + " " + userLastNames[0] +
+                                             " sent at " + messageTime(date) + " has been deleted",
+                                             PURPLE_MESSAGE_SYSTEM, 0));
+
+    // Telegram does not say who deleted a message, but one deleted from its menu here was by us
+    receiveText("text");
+    client->deleteMessage(ChatId::fromString(std::to_string(chatIds[0]).c_str()),
+                          MessageId::fromString(std::to_string(messageId).c_str()), true);
+    tgl.verifyRequest(*makeDeleteMessages(chatIds[0], {messageId}, true));
+    tgl.reply(make_object<ok>());
+    tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                                             selfFirstName + " " + selfLastName + " deleted the message " + userFirstNames[0] + " " +
+                                             userLastNames[0] + " sent at " + messageTime(date),
+                                             PURPLE_MESSAGE_SYSTEM, 0));
+}
+
 TEST_F(MessageEditTest, DeletedWhileFetchingEdit)
 {
     loginWithOneContact();
@@ -103,7 +138,8 @@ TEST_F(MessageEditTest, DeletedWhileFetchingEdit)
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
     tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
     prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
-                                             "Message from " + messageTime(date) + " has been deleted",
+                                             "The message " + userFirstNames[0] + " " + userLastNames[0] + " sent at " + messageTime(date) +
+                                             " has been deleted",
                                              PURPLE_MESSAGE_SYSTEM, 0));
 
     // The edit of a message reported deleted is no news
@@ -272,7 +308,8 @@ TEST_F(MessageEditTest, DeletedWhileEditDownloads)
     // The message shown before is deleted all the same
     tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
     prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
-                                             "Message from " + messageTime(date) + " has been deleted",
+                                             "The message " + userFirstNames[0] + " " + userLastNames[0] + " sent at " + messageTime(date) +
+                                             " has been deleted",
                                              PURPLE_MESSAGE_SYSTEM, 0));
 
     // ...and its edit is not shown once the picture is here
@@ -294,7 +331,8 @@ TEST_F(MessageEditTest, Deleted)
     prpl.verifyEvents(
         ConversationWriteEvent(
             purpleUserName(0), purpleUserName(0),
-            "Message from " + messageTime(date) + " has been deleted",
+            "The message " + userFirstNames[0] + " " + userLastNames[0] + " sent at " + messageTime(date) +
+            " has been deleted",
             PURPLE_MESSAGE_SYSTEM, 0
         )
     );
@@ -383,7 +421,8 @@ TEST_F(MessageEditTest, NoticesLinkToMessage)
     tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
     prpl.verifyEvents(ConversationWriteEvent(
         purpleUserName(0), purpleUserName(0),
-        "Message from <a href=\"" + link + "\">" + messageTime(date) + "</a> has been deleted",
+        "The message " + userFirstNames[0] + " " + userLastNames[0] + " sent at <a href=\"" + link + "\">" +
+        messageTime(date) + "</a> has been deleted",
         PURPLE_MESSAGE_SYSTEM, 0
     ));
     setJumpLinksEnabled(false);

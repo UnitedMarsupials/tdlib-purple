@@ -122,6 +122,26 @@ public:
     void cancelEntryEdit(ChatId chatId);
     void showEditCancelled(ChatId chatId);
 
+    // Somewhere a message may be forwarded to: a buddy, or a chat, of an account in the buddy list,
+    // this one or another; a chat of another account only while its conversation is open
+    struct ForwardDestination {
+        std::string accountName;  // as purple_account_get_username has it
+        std::string protocolId;
+        bool        isChat = false;
+        std::string name;         // the buddy's, or the chat's, as libpurple has it
+        std::string label;        // as offered
+    };
+    // Asks where to forward the message, out of what the buddy list offers, and forwards it there
+    void askForwardMessage(ChatId chatId, MessageId messageId);
+    // Asks which of these, the buddy list's, to forward the message to
+    void askForwardMessage(ChatId chatId, MessageId messageId, std::vector<ForwardDestination> destinations);
+    // Through Telegram, if the destination is this account's; otherwise through the destination's
+    // account: the text as a message, the file by file transfer, where that account can send one
+    void forwardMessage(ChatId chatId, MessageId messageId, const ForwardDestination &to);
+    static std::vector<ForwardDestination> getForwardDestinations();
+    // Labels that are the same as another's are made to differ
+    static void makeForwardLabelsUnique(std::vector<ForwardDestination> &destinations);
+
     // Blocks a user, or unblocks, as Pidgin's list of blocked users changes
     void setUserBlocked(UserId userId, bool blocked);
     // Whether Telegram takes a report about the chat as a whole, not about its messages
@@ -321,6 +341,7 @@ private:
         bool                       canDeleteForSelf = false;
         bool                       canDeleteForAll  = false;
         bool                       canReport        = false;
+        bool                       canForward       = false;
         UserId                     sender;           // someone else who sent it
         bool                       senderBlocked    = false;
         SentMedia                  media;
@@ -335,6 +356,11 @@ private:
     void showMessageMenuResponse(ChatId chatId, MessageId messageId, const MessageMenu &menu,
                                  const OpenMenuRef &openMenu, TdObjectPtr object);
     void askDeleteMessage(ChatId chatId, MessageId messageId, bool forAll);
+    void forwardToChat(ChatId chatId, MessageId messageId, ChatId toChatId, const std::string &label);
+    void forwardElsewhere(ChatId chatId, MessageId messageId, const ForwardDestination &to, TdObjectPtr object);
+    void showForwardFailure(ChatId chatId, const std::string &label, const std::string &reason);
+    static void forwardDestinationChosen(void *data, PurpleRequestFields *fields);
+    static void forwardDestinationCancelled(void *data, PurpleRequestFields *fields);
     void showEditRefused(ChatId chatId, const std::string &reason);
     void replaceMedia(ChatId chatId, MessageId messageId, const PlaceholderUse &use,
                       std::shared_ptr<td::td_api::formattedText> caption);

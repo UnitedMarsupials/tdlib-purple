@@ -130,7 +130,39 @@ FRONT_END_FUNCTION(gtk_text_view_get_iter_at_location);
 FRONT_END_FUNCTION(gtk_text_iter_get_marks);
 FRONT_END_FUNCTION(gtk_text_mark_get_name);
 FRONT_END_FUNCTION(gtk_separator_menu_item_new);
+FRONT_END_FUNCTION(gtk_menu_get_type);
+FRONT_END_FUNCTION(g_type_check_instance_is_a);
 FRONT_END_FUNCTION(gtk_widget_show);
+// For the dialog choosing out of a list, searched by what is typed
+FRONT_END_FUNCTION(gtk_dialog_new_with_buttons);
+FRONT_END_FUNCTION(gtk_dialog_get_content_area);
+FRONT_END_FUNCTION(gtk_dialog_response);
+FRONT_END_FUNCTION(gtk_dialog_set_default_response);
+FRONT_END_FUNCTION(gtk_window_set_default_size);
+FRONT_END_FUNCTION(gtk_label_new);
+FRONT_END_FUNCTION(gtk_entry_new);
+FRONT_END_FUNCTION(gtk_entry_get_text);
+FRONT_END_FUNCTION(gtk_entry_set_activates_default);
+FRONT_END_FUNCTION(gtk_list_store_new);
+FRONT_END_FUNCTION(gtk_list_store_append);
+FRONT_END_FUNCTION(gtk_list_store_set);
+FRONT_END_FUNCTION(gtk_tree_model_filter_new);
+FRONT_END_FUNCTION(gtk_tree_model_filter_set_visible_func);
+FRONT_END_FUNCTION(gtk_tree_model_filter_refilter);
+FRONT_END_FUNCTION(gtk_tree_model_get);
+FRONT_END_FUNCTION(gtk_tree_model_get_iter_first);
+FRONT_END_FUNCTION(gtk_tree_view_new_with_model);
+FRONT_END_FUNCTION(gtk_tree_view_set_headers_visible);
+FRONT_END_FUNCTION(gtk_tree_view_append_column);
+FRONT_END_FUNCTION(gtk_tree_view_get_selection);
+FRONT_END_FUNCTION(gtk_tree_view_column_new_with_attributes);
+FRONT_END_FUNCTION(gtk_cell_renderer_text_new);
+FRONT_END_FUNCTION(gtk_tree_selection_get_selected);
+FRONT_END_FUNCTION(gtk_tree_selection_select_iter);
+FRONT_END_FUNCTION(gtk_scrolled_window_new);
+FRONT_END_FUNCTION(gtk_scrolled_window_set_policy);
+FRONT_END_FUNCTION(gtk_box_pack_start);
+static bool g_chooser = false;
 FRONT_END_FUNCTION(gtk_text_buffer_get_tag_table);
 FRONT_END_FUNCTION(gtk_text_tag_table_lookup);
 FRONT_END_FUNCTION(gtk_text_buffer_create_tag);
@@ -596,6 +628,22 @@ void pidginUiLoad(PurplePlugin *plugin)
         !LOOK_UP(pango_context_get_metrics) || !LOOK_UP(pango_font_metrics_get_ascent) ||
         !LOOK_UP(pango_font_metrics_get_descent) || !LOOK_UP(pango_font_metrics_unref))
         p_gtk_widget_get_default_style = nullptr;
+
+    g_chooser = LOOK_UP(gtk_dialog_new_with_buttons) && LOOK_UP(gtk_dialog_get_content_area) && LOOK_UP(gtk_dialog_response) &&
+                LOOK_UP(gtk_dialog_set_default_response) && LOOK_UP(gtk_window_set_default_size) &&
+                LOOK_UP(gtk_label_new) && LOOK_UP(gtk_entry_new) && LOOK_UP(gtk_entry_get_text) &&
+                LOOK_UP(gtk_entry_set_activates_default) && LOOK_UP(gtk_list_store_new) &&
+                LOOK_UP(gtk_list_store_append) && LOOK_UP(gtk_list_store_set) &&
+                LOOK_UP(gtk_tree_model_filter_new) && LOOK_UP(gtk_tree_model_filter_set_visible_func) &&
+                LOOK_UP(gtk_tree_model_filter_refilter) && LOOK_UP(gtk_tree_model_get) &&
+                LOOK_UP(gtk_tree_model_get_iter_first) && LOOK_UP(gtk_tree_view_new_with_model) &&
+                LOOK_UP(gtk_tree_view_set_headers_visible) && LOOK_UP(gtk_tree_view_append_column) &&
+                LOOK_UP(gtk_tree_view_get_selection) && LOOK_UP(gtk_tree_view_column_new_with_attributes) &&
+                LOOK_UP(gtk_cell_renderer_text_new) && LOOK_UP(gtk_tree_selection_get_selected) &&
+                LOOK_UP(gtk_tree_selection_select_iter) && LOOK_UP(gtk_scrolled_window_new) &&
+                LOOK_UP(gtk_scrolled_window_set_policy) && LOOK_UP(gtk_box_pack_start) &&
+                LOOK_UP(gtk_widget_show_all) && LOOK_UP(gtk_widget_destroy) &&
+                LOOK_UP(g_signal_connect_data) && LOOK_UP(gtk_container_add);
 
     // A protocol plugin is loaded before Pidgin's window registers its signals: they are
     // connected to once the main loop is idle
@@ -2449,6 +2497,8 @@ static void addPlaceholderMenu(PurpleConversation *conv, GtkWidget *entry, GtkWi
     p_gtk_widget_show_all(menu);
 }
 
+static void addMessageMenu(PurpleConversation *conv, GtkWidget *menu, MessageId messageId);
+
 // GTK builds the menu of a tab's text anew each time, before emitting "populate-popup" for others to
 // add to it. The message is the one under the pointer, also when the menu is opened from the
 // keyboard; none if the pointer is elsewhere.
@@ -2467,15 +2517,24 @@ static gboolean populatingPopup(GSignalInvocationHint *, guint paramCount, const
     GtkTextView *textView = reinterpret_cast<GtkTextView *>(view);
     GtkTextIter  where;
     p_gtk_text_view_window_to_buffer_coords(textView, GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
-    p_gtk_text_view_get_iter_at_location(textView, &where, x, y);
     if (entryConv) {
+        p_gtk_text_view_get_iter_at_location(textView, &where, x, y);
         addPlaceholderMenu(entryConv, view, menu, where);
         return TRUE;
     }
+    // The character under the pointer, or the last of its line, if past it: not the place after,
+    // which for the last of a message is past its end
+    gint trailing;
+    p_gtk_text_view_get_iter_at_position(textView, &where, &trailing, x, y);
     MessageId messageId = findMessageAt(getTextBuffer(conv), where);
-    if (!messageId.valid())
-        return TRUE;
+    if (messageId.valid())
+        addMessageMenu(conv, menu, messageId);
+    return TRUE;
+}
 
+// The message's items go at the end of the menu: a placeholder waits for them
+static void addMessageMenu(PurpleConversation *conv, GtkWidget *menu, MessageId messageId)
+{
     OpenMenuRef openMenu = std::make_shared<OpenMenu>();
     openMenu->menu        = menu;
     openMenu->separator   = p_gtk_separator_menu_item_new();
@@ -2491,6 +2550,68 @@ static gboolean populatingPopup(GSignalInvocationHint *, guint paramCount, const
     purple_debug_misc(config::pluginId, "Menu opened on message %" G_GINT64_FORMAT "\n", messageId.value());
     if (!g_messagePopupHandler(conv, messageId, openMenu))
         fillOpenMenu(openMenu, {});
+}
+
+// A picture's menu, Pidgin's own with its "Save Image...", is built by the picture's event box when
+// the right button is let go over it, with no signal to add to it: the message under the pointer is
+// noted then, for its items to go into the menu shown next, before the main loop is idle again
+struct PictureMenu {
+    PurpleConversation *conv = nullptr;
+    MessageId           messageId;
+};
+static PictureMenu g_pictureMenu;
+static guint       g_pictureMenuSource  = 0;
+static guint       g_pictureEventSignal = 0;
+static gulong      g_pictureEventHook   = 0;
+static guint       g_menuShowSignal     = 0;
+static gulong      g_menuShowHook       = 0;
+
+static gboolean forgetPictureMenu(gpointer)
+{
+    g_pictureMenu       = PictureMenu();
+    g_pictureMenuSource = 0;
+    return FALSE;
+}
+
+static gboolean pictureClicked(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
+{
+    GtkWidget *box   = (paramCount > 1) ? static_cast<GtkWidget *>(p_g_value_get_object(&params[0])) : nullptr;
+    GdkEvent  *event = box ? static_cast<GdkEvent *>(p_g_value_get_boxed(&params[1])) : nullptr;
+    if (!event || (event->type != GDK_BUTTON_RELEASE) || (event->button.button != 3) || !g_messagePopupHandler ||
+        !p_g_object_get_data(G_OBJECT(box), IMAGE_SAVE_KEY))
+        return TRUE;
+    GtkWidget          *view = p_gtk_widget_get_parent(box);
+    PurpleConversation *conv = view ? findTabConversation(view) : nullptr;
+    if (!conv)
+        return TRUE;
+    gint x, y;
+    p_gtk_widget_get_pointer(view, &x, &y);
+    GtkTextView *textView = reinterpret_cast<GtkTextView *>(view);
+    GtkTextIter  where;
+    gint         trailing;
+    p_gtk_text_view_window_to_buffer_coords(textView, GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
+    p_gtk_text_view_get_iter_at_position(textView, &where, &trailing, x, y);
+    MessageId messageId = findMessageAt(getTextBuffer(conv), where);
+    if (!messageId.valid())
+        return TRUE;
+    if (!g_pictureMenuSource)
+        g_pictureMenuSource = g_idle_add(forgetPictureMenu, nullptr);
+    g_pictureMenu.conv      = conv;
+    g_pictureMenu.messageId = messageId;
+    return TRUE;
+}
+
+static gboolean menuShown(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
+{
+    if (!g_pictureMenu.conv)
+        return TRUE;
+    GtkWidget *menu = (paramCount > 0) ? static_cast<GtkWidget *>(p_g_value_get_object(&params[0])) : nullptr;
+    if (!menu || !p_g_type_check_instance_is_a(reinterpret_cast<GTypeInstance *>(menu), p_gtk_menu_get_type()))
+        return TRUE;
+    PictureMenu picture = g_pictureMenu;
+    g_pictureMenu.conv  = nullptr;
+    if (g_list_find(purple_get_conversations(), picture.conv))
+        addMessageMenu(picture.conv, menu, picture.messageId);
     return TRUE;
 }
 
@@ -3166,8 +3287,9 @@ static void connectPopup()
     if (!LOOK_UP(gtk_imhtml_get_type) || !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
         !LOOK_UP(g_signal_remove_emission_hook) || !LOOK_UP(g_value_get_object) ||
         !LOOK_UP(gtk_widget_get_pointer) || !LOOK_UP(gtk_text_view_window_to_buffer_coords) ||
-        !LOOK_UP(gtk_text_view_get_iter_at_location) || !LOOK_UP(gtk_text_iter_get_marks) ||
-        !LOOK_UP(gtk_text_mark_get_name) || !LOOK_UP(gtk_separator_menu_item_new) || !LOOK_UP(gtk_widget_show))
+        !LOOK_UP(gtk_text_view_get_iter_at_location) || !LOOK_UP(gtk_text_view_get_iter_at_position) ||
+        !LOOK_UP(gtk_text_iter_get_marks) || !LOOK_UP(gtk_text_mark_get_name) ||
+        !LOOK_UP(gtk_separator_menu_item_new) || !LOOK_UP(gtk_widget_show))
     {
         purple_debug_warning(config::pluginId, "Cannot add to the menu of a tab's text: some of GTK is not found\n");
         return;
@@ -3178,19 +3300,170 @@ static void connectPopup()
     g_popupSignal = p_g_signal_lookup("populate-popup", p_gtk_imhtml_get_type());
     if (g_popupSignal)
         g_popupHook = p_g_signal_add_emission_hook(g_popupSignal, 0, populatingPopup, nullptr, nullptr);
+    if (!LOOK_UP(gtk_widget_get_type) || !LOOK_UP(g_value_get_boxed) || !LOOK_UP(gtk_widget_get_parent) ||
+        !LOOK_UP(gtk_menu_get_type) || !LOOK_UP(g_type_check_instance_is_a))
+    {
+        purple_debug_warning(config::pluginId, "Cannot add to the menu of a picture: some of GTK is not found\n");
+        return;
+    }
+    g_pictureEventSignal = p_g_signal_lookup("event", p_gtk_widget_get_type());
+    g_menuShowSignal     = p_g_signal_lookup("show", p_gtk_widget_get_type());
+    if (g_pictureEventSignal && g_menuShowSignal) {
+        g_pictureEventHook = p_g_signal_add_emission_hook(g_pictureEventSignal, 0, pictureClicked, nullptr, nullptr);
+        g_menuShowHook     = p_g_signal_add_emission_hook(g_menuShowSignal, 0, menuShown, nullptr, nullptr);
+    }
 }
 
 static void disconnectPopup()
 {
     if (g_popupHook)
         p_g_signal_remove_emission_hook(g_popupSignal, g_popupHook);
-    g_popupHook = 0;
+    if (g_pictureEventHook)
+        p_g_signal_remove_emission_hook(g_pictureEventSignal, g_pictureEventHook);
+    if (g_menuShowHook)
+        p_g_signal_remove_emission_hook(g_menuShowSignal, g_menuShowHook);
+    g_popupHook        = 0;
+    g_pictureEventHook = 0;
+    g_menuShowHook     = 0;
+    if (g_pictureMenuSource)
+        g_source_remove(g_pictureMenuSource);
+    g_pictureMenuSource = 0;
+    g_pictureMenu       = PictureMenu();
+}
+
+// The dialog choosing out of a list: what is typed in its field narrows the list down to the items
+// with that in them, the first of which is chosen by Enter; a double-click chooses too
+namespace {
+struct ListChooser {
+    std::function<void(int)> chosen;
+    GtkWidget               *entry  = nullptr;
+    GtkWidget               *view   = nullptr;
+    GtkTreeModel            *filter = nullptr;
+    std::string              needle;  // what is typed, case folded
+};
+enum { COLUMN_LABEL, COLUMN_INDEX };
+}
+
+static gboolean listItemVisible(GtkTreeModel *model, GtkTreeIter *iter, gpointer data)
+{
+    const ListChooser *chooser = static_cast<const ListChooser *>(data);
+    if (chooser->needle.empty())
+        return TRUE;
+    gchar *label = nullptr;
+    p_gtk_tree_model_get(model, iter, COLUMN_LABEL, &label, -1);
+    if (!label)
+        return FALSE;
+    gchar   *folded  = g_utf8_casefold(label, -1);
+    gboolean visible = (strstr(folded, chooser->needle.c_str()) != nullptr);
+    g_free(folded);
+    g_free(label);
+    return visible;
+}
+
+static void listSearchChanged(GtkEditable *, gpointer data)
+{
+    ListChooser *chooser = static_cast<ListChooser *>(data);
+    gchar *folded = g_utf8_casefold(p_gtk_entry_get_text(reinterpret_cast<GtkEntry *>(chooser->entry)), -1);
+    chooser->needle = folded;
+    g_free(folded);
+    p_gtk_tree_model_filter_refilter(reinterpret_cast<GtkTreeModelFilter *>(chooser->filter));
+    // The first of what is left is what Enter takes
+    GtkTreeIter first;
+    if (p_gtk_tree_model_get_iter_first(chooser->filter, &first))
+        p_gtk_tree_selection_select_iter(p_gtk_tree_view_get_selection(reinterpret_cast<GtkTreeView *>(chooser->view)),
+                                         &first);
+}
+
+static void listItemActivated(GtkTreeView *, GtkTreePath *, GtkTreeViewColumn *, gpointer data)
+{
+    p_gtk_dialog_response(reinterpret_cast<GtkDialog *>(data), GTK_RESPONSE_OK);
+}
+
+static void listChooserResponse(GtkDialog *dialog, gint response, gpointer data)
+{
+    ListChooser *chooser = static_cast<ListChooser *>(data);
+    int          index   = -1;
+    GtkTreeIter  iter;
+    GtkTreeModel *model = nullptr;
+    if ((response == GTK_RESPONSE_OK) &&
+        p_gtk_tree_selection_get_selected(p_gtk_tree_view_get_selection(reinterpret_cast<GtkTreeView *>(chooser->view)),
+                                          &model, &iter))
+        p_gtk_tree_model_get(model, &iter, COLUMN_INDEX, &index, -1);
+    std::function<void(int)> chosen = std::move(chooser->chosen);
+    p_gtk_widget_destroy(reinterpret_cast<GtkWidget *>(dialog));
+    if (index >= 0)
+        chosen(index);
+}
+
+static void deleteListChooser(gpointer data)
+{
+    delete static_cast<ListChooser *>(data);
+}
+
+bool chooseFromList(const std::string &title, const std::string &prompt, const std::vector<std::string> &labels,
+                    std::function<void(int index)> chosen)
+{
+    if (!g_pidginUi || !g_chooser)
+        return false;
+
+    auto *chooser = new ListChooser;
+    chooser->chosen = std::move(chosen);
+    GtkWidget *dialog = p_gtk_dialog_new_with_buttons(title.c_str(), nullptr, GtkDialogFlags(0),
+                                                      GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
+                                                      GTK_STOCK_OK, GTK_RESPONSE_OK, nullptr);
+    p_gtk_dialog_set_default_response(reinterpret_cast<GtkDialog *>(dialog), GTK_RESPONSE_OK);
+    p_gtk_window_set_default_size(reinterpret_cast<GtkWindow *>(dialog), 400, 500);
+    // Let go with the dialog
+    p_g_object_set_data_full(reinterpret_cast<GObject *>(dialog), "tdlib-purple-chooser", chooser, deleteListChooser);
+
+    GtkListStore *store = p_gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_INT);
+    for (size_t i = 0; i < labels.size(); i++) {
+        GtkTreeIter iter;
+        p_gtk_list_store_append(store, &iter);
+        p_gtk_list_store_set(store, &iter, COLUMN_LABEL, labels[i].c_str(), COLUMN_INDEX, int(i), -1);
+    }
+    chooser->filter = p_gtk_tree_model_filter_new(reinterpret_cast<GtkTreeModel *>(store), nullptr);
+    p_g_object_unref(store);
+    p_gtk_tree_model_filter_set_visible_func(reinterpret_cast<GtkTreeModelFilter *>(chooser->filter),
+                                             listItemVisible, chooser, nullptr);
+    chooser->view = p_gtk_tree_view_new_with_model(chooser->filter);
+    p_g_object_unref(chooser->filter);
+    p_gtk_tree_view_set_headers_visible(reinterpret_cast<GtkTreeView *>(chooser->view), FALSE);
+    p_gtk_tree_view_append_column(reinterpret_cast<GtkTreeView *>(chooser->view),
+                                  p_gtk_tree_view_column_new_with_attributes("", p_gtk_cell_renderer_text_new(),
+                                                                             "text", COLUMN_LABEL, nullptr));
+    p_g_signal_connect_data(chooser->view, "row-activated", G_CALLBACK(listItemActivated), dialog, nullptr,
+                            GConnectFlags(0));
+
+    chooser->entry = p_gtk_entry_new();
+    p_gtk_entry_set_activates_default(reinterpret_cast<GtkEntry *>(chooser->entry), TRUE);
+    p_g_signal_connect_data(chooser->entry, "changed", G_CALLBACK(listSearchChanged), chooser, nullptr,
+                            GConnectFlags(0));
+
+    GtkWidget *scrolled = p_gtk_scrolled_window_new(nullptr, nullptr);
+    p_gtk_scrolled_window_set_policy(reinterpret_cast<GtkScrolledWindow *>(scrolled), GTK_POLICY_NEVER,
+                                     GTK_POLICY_AUTOMATIC);
+    p_gtk_container_add(reinterpret_cast<GtkContainer *>(scrolled), chooser->view);
+    GtkWidget *content = p_gtk_dialog_get_content_area(reinterpret_cast<GtkDialog *>(dialog));
+    p_gtk_box_pack_start(reinterpret_cast<GtkBox *>(content), p_gtk_label_new(prompt.c_str()), FALSE, FALSE, 4);
+    p_gtk_box_pack_start(reinterpret_cast<GtkBox *>(content), chooser->entry, FALSE, FALSE, 4);
+    p_gtk_box_pack_start(reinterpret_cast<GtkBox *>(content), scrolled, TRUE, TRUE, 4);
+    p_g_signal_connect_data(dialog, "response", G_CALLBACK(listChooserResponse), chooser, nullptr, GConnectFlags(0));
+    listSearchChanged(nullptr, chooser);
+    p_gtk_widget_show_all(dialog);
+    return true;
 }
 
 #else
 
 void pidginUiLoad(PurplePlugin *plugin)
 {
+}
+
+bool chooseFromList(const std::string &title, const std::string &prompt, const std::vector<std::string> &labels,
+                    std::function<void(int index)> chosen)
+{
+    return false;
 }
 
 void pidginUiUnload()

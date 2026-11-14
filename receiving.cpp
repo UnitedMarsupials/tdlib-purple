@@ -843,7 +843,8 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
             newText += formatMessage(_("<b>Forwarded from {}:</b>"),
                                      escapeForDisplay(message.forwardedFrom));
         }
-        if (!newText.empty())
+        // A picture begins a line of its own already
+        if (!newText.empty() && (*text != '\n'))
             newText += "\n";
         newText += text;
     }
@@ -2632,6 +2633,11 @@ void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
 {
     if (!message) return;
     ChatId chatId = getId(chat);
+    // Fetched while still being sent, as for a tab redrawn just then, and sent since: it goes by
+    // its new id, or its marks would name one that is gone
+    MessageId sentId = account.getSentMessageId(chatId, getId(*message));
+    if (message->sending_state_ && (sentId != getId(*message)))
+        message->id_ = sentId.value();
 
     if (isReadReceiptsEnabled(account.purpleAccount))
         account.addPendingReadReceipt(chatId, getId(*message));
@@ -2640,6 +2646,7 @@ void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
         ShownMessage shownMessage;
         getShownContent(*message->content_, shownMessage);
         shownMessage.timestamp = message->date_;
+        shownMessage.outgoing  = message->is_outgoing_;
         // Reactions it came with are no news
         std::vector<GivenReaction> reactions;
         getGivenReactions(message->interaction_info_.get(), reactions, nullptr);
@@ -2654,11 +2661,10 @@ void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
     makeFullMessage(chat, std::move(message), fullMessage, account);
     fullMessage.messageInfo.fromHistory = (action == PendingMessageQueue::Prepend) || redrawn;
     fullMessage.messageInfo.redrawn     = redrawn;
-    // Who sent it in a group, for a notice about it later: several members' messages sent in the
-    // same second are otherwise reported deleted in the same words. A private chat has only the
-    // one sender, and a channel post signed by nobody has no one to name.
-    if (!fullMessage.messageInfo.outgoing && !fullMessage.messageInfo.anonymousChannelPost &&
-        (getBasicGroupId(chat).valid() || getSupergroupId(chat).valid())) {
+    // Who sent it, for a notice about it later: several members' messages sent in the same second
+    // are otherwise reported deleted in the same words, and in a private chat either of us may have
+    // sent it. A channel post signed by nobody has no one to name.
+    if (!fullMessage.messageInfo.anonymousChannelPost) {
         ShownMessage *shownMessage = account.findShownMessage(chatId, messageId);
         if (shownMessage)
             shownMessage->sender = getSenderDisplayName(chat, fullMessage.messageInfo, account.purpleAccount);
@@ -2804,6 +2810,8 @@ struct DeletedMessage {
     MessageId   messageId;
     time_t      timestamp;
     std::string sender; // as the conversation names them, if known
+    bool        outgoing    = false;
+    bool        deletedHere = false;
 };
 }
 
@@ -2912,7 +2920,8 @@ void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessag
         ShownMessage *shownMessage = account.findShownMessage(chatId, messageId);
         if (!shownMessage)
             continue;
-        DeletedMessage message{messageId, shownMessage->timestamp, shownMessage->sender};
+        DeletedMessage message{messageId, shownMessage->timestamp, shownMessage->sender, shownMessage->outgoing,
+                               shownMessage->deletedHere};
         account.removeShownMessage(chatId, messageId);
 
         PendingEdit edit;
@@ -2931,6 +2940,13 @@ void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessag
             deleted.push_back(std::move(message));
         }
     }
+    // Deleted from here, it was by us
+    auto byUs = std::stable_partition(deleted.begin(), deleted.end(),
+                                      [](const DeletedMessage &message) { return message.deletedHere; });
+    for (auto it = deleted.begin(); it != byUs; ++it)
+        showDeletionNotice(account, chatId, *it, purple_account_get_name_for_display(account.purpleAccount),
+                           it->outgoing);
+    deleted.erase(deleted.begin(), byUs);
     if (deleted.empty())
         return;
 

@@ -154,6 +154,7 @@ PurpleAccount *purple_account_new(const char *username, const char *protocol_id)
     // Zeroed, the list of blocked users among the rest
     PurpleAccount *account = new PurpleAccount();
     account->username = strdup(username);
+    account->protocol_id = protocol_id ? strdup(protocol_id) : nullptr;
     account->alias = nullptr;
     account->proxy_info = NULL;
 
@@ -177,6 +178,7 @@ PurpleBlistNode root = {
 void purple_account_destroy(PurpleAccount *account)
 {
     free(account->username);
+    free(account->protocol_id);
     free(account->alias);
     g_slist_free_full(account->deny, g_free);
 
@@ -199,14 +201,16 @@ void purple_account_destroy(PurpleAccount *account)
 
 const char *purple_account_get_protocol_id(const PurpleAccount *account)
 {
-    return "";
+    return account->protocol_id ? account->protocol_id : "";
 }
 
 PurpleAccount *purple_accounts_find(const char *name, const char *protocol)
 {
     auto it = std::find_if(g_accounts.begin(), g_accounts.end(),
-                           [name](const AccountInfo &account) {
-                               return !strcmp(account.account->username, name);
+                           [name, protocol](const AccountInfo &account) {
+                               return !strcmp(account.account->username, name) &&
+                                      !strcmp(purple_account_get_protocol_id(account.account),
+                                              protocol ? protocol : "");
                            });
     if (it != g_accounts.end())
         return it->account;
@@ -1767,6 +1771,21 @@ gboolean purple_privacy_deny_remove(PurpleAccount *account, const char *who, gbo
     return FALSE;
 }
 
+// The list of the request of fields being made, its items with their data, and the one chosen
+namespace {
+struct ListField {
+    std::vector<std::pair<std::string, void *>> items;
+    GList                                      *selected = nullptr;
+};
+}
+static ListField *g_listField       = nullptr;
+static int        g_requestListChoice = -1;
+
+extern "C++" void setRequestListChoice(int index)
+{
+    g_requestListChoice = index;
+}
+
 void *purple_request_fields(void *handle, const char *title, const char *primary,
 	const char *secondary, PurpleRequestFields *fields,
 	const char *ok_text, GCallback ok_cb,
@@ -1774,10 +1793,80 @@ void *purple_request_fields(void *handle, const char *title, const char *primary
 	PurpleAccount *account, const char *who, PurpleConversation *conv,
 	void *user_data)
 {
-    // Given up at once, as the dialog is not shown, so that what it holds is let go
-    if (cancel_cb)
+    ListField *list   = g_listField;
+    int        choice = g_requestListChoice;
+    g_listField         = nullptr;
+    g_requestListChoice = -1;
+    if (list && ok_cb && (choice >= 0) && (static_cast<size_t>(choice) < list->items.size())) {
+        list->selected = g_list_append(NULL, const_cast<char *>(list->items[choice].first.c_str()));
+        g_listField    = list;
+        reinterpret_cast<PurpleRequestFieldsCb>(ok_cb)(user_data, fields);
+        g_listField    = nullptr;
+    } else if (cancel_cb)
+        // Given up at once, as the dialog is not shown, so that what it holds is let go
         reinterpret_cast<PurpleRequestFieldsCb>(cancel_cb)(user_data, fields);
+    if (list)
+        g_list_free(list->selected);
+    delete list;
     return NULL;
+}
+
+PurpleRequestField *purple_request_field_list_new(const char *id, const char *text)
+{
+    delete g_listField;
+    g_listField = new ListField;
+    return reinterpret_cast<PurpleRequestField *>(g_listField);
+}
+
+void purple_request_field_list_add(PurpleRequestField *field, const char *item, void *data)
+{
+    // As libpurple, which takes no item without data
+    if (field && item && data)
+        reinterpret_cast<ListField *>(field)->items.emplace_back(item, data);
+}
+
+GList *purple_request_field_list_get_selected(const PurpleRequestField *field)
+{
+    return field ? reinterpret_cast<const ListField *>(field)->selected : NULL;
+}
+
+void *purple_request_field_list_get_data(const PurpleRequestField *field, const char *text)
+{
+    if (field && text)
+        for (const auto &item: reinterpret_cast<const ListField *>(field)->items)
+            if (item.first == text)
+                return item.second;
+    return NULL;
+}
+
+PurpleRequestField *purple_request_fields_get_field(const PurpleRequestFields *fields, const char *id)
+{
+    // The only field there is, the list, while its request is answered
+    return reinterpret_cast<PurpleRequestField *>(g_listField);
+}
+
+GList *purple_get_chats(void)
+{
+    return NULL;
+}
+
+PurplePlugin *purple_connection_get_prpl(const PurpleConnection *gc)
+{
+    return NULL;
+}
+
+void serv_send_file(PurpleConnection *gc, const char *who, const char *file)
+{
+}
+
+void purple_conv_im_send(PurpleConvIm *im, const char *message)
+{
+    EVENT(ConversationSendEvent, PURPLE_CONV_TYPE_IM, im->conv->account, im->conv->name, message);
+}
+
+void purple_conv_chat_send(PurpleConvChat *chat, const char *message)
+{
+    EVENT(ConversationSendEvent, PURPLE_CONV_TYPE_CHAT, chat->conv->account, chat->conv->name, message);
 }
 
 PurpleMenuAction *purple_menu_action_new(const char *label, PurpleCallback callback,
