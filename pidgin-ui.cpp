@@ -130,6 +130,8 @@ FRONT_END_FUNCTION(gtk_text_view_get_iter_at_location);
 FRONT_END_FUNCTION(gtk_text_iter_get_marks);
 FRONT_END_FUNCTION(gtk_text_mark_get_name);
 FRONT_END_FUNCTION(gtk_separator_menu_item_new);
+FRONT_END_FUNCTION(gtk_menu_get_type);
+FRONT_END_FUNCTION(g_type_check_instance_is_a);
 FRONT_END_FUNCTION(gtk_widget_show);
 // For the dialog choosing out of a list, searched by what is typed
 FRONT_END_FUNCTION(gtk_dialog_new_with_buttons);
@@ -2495,6 +2497,8 @@ static void addPlaceholderMenu(PurpleConversation *conv, GtkWidget *entry, GtkWi
     p_gtk_widget_show_all(menu);
 }
 
+static void addMessageMenu(PurpleConversation *conv, GtkWidget *menu, MessageId messageId);
+
 // GTK builds the menu of a tab's text anew each time, before emitting "populate-popup" for others to
 // add to it. The message is the one under the pointer, also when the menu is opened from the
 // keyboard; none if the pointer is elsewhere.
@@ -2513,15 +2517,24 @@ static gboolean populatingPopup(GSignalInvocationHint *, guint paramCount, const
     GtkTextView *textView = reinterpret_cast<GtkTextView *>(view);
     GtkTextIter  where;
     p_gtk_text_view_window_to_buffer_coords(textView, GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
-    p_gtk_text_view_get_iter_at_location(textView, &where, x, y);
     if (entryConv) {
+        p_gtk_text_view_get_iter_at_location(textView, &where, x, y);
         addPlaceholderMenu(entryConv, view, menu, where);
         return TRUE;
     }
+    // The character under the pointer, or the last of its line, if past it: not the place after,
+    // which for the last of a message is past its end
+    gint trailing;
+    p_gtk_text_view_get_iter_at_position(textView, &where, &trailing, x, y);
     MessageId messageId = findMessageAt(getTextBuffer(conv), where);
-    if (!messageId.valid())
-        return TRUE;
+    if (messageId.valid())
+        addMessageMenu(conv, menu, messageId);
+    return TRUE;
+}
 
+// The message's items go at the end of the menu: a placeholder waits for them
+static void addMessageMenu(PurpleConversation *conv, GtkWidget *menu, MessageId messageId)
+{
     OpenMenuRef openMenu = std::make_shared<OpenMenu>();
     openMenu->menu        = menu;
     openMenu->separator   = p_gtk_separator_menu_item_new();
@@ -2537,6 +2550,68 @@ static gboolean populatingPopup(GSignalInvocationHint *, guint paramCount, const
     purple_debug_misc(config::pluginId, "Menu opened on message %" G_GINT64_FORMAT "\n", messageId.value());
     if (!g_messagePopupHandler(conv, messageId, openMenu))
         fillOpenMenu(openMenu, {});
+}
+
+// A picture's menu, Pidgin's own with its "Save Image...", is built by the picture's event box when
+// the right button is let go over it, with no signal to add to it: the message under the pointer is
+// noted then, for its items to go into the menu shown next, before the main loop is idle again
+struct PictureMenu {
+    PurpleConversation *conv = nullptr;
+    MessageId           messageId;
+};
+static PictureMenu g_pictureMenu;
+static guint       g_pictureMenuSource  = 0;
+static guint       g_pictureEventSignal = 0;
+static gulong      g_pictureEventHook   = 0;
+static guint       g_menuShowSignal     = 0;
+static gulong      g_menuShowHook       = 0;
+
+static gboolean forgetPictureMenu(gpointer)
+{
+    g_pictureMenu       = PictureMenu();
+    g_pictureMenuSource = 0;
+    return FALSE;
+}
+
+static gboolean pictureClicked(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
+{
+    GtkWidget *box   = (paramCount > 1) ? static_cast<GtkWidget *>(p_g_value_get_object(&params[0])) : nullptr;
+    GdkEvent  *event = box ? static_cast<GdkEvent *>(p_g_value_get_boxed(&params[1])) : nullptr;
+    if (!event || (event->type != GDK_BUTTON_RELEASE) || (event->button.button != 3) || !g_messagePopupHandler ||
+        !p_g_object_get_data(G_OBJECT(box), IMAGE_SAVE_KEY))
+        return TRUE;
+    GtkWidget          *view = p_gtk_widget_get_parent(box);
+    PurpleConversation *conv = view ? findTabConversation(view) : nullptr;
+    if (!conv)
+        return TRUE;
+    gint x, y;
+    p_gtk_widget_get_pointer(view, &x, &y);
+    GtkTextView *textView = reinterpret_cast<GtkTextView *>(view);
+    GtkTextIter  where;
+    gint         trailing;
+    p_gtk_text_view_window_to_buffer_coords(textView, GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
+    p_gtk_text_view_get_iter_at_position(textView, &where, &trailing, x, y);
+    MessageId messageId = findMessageAt(getTextBuffer(conv), where);
+    if (!messageId.valid())
+        return TRUE;
+    if (!g_pictureMenuSource)
+        g_pictureMenuSource = g_idle_add(forgetPictureMenu, nullptr);
+    g_pictureMenu.conv      = conv;
+    g_pictureMenu.messageId = messageId;
+    return TRUE;
+}
+
+static gboolean menuShown(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
+{
+    if (!g_pictureMenu.conv)
+        return TRUE;
+    GtkWidget *menu = (paramCount > 0) ? static_cast<GtkWidget *>(p_g_value_get_object(&params[0])) : nullptr;
+    if (!menu || !p_g_type_check_instance_is_a(reinterpret_cast<GTypeInstance *>(menu), p_gtk_menu_get_type()))
+        return TRUE;
+    PictureMenu picture = g_pictureMenu;
+    g_pictureMenu.conv  = nullptr;
+    if (g_list_find(purple_get_conversations(), picture.conv))
+        addMessageMenu(picture.conv, menu, picture.messageId);
     return TRUE;
 }
 
@@ -3212,8 +3287,9 @@ static void connectPopup()
     if (!LOOK_UP(gtk_imhtml_get_type) || !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
         !LOOK_UP(g_signal_remove_emission_hook) || !LOOK_UP(g_value_get_object) ||
         !LOOK_UP(gtk_widget_get_pointer) || !LOOK_UP(gtk_text_view_window_to_buffer_coords) ||
-        !LOOK_UP(gtk_text_view_get_iter_at_location) || !LOOK_UP(gtk_text_iter_get_marks) ||
-        !LOOK_UP(gtk_text_mark_get_name) || !LOOK_UP(gtk_separator_menu_item_new) || !LOOK_UP(gtk_widget_show))
+        !LOOK_UP(gtk_text_view_get_iter_at_location) || !LOOK_UP(gtk_text_view_get_iter_at_position) ||
+        !LOOK_UP(gtk_text_iter_get_marks) || !LOOK_UP(gtk_text_mark_get_name) ||
+        !LOOK_UP(gtk_separator_menu_item_new) || !LOOK_UP(gtk_widget_show))
     {
         purple_debug_warning(config::pluginId, "Cannot add to the menu of a tab's text: some of GTK is not found\n");
         return;
@@ -3224,13 +3300,35 @@ static void connectPopup()
     g_popupSignal = p_g_signal_lookup("populate-popup", p_gtk_imhtml_get_type());
     if (g_popupSignal)
         g_popupHook = p_g_signal_add_emission_hook(g_popupSignal, 0, populatingPopup, nullptr, nullptr);
+    if (!LOOK_UP(gtk_widget_get_type) || !LOOK_UP(g_value_get_boxed) || !LOOK_UP(gtk_widget_get_parent) ||
+        !LOOK_UP(gtk_menu_get_type) || !LOOK_UP(g_type_check_instance_is_a))
+    {
+        purple_debug_warning(config::pluginId, "Cannot add to the menu of a picture: some of GTK is not found\n");
+        return;
+    }
+    g_pictureEventSignal = p_g_signal_lookup("event", p_gtk_widget_get_type());
+    g_menuShowSignal     = p_g_signal_lookup("show", p_gtk_widget_get_type());
+    if (g_pictureEventSignal && g_menuShowSignal) {
+        g_pictureEventHook = p_g_signal_add_emission_hook(g_pictureEventSignal, 0, pictureClicked, nullptr, nullptr);
+        g_menuShowHook     = p_g_signal_add_emission_hook(g_menuShowSignal, 0, menuShown, nullptr, nullptr);
+    }
 }
 
 static void disconnectPopup()
 {
     if (g_popupHook)
         p_g_signal_remove_emission_hook(g_popupSignal, g_popupHook);
-    g_popupHook = 0;
+    if (g_pictureEventHook)
+        p_g_signal_remove_emission_hook(g_pictureEventSignal, g_pictureEventHook);
+    if (g_menuShowHook)
+        p_g_signal_remove_emission_hook(g_menuShowSignal, g_menuShowHook);
+    g_popupHook        = 0;
+    g_pictureEventHook = 0;
+    g_menuShowHook     = 0;
+    if (g_pictureMenuSource)
+        g_source_remove(g_pictureMenuSource);
+    g_pictureMenuSource = 0;
+    g_pictureMenu       = PictureMenu();
 }
 
 // The dialog choosing out of a list: what is typed in its field narrows the list down to the items
