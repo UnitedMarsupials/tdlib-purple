@@ -10,6 +10,9 @@
 
 ### Fixes
 
+- **In Pidgin, a message's own items are in the menu of its picture too, after "Save Image...", and in the menu opened beside its last line.** Pidgin's picture menu is its own, which GTK's of the text was never part of; and to the right of a message's last line, or over the right half of its last character, the message was taken to have ended already.
+- **A message forwarded to a chat whose tab was not open has its menu, rather than "The message has been deleted."** The tab, opened and filled from Telegram meanwhile, showed the message by the temporary id it had while being sent.
+- **The notice of a message deleted from its menu here names us as who deleted it.** Telegram does not say who deletes a message; the log of a supergroup's events tells only its administrators.
 - **A group or channel in the buddy list that TDLib has not told of opens all the same, if it can be found, rather than nothing happening.** TDLib is asked for it by its id, from what it has stored, and then Telegram by its public name, which the buddy list now keeps for a public group or channel; only a chat with the same id counts, a name being free to go to another. If neither finds it, a dialog says so.
 - **A chat read to its end on another device no longer shows as having unread messages, in Pidgin's tab and the counts of the tray and the buddy list's menu, once Telegram tells that.** It tells every session, connected but offline too; a chat read only in part keeps Pidgin's mark, which counts what came since its tab was looked at.
 
