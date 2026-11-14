@@ -769,6 +769,37 @@ TEST_F(PrivateChatTest, AlreadyDownloadedPhoto)
     tgl.reply(make_object<ok>()); // reply to viewMessages
 }
 
+TEST_F(PrivateChatTest, ForwardedPhoto)
+{
+    const int32_t date   = 10001;
+    const int32_t fileId = 1234;
+    loginWithOneContact();
+
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(make_object<file>(
+            fileId, 10000, 10000,
+            make_object<localFile>(TEST_SOURCE_DIR "/test.webp", true, true, false, true, 0, 10000, 10000),
+            make_object<remoteFile>("beh", "bleh", false, true, 10000)
+        ), 640, 480));
+    object_ptr<message> forwarded = makeMessage(
+        1, userIds[0], chatIds[0], false, date,
+        makeMessagePhoto(make_object<photo>(false, nullptr, std::move(sizes)), makeFormattedText(""),
+                         false, false, false)
+    );
+    auto origin = make_object<messageOriginHiddenUser>();
+    origin->sender_name_   = "Someone";
+    forwarded->forward_info_ = make_object<messageForwardInfo>();
+    forwarded->forward_info_->origin_ = std::move(origin);
+    tgl.update(make_object<updateNewMessage>(std::move(forwarded)));
+    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
+    // The picture on the line after the header, as without it
+    prpl.verifyEvents(ServGotImEvent(
+        connection, purpleUserName(0),
+        "<b>Forwarded from Someone:</b>\n<img id=\"" + std::to_string(getLastImgstoreId()) + "\">",
+        (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES), date
+    ));
+}
+
 TEST_F(PrivateChatTest, AlreadyDownloadedPhoto_Unreadable)
 {
     // Shown as the link to its file, Pidgin showing no picture but from its image store

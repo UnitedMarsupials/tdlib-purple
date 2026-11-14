@@ -843,7 +843,8 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
             newText += formatMessage(_("<b>Forwarded from {}:</b>"),
                                      escapeForDisplay(message.forwardedFrom));
         }
-        if (!newText.empty())
+        // A picture begins a line of its own already
+        if (!newText.empty() && (*text != '\n'))
             newText += "\n";
         newText += text;
     }
