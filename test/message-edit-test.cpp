@@ -109,7 +109,8 @@ TEST_F(MessageEditTest, DeletedFromHere)
     tgl.reply(make_object<ok>());
     tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
     prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
-                                             selfFirstName + " " + selfLastName + " deleted the message sent at " + messageTime(date),
+                                             selfFirstName + " " + selfLastName + " deleted the message " + userFirstNames[0] + " " +
+                                             userLastNames[0] + " sent at " + messageTime(date),
                                              PURPLE_MESSAGE_SYSTEM, 0));
 }
 
@@ -122,7 +123,8 @@ TEST_F(MessageEditTest, DeletedWhileFetchingEdit)
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
     tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
     prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
-                                             "Message from " + messageTime(date) + " has been deleted",
+                                             "The message " + userFirstNames[0] + " " + userLastNames[0] + " sent at " + messageTime(date) +
+                                             " has been deleted",
                                              PURPLE_MESSAGE_SYSTEM, 0));
 
     // The edit of a message reported deleted is no news
@@ -291,7 +293,8 @@ TEST_F(MessageEditTest, DeletedWhileEditDownloads)
     // The message shown before is deleted all the same
     tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
     prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
-                                             "Message from " + messageTime(date) + " has been deleted",
+                                             "The message " + userFirstNames[0] + " " + userLastNames[0] + " sent at " + messageTime(date) +
+                                             " has been deleted",
                                              PURPLE_MESSAGE_SYSTEM, 0));
 
     // ...and its edit is not shown once the picture is here
@@ -313,7 +316,8 @@ TEST_F(MessageEditTest, Deleted)
     prpl.verifyEvents(
         ConversationWriteEvent(
             purpleUserName(0), purpleUserName(0),
-            "Message from " + messageTime(date) + " has been deleted",
+            "The message " + userFirstNames[0] + " " + userLastNames[0] + " sent at " + messageTime(date) +
+            " has been deleted",
             PURPLE_MESSAGE_SYSTEM, 0
         )
     );
@@ -402,7 +406,8 @@ TEST_F(MessageEditTest, NoticesLinkToMessage)
     tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
     prpl.verifyEvents(ConversationWriteEvent(
         purpleUserName(0), purpleUserName(0),
-        "Message from <a href=\"" + link + "\">" + messageTime(date) + "</a> has been deleted",
+        "The message " + userFirstNames[0] + " " + userLastNames[0] + " sent at <a href=\"" + link + "\">" +
+        messageTime(date) + "</a> has been deleted",
         PURPLE_MESSAGE_SYSTEM, 0
     ));
     setJumpLinksEnabled(false);

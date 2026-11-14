@@ -2660,11 +2660,10 @@ void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
     makeFullMessage(chat, std::move(message), fullMessage, account);
     fullMessage.messageInfo.fromHistory = (action == PendingMessageQueue::Prepend) || redrawn;
     fullMessage.messageInfo.redrawn     = redrawn;
-    // Who sent it in a group, for a notice about it later: several members' messages sent in the
-    // same second are otherwise reported deleted in the same words. A private chat has only the
-    // one sender, and a channel post signed by nobody has no one to name.
-    if (!fullMessage.messageInfo.outgoing && !fullMessage.messageInfo.anonymousChannelPost &&
-        (getBasicGroupId(chat).valid() || getSupergroupId(chat).valid())) {
+    // Who sent it, for a notice about it later: several members' messages sent in the same second
+    // are otherwise reported deleted in the same words, and in a private chat either of us may have
+    // sent it. A channel post signed by nobody has no one to name.
+    if (!fullMessage.messageInfo.anonymousChannelPost) {
         ShownMessage *shownMessage = account.findShownMessage(chatId, messageId);
         if (shownMessage)
             shownMessage->sender = getSenderDisplayName(chat, fullMessage.messageInfo, account.purpleAccount);
