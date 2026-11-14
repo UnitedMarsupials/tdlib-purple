@@ -2645,6 +2645,7 @@ void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
         ShownMessage shownMessage;
         getShownContent(*message->content_, shownMessage);
         shownMessage.timestamp = message->date_;
+        shownMessage.outgoing  = message->is_outgoing_;
         // Reactions it came with are no news
         std::vector<GivenReaction> reactions;
         getGivenReactions(message->interaction_info_.get(), reactions, nullptr);
@@ -2809,6 +2810,8 @@ struct DeletedMessage {
     MessageId   messageId;
     time_t      timestamp;
     std::string sender; // as the conversation names them, if known
+    bool        outgoing    = false;
+    bool        deletedHere = false;
 };
 }
 
@@ -2917,7 +2920,8 @@ void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessag
         ShownMessage *shownMessage = account.findShownMessage(chatId, messageId);
         if (!shownMessage)
             continue;
-        DeletedMessage message{messageId, shownMessage->timestamp, shownMessage->sender};
+        DeletedMessage message{messageId, shownMessage->timestamp, shownMessage->sender, shownMessage->outgoing,
+                               shownMessage->deletedHere};
         account.removeShownMessage(chatId, messageId);
 
         PendingEdit edit;
@@ -2936,6 +2940,13 @@ void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessag
             deleted.push_back(std::move(message));
         }
     }
+    // Deleted from here, it was by us
+    auto byUs = std::stable_partition(deleted.begin(), deleted.end(),
+                                      [](const DeletedMessage &message) { return message.deletedHere; });
+    for (auto it = deleted.begin(); it != byUs; ++it)
+        showDeletionNotice(account, chatId, *it, purple_account_get_name_for_display(account.purpleAccount),
+                           it->outgoing);
+    deleted.erase(deleted.begin(), byUs);
     if (deleted.empty())
         return;
 

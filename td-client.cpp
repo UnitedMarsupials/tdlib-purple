@@ -2224,7 +2224,10 @@ void PurpleTdClient::deleteMessage(ChatId chatId, MessageId messageId, bool forA
     request->chat_id_ = chatId.value();
     request->message_ids_.push_back(messageId.value());
     request->revoke_ = forAll;
-    // The deletion comes back as an update, as from any other client
+    // The deletion comes back as an update, as from any other client, but its notice names us
+    ShownMessage *shownMessage = m_data.findShownMessage(chatId, messageId);
+    if (shownMessage)
+        shownMessage->deletedHere = true;
     m_transceiver.sendQuery(std::move(request), [this, chatId](uint64_t, TdObjectPtr object) {
         if (!object || (object->get_id() != td::td_api::ok::ID))
             // TRANSLATOR: In-chat error, after a message was deleted from its menu; followed by the reason.

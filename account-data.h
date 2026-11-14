@@ -346,6 +346,8 @@ struct ShownMessage {
     bool        quotable = false; // content is the text or caption, as written
     std::string kind;      // what the message is, to name it by where there is no text to quote
     std::string sender;    // who sent it, as the conversation names them; empty if not known
+    bool        outgoing    = false;
+    bool        deletedHere = false; // asked to be, from this client: by us, then
     time_t      timestamp;
     // Who gave which reaction, as far as anyone has been named, and whether it was us
     std::map<std::string, bool> reactions;
