@@ -1306,6 +1306,15 @@ object_ptr<messages> makeMessages(std::vector<object_ptr<message>> &&list)
     return result;
 }
 
+object_ptr<updateMessageSendSucceeded> makeUpdateMessageSendSucceeded(object_ptr<message> &&message,
+                                                                      std::int64_t oldMessageId)
+{
+    auto result = make_object<updateMessageSendSucceeded>();
+    result->message_        = std::move(message);
+    result->old_message_id_ = oldMessageId;
+    return result;
+}
+
 object_ptr<updateChatTitle> makeUpdateChatTitle(std::int64_t chatId, const std::string &title)
 {
     auto result = make_object<updateChatTitle>();

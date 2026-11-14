@@ -1951,10 +1951,29 @@ std::vector<PurpleTdClient::ForwardDestination> PurpleTdClient::getForwardDestin
             add(purple_conversation_get_account(conv), true, purple_conversation_get_name(conv),
                 purple_conversation_get_title(conv));
     }
+    makeForwardLabelsUnique(result);
     std::sort(result.begin(), result.end(), [](const ForwardDestination &a, const ForwardDestination &b) {
         return g_utf8_collate(a.label.c_str(), b.label.c_str()) < 0;
     });
     return result;
+}
+
+void PurpleTdClient::makeForwardLabelsUnique(std::vector<ForwardDestination> &destinations)
+{
+    // Two buddies may go by the same alias, or two accounts of the same name be of different
+    // protocols: those are told apart by their names, then by their protocols, for a label to
+    // name one destination only
+    auto disambiguate = [&destinations](std::string ForwardDestination::*more) {
+        std::map<std::string, unsigned> counts;
+        for (const ForwardDestination &to: destinations)
+            counts[to.label]++;
+        for (ForwardDestination &to: destinations)
+            if (counts[to.label] > 1)
+                // TRANSLATOR: A destination a message may be forwarded to, whose name alone would be the same as another's. Arguments: its name as offered, then what tells it apart.
+                to.label = formatMessage(_("{} [{}]"), {to.label, to.*more});
+    };
+    disambiguate(&ForwardDestination::name);
+    disambiguate(&ForwardDestination::protocolId);
 }
 
 namespace {
@@ -1999,8 +2018,9 @@ void PurpleTdClient::askForwardMessage(ChatId chatId, MessageId messageId)
     // TRANSLATOR: Label of the list of destinations, in the dialog asking where to forward a message to.
     PurpleRequestField      *field  = purple_request_field_list_new("to", _("To"));
     for (size_t i = 0; i < request->destinations.size(); i++)
+        // The data must not be null, nor is it needed: the labels tell the destinations apart
         purple_request_field_list_add(field, request->destinations[i].label.c_str(),
-                                      reinterpret_cast<void *>(i));
+                                      &request->destinations[i]);
     purple_request_field_group_add_field(group, field);
     purple_request_fields_add_group(fields, group);
     // TRANSLATOR: Title of the dialog asking where to forward a message to.
@@ -2041,7 +2061,8 @@ void PurpleTdClient::showForwardFailure(ChatId chatId, const std::string &label,
     if (chat)
         // TRANSLATOR: In-chat error message. Arguments: where the message was to go, and what went wrong.
         showChatNotification(m_data, *chat, formatMessage(_("The message was not forwarded to {}: {}"),
-                                                          {label, reason}).c_str(), PURPLE_MESSAGE_ERROR);
+                                                          {escapeForDisplay(label), escapeForDisplay(reason)}).c_str(),
+                             PURPLE_MESSAGE_ERROR);
 }
 
 void PurpleTdClient::forwardMessage(ChatId chatId, MessageId linkedId, const ForwardDestination &to)
@@ -2049,7 +2070,7 @@ void PurpleTdClient::forwardMessage(ChatId chatId, MessageId linkedId, const For
     MessageId messageId = m_data.getSentMessageId(chatId, linkedId);
     purple_debug_misc(config::pluginId, "Forwarding message %" G_GINT64_FORMAT " to %s of %s\n",
                       messageId.value(), to.name.c_str(), to.accountName.c_str());
-    if (to.accountName != purple_account_get_username(m_data.purpleAccount)) {
+    if ((to.accountName != purple_account_get_username(m_data.purpleAccount)) || (to.protocolId != config::pluginId)) {
         // The message as it is, to be re-told
         auto request = td::td_api::make_object<td::td_api::getMessage>();
         request->chat_id_    = chatId.value();
@@ -2099,8 +2120,14 @@ void PurpleTdClient::forwardToChat(ChatId chatId, MessageId messageId, ChatId to
     request->from_chat_id_ = chatId.value();
     request->message_ids_.push_back(messageId.value());
     m_transceiver.sendQuery(std::move(request), [this, chatId, label](uint64_t, TdObjectPtr object) {
-        if (!object || (object->get_id() != td::td_api::messages::ID))
+        // A message that cannot be forwarded comes back as null
+        const auto *sent = (object && (object->get_id() == td::td_api::messages::ID))
+                           ? static_cast<const td::td_api::messages *>(object.get()) : nullptr;
+        if (!sent)
             showForwardFailure(chatId, label, getDisplayedError(object));
+        else if ((sent->messages_.size() != 1) || !sent->messages_[0])
+            // TRANSLATOR: In-chat error message, the reason a message was not forwarded.
+            showForwardFailure(chatId, label, _("Telegram did not forward it"));
     });
 }
 
@@ -2152,8 +2179,15 @@ void PurpleTdClient::forwardElsewhere(ChatId chatId, MessageId messageId, const 
         else if (chat)
             source = chat->title_;
     }
-    bool isCaption;
+    bool isCaption, hasFile = false, picture = false;
     const td::td_api::formattedText *text = getEditableText(message, isCaption);
+    if (message.content_)
+        getMessageFileKind(*message.content_, hasFile, picture);
+    if ((!text || text->text_.empty()) && !hasFile) {
+        // TRANSLATOR: In-chat error message, the reason a message, such as a location or a poll, was not forwarded to another account's buddy or chat.
+        showForwardFailure(chatId, to.label, _("it has neither text nor a file"));
+        return;
+    }
     // TRANSLATOR: In-chat notification of forward. Argument will be a username. Please preserve the HTML.
     std::string html = formatMessage(_("<b>Forwarded from {}:</b>"), escapeForDisplay(source));
     if (text && !text->text_.empty())
@@ -2163,15 +2197,13 @@ void PurpleTdClient::forwardElsewhere(ChatId chatId, MessageId messageId, const 
     else
         purple_conv_im_send(purple_conversation_get_im_data(conv), html.c_str());
 
-    bool hasFile, picture;
-    getMessageFileKind(*message.content_, hasFile, picture);
     if (!hasFile)
         return;
     if (to.isChat || !canSendFile(account, to.name.c_str())) {
         if (chat)
             // TRANSLATOR: In-chat error message. Argument: where the message was forwarded to.
             showChatNotification(m_data, *chat, formatMessage(_("The file of the message was not forwarded to {}: files cannot be sent there."),
-                                                              to.label).c_str(), PURPLE_MESSAGE_ERROR);
+                                                              escapeForDisplay(to.label)).c_str(), PURPLE_MESSAGE_ERROR);
         return;
     }
     fetchMessageFile(chatId, messageId, std::string(),
@@ -2228,10 +2260,15 @@ void PurpleTdClient::deleteMessage(ChatId chatId, MessageId messageId, bool forA
     ShownMessage *shownMessage = m_data.findShownMessage(chatId, messageId);
     if (shownMessage)
         shownMessage->deletedHere = true;
-    m_transceiver.sendQuery(std::move(request), [this, chatId](uint64_t, TdObjectPtr object) {
-        if (!object || (object->get_id() != td::td_api::ok::ID))
+    m_transceiver.sendQuery(std::move(request), [this, chatId, messageId](uint64_t, TdObjectPtr object) {
+        if (!object || (object->get_id() != td::td_api::ok::ID)) {
+            // Not deleted after all: if it is later, it is not by us
+            ShownMessage *shownMessage = m_data.findShownMessage(chatId, messageId);
+            if (shownMessage)
+                shownMessage->deletedHere = false;
             // TRANSLATOR: In-chat error, after a message was deleted from its menu; followed by the reason.
             reportMenuError(chatId, _("Cannot delete the message"), object);
+        }
     });
 }
 

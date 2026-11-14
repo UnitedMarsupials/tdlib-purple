@@ -102,7 +102,22 @@ TEST_F(MessageEditTest, DeletedFromHere)
     PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
     ASSERT_NE(nullptr, client);
 
+    // Not deleted when Telegram refuses, it is not by us when it is later
+    client->deleteMessage(ChatId::fromString(std::to_string(chatIds[0]).c_str()),
+                          MessageId::fromString(std::to_string(messageId).c_str()), true);
+    tgl.verifyRequest(deleteMessages(chatIds[0], {messageId}, true));
+    tgl.reply(makeError(400, "MESSAGE_DELETE_FORBIDDEN"));
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                                             "Cannot delete the message: code 400 (MESSAGE_DELETE_FORBIDDEN)",
+                                             PURPLE_MESSAGE_ERROR, 0));
+    tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                                             "The message " + userFirstNames[0] + " " + userLastNames[0] +
+                                             " sent at " + messageTime(date) + " has been deleted",
+                                             PURPLE_MESSAGE_SYSTEM, 0));
+
     // Telegram does not say who deleted a message, but one deleted from its menu here was by us
+    receiveText("text");
     client->deleteMessage(ChatId::fromString(std::to_string(chatIds[0]).c_str()),
                           MessageId::fromString(std::to_string(messageId).c_str()), true);
     tgl.verifyRequest(deleteMessages(chatIds[0], {messageId}, true));

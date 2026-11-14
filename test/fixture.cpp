@@ -1,6 +1,7 @@
 #include "fixture.h"
 #include "sticker.h"
 #include "client-utils.h"
+#include "config.h"
 #include "tdlib-purple.h"
 #include "libpurple-mock.h"
 #include "printout.h"
@@ -24,7 +25,7 @@ void CommTest::SetUp()
     setMessageLinksEnabled(false);
     setJumpLinksEnabled(false);
     setLogMarkersEnabled(false);
-    account = purple_account_new(("+" + selfPhoneNumber).c_str(), NULL);
+    account = purple_account_new(("+" + selfPhoneNumber).c_str(), config::pluginId);
     connection = new PurpleConnection();
     connection->state = PURPLE_DISCONNECTED;
     connection->account = account;

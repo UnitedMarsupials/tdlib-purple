@@ -1617,6 +1617,15 @@ msgstr "немає такого користувача"
 msgid "no such chat"
 msgstr "немає такого чату"
 
+msgid "Telegram did not forward it"
+msgstr "Telegram його не переслав"
+
+msgid "it has neither text nor a file"
+msgstr "у ньому немає ні тексту, ні файлу"
+
+msgid "{} [{}]"
+msgstr "{} [{}]"
+
 msgid "the account is not connected"
 msgstr "обліковий запис не під'єднано"
 

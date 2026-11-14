@@ -700,7 +700,7 @@ TEST_F(MessageLinkTest, SentMessageRenamed)
     const int64_t sentId = 1000;
 
     // Shown while being sent, its link names the id it went by then
-    tgl.update(make_object<updateMessageSendSucceeded>(makeDocumentMessage(10000, "/path/video.mp4", true), sentId));
+    tgl.update(makeUpdateMessageSendSucceeded(makeDocumentMessage(10000, "/path/video.mp4", true), sentId));
     tgl.verifyNoRequests();
 
     std::string sentLink = "tdlib://%2B" + selfPhoneNumber + "/" + std::to_string(chatIds[0]) + "/" +
@@ -715,7 +715,7 @@ TEST_F(MessageLinkTest, SentMessageFetchedEarlier)
 {
     loginWithOneContact();
     const int64_t sentId = 1000;
-    tgl.update(make_object<updateMessageSendSucceeded>(makeDocumentMessage(10000, "/path/video.mp4", true), sentId));
+    tgl.update(makeUpdateMessageSendSucceeded(makeDocumentMessage(10000, "/path/video.mp4", true), sentId));
     tgl.verifyNoRequests();
 
     // Its copy fetched before it was sent, as a tab redrawn meanwhile gets it, goes by its new id
@@ -747,13 +747,18 @@ TEST_F(MessageLinkTest, ForwardWithinTelegram)
     to.label       = "Gottfried Leibniz (+" + selfPhoneNumber + ")";
     client->forwardMessage(chat, message, to);
     tgl.verifyRequest(*makeForwardMessages(chatIds[0], chatIds[0], messageId));
-    tgl.reply(make_object<messages>());
+    {
+        std::vector<object_ptr<td::td_api::message>> sent;
+        sent.push_back(makeMessage(2, selfId, chatIds[0], true, date, makeTextMessage("text")));
+        tgl.reply(makeMessages(std::move(sent)));
+    }
     prpl.verifyNoEvents();
 
-    // To a group chat, by its name; Telegram's refusal is told in the message's chat
+    // To a group chat, by its name; Telegram's refusal is told in the message's chat, the
+    // destination's name as it is
     to.isChat = true;
     to.name   = "chat" + std::to_string(chatIds[1]);
-    to.label  = "Group (+" + selfPhoneNumber + ")";
+    to.label  = "<Group> (+" + selfPhoneNumber + ")";
     client->forwardMessage(chat, message, to);
     tgl.verifyRequest(*makeForwardMessages(chatIds[1], chatIds[0], messageId));
     tgl.reply(makeError(400, "CHAT_FORWARDS_RESTRICTED"));
@@ -761,10 +766,25 @@ TEST_F(MessageLinkTest, ForwardWithinTelegram)
         NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
         ConversationWriteEvent(
             purpleUserName(0), purpleUserName(0),
-            "The message was not forwarded to Group (+" + selfPhoneNumber + "): code 400 (CHAT_FORWARDS_RESTRICTED)",
+            "The message was not forwarded to &lt;Group&gt; (+" + selfPhoneNumber + "): code 400 (CHAT_FORWARDS_RESTRICTED)",
             PURPLE_MESSAGE_ERROR, 0
         )
     );
+
+    // Nor is a message Telegram answers for with none
+    to.label = "Group (+" + selfPhoneNumber + ")";
+    client->forwardMessage(chat, message, to);
+    tgl.verifyRequest(*makeForwardMessages(chatIds[1], chatIds[0], messageId));
+    {
+        std::vector<object_ptr<td::td_api::message>> sent;
+        sent.push_back(nullptr);
+        tgl.reply(makeMessages(std::move(sent)));
+    }
+    prpl.verifyEvents(ConversationWriteEvent(
+        purpleUserName(0), purpleUserName(0),
+        "The message was not forwarded to Group (+" + selfPhoneNumber + "): Telegram did not forward it",
+        PURPLE_MESSAGE_ERROR, 0
+    ));
 
     // To a buddy unknown to Telegram
     to.isChat = false;
@@ -776,6 +796,33 @@ TEST_F(MessageLinkTest, ForwardWithinTelegram)
         purpleUserName(0), purpleUserName(0), "The message was not forwarded to Nobody (+" + selfPhoneNumber + "): no such user",
         PURPLE_MESSAGE_ERROR, 0
     ));
+}
+
+TEST_F(MessageLinkTest, ForwardLabelsUnique)
+{
+    auto destination = [](const char *account, const char *protocol, const char *name, const char *label) {
+        PurpleTdClient::ForwardDestination to;
+        to.accountName = account;
+        to.protocolId  = protocol;
+        to.name        = name;
+        to.label       = label;
+        return to;
+    };
+    // Two buddies of the same alias are told apart by their names; two accounts of the same name,
+    // by their protocols
+    std::vector<PurpleTdClient::ForwardDestination> destinations = {
+        destination("a", "prpl-a", "id1", "Ann (a)"),
+        destination("a", "prpl-a", "id2", "Ann (a)"),
+        destination("a", "prpl-a", "id3", "Bob (a)"),
+        destination("b", "prpl-b", "x", "Cid (b)"),
+        destination("b", "prpl-c", "x", "Cid (b)"),
+    };
+    PurpleTdClient::makeForwardLabelsUnique(destinations);
+    ASSERT_EQ(std::string("Ann (a) [id1]"), destinations[0].label);
+    ASSERT_EQ(std::string("Ann (a) [id2]"), destinations[1].label);
+    ASSERT_EQ(std::string("Bob (a)"), destinations[2].label);
+    ASSERT_EQ(std::string("Cid (b) [x] [prpl-b]"), destinations[3].label);
+    ASSERT_EQ(std::string("Cid (b) [x] [prpl-c]"), destinations[4].label);
 }
 
 TEST_F(MessageLinkTest, ForwardToAnotherAccount)
@@ -819,6 +866,30 @@ TEST_F(MessageLinkTest, ForwardToAnotherAccount)
                                "The file of the message was not forwarded to Friend (other): files cannot be sent there.",
                                PURPLE_MESSAGE_ERROR, 0)
     );
+
+    // Nor what has neither text nor a file, such as a location
+    client->forwardMessage(chat, message, to);
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    {
+        auto location = make_object<messageLocation>();
+        location->location_ = make_object<td::td_api::location>();
+        tgl.reply(makeMessage(messageId, userIds[0], chatIds[0], false, date, std::move(location)));
+    }
+    prpl.verifyEvents(ConversationWriteEvent(
+        purpleUserName(0), purpleUserName(0), "The message was not forwarded to Friend (other): it has neither text nor a file",
+        PURPLE_MESSAGE_ERROR, 0
+    ));
+
+    // An account of another protocol, of the same name as this one, is another account
+    PurpleTdClient::ForwardDestination sameName = to;
+    sameName.accountName = "+" + selfPhoneNumber;
+    client->forwardMessage(chat, message, sameName);
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(makeMessage(messageId, userIds[0], chatIds[0], false, date, makeTextMessage("hello")));
+    prpl.verifyEvents(ConversationWriteEvent(
+        purpleUserName(0), purpleUserName(0), "The message was not forwarded to Friend (other): the account is not connected",
+        PURPLE_MESSAGE_ERROR, 0
+    ));
 
     // Not while that account is off
     otherConnection.state = PURPLE_DISCONNECTED;

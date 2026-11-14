@@ -154,6 +154,7 @@ PurpleAccount *purple_account_new(const char *username, const char *protocol_id)
     // Zeroed, the list of blocked users among the rest
     PurpleAccount *account = new PurpleAccount();
     account->username = strdup(username);
+    account->protocol_id = protocol_id ? strdup(protocol_id) : nullptr;
     account->alias = nullptr;
     account->proxy_info = NULL;
 
@@ -177,6 +178,7 @@ PurpleBlistNode root = {
 void purple_account_destroy(PurpleAccount *account)
 {
     free(account->username);
+    free(account->protocol_id);
     free(account->alias);
     g_slist_free_full(account->deny, g_free);
 
@@ -199,14 +201,16 @@ void purple_account_destroy(PurpleAccount *account)
 
 const char *purple_account_get_protocol_id(const PurpleAccount *account)
 {
-    return "";
+    return account->protocol_id ? account->protocol_id : "";
 }
 
 PurpleAccount *purple_accounts_find(const char *name, const char *protocol)
 {
     auto it = std::find_if(g_accounts.begin(), g_accounts.end(),
-                           [name](const AccountInfo &account) {
-                               return !strcmp(account.account->username, name);
+                           [name, protocol](const AccountInfo &account) {
+                               return !strcmp(account.account->username, name) &&
+                                      !strcmp(purple_account_get_protocol_id(account.account),
+                                              protocol ? protocol : "");
                            });
     if (it != g_accounts.end())
         return it->account;

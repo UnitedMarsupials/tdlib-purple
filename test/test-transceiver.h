@@ -129,6 +129,8 @@ object_ptr<textEntity> makeTextEntity(std::int32_t offset, std::int32_t length, 
 object_ptr<alternativeVideo> makeAlternativeVideo(std::int64_t id, std::int32_t width, std::int32_t height,
                                                   const std::string &codec, object_ptr<file> &&video);
 object_ptr<messages> makeMessages(std::vector<object_ptr<message>> &&list);
+object_ptr<updateMessageSendSucceeded> makeUpdateMessageSendSucceeded(object_ptr<message> &&message,
+                                                                      std::int64_t oldMessageId);
 object_ptr<updateChatTitle> makeUpdateChatTitle(std::int64_t chatId, const std::string &title);
 object_ptr<error> makeError(std::int32_t code, const std::string &message);
 // A file Telegram has, downloaded here if it has a path

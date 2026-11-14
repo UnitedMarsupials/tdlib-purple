@@ -137,6 +137,8 @@ public:
     // account: the text as a message, the file by file transfer, where that account can send one
     void forwardMessage(ChatId chatId, MessageId messageId, const ForwardDestination &to);
     static std::vector<ForwardDestination> getForwardDestinations();
+    // Labels that are the same as another's are made to differ
+    static void makeForwardLabelsUnique(std::vector<ForwardDestination> &destinations);
 
     // Blocks a user, or unblocks, as Pidgin's list of blocked users changes
     void setUserBlocked(UserId userId, bool blocked);

@@ -776,15 +776,10 @@ TEST_F(PrivateChatTest, ForwardedPhoto)
     loginWithOneContact();
 
     std::vector<object_ptr<photoSize>> sizes;
-    sizes.push_back(makePhotoSize(make_object<file>(
-            fileId, 10000, 10000,
-            make_object<localFile>(TEST_SOURCE_DIR "/test.webp", true, true, false, true, 0, 10000, 10000),
-            make_object<remoteFile>("beh", "bleh", false, true, 10000)
-        ), 640, 480));
+    sizes.push_back(makePhotoSize(makeFile(fileId, 10000, TEST_SOURCE_DIR "/test.webp"), 640, 480));
     object_ptr<message> forwarded = makeMessage(
         1, userIds[0], chatIds[0], false, date,
-        makeMessagePhoto(make_object<photo>(false, nullptr, std::move(sizes)), makeFormattedText(""),
-                         false, false, false)
+        makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText(""), false, false, false)
     );
     auto origin = make_object<messageOriginHiddenUser>();
     origin->sender_name_   = "Someone";
@@ -988,7 +983,7 @@ TEST_F(PrivateChatTest, SendImage)
     tgl.reply(std::move(msg));
 
     checkFile(tgl.getInputPhotoPath(0).c_str(), data1, sizeof(data1));
-    tgl.update(make_object<updateMessageSendSucceeded>(
+    tgl.update(makeUpdateMessageSendSucceeded(
         makeMessage(
             msgIdNew[1],
             userIds[0],
@@ -1159,7 +1154,7 @@ TEST_F(PrivateChatTest, SendImageFromEarlierSession)
               std::string(purple_account_get_string(account, "temp-image-uploads", "")));
 
     // TDLib finishes what it began in the earlier session
-    tgl.update(make_object<updateMessageSendSucceeded>(
+    tgl.update(makeUpdateMessageSendSucceeded(
         makeMessage(20, userIds[0], chatIds[0], true, 1, makeTextMessage("")), messageIds[0]
     ));
     ASSERT_FALSE(g_file_test(paths[0].c_str(), G_FILE_TEST_EXISTS));
