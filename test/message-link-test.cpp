@@ -577,13 +577,13 @@ TEST_F(MessageLinkTest, MessageMenu)
     tgl.verifyRequest(editMessageCaption(chatIds[0], messageId, nullptr, makeFormattedText("new caption"), false));
     tgl.reply(makeDocumentMessage(10000, "", false));
     client->deleteMessage(chat, message, true);
-    tgl.verifyRequest(deleteMessages(chatIds[0], {messageId}, true));
+    tgl.verifyRequest(*makeDeleteMessages(chatIds[0], {messageId}, true));
     tgl.reply(make_object<ok>());
     prpl.verifyNoEvents();
 
     // A failure is told in the conversation
     client->deleteMessage(chat, message, false);
-    tgl.verifyRequest(deleteMessages(chatIds[0], {messageId}, false));
+    tgl.verifyRequest(*makeDeleteMessages(chatIds[0], {messageId}, false));
     tgl.reply(make_object<error>(400, "MESSAGE_DELETE_FORBIDDEN"));
     prpl.verifyEvents(NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
                       ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
@@ -839,6 +839,40 @@ TEST_F(MessageLinkTest, ForwardLabelsUnique)
     ASSERT_EQ(std::string("Cid (b) [x] [prpl-c]"), destinations[4].label);
     ASSERT_EQ(std::string("X (c) [#x] [prpl-c] [1]"), destinations[5].label);
     ASSERT_EQ(std::string("X (c) [#x] [prpl-c] [2]"), destinations[6].label);
+}
+
+TEST_F(MessageLinkTest, ForwardChosenInDialog)
+{
+    loginWithOneContact();
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    const ChatId    chat    = ChatId::fromString(std::to_string(chatIds[0]).c_str());
+    const MessageId message = MessageId::fromString("1");
+    auto destination = [this](const std::string &name, const std::string &label) {
+        PurpleTdClient::ForwardDestination to;
+        to.accountName = "+" + selfPhoneNumber;
+        to.protocolId  = config::pluginId;
+        to.isChat      = true;
+        to.name        = name;
+        to.label       = label;
+        return to;
+    };
+
+    // Without Pidgin's dialog, libpurple's: the one chosen there, the second, is forwarded to
+    setRequestListChoice(1);
+    client->askForwardMessage(chat, message, {destination("chat1", "First (+" + selfPhoneNumber + ")"),
+                                              destination("chat" + std::to_string(chatIds[1]),
+                                                          "Second (+" + selfPhoneNumber + ")")});
+    tgl.verifyRequest(*makeForwardMessages(chatIds[1], chatIds[0], messageId));
+    tgl.reply(makeError(400, "CHAT_FORWARDS_RESTRICTED"));
+    prpl.verifyEvents(
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+        ConversationWriteEvent(
+            purpleUserName(0), purpleUserName(0),
+            "The message was not forwarded to Second (+" + selfPhoneNumber + "): code 400 (CHAT_FORWARDS_RESTRICTED)",
+            PURPLE_MESSAGE_ERROR, 0
+        )
+    );
 }
 
 TEST_F(MessageLinkTest, ForwardToAnotherAccount)

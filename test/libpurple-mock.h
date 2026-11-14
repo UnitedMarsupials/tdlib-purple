@@ -27,6 +27,9 @@ void setImageLoaders(std::initializer_list<std::string> formats);
 void setCustomSmileys(bool supported);
 // Whether the front-end has request dialogs, so that purple_request_input asks; on by default
 void setRequestInputSupported(bool supported);
+// Which item of its list the next request of fields is answered with, by its OK button; given up
+// at once otherwise, as by default
+void setRequestListChoice(int index);
 void clearConversationData();
 // Whether the account's presence is idle, as libpurple tells; not by default
 void setPresenceIdle(bool idle);

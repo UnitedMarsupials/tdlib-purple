@@ -105,7 +105,7 @@ TEST_F(MessageEditTest, DeletedFromHere)
     // Not deleted when Telegram refuses, it is not by us when it is later
     client->deleteMessage(ChatId::fromString(std::to_string(chatIds[0]).c_str()),
                           MessageId::fromString(std::to_string(messageId).c_str()), true);
-    tgl.verifyRequest(deleteMessages(chatIds[0], {messageId}, true));
+    tgl.verifyRequest(*makeDeleteMessages(chatIds[0], {messageId}, true));
     tgl.reply(makeError(400, "MESSAGE_DELETE_FORBIDDEN"));
     prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
                                              "Cannot delete the message: code 400 (MESSAGE_DELETE_FORBIDDEN)",
@@ -120,7 +120,7 @@ TEST_F(MessageEditTest, DeletedFromHere)
     receiveText("text");
     client->deleteMessage(ChatId::fromString(std::to_string(chatIds[0]).c_str()),
                           MessageId::fromString(std::to_string(messageId).c_str()), true);
-    tgl.verifyRequest(deleteMessages(chatIds[0], {messageId}, true));
+    tgl.verifyRequest(*makeDeleteMessages(chatIds[0], {messageId}, true));
     tgl.reply(make_object<ok>());
     tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
     prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),

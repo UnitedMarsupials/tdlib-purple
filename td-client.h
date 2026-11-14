@@ -133,6 +133,8 @@ public:
     };
     // Asks where to forward the message, out of what the buddy list offers, and forwards it there
     void askForwardMessage(ChatId chatId, MessageId messageId);
+    // Asks which of these, the buddy list's, to forward the message to
+    void askForwardMessage(ChatId chatId, MessageId messageId, std::vector<ForwardDestination> destinations);
     // Through Telegram, if the destination is this account's; otherwise through the destination's
     // account: the text as a message, the file by file transfer, where that account can send one
     void forwardMessage(ChatId chatId, MessageId messageId, const ForwardDestination &to);

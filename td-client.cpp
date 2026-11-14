@@ -2005,8 +2005,13 @@ struct ForwardRequest {
 
 void PurpleTdClient::askForwardMessage(ChatId chatId, MessageId messageId)
 {
-    std::vector<ForwardDestination> destinations = getForwardDestinations();
-    const td::td_api::chat         *chat         = m_data.getChat(chatId);
+    askForwardMessage(chatId, messageId, getForwardDestinations());
+}
+
+void PurpleTdClient::askForwardMessage(ChatId chatId, MessageId messageId,
+                                       std::vector<ForwardDestination> destinations)
+{
+    const td::td_api::chat *chat = m_data.getChat(chatId);
     if (destinations.empty()) {
         if (chat)
             // TRANSLATOR: In-chat error message, when the buddy list offers nowhere to forward a message to.

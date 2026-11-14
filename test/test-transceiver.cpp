@@ -1306,6 +1306,16 @@ object_ptr<messages> makeMessages(std::vector<object_ptr<message>> &&list)
     return result;
 }
 
+object_ptr<deleteMessages> makeDeleteMessages(std::int64_t chatId, const std::vector<std::int64_t> &messageIds,
+                                              bool revoke)
+{
+    auto result = make_object<deleteMessages>();
+    result->chat_id_     = chatId;
+    result->message_ids_ = messageIds;
+    result->revoke_      = revoke;
+    return result;
+}
+
 object_ptr<updateMessageSendSucceeded> makeUpdateMessageSendSucceeded(object_ptr<message> &&message,
                                                                       std::int64_t oldMessageId)
 {

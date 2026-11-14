@@ -1771,6 +1771,21 @@ gboolean purple_privacy_deny_remove(PurpleAccount *account, const char *who, gbo
     return FALSE;
 }
 
+// The list of the request of fields being made, its items with their data, and the one chosen
+namespace {
+struct ListField {
+    std::vector<std::pair<std::string, void *>> items;
+    GList                                      *selected = nullptr;
+};
+}
+static ListField *g_listField       = nullptr;
+static int        g_requestListChoice = -1;
+
+extern "C++" void setRequestListChoice(int index)
+{
+    g_requestListChoice = index;
+}
+
 void *purple_request_fields(void *handle, const char *title, const char *primary,
 	const char *secondary, PurpleRequestFields *fields,
 	const char *ok_text, GCallback ok_cb,
@@ -1778,34 +1793,56 @@ void *purple_request_fields(void *handle, const char *title, const char *primary
 	PurpleAccount *account, const char *who, PurpleConversation *conv,
 	void *user_data)
 {
-    // Given up at once, as the dialog is not shown, so that what it holds is let go
-    if (cancel_cb)
+    ListField *list   = g_listField;
+    int        choice = g_requestListChoice;
+    g_listField         = nullptr;
+    g_requestListChoice = -1;
+    if (list && ok_cb && (choice >= 0) && (static_cast<size_t>(choice) < list->items.size())) {
+        list->selected = g_list_append(NULL, const_cast<char *>(list->items[choice].first.c_str()));
+        g_listField    = list;
+        reinterpret_cast<PurpleRequestFieldsCb>(ok_cb)(user_data, fields);
+        g_listField    = nullptr;
+    } else if (cancel_cb)
+        // Given up at once, as the dialog is not shown, so that what it holds is let go
         reinterpret_cast<PurpleRequestFieldsCb>(cancel_cb)(user_data, fields);
+    if (list)
+        g_list_free(list->selected);
+    delete list;
     return NULL;
 }
 
 PurpleRequestField *purple_request_field_list_new(const char *id, const char *text)
 {
-    return NULL;
+    delete g_listField;
+    g_listField = new ListField;
+    return reinterpret_cast<PurpleRequestField *>(g_listField);
 }
 
 void purple_request_field_list_add(PurpleRequestField *field, const char *item, void *data)
 {
+    // As libpurple, which takes no item without data
+    if (field && item && data)
+        reinterpret_cast<ListField *>(field)->items.emplace_back(item, data);
 }
 
 GList *purple_request_field_list_get_selected(const PurpleRequestField *field)
 {
-    return NULL;
+    return field ? reinterpret_cast<const ListField *>(field)->selected : NULL;
 }
 
 void *purple_request_field_list_get_data(const PurpleRequestField *field, const char *text)
 {
+    if (field && text)
+        for (const auto &item: reinterpret_cast<const ListField *>(field)->items)
+            if (item.first == text)
+                return item.second;
     return NULL;
 }
 
 PurpleRequestField *purple_request_fields_get_field(const PurpleRequestFields *fields, const char *id)
 {
-    return NULL;
+    // The only field there is, the list, while its request is answered
+    return reinterpret_cast<PurpleRequestField *>(g_listField);
 }
 
 GList *purple_get_chats(void)
