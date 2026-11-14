@@ -2632,6 +2632,11 @@ void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
 {
     if (!message) return;
     ChatId chatId = getId(chat);
+    // Fetched while still being sent, as for a tab redrawn just then, and sent since: it goes by
+    // its new id, or its marks would name one that is gone
+    MessageId sentId = account.getSentMessageId(chatId, getId(*message));
+    if (message->sending_state_ && (sentId != getId(*message)))
+        message->id_ = sentId.value();
 
     if (isReadReceiptsEnabled(account.purpleAccount))
         account.addPendingReadReceipt(chatId, getId(*message));

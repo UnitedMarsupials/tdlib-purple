@@ -711,6 +711,26 @@ TEST_F(MessageLinkTest, SentMessageRenamed)
     prpl.verifyEvents(NotifyUriEvent("file:///path/video.mp4"));
 }
 
+TEST_F(MessageLinkTest, SentMessageFetchedEarlier)
+{
+    loginWithOneContact();
+    const int64_t sentId = 1000;
+    tgl.update(make_object<updateMessageSendSucceeded>(makeDocumentMessage(10000, "/path/video.mp4", true), sentId));
+    tgl.verifyNoRequests();
+
+    // Its copy fetched before it was sent, as a tab redrawn meanwhile gets it, goes by its new id
+    object_ptr<message> early = makeDocumentMessage(10000, "/path/video.mp4", true);
+    early->id_            = sentId;
+    early->sending_state_ = make_object<messageSendingStatePending>();
+    tgl.update(make_object<updateNewMessage>(std::move(early)));
+    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
+    prpl.verifyEvents(ServGotImEvent(
+        connection, purpleUserName(0),
+        "<a href=\"" + link() + "\">video.mp4 [video/mp4]</a>\ncaption",
+        PURPLE_MESSAGE_RECV, date
+    ));
+}
+
 TEST_F(MessageLinkTest, ForwardWithinTelegram)
 {
     loginWithOneContact();
