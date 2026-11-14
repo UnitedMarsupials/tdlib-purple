@@ -816,13 +816,19 @@ TEST_F(MessageLinkTest, ForwardLabelsUnique)
         destination("a", "prpl-a", "id3", "Bob (a)"),
         destination("b", "prpl-b", "x", "Cid (b)"),
         destination("b", "prpl-c", "x", "Cid (b)"),
+        // A buddy and a chat of the same name, by their numbers
+        destination("c", "prpl-c", "#x", "X (c)"),
+        destination("c", "prpl-c", "#x", "X (c)"),
     };
+    destinations.back().isChat = true;
     PurpleTdClient::makeForwardLabelsUnique(destinations);
     ASSERT_EQ(std::string("Ann (a) [id1]"), destinations[0].label);
     ASSERT_EQ(std::string("Ann (a) [id2]"), destinations[1].label);
     ASSERT_EQ(std::string("Bob (a)"), destinations[2].label);
     ASSERT_EQ(std::string("Cid (b) [x] [prpl-b]"), destinations[3].label);
     ASSERT_EQ(std::string("Cid (b) [x] [prpl-c]"), destinations[4].label);
+    ASSERT_EQ(std::string("X (c) [#x] [prpl-c] [1]"), destinations[5].label);
+    ASSERT_EQ(std::string("X (c) [#x] [prpl-c] [2]"), destinations[6].label);
 }
 
 TEST_F(MessageLinkTest, ForwardToAnotherAccount)

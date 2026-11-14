@@ -1798,6 +1798,11 @@ GList *purple_request_field_list_get_selected(const PurpleRequestField *field)
     return NULL;
 }
 
+void *purple_request_field_list_get_data(const PurpleRequestField *field, const char *text)
+{
+    return NULL;
+}
+
 PurpleRequestField *purple_request_fields_get_field(const PurpleRequestFields *fields, const char *id)
 {
     return NULL;

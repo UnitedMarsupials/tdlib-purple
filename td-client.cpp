@@ -1961,8 +1961,9 @@ std::vector<PurpleTdClient::ForwardDestination> PurpleTdClient::getForwardDestin
 void PurpleTdClient::makeForwardLabelsUnique(std::vector<ForwardDestination> &destinations)
 {
     // Two buddies may go by the same alias, or two accounts of the same name be of different
-    // protocols: those are told apart by their names, then by their protocols, for a label to
-    // name one destination only
+    // protocols: those are told apart by their names, then by their protocols, and any still alike,
+    // as a buddy and a chat of the same name, by their numbers, for a label to name one destination
+    // only, as libpurple's list tells its items apart by their labels
     auto disambiguate = [&destinations](std::string ForwardDestination::*more) {
         std::map<std::string, unsigned> counts;
         for (const ForwardDestination &to: destinations)
@@ -1974,6 +1975,14 @@ void PurpleTdClient::makeForwardLabelsUnique(std::vector<ForwardDestination> &de
     };
     disambiguate(&ForwardDestination::name);
     disambiguate(&ForwardDestination::protocolId);
+    std::map<std::string, unsigned> counts, numbers;
+    for (const ForwardDestination &to: destinations)
+        counts[to.label]++;
+    for (ForwardDestination &to: destinations)
+        if (counts[to.label] > 1) {
+            std::string number = std::to_string(++numbers[to.label]);
+            to.label = formatMessage(_("{} [{}]"), {to.label, number});
+        }
 }
 
 namespace {
@@ -2018,7 +2027,6 @@ void PurpleTdClient::askForwardMessage(ChatId chatId, MessageId messageId)
     // TRANSLATOR: Label of the list of destinations, in the dialog asking where to forward a message to.
     PurpleRequestField      *field  = purple_request_field_list_new("to", _("To"));
     for (size_t i = 0; i < request->destinations.size(); i++)
-        // The data must not be null, nor is it needed: the labels tell the destinations apart
         purple_request_field_list_add(field, request->destinations[i].label.c_str(),
                                       &request->destinations[i]);
     purple_request_field_group_add_field(group, field);
@@ -2043,11 +2051,10 @@ void PurpleTdClient::forwardDestinationChosen(void *data, PurpleRequestFields *f
     if (!client || !selected)
         return;
     const char *label = static_cast<const char *>(selected->data);
-    for (const ForwardDestination &to: request->destinations)
-        if (label && (to.label == label)) {
-            client->forwardMessage(request->chatId, request->messageId, to);
-            break;
-        }
+    const auto *to    = label ? static_cast<const ForwardDestination *>(purple_request_field_list_get_data(field, label))
+                              : nullptr;
+    if (to)
+        client->forwardMessage(request->chatId, request->messageId, *to);
 }
 
 void PurpleTdClient::forwardDestinationCancelled(void *data, PurpleRequestFields *)
