@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <algorithm>
+#include <set>
 
 enum {
     // Typing notifications seems to be resent every 5-6 seconds, so 10s timeout hould be appropriate
@@ -1975,13 +1976,21 @@ void PurpleTdClient::makeForwardLabelsUnique(std::vector<ForwardDestination> &de
     };
     disambiguate(&ForwardDestination::name);
     disambiguate(&ForwardDestination::protocolId);
+    // A number skips the labels already taken, as a name may look like a label numbered
     std::map<std::string, unsigned> counts, numbers;
-    for (const ForwardDestination &to: destinations)
+    std::set<std::string>           taken;
+    for (const ForwardDestination &to: destinations) {
         counts[to.label]++;
+        taken.insert(to.label);
+    }
     for (ForwardDestination &to: destinations)
         if (counts[to.label] > 1) {
-            std::string number = std::to_string(++numbers[to.label]);
-            to.label = formatMessage(_("{} [{}]"), {to.label, number});
+            std::string label;
+            do
+                label = formatMessage(_("{} [{}]"), {to.label, std::to_string(++numbers[to.label])});
+            while (taken.count(label));
+            taken.insert(label);
+            to.label = label;
         }
 }
 

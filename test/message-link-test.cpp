@@ -821,6 +821,16 @@ TEST_F(MessageLinkTest, ForwardLabelsUnique)
         destination("c", "prpl-c", "#x", "X (c)"),
     };
     destinations.back().isChat = true;
+    // Nor is a number given that is another's label already
+    std::vector<PurpleTdClient::ForwardDestination> lookalikes = {
+        destination("d", "prpl-d", "room", "Shared (d)"),
+        destination("d", "prpl-d", "room", "Shared (d)"),
+        destination("d", "prpl-d", "room] [prpl-d] [1", "Shared (d)"),
+    };
+    PurpleTdClient::makeForwardLabelsUnique(lookalikes);
+    ASSERT_EQ(std::string("Shared (d) [room] [prpl-d] [2]"), lookalikes[0].label);
+    ASSERT_EQ(std::string("Shared (d) [room] [prpl-d] [3]"), lookalikes[1].label);
+    ASSERT_EQ(std::string("Shared (d) [room] [prpl-d] [1]"), lookalikes[2].label);
     PurpleTdClient::makeForwardLabelsUnique(destinations);
     ASSERT_EQ(std::string("Ann (a) [id1]"), destinations[0].label);
     ASSERT_EQ(std::string("Ann (a) [id2]"), destinations[1].label);
