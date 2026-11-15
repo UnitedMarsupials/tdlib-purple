@@ -2839,8 +2839,11 @@ static ShownHandler                   g_shownHandler      = nullptr;
 static ViewedHandler                  g_viewedHandler     = nullptr;
 static guint                          g_windowStateSignal = 0;
 static gulong                         g_windowStateHook   = 0;
-static guint                          g_notifySignal      = 0;
-static gulong                         g_focusHook         = 0;
+static guint                          g_focusInSignal     = 0;
+static gulong                         g_focusInHook       = 0;
+static guint                          g_focusOutSignal    = 0;
+static gulong                         g_focusOutHook      = 0;
+static guint                          g_focusSource       = 0;
 static guint                          g_shownSource       = 0;
 static const char                     VIEW_SOURCE_KEY[]   = "tdlib-purple-view-source";
 
@@ -3204,15 +3207,24 @@ static gboolean windowStateChanged(GSignalInvocationHint *, guint, const GValue 
     return TRUE;
 }
 
-// Any window given the focus or losing it, Pidgin's or not: the shown tabs of those focused are
-// looked at again, and none of the others is
-static gboolean focusChanged(GSignalInvocationHint *, guint, const GValue *, gpointer)
+// The shown tabs of the windows focused are looked at again, and none of the others is
+static gboolean refreshFocusedNow(gpointer)
 {
+    g_focusSource = 0;
     for (PurpleConversation *conv: g_shownConversations)
         if (isWindowFocused(conv))
             scheduleViewCheck(conv);
         else
             stopViewCheck(conv);
+    return G_SOURCE_REMOVE;
+}
+
+// Any widget given the focus or losing it, Pidgin's or not, its window among them: once the
+// window's own handler has said whether it is active, which it does only after the hooks
+static gboolean focusChanged(GSignalInvocationHint *, guint, const GValue *, gpointer)
+{
+    if (!g_focusSource)
+        g_focusSource = g_idle_add(refreshFocusedNow, nullptr);
     return TRUE;
 }
 
@@ -3232,18 +3244,23 @@ static void connectShown(gpointer plugin)
     if (g_windowStateSignal)
         g_windowStateHook = p_g_signal_add_emission_hook(g_windowStateSignal, 0, windowStateChanged, nullptr,
                                                          nullptr);
-    // GtkWindow's is-active, said by GObject's notify
-    g_notifySignal = p_g_signal_lookup("notify", G_TYPE_OBJECT);
-    if (g_notifySignal)
-        g_focusHook = p_g_signal_add_emission_hook(g_notifySignal, g_quark_from_static_string("is-active"),
-                                                   focusChanged, nullptr, nullptr);
-    if (!g_windowStateHook || !g_focusHook) {
+    // Not GtkWindow's is-active: GObject's notify, which says it, takes no emission hooks
+    g_focusInSignal  = p_g_signal_lookup("focus-in-event", p_gtk_widget_get_type());
+    g_focusOutSignal = p_g_signal_lookup("focus-out-event", p_gtk_widget_get_type());
+    if (g_focusInSignal)
+        g_focusInHook = p_g_signal_add_emission_hook(g_focusInSignal, 0, focusChanged, nullptr, nullptr);
+    if (g_focusOutSignal)
+        g_focusOutHook = p_g_signal_add_emission_hook(g_focusOutSignal, 0, focusChanged, nullptr, nullptr);
+    if (!g_windowStateHook || !g_focusInHook || !g_focusOutHook) {
         if (g_windowStateHook)
             p_g_signal_remove_emission_hook(g_windowStateSignal, g_windowStateHook);
-        if (g_focusHook)
-            p_g_signal_remove_emission_hook(g_notifySignal, g_focusHook);
+        if (g_focusInHook)
+            p_g_signal_remove_emission_hook(g_focusInSignal, g_focusInHook);
+        if (g_focusOutHook)
+            p_g_signal_remove_emission_hook(g_focusOutSignal, g_focusOutHook);
         g_windowStateHook = 0;
-        g_focusHook       = 0;
+        g_focusInHook     = 0;
+        g_focusOutHook    = 0;
         purple_debug_warning(config::pluginId, "Cannot tell which tabs are shown: windows cannot be followed\n");
         return;
     }
@@ -3268,10 +3285,16 @@ static void disconnectShown()
 {
     if (g_windowStateHook)
         p_g_signal_remove_emission_hook(g_windowStateSignal, g_windowStateHook);
-    if (g_focusHook)
-        p_g_signal_remove_emission_hook(g_notifySignal, g_focusHook);
+    if (g_focusInHook)
+        p_g_signal_remove_emission_hook(g_focusInSignal, g_focusInHook);
+    if (g_focusOutHook)
+        p_g_signal_remove_emission_hook(g_focusOutSignal, g_focusOutHook);
     g_windowStateHook = 0;
-    g_focusHook       = 0;
+    g_focusInHook     = 0;
+    g_focusOutHook    = 0;
+    if (g_focusSource)
+        g_source_remove(g_focusSource);
+    g_focusSource = 0;
     if (g_shownSource)
         g_source_remove(g_shownSource);
     g_shownSource = 0;
