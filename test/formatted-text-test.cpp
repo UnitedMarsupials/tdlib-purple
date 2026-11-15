@@ -139,4 +139,19 @@ TEST(LoggedLines, Parse)
     ASSERT_TRUE(lines[2].message);
     ASSERT_EQ(logStart + 11 * 60 + 2, lines[2].when);
     ASSERT_EQ(std::string("Bye"), lines[2].html.substr(lines[2].bodyStart));
+
+    // The last of a log Pidgin has closed, and that one only
+    ASSERT_FALSE(lines[0].closing);
+    ASSERT_FALSE(lines[1].closing);
+    ASSERT_TRUE(lines[2].closing);
+}
+
+TEST(LoggedLines, StillOpen)
+{
+    // A log still written to, which Pidgin has not ended
+    std::string content =
+        "<span style=\"font-size: smaller\">(10:00:00)</span><b> Ann left</b><br>\n";
+    std::vector<LoggedLine> lines = parseLoggedLines(content, time(nullptr));
+    ASSERT_EQ(1u, lines.size());
+    ASSERT_FALSE(lines[0].closing);
 }

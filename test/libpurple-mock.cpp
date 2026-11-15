@@ -2035,6 +2035,11 @@ void *purple_conversations_get_handle()
     return NULL;
 }
 
+PurpleCore *purple_get_core()
+{
+    return NULL;
+}
+
 PurpleConversationUiOps *purple_conversation_get_ui_ops(const PurpleConversation *conv)
 {
     return conv->ui_ops;
