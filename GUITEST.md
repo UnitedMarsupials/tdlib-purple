@@ -29,21 +29,21 @@ request the plugin makes appears as TDLib's `Receive request N: <name> {`.
 Without Telegram Premium, an account gives one reaction to a message: a test's reaction takes
 the place of the one given before.
 
-## Driving Pidgin with xdotool
+## Driving Pidgin with synthetic input
 
-The tests can be done through XTEST, by a script or an agent, on the tester's own display, but
-synthetic input is not a hand on the mouse:
+The tests can be done by a script or an agent, with input made up by a tool, on the tester's
+own display. Such input is not a hand on the mouse, and whatever tool is used, look out for:
 
-* `xdotool click 3` lets the button go at once, before the menu it opens is there to see it, so
-  the menu still takes the right button for the one that picks: pick from it, and from its
-  submenus, with `click 3` too. A left click in a submenu closes it with nothing picked. Holding
-  the right button down for longer closes the menu as soon as it opens.
-* Take screenshots with `xwd -root -silent`, cropped to the window or menu. ImageMagick's
-  `import` grabs the server, which closes any open menu.
-* A menu is a window of Pidgin's process: `xdotool search --onlyvisible --pid <pid>` and
-  `xdotool getwindowgeometry --shell` find where it opened, and its submenus.
-* The input goes to whatever is under the pointer and has the focus: the tester should not be
+* A click that lets the button go at once, before the menu it opens is up. GTK's menu then
+  still takes the right button for the one that picks, from the menu and its submenus, and a
+  left click in a submenu closes it with nothing picked: pick with the right button too.
+* A screenshot that grabs the pointer or the display, which closes any open menu.
+* Input going to whatever is under the pointer and has the focus: the tester should not be
   using the display meanwhile.
+
+With X11's `xdotool`, for example, `click 3` is such a click; `xwd -root` takes screenshots
+without a grab, where ImageMagick's `import` grabs; and `xdotool search --onlyvisible --pid`
+finds a menu, as one of Pidgin's windows.
 
 ## Starting and quitting
 
