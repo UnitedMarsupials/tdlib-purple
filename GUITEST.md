@@ -12,7 +12,8 @@ whenever a failure is found that only the GUI showed.
 ## Setting up
 
 * Pidgin with the plugin installed, started with its debug output kept, in a file only you can
-  read: `(umask 077; pidgin -d > pidgin-debug.log 2>&1)`. TDLib's own log goes there too, at the
+  read: `rm -f pidgin-debug.log; (umask 077; pidgin -d > pidgin-debug.log 2>&1)`, the file
+  removed first, as one already there keeps its permissions. TDLib's own log goes there too, at the
   verbosity of Pidgin's debug window; its verbose mode gives TDLib's requests and updates. The
   log holds messages, names, phone numbers and, while signing in, the login code: take out what
   is private before showing any of it to others.
@@ -33,8 +34,9 @@ Quit Pidgin with a tab or two of Telegram chats open, and start it again.
 
 * No warning `Cannot tell which tabs are shown` in the log, and no GLib warning about emission
   hooks.
-* Each tab is filled with its messages: `Redrawing chat <id> ... N messages`. Note how long it
-  took from `Opening chat <id>` to that line.
+* Each tab is filled with its messages once it is shown: `Redrawing chat <id> ... N messages`.
+  Note how long it took from `Opening chat <id>`, which is logged as the tab is shown: at once
+  for the chosen tab of each window, and for one behind it when it is switched to.
 * A tab of a chat with nothing unread is not marked as having new messages.
 
 Since: 0.9.6, whose focus hook GLib refused, so that no tab was known to be shown.
@@ -131,7 +133,13 @@ Point at a reaction under a group's message.
 Have someone react to a message of ours, with its chat's tab closed.
 
 * The chat is marked with ❤️ before its title and its buddy's name, until the tab is opened.
-* For a message of ours the tab does not show, the tab is filled anew from that message.
+
+### R7. A reaction to an older message of ours
+
+With the chat's tab open, have someone react to a message of ours older than the earliest the tab
+shows.
+
+* The tab is filled anew from that message to the latest, the reaction under it.
 
 ## A message's menu
 
