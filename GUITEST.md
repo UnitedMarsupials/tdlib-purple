@@ -248,7 +248,8 @@ being received.
 
 ### F5. Stickers and custom emoji
 
-Send and receive an animated sticker, a video sticker and a message with custom emoji.
+Have someone send an animated sticker, a video sticker and a message with custom emoji: the
+plugin cannot send stickers.
 
 * They are shown animated and transparent around the picture, not on a white square.
 
