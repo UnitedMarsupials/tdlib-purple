@@ -26,6 +26,25 @@ whenever a failure is found that only the GUI showed.
 In the log, the plugin's own lines start with `telegram-tdlib:`, TDLib's with `tdlib:`. A
 request the plugin makes appears as TDLib's `Receive request N: <name> {`.
 
+Without Telegram Premium, an account gives one reaction to a message: a test's reaction takes
+the place of the one given before.
+
+## Driving Pidgin with xdotool
+
+The tests can be done through XTEST, by a script or an agent, on the tester's own display, but
+synthetic input is not a hand on the mouse:
+
+* `xdotool click 3` lets the button go at once, before the menu it opens is there to see it, so
+  the menu still takes the right button for the one that picks: pick from it, and from its
+  submenus, with `click 3` too. A left click in a submenu closes it with nothing picked. Holding
+  the right button down for longer closes the menu as soon as it opens.
+* Take screenshots with `xwd -root -silent`, cropped to the window or menu. ImageMagick's
+  `import` grabs the server, which closes any open menu.
+* A menu is a window of Pidgin's process: `xdotool search --onlyvisible --pid <pid>` and
+  `xdotool getwindowgeometry --shell` find where it opened, and its submenus.
+* The input goes to whatever is under the pointer and has the focus: the tester should not be
+  using the display meanwhile.
+
 ## Starting and quitting
 
 ### S1. Start with conversations open
