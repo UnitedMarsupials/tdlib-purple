@@ -14,8 +14,8 @@ msgstr ""
 "Project-Id-Version: tdlib-purple\n"
 "Report-Msgid-Bugs-To: https://github.com/UnitedMarsupials/tdlib-purple/"
 "issues/new \n"
-"POT-Creation-Date: 2026-10-17 15:45-0400\n"
-"PO-Revision-Date: 2026-10-13 19:10-0400\n"
+"POT-Creation-Date: 2026-11-16 18:54-0500\n"
+"PO-Revision-Date: 2026-11-16 19:00-0500\n"
 "Last-Translator: Claude Opus 5.5 (effort medium), 2026\n"
 "Language-Team: Czech (https://www.transifex.com/tdlib-purple-developers/"
 "teams/110016/cs/)\n"
@@ -70,12 +70,14 @@ msgstr "{} si přeje ti zavolat."
 #. TRANSLATOR: Authentication dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
 #. TRANSLATOR: 2FA dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
 #. TRANSLATOR: Registration dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
+#. TRANSLATOR: Paid reaction dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
+#. TRANSLATOR: Message editing dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
 #. TRANSLATOR: 2FA setup confirmation dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
 #. TRANSLATOR: Group creation dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
 #. TRANSLATOR: 2FA settings, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
-#: ../call.cpp:220 ../td-client.cpp:518 ../td-client.cpp:582
-#: ../td-client.cpp:613 ../td-client.cpp:2308 ../tdlib-purple.cpp:522
-#: ../tdlib-purple.cpp:1245
+#: ../call.cpp:220 ../td-client.cpp:629 ../td-client.cpp:697
+#: ../td-client.cpp:732 ../td-client.cpp:1639 ../td-client.cpp:1765
+#: ../td-client.cpp:3925 ../tdlib-purple.cpp:739 ../tdlib-purple.cpp:1778
 msgid "_OK"
 msgstr "_OK"
 
@@ -83,12 +85,21 @@ msgstr "_OK"
 #. TRANSLATOR: Authentication dialog, alternative is "_OK". The underscore marks accelerator keys, they must be different!
 #. TRANSLATOR: 2FA dialog, alternative is "_OK". The underscore marks accelerator keys, they must be different!
 #. TRANSLATOR: Registration dialog, alternative is "_OK". The underscore marks accelerator keys, they must be different!
+#. TRANSLATOR: Paid reaction dialog, alternative is "_OK". The underscore marks accelerator keys, they must be different!
+#. TRANSLATOR: Message editing dialog, alternative is "_OK". The underscore marks accelerator keys, they must be different!
+#. TRANSLATOR: Forward dialog, alternative is "_Forward". The underscore marks accelerator keys, they must be different!
+#. TRANSLATOR: Message deletion dialog, alternative is "_Delete". The underscore marks accelerator keys, they must be different!
 #. TRANSLATOR: 2FA setup confirmation dialog, alternative is "_OK". The underscore marks accelerator keys, they must be different!
+#. TRANSLATOR: Block dialog, alternative is "_Block". The underscore marks accelerator keys, they must be different!
+#. TRANSLATOR: Report dialog, alternative is "_Next". The underscore marks accelerator keys, they must be different!
+#. TRANSLATOR: Report dialog, alternative is "_Report". The underscore marks accelerator keys, they must be different!
 #. TRANSLATOR: Group creation dialog, alternative is "_OK". The underscore marks accelerator keys, they must be different!
 #. TRANSLATOR: 2FA settings, alternative is "_OK". The underscore marks accelerator keys, they must be different!
-#: ../call.cpp:222 ../td-client.cpp:520 ../td-client.cpp:584
-#: ../td-client.cpp:615 ../td-client.cpp:2310 ../tdlib-purple.cpp:524
-#: ../tdlib-purple.cpp:1247
+#: ../call.cpp:222 ../td-client.cpp:631 ../td-client.cpp:699
+#: ../td-client.cpp:734 ../td-client.cpp:1641 ../td-client.cpp:1767
+#: ../td-client.cpp:2055 ../td-client.cpp:2269 ../td-client.cpp:3927
+#: ../td-client.cpp:4252 ../td-client.cpp:4349 ../td-client.cpp:4370
+#: ../tdlib-purple.cpp:741 ../tdlib-purple.cpp:1780
 msgid "_Cancel"
 msgstr "_Zrušit"
 
@@ -134,53 +145,90 @@ msgid "Call ended ({0}): {1}"
 msgstr "Volání ukončeno ({0}): {1}"
 
 #. TRANSLATOR: In-line error message, appears after a colon (':'), arguments will be a number and some error text from Telegram
-#: ../client-utils.cpp:21
+#: ../client-utils.cpp:22
 #, c++-format
 msgid "code {0} ({1})"
 msgstr "kód {0} ({1})"
 
 #. TRANSLSATOR: In-line placeholder when an unsupported message is being replied to.
-#: ../client-utils.cpp:83
+#: ../client-utils.cpp:84
 #, c++-format
 msgid "Unsupported message type {}"
 msgstr "Nepodporovaný typ zprávy {}"
 
 #. TRANSLATOR: Buddy-list group, holding channels and groups shown in a conversation though not joined. It lasts until the program quits.
-#: ../client-utils.cpp:241
+#: ../client-utils.cpp:298
 msgid "Telegram: not joined"
 msgstr "Telegram: nepřipojené"
 
+#. TRANSLATOR: Buddy-list group, holding buddies whose Telegram accounts were deleted.
+#: ../client-utils.cpp:430
+msgid "Deleted Accounts (Telegram)"
+msgstr "Smazané účty (Telegram)"
+
+#. TRANSLATOR: Buddy's name, of an account that was deleted. The argument is the name it had.
+#: ../client-utils.cpp:483
+#, c++-format
+msgid "{} (deleted)"
+msgstr "{} (smazáno)"
+
+#. TRANSLATOR: In-chat status update. The owner may have deleted it, or Telegram.
+#: ../client-utils.cpp:488
+msgid "This account has been deleted."
+msgstr "Tento účet byl smazán."
+
+#. TRANSLATOR: In-chat status update, of an account that had been deleted.
+#: ../client-utils.cpp:506
+msgid "This account has been restored."
+msgstr "Tento účet byl obnoven."
+
 #. TRANSLATOR: The "sender" of a message that was posted to a channel. Will be used like a username.
-#: ../client-utils.cpp:596 ../receiving.cpp:507
+#: ../client-utils.cpp:787 ../receiving.cpp:674
 msgid "Channel post"
 msgstr "Odesílatel"
 
+#. TRANSLATOR: In-chat error message. The arguments are a pasted file's placeholder, such as [report.pdf#3], and where the file was.
+#: ../client-utils.cpp:1569
+#, c++-format
+msgid "The message is not sent: {0} is gone from {1}."
+msgstr "Zpráva není odeslána: {0} zmizel z {1}."
+
 #. TRANSLATOR: In-chat error message, argument will be text.
 #. TRANSLATOR: In-chat error message, argument will be a user-sent message
-#: ../client-utils.cpp:1019 ../td-client.cpp:1240
+#: ../client-utils.cpp:1934 ../td-client.cpp:2759
 #, c++-format
 msgid "Failed to send message: {}"
 msgstr "Selhalo poslání zprávy: {}"
 
+#: ../clipboard.cpp:335
+#, c++-format
+msgid "xclip failed, with status {}"
+msgstr "xclip selhal se stavem {}"
+
 #. TRANSLATOR: In-line document type. Argument will be a mime type.
-#: ../file-transfer.cpp:578
+#: ../file-transfer.cpp:600
 #, c++-format
 msgid "voice note [{}]"
 msgstr "hlasová poznámka [{}]"
 
 #. TRANSLATOR: In-line document type. Argument will be a duration.
-#: ../file-transfer.cpp:587
+#: ../file-transfer.cpp:609
 #, c++-format
 msgid "video note [{}]"
 msgstr "video poznámka [{}]"
 
+#. TRANSLATOR: Of a video in several sizes, the one as it was sent, in place of a codec, as in "720×576 (original), 14 MiB".
+#: ../file-transfer.cpp:623 ../media-variants.cpp:34
+msgid "original"
+msgstr "originál"
+
 #. TRANSLATOR: Filename. Keep it short, and as few special characters as possible.
-#: ../file-transfer.cpp:595 ../file-transfer.cpp:597
+#: ../file-transfer.cpp:640 ../file-transfer.cpp:642
 msgid "voiceNote"
 msgstr "voiceNote"
 
 #. TRANSLATOR: Filename. Keep it short, and as few special characters as possible.
-#: ../file-transfer.cpp:603
+#: ../file-transfer.cpp:648
 msgid "videoNote"
 msgstr "videoNote"
 
@@ -211,127 +259,128 @@ msgid "Group to create: 1=small 2=big 3=channel"
 msgstr "Skupina k vytvoření: 1=malá 2=velká 3=kanál"
 
 #. TRANSLATOR: Buddy-window error message, argument will be a "number".
-#: ../purple-info.cpp:113
+#: ../purple-info.cpp:141
 #, c++-format
 msgid "Invalid auto-download limit '{}', resetting to default"
 msgstr "Neplatný limit pro automatické stahování '{}', přenastaveno na výchozí"
 
 #. TRANSLATOR: Title of a buddy-window error message
-#: ../purple-info.cpp:115
+#: ../purple-info.cpp:143
 msgid "Download limit"
 msgstr "Dosažen limit stahování"
 
 #. TRANSLATOR: In-chat message. Argument is a hyperlink, showing map coordinates.
-#: ../receiving.cpp:171
+#: ../receiving.cpp:175
 #, c++-format
 msgid "Location: {}"
 msgstr "Poloha: {}"
 
 #. TRANSLATOR: In-chat message, for a location shared live with no end set. Argument is a hyperlink, showing map coordinates.
-#: ../receiving.cpp:174
+#: ../receiving.cpp:178
 #, c++-format
 msgid "Live location: {}"
 msgstr "Živá poloha: {}"
 
 #. TRANSLATOR: In-chat message. Arguments are the time (or date and time) the live location will cease to be shared at, and a hyperlink, showing map coordinates.
-#: ../receiving.cpp:177
+#: ../receiving.cpp:181
 #, c++-format
 msgid "Live location until {0}: {1}"
 msgstr "Živá poloha do {0}: {1}"
 
 #. TRANSLATOR: What a message is, as in "reacted with 👍 to message from 12:00", where it has no text to quote. Also for "photo", "sticker" and the like.
-#: ../receiving.cpp:193
+#: ../receiving.cpp:207
 msgid "message"
 msgstr "zpráva"
 
 #. TRANSLATOR: File-type, used to describe what is being downloaded, in sentences like "Downloading photo" or "Ignoring photo download".
-#: ../receiving.cpp:204 ../receiving.cpp:698 ../receiving.cpp:1053
-#: ../receiving.cpp:1558
+#: ../receiving.cpp:220 ../receiving.cpp:911 ../receiving.cpp:1265
+#: ../receiving.cpp:2058
 msgid "photo"
 msgstr "foto"
 
 #. TRANSLATOR: What a message is, as in "reacted with 👍 to document from 12:00".
-#: ../receiving.cpp:217
+#: ../receiving.cpp:233
 msgid "document"
 msgstr "dokument"
 
 #. TRANSLATOR: What a message is, as in "reacted with 👍 to video from 12:00".
-#: ../receiving.cpp:226
+#: ../receiving.cpp:242
 msgid "video"
 msgstr "video"
 
 #. TRANSLATOR: What a message is, as in "reacted with 👍 to animation from 12:00".
-#: ../receiving.cpp:235
+#: ../receiving.cpp:251
 msgid "animation"
 msgstr "animace"
 
 #. TRANSLATOR: What a message is, as in "reacted with 👍 to audio from 12:00".
-#: ../receiving.cpp:244
+#: ../receiving.cpp:260
 msgid "audio"
 msgstr "zvuková nahrávka"
 
 #. TRANSLATOR: What a message is, as in "reacted with 👍 to voice message from 12:00".
-#: ../receiving.cpp:253
+#: ../receiving.cpp:269
 msgid "voice message"
 msgstr "hlasová zpráva"
 
 #. TRANSLATOR: What a message is, as in "reacted with 👍 to video message from 12:00".
-#: ../receiving.cpp:262
+#: ../receiving.cpp:278
 msgid "video message"
 msgstr "videozpráva"
 
 #. TRANSLATOR: File-type, used to describe what is being downloaded, in sentences like "Downloading photo" or "Ignoring photo download".
 #. will not be needed - inline download only
 #. TRANSLATOR: File-type, used to describe what is being downloaded, in sentences like "Downloading photo" or "Ignoring photo download".
-#: ../receiving.cpp:269 ../receiving.cpp:1115 ../receiving.cpp:1617
+#: ../receiving.cpp:285 ../receiving.cpp:1325 ../receiving.cpp:2118
 msgid "sticker"
 msgstr "nálepka"
 
 #. TRANSLATOR: What a message is, as in "reacted with 👍 to location from 12:00".
-#: ../receiving.cpp:296
+#: ../receiving.cpp:313
 msgid "location"
 msgstr "poloha"
 
 #. message == NULL means it could not be fetched, or took too long to fetch
 #. TRANSLATOR: In-line placeholder if the original author of a quote is unknown. Is at the beginning of the line if and only if you make it so, see "<b>&bt {} wrote:"...
-#: ../receiving.cpp:511
+#. TRANSLATOR: In-chat placeholder for a group member whose name is not known.
+#: ../receiving.cpp:678 ../receiving.cpp:1547
 msgid "Unknown user"
 msgstr "Neznámý uživatel"
 
 #. TRANSLATOR: In-chat placeholder when something unknown is being replied to.
-#: ../receiving.cpp:517
+#: ../receiving.cpp:684
 msgid "[message unavailable]"
 msgstr "[zpráva nedostupná]"
 
 #. TRANSLATOR: In-line placeholder when a photo is being replied to.
-#: ../receiving.cpp:530
+#: ../receiving.cpp:698
 msgid "[photo]"
 msgstr "[foto]"
 
 #. TRANSLATOR: In-line placeholder when a file is being replied to. Arguments will be the file name and MIME type (e.g. "application/gzip")
-#: ../receiving.cpp:539
+#: ../receiving.cpp:707
 #, c++-format
 msgid "[file: {0} ({1})]"
 msgstr "[soubor: {0} ({1})]"
 
 #. TRANSLATOR: In-line placeholder when a video is being replied to. Argument will be the file name.
-#: ../receiving.cpp:553
+#: ../receiving.cpp:721
 #, c++-format
 msgid "[video: {}]"
 msgstr "[video: {}]"
 
 #. TRANSLATOR: In-line placeholder when a sticker is being replied to.
-#: ../receiving.cpp:564
+#: ../receiving.cpp:732
 msgid "[sticker]"
 msgstr "[nálepka]"
 
 #. TRANSLATOR: In-line placeholder when a location is being replied to.
-#: ../receiving.cpp:580
+#: ../receiving.cpp:748
 msgid "[location]"
 msgstr "[poloha]"
 
 #. TRANSLATOR: In-chat notification of a reply. Arguments will be username and the original text or description thereof. Please preserve the HTML.
-#: ../receiving.cpp:594
+#: ../receiving.cpp:762
 #, c++-format
 msgid ""
 "<b>&gt; {0} wrote:</b>\n"
@@ -341,35 +390,35 @@ msgstr ""
 "&gt; {1}"
 
 #. TRANSLATOR: In-chat notification of forward. Argument will be a username. Please preserve the HTML.
-#: ../receiving.cpp:643
+#: ../receiving.cpp:843 ../td-client.cpp:2213
 #, c++-format
 msgid "<b>Forwarded from {}:</b>"
 msgstr "<b>Předáno od {}:</b>"
 
 #. TRANSLATOR: In-chat status update
-#: ../receiving.cpp:746
+#: ../receiving.cpp:950
 msgid "Converting sticker"
 msgstr "Konverze nálepky"
 
 #. TRANSLATOR: Download dialog, primary content, argument will be a username.
-#: ../receiving.cpp:874
+#: ../receiving.cpp:1078
 #, c++-format
 msgid "Download file from {}?"
 msgstr "Stáhnout soubor z {}?"
 
 #. TRANSLATOR: Download dialog, placeholder chat title, in the sentence "posted in a private chat".
-#: ../receiving.cpp:880
+#: ../receiving.cpp:1084
 msgid "a private chat"
 msgstr "soukromý chat"
 
 #. TRANSLATOR: Download dialog, secondary content. Arguments will be file description (text), chat name (text), and a file size (text!)
-#: ../receiving.cpp:882
+#: ../receiving.cpp:1086
 #, c++-format
 msgid "{0} posted in {1}, size: {2}"
 msgstr "{0} posláno do {1}, velikost: {2}"
 
 #. TRANSLATOR: Download dialog, title
-#: ../receiving.cpp:895
+#: ../receiving.cpp:1099
 msgid "Download"
 msgstr "Stahování"
 
@@ -377,8 +426,8 @@ msgstr "Stahování"
 #. TRANSLATOR: Owning group deletion dialog, alternative is "_No"
 #. TRANSLATOR: Group leave dialog, alternative is "_No"
 #. TRANSLATOR: Group deletion dialog, alternative is "_No"
-#: ../receiving.cpp:898 ../tdlib-purple.cpp:143 ../tdlib-purple.cpp:153
-#: ../tdlib-purple.cpp:185
+#: ../receiving.cpp:1102 ../tdlib-purple.cpp:149 ../tdlib-purple.cpp:159
+#: ../tdlib-purple.cpp:191
 msgid "_Yes"
 msgstr "_Ano"
 
@@ -386,122 +435,239 @@ msgstr "_Ano"
 #. TRANSLATOR: Owning group deletion dialog, alternative is "_Yes"
 #. TRANSLATOR: Group leave dialog, alternative is "_Yes"
 #. TRANSLATOR: Group deletion dialog, alternative is "_Yes"
-#: ../receiving.cpp:900 ../tdlib-purple.cpp:145 ../tdlib-purple.cpp:155
-#: ../tdlib-purple.cpp:187
+#: ../receiving.cpp:1104 ../tdlib-purple.cpp:151 ../tdlib-purple.cpp:161
+#: ../tdlib-purple.cpp:193
 msgid "_No"
 msgstr "_Ne"
 
 #. TRANSLATOR: In-chat notification, appears after a colon (':'). Argument is a file *type*, not a filename.
-#: ../receiving.cpp:977 ../td-client.cpp:978
+#: ../receiving.cpp:1185 ../td-client.cpp:2329
 #, c++-format
 msgid "Downloading {}"
 msgstr "Stahování {}"
 
 #. TRANSLATOR: In-chat notification, appears after a colon (':'). Argument is a file *type*, not a filename.
-#: ../receiving.cpp:982
+#: ../receiving.cpp:1190
 #, c++-format
 msgid "Requesting {} download"
 msgstr "Požadováno stažení {}"
 
 #. File size above limit, so it's non-zero
 #. TRANSLATOR: In-chat notification, appears after a colon (':'). Arguments are a file *type*, not a filename; second argument is a file size with unit.
-#: ../receiving.cpp:987
+#: ../receiving.cpp:1195
 #, c++-format
 msgid "Ignoring {0} download ({1})"
 msgstr "Ignorování {0} stahování ({1})"
 
 #. TRANSLATOR: In-chat notification in a channel. Arguments are the time (or date and time) the message was sent at, as the conversation window shows it, and a hyperlink, showing the map coordinates last shared.
-#: ../receiving.cpp:1162
+#: ../receiving.cpp:1373
 #, c++-format
 msgid "The live location from {0} is no longer shared: {1}"
 msgstr "Sdílení živé polohy ze zprávy z {0} bylo ukončeno: {1}"
 
 #. TRANSLATOR: In-chat notification. Arguments are a username, the time (or date and time) the message was sent at, as the conversation window shows it, and a hyperlink, showing the map coordinates last shared.
-#: ../receiving.cpp:1165
+#: ../receiving.cpp:1376
 #, c++-format
 msgid "{0} stopped sharing the live location from {1}: {2}"
 msgstr "{0} přestává sdílet živou polohu ze zprávy z {1}: {2}"
 
 #. TRANSLATOR: In-chat notification in a channel. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
-#: ../receiving.cpp:1170
+#: ../receiving.cpp:1381
 #, c++-format
 msgid "The caption of the message from {0} was removed"
 msgstr "Popisek zprávy z {0} byl odstraněn"
 
 #. TRANSLATOR: In-chat notification. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
-#: ../receiving.cpp:1173
+#: ../receiving.cpp:1384
 #, c++-format
 msgid "{0} removed the caption of the message from {1}"
 msgstr "{0} odstraňuje popisek zprávy z {1}"
 
+#. TRANSLATOR: In-chat notification in a channel, not logged, when the message's new text is shown in its place. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
+#: ../receiving.cpp:1397
+#, c++-format
+msgid "The message from {0} was edited"
+msgstr "Zpráva z {0} byla upravena"
+
+#. TRANSLATOR: In-chat notification, not logged, when the message's new text is shown in its place. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
+#: ../receiving.cpp:1400
+#, c++-format
+msgid "{0} edited the message from {1}"
+msgstr "{0} upravuje zprávu z {1}"
+
 #. TRANSLATOR: In-chat notification in a channel. Arguments are the time (or date and time) the message was sent at, as the conversation window shows it, and the message's new text.
-#: ../receiving.cpp:1182
+#: ../receiving.cpp:1408
 #, c++-format
 msgid "The message from {0} was edited: {1}"
 msgstr "Zpráva z {0} byla upravena: {1}"
 
 #. TRANSLATOR: In-chat notification. Arguments are a username, the time (or date and time) the message was sent at, as the conversation window shows it, and the message's new text.
-#: ../receiving.cpp:1185
+#: ../receiving.cpp:1411
 #, c++-format
 msgid "{0} edited the message from {1}: {2}"
 msgstr "{0} upravuje zprávu z {1}: {2}"
 
 #. TRANSLATOR: In-chat notification in a channel, followed by the message as edited. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
-#: ../receiving.cpp:1189
+#: ../receiving.cpp:1417
 #, c++-format
 msgid "The message from {0} was edited:"
 msgstr "Zpráva z {0} byla upravena:"
 
 #. TRANSLATOR: In-chat notification, followed by the message as edited. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
-#: ../receiving.cpp:1192
+#: ../receiving.cpp:1420
 #, c++-format
 msgid "{0} edited the message from {1}:"
 msgstr "{0} upravuje zprávu z {1}:"
 
+#. TRANSLATOR: In-chat status update. Argument is a group or channel name.
+#: ../receiving.cpp:1569
+#, c++-format
+msgid "{} was created"
+msgstr "Vytvořeno: {}"
+
+#. TRANSLATOR: In-chat status update. Arguments are a user name and a group or channel name.
+#: ../receiving.cpp:1571
+#, c++-format
+msgid "{0} created {1}"
+msgstr "{0} zakládá {1}"
+
+#. TRANSLATOR: In-chat status update. Argument is a user name.
+#: ../receiving.cpp:1586 ../receiving.cpp:1595
+#, c++-format
+msgid "{} joined"
+msgstr "{} se připojuje"
+
+#. TRANSLATOR: In-chat status update. Arguments are a user name and a list of user names.
+#: ../receiving.cpp:1588
+#, c++-format
+msgid "{0} added {1}"
+msgstr "{0} přidává {1}"
+
+#. TRANSLATOR: In-chat status update. Argument is a user name.
+#: ../receiving.cpp:1592
+#, c++-format
+msgid "{} joined by an invite link"
+msgstr "{} se připojuje přes pozvánku"
+
+#. TRANSLATOR: In-chat status update. Argument is a user name.
+#: ../receiving.cpp:1600
+#, c++-format
+msgid "{} left"
+msgstr "{} odchází"
+
+#. TRANSLATOR: In-chat status update. Arguments are user names.
+#: ../receiving.cpp:1602
+#, c++-format
+msgid "{0} removed {1}"
+msgstr "{0} odebírá {1}"
+
+#. TRANSLATOR: In-chat status update.
+#: ../receiving.cpp:1607
+msgid "A message was pinned"
+msgstr "Zpráva byla připnuta"
+
+#. TRANSLATOR: In-chat status update. Argument is a user name.
+#: ../receiving.cpp:1609
+#, c++-format
+msgid "{} pinned a message"
+msgstr "{} připíná zprávu"
+
+#. TRANSLATOR: After the text of a message edited where it stands, in Pidgin's conversation window, when only the formatting of its words (bold, italic and the like) changed.
+#: ../receiving.cpp:1673
+msgid "formatting edited"
+msgstr "formátování upraveno"
+
+#. TRANSLATOR: After the text of a message edited where it stands, in Pidgin's conversation window.
+#: ../receiving.cpp:1675
+msgid "edited"
+msgstr "upraveno"
+
 #. TRANSLATOR: In-chat status update, arguments are chat names.
-#: ../receiving.cpp:1284
+#: ../receiving.cpp:1723
 #, c++-format
 msgid "{0} changed group name to {1}"
 msgstr "{0} změnil/a jméno skupiny na {1}"
 
+#. TRANSLATOR: In-chat status update. Argument is a username.
+#: ../receiving.cpp:1732
+#, c++-format
+msgid "{} joined Telegram"
+msgstr "{} je nyní na Telegramu"
+
 #. TRANSLATOR: In-chat message, shown as sent by whoever reacted. Arguments are a reaction (an emoji, mostly) and the beginning of the message's text. Use the quotation marks of your language.
-#: ../receiving.cpp:1887
+#: ../receiving.cpp:2427
 #, c++-format
 msgid "reacted with {0} to message „{1}“."
 msgstr "reaguje {0} na zprávu „{1}“."
 
 #. TRANSLATOR: In-chat message, shown as sent by whoever reacted. Arguments are a reaction (an emoji, mostly), what the message is ("photo", "sticker" and the like), and the time (or date and time) it was sent at, as the conversation window shows it.
-#: ../receiving.cpp:1890
+#: ../receiving.cpp:2430
 #, c++-format
 msgid "reacted with {0} to {1} from {2}."
 msgstr "reaguje {0} na: {1} z {2}."
 
 #. TRANSLATOR: In-chat message, shown as sent by whoever reacted. Argument is the beginning of the message's text. Use the quotation marks of your language.
-#: ../receiving.cpp:1894
+#: ../receiving.cpp:2434
 #, c++-format
 msgid "removed their reaction to message „{0}“."
 msgstr "ruší svou reakci na zprávu „{0}“."
 
 #. TRANSLATOR: In-chat message, shown as sent by whoever reacted. Arguments are what the message is ("photo", "sticker" and the like), and the time (or date and time) it was sent at, as the conversation window shows it.
-#: ../receiving.cpp:1897
+#: ../receiving.cpp:2437
 #, c++-format
 msgid "removed their reaction to {0} from {1}."
 msgstr "ruší svou reakci na: {0} z {1}."
 
-#: ../receiving.cpp:1994
+#. TRANSLATOR: In-chat reaction, in place of one that is a picture of its own rather than an emoji, where it cannot be shown, as in "reacted with [custom emoji] to message ...".
+#: ../receiving.cpp:2540
 msgid "[custom emoji]"
 msgstr "[vlastní emoji]"
 
+#. TRANSLATOR: In-chat notification. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
+#: ../receiving.cpp:2831
+#, c++-format
+msgid "{0} deleted their message sent at {1}"
+msgstr "{0} maže svou zprávu z {1}"
+
+#. TRANSLATOR: In-chat notification. Arguments are the username of who deleted the message, that of who sent it, and the time (or date and time) it was sent at, as the conversation window shows it.
+#: ../receiving.cpp:2835
+#, c++-format
+msgid "{0} deleted the message {1} sent at {2}"
+msgstr "{0} maže zprávu z {2} (autor: {1})"
+
+#. TRANSLATOR: In-chat notification. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
+#: ../receiving.cpp:2840
+#, c++-format
+msgid "{0} deleted the message sent at {1}"
+msgstr "{0} maže zprávu z {1}"
+
+#. TRANSLATOR: In-chat notification. Arguments are a username and the time (or date and time) the message was sent at, as the conversation window shows it.
+#: ../receiving.cpp:2844
+#, c++-format
+msgid "The message {0} sent at {1} has been deleted"
+msgstr "Zpráva z {1} (autor: {0}) byla smazána"
+
 #. TRANSLATOR: In-chat notification. Argument is the time (or date and time) the message was sent at, as the conversation window shows it.
-#: ../receiving.cpp:2223
+#: ../receiving.cpp:2848
 #, c++-format
 msgid "Message from {} has been deleted"
 msgstr "Zpráva z {} byla smazána"
 
-#: ../receiving.cpp:2271
+#: ../receiving.cpp:3017
 #, c++-format
 msgid "Failed to fetch earlier messages: {}"
 msgstr "Selhalo načtení starších zpráv: {}"
+
+#. TRANSLATOR: At the end of a conversation window while it is being filled, followed by a turning character.
+#: ../receiving.cpp:3307
+msgid "Fetching messages from Telegram"
+msgstr "Načítání zpráv z Telegramu"
+
+#. TRANSLATOR: Under the names of those who gave a reaction, in its tooltip, when not all are known. Argument is a number.
+#: ../receiving.cpp:3479
+#, c++-format
+msgid "and {} more"
+msgstr "a {} dalších"
 
 #. TRANSLATOR: Default buddy-alias for a new secret chat. Argument is the Telegram nick, I think.
 #: ../secret-chat.cpp:20
@@ -515,246 +681,585 @@ msgid "The secret chat will be available when activated by the peer"
 msgstr "Tajný rozhovor bude k dispozici, až ho protistrana aktivuje"
 
 #. TRANSLATOR: Buddy-window error message, argument will be some kind of proxy-identifier.
-#: ../td-client.cpp:361
+#: ../td-client.cpp:399
 #, c++-format
 msgid "Proxy type {} is not supported"
 msgstr "Typ proxy {} není podporován"
 
 #. TRANSLATOR: Buddy-window error message
-#: ../td-client.cpp:393
+#: ../td-client.cpp:431
 #, c++-format
 msgid "Could not set proxy: {}"
 msgstr "Proxy nemohla být nastavena: {}"
 
 #. TRANSLATOR: Buddy-window error message
-#: ../td-client.cpp:406
+#: ../td-client.cpp:444
 #, c++-format
 msgid "Could not get proxies: {}"
 msgstr "Proxy nemohla být získána: {}"
 
 #. TRANSLATOR: Authentication dialog, secondary content. Appears after a colon (':'). Argument is a number.
-#: ../td-client.cpp:472
+#: ../td-client.cpp:520
 #, c++-format
 msgid "Telegram message (length: {})"
 msgstr "Zpráva od Telegram (délka: {})"
 
 #. TRANSLATOR: Authentication dialog, secondary content. Appears after a colon (':'). Argument is a number.
-#: ../td-client.cpp:476
+#: ../td-client.cpp:524
 #, c++-format
 msgid "SMS (length: {})"
 msgstr "SMS (délka: {})"
 
 #. TRANSLATOR: Authentication dialog, secondary content. Appears after a colon (':'). Argument is a number.
-#: ../td-client.cpp:480
+#: ../td-client.cpp:528
 #, c++-format
 msgid "Phone call (length: {})"
 msgstr "Volání (délka: {})"
 
 #. TRANSLATOR: Authentication dialog, secondary content. Official name "flash call". Appears after a colon (':'). Argument is some text-string-ish.
-#: ../td-client.cpp:484
+#: ../td-client.cpp:532
 #, c++-format
 msgid "Poor man's phone call (pattern: {})"
 msgstr "\"Volání chudého muže\" (vzor: {})"
 
+#. TRANSLATOR: appended to the auth prompt shown in the fallback "Telegram" chat.
+#: ../td-client.cpp:558
+msgid "Reply to this chat with the value above to continue."
+msgstr ""
+"Chcete-li pokračovat, pošlete do tohoto chatu hodnotu požadovanou výše."
+
 #. TRANSLATOR: Authentication dialog, primary content. Will be followed by instructions and an input box.
-#: ../td-client.cpp:495
+#: ../td-client.cpp:606
 msgid "Enter authentication code"
 msgstr "Vložte autorizační kód"
 
 #. TRANSLATOR: Authentication dialog, secondary content. Argument will be a term.
-#: ../td-client.cpp:500
+#: ../td-client.cpp:611
 #, c++-format
 msgid "Code sent via: {}"
 msgstr "Kód poslaný pomocí: {}"
 
 #. TRANSLATOR: Authentication dialog, secondary content. Argument will be a term.
-#: ../td-client.cpp:504
+#: ../td-client.cpp:615
 #, c++-format
 msgid "Next code will be: {}"
 msgstr "Nový kód bude: {}"
 
 #. TRANSLATOR: Authentication dialog, title.
-#: ../td-client.cpp:510
+#: ../td-client.cpp:621
 msgid "Login code"
 msgstr "Kód pro přihlášení"
 
 #. TRANSLATOR: Connection failure, error message (title; empty content)
-#: ../td-client.cpp:540
+#: ../td-client.cpp:655
 msgid "Authentication code required"
 msgstr "Je vyžadován autorizační kód"
 
 #. TRANSLATOR: Connection failure, error message title (title; empty content)
-#: ../td-client.cpp:555
+#: ../td-client.cpp:670
 msgid "Password required"
 msgstr "Je vyžadováno heslo"
 
 #. TRANSLATOR: 2FA dialog, secondary content, appears in new line. Argument is an arbitrary string from Telegram.
-#: ../td-client.cpp:563
+#: ../td-client.cpp:678
 #, c++-format
 msgid "Hint: {}"
 msgstr "Nápověda: {}"
 
 #. TRANSLATOR: 2FA dialog, secondary content, appears in new line. Argument is an e-mail address.
-#: ../td-client.cpp:569
+#: ../td-client.cpp:684
 #, c++-format
 msgid "Recovery e-mail may have been sent to {}"
 msgstr "E-mail pro obnovení poslán do {}"
 
 #. TRANSLATOR: 2FA dialog, title
-#: ../td-client.cpp:573
+#: ../td-client.cpp:688
 msgid "Password"
 msgstr "Heslo"
 
 #. TRANSLATOR: 2FA dialog, primary content
-#: ../td-client.cpp:575
+#. Request UI unavailable: ask for the 2FA password through the "Telegram" chat.
+#: ../td-client.cpp:690 ../td-client.cpp:706
 msgid "Enter password for two-factor authentication"
 msgstr "Vložte heslo pro dvou úrovňovou autorizaci"
 
+#. TRANSLATOR: 2FA prompt in the "Telegram" chat, which stands in for the password dialog, in a new line
+#: ../td-client.cpp:710
+msgid ""
+"The password is sent as a message: it will be visible on screen as you type "
+"it."
+msgstr "Heslo se odešle jako zpráva: při psaní bude vidět na obrazovce."
+
 #. TRANSLATOR: Registration dialog, title
-#: ../td-client.cpp:604
+#: ../td-client.cpp:723
 msgid "Registration"
 msgstr "Registrace"
 
 #. TRANSLATOR: Registration dialog, content
-#: ../td-client.cpp:606
+#: ../td-client.cpp:725 ../td-client.cpp:742
 msgid "New account is being created. Please enter your display name."
 msgstr "Nový účet se vytvoří. Prosím vložte zobrazované jméno."
 
 #. TRANSLATOR: Connection error message after failed registration.
-#: ../td-client.cpp:637 ../td-client.cpp:647
+#: ../td-client.cpp:756 ../td-client.cpp:766
 msgid "Display name is required for registration"
 msgstr "Zobrazované jméno je nutné k registraci"
 
 #. TRANSLATOR: Connection error message, argument is text (a proper reason)
-#: ../td-client.cpp:664
+#: ../td-client.cpp:783
 #, c++-format
 msgid "Authentication error: {}"
 msgstr "Chyba autorizace: {}"
 
+#. TRANSLATOR: Disabled item of a message's menu, when the message has been deleted.
+#: ../td-client.cpp:1297
+msgid "The message has been deleted."
+msgstr "Zpráva byla smazána."
+
+#. TRANSLATOR: Tooltip of the paid reaction in a message's menu.
+#: ../td-client.cpp:1381
+msgid "Spend Telegram Stars on a reaction"
+msgstr "Utratit Telegram Stars za reakci"
+
+#. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
+#: ../td-client.cpp:1430
+msgid "Needs Telegram Premium"
+msgstr "Vyžaduje Telegram Premium"
+
+#. TRANSLATOR: Submenu of reactions, after the most likely ones.
+#: ../td-client.cpp:1446
+msgid "More"
+msgstr "Další"
+
+#. TRANSLATOR: Disabled item of the reactions' submenu, in a message's menu.
+#: ../td-client.cpp:1454
+msgid "No reactions allowed"
+msgstr "Reakce nejsou povoleny"
+
+#. TRANSLATOR: Submenu of a message's menu.
+#: ../td-client.cpp:1460
+msgid "Reactions"
+msgstr "Reakce"
+
+#. TRANSLATOR: Item of an edited message's menu, while its latest edit is shown: removed words put back, and added ones, each on its own color. It shows just the text as it now is.
+#: ../td-client.cpp:1473
+msgid "Show the latest version"
+msgstr "Zobrazit poslední verzi"
+
+#. TRANSLATOR: Item of an edited message's menu, while just its text as it now is is shown. It shows the latest edit: removed words put back, and added ones, each on its own color.
+#: ../td-client.cpp:1475
+msgid "Show the latest edit"
+msgstr "Zobrazit poslední úpravu"
+
+#. TRANSLATOR: Item of a message's menu: the picture goes on the clipboard, as a file and as a picture, downloaded first, if need be.
+#: ../td-client.cpp:1486
+msgid "Copy the picture"
+msgstr "Kopírovat obrázek"
+
+#. TRANSLATOR: Item of a message's menu, and of a file's link: the file goes on the clipboard, for a file manager to paste, downloaded first, if need be.
+#: ../td-client.cpp:1488 ../tdlib-purple.cpp:1325
+msgid "Copy the file"
+msgstr "Kopírovat soubor"
+
+#. TRANSLATOR: Item of a message's menu, while the message is being edited in the input field.
+#: ../td-client.cpp:1499
+msgid "Cancel editing"
+msgstr "Zrušit úpravu"
+
+#. TRANSLATOR: Item of a message's menu; it opens a dialog.
+#: ../td-client.cpp:1509
+msgid "Edit…"
+msgstr "Upravit…"
+
+#. TRANSLATOR: Item of a message's menu; it asks for confirmation.
+#: ../td-client.cpp:1522
+msgid "Delete for everyone…"
+msgstr "Smazat pro všechny…"
+
+#. TRANSLATOR: Item of a message's menu; it asks for confirmation.
+#: ../td-client.cpp:1524
+msgid "Delete for me…"
+msgstr "Smazat pro mě…"
+
+#. TRANSLATOR: Item of a message's menu; it asks where to, in a dialog.
+#: ../td-client.cpp:1535
+msgid "Forward…"
+msgstr "Přeposlat…"
+
+#. TRANSLATOR: Item of a message's menu; it asks why, in a dialog or more.
+#: ../td-client.cpp:1546
+msgid "Report the message…"
+msgstr "Nahlásit zprávu…"
+
+#. TRANSLATOR: Item of a message's menu. Argument is the name of the message's sender.
+#: ../td-client.cpp:1560
+#, c++-format
+msgid "Unblock {}"
+msgstr "Odblokovat {}"
+
+#. TRANSLATOR: Item of a message's menu; it asks for confirmation. Argument is the name of the message's sender.
+#: ../td-client.cpp:1569
+#, c++-format
+msgid "Block {}…"
+msgstr "Zablokovat {}…"
+
+#. TRANSLATOR: In-chat error, after a reaction was picked from a message's menu; followed by the reaction.
+#: ../td-client.cpp:1602
+msgid "Cannot change the reaction"
+msgstr "Reakci nelze změnit"
+
+#. TRANSLATOR: Paid reaction dialog, title
+#: ../td-client.cpp:1629
+msgid "Paid reaction"
+msgstr "Placená reakce"
+
+#. TRANSLATOR: Paid reaction dialog, primary content
+#: ../td-client.cpp:1631
+msgid "How many Telegram Stars to spend on this message?"
+msgstr "Kolik Telegram Stars utratit za tuto zprávu?"
+
+#. TRANSLATOR: Paid reaction dialog, secondary content
+#: ../td-client.cpp:1633
+msgid "They are spent at once, and cannot be taken back."
+msgstr "Utratí se okamžitě a nelze je vzít zpět."
+
+#. TRANSLATOR: In-chat error, when the paid reaction dialog got something other than a number of stars.
+#: ../td-client.cpp:1659
+#, c++-format
+msgid "Not a number of Telegram Stars: {}"
+msgstr "Není to počet Telegram Stars: {}"
+
+#. There with its formatting, in Pidgin's markup, as what is sent from there
+#. TRANSLATOR: In-chat notification, not logged, until the edit ends. Argument is the time (or date and time) the message was sent at, as the conversation window shows it. "/cancel" must remain verbatim!
+#: ../td-client.cpp:1731
+#, c++-format
+msgid ""
+"Editing the message from {}: send it to save the change; Esc or /cancel "
+"leaves it as it was."
+msgstr ""
+"Úprava zprávy z {}: odesláním změnu uložíte; Esc nebo /cancel ji ponechá "
+"beze změny."
+
+#. TRANSLATOR: Message editing dialog, title
+#: ../td-client.cpp:1754
+msgid "Edit message"
+msgstr "Upravit zprávu"
+
+#. TRANSLATOR: Message editing dialog, primary content
+#: ../td-client.cpp:1756
+msgid "New caption of the message"
+msgstr "Nový popisek zprávy"
+
+#. TRANSLATOR: Message editing dialog, primary content
+#: ../td-client.cpp:1758
+msgid "New text of the message"
+msgstr "Nový text zprávy"
+
+#. TRANSLATOR: In-chat notification, not logged, once editing a message was given up.
+#. TRANSLATOR: In-chat notification, not logged, after a message being edited was sent unchanged.
+#. TRANSLATOR: In-chat notification, not logged, after the /cancel command.
+#: ../td-client.cpp:1788 ../tdlib-purple.cpp:543 ../tdlib-purple.cpp:1007
+msgid "The message is left as it was."
+msgstr "Zpráva zůstává beze změny."
+
+#. TRANSLATOR: In-chat error, after a message was edited from its menu; followed by the reason.
+#: ../td-client.cpp:1810 ../td-client.cpp:1880 ../td-client.cpp:1909
+msgid "Cannot edit the message"
+msgstr "Zprávu nelze upravit"
+
+#. TRANSLATOR: In-chat notification, after an edit Telegram does not allow was sent. The argument is why.
+#: ../td-client.cpp:1817
+#, c++-format
+msgid "The message is left as it was: {}"
+msgstr "Zpráva zůstává, jak byla: {}"
+
+#. TRANSLATOR: In-chat notification, after "The message is left as it was:", when a placeholder of something pasted was put into a message of text being edited.
+#: ../td-client.cpp:1835
+msgid "Telegram adds no picture, video or file to a message of text."
+msgstr "Telegram nepřidá obrázek, video ani soubor do textové zprávy."
+
+#. TRANSLATOR: In-chat notification, after "The message is left as it was:", when the placeholder of a message's picture, video or file was taken out as it was edited.
+#: ../td-client.cpp:1840
+msgid ""
+"Telegram takes no picture, video or file out of a message; it can be "
+"replaced, or the message deleted."
+msgstr ""
+"Telegram z žádné zprávy obrázek, video ani soubor neodebere; lze je "
+"nahradit, nebo zprávu smazat."
+
+#. TRANSLATOR: In-chat notification, after "The message is left as it was:", when placeholders of more than one thing were put into a message with a picture, video or file being edited.
+#: ../td-client.cpp:1845
+msgid ""
+"A message holds one picture, video or file, which can be replaced, but no "
+"more."
+msgstr ""
+"Zpráva obsahuje jeden obrázek, video nebo soubor, který lze nahradit, ale "
+"nic víc."
+
+#. TRANSLATOR: In-chat notification, after "The message is left as it was:". The arguments are a pasted file's placeholder, such as [report.pdf#3], and where the file was.
+#: ../td-client.cpp:1892
+#, c++-format
+msgid "{0} is gone from {1}."
+msgstr "{0} zmizel z {1}."
+
+#. TRANSLATOR: A destination a message may be forwarded to. Arguments: the buddy's or chat's name, and the account's.
+#: ../td-client.cpp:1925
+#, c++-format
+msgid "{} ({})"
+msgstr "{} ({})"
+
+#. TRANSLATOR: A destination a message may be forwarded to, whose name alone would be the same as another's. Arguments: its name as offered, then what tells it apart.
+#: ../td-client.cpp:1975 ../td-client.cpp:1990
+#, c++-format
+msgid "{} [{}]"
+msgstr "{} [{}]"
+
+#. TRANSLATOR: In-chat error message, when the buddy list offers nowhere to forward a message to.
+#: ../td-client.cpp:2018
+msgid "Nowhere to forward the message to: the buddy list is empty."
+msgstr "Zprávu není kam přeposlat: seznam kontaktů je prázdný."
+
+#. TRANSLATOR: Title of the dialog asking where to forward a message to.
+#: ../td-client.cpp:2028 ../td-client.cpp:2049
+msgid "Forward the message"
+msgstr "Přeposlat zprávu"
+
+#. TRANSLATOR: Prompt of the dialog asking where to forward a message to; typing in its field searches the list.
+#. TRANSLATOR: Prompt of the dialog asking where to forward a message to.
+#: ../td-client.cpp:2030 ../td-client.cpp:2051
+msgid "To whom, or to which chat?"
+msgstr "Komu, nebo do kterého chatu?"
+
+#. TRANSLATOR: Label of the list of destinations, in the dialog asking where to forward a message to.
+#: ../td-client.cpp:2042
+msgid "To"
+msgstr "Komu"
+
+#. TRANSLATOR: Forward dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
+#: ../td-client.cpp:2053
+msgid "_Forward"
+msgstr "_Přeposlat"
+
+#. TRANSLATOR: In-chat error message. Arguments: where the message was to go, and what went wrong.
+#: ../td-client.cpp:2084
+#, c++-format
+msgid "The message was not forwarded to {}: {}"
+msgstr "Zpráva nebyla přeposlána – {}: {}"
+
+#. TRANSLATOR: In-chat error message, the reason a message was not forwarded.
+#: ../td-client.cpp:2112
+msgid "no such user"
+msgstr "takový uživatel neexistuje"
+
+#. TRANSLATOR: In-chat error message, the reason a message was not forwarded.
+#: ../td-client.cpp:2136
+msgid "no such chat"
+msgstr "takový chat neexistuje"
+
+#. TRANSLATOR: In-chat error message, the reason a message was not forwarded.
+#: ../td-client.cpp:2151
+msgid "Telegram did not forward it"
+msgstr "Telegram ji nepřeposlal"
+
+#. TRANSLATOR: In-chat error message, the reason a message was not forwarded to another account's buddy or chat.
+#: ../td-client.cpp:2177 ../td-client.cpp:2234
+msgid "the account is not connected"
+msgstr "účet není připojen"
+
+#. TRANSLATOR: In-chat error message, the reason a message was not forwarded to another account's chat.
+#: ../td-client.cpp:2186
+msgid "the chat is no longer open"
+msgstr "chat už není otevřený"
+
+#. TRANSLATOR: In-chat error message, the reason a message, such as a location or a poll, was not forwarded to another account's buddy or chat.
+#: ../td-client.cpp:2209
+msgid "it has neither text nor a file"
+msgstr "nemá text ani soubor"
+
+#. TRANSLATOR: In-chat error message. Argument: where the message was forwarded to.
+#: ../td-client.cpp:2226
+#, c++-format
+msgid ""
+"The file of the message was not forwarded to {}: files cannot be sent there."
+msgstr "Soubor zprávy nebyl přeposlán – {}: soubory tam poslat nelze."
+
+#. TRANSLATOR: Message deletion dialog, title
+#: ../td-client.cpp:2254
+msgid "Delete message"
+msgstr "Smazat zprávu"
+
+#. TRANSLATOR: Message deletion dialog, primary content
+#: ../td-client.cpp:2256
+msgid "Delete the message for everyone in the chat?"
+msgstr "Smazat zprávu pro všechny v chatu?"
+
+#. TRANSLATOR: Message deletion dialog, primary content
+#: ../td-client.cpp:2258
+msgid "Delete the message for yourself only?"
+msgstr "Smazat zprávu jen pro sebe?"
+
+#. TRANSLATOR: Message deletion dialog, secondary content
+#: ../td-client.cpp:2260
+msgid "This cannot be undone."
+msgstr "Tuto akci nelze vrátit zpět."
+
+#. TRANSLATOR: Message deletion dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
+#: ../td-client.cpp:2267
+msgid "_Delete"
+msgstr "_Smazat"
+
+#. TRANSLATOR: In-chat error, after a message was deleted from its menu; followed by the reason.
+#: ../td-client.cpp:2291
+msgid "Cannot delete the message"
+msgstr "Zprávu nelze smazat"
+
+#. Unlikely error message not worth translating
+#. TRANSLATOR: In-chat error message, the reason in "Could not open {0}: {1}".
+#: ../td-client.cpp:2317
+msgid "no file in the message"
+msgstr "zpráva neobsahuje soubor"
+
+#. TRANSLATOR: In-chat error message, the reason in "Could not copy {0}: {1}".
+#: ../td-client.cpp:2362
+msgid "there is no clipboard to put it on"
+msgstr "není schránka, kam by šlo kopírovat"
+
+#. TRANSLATOR: In-chat error message, after "Copy the file" was picked, or the file was dragged out of the conversation. Arguments are a file *type* or name, and the reason.
+#: ../td-client.cpp:2387
+#, c++-format
+msgid "Could not copy {0}: {1}"
+msgstr "Nepodařilo se zkopírovat {0}: {1}"
+
 #. TRANSLATOR: In-chat error message. Arguments are a file *type* or name, and the reason.
-#: ../td-client.cpp:1019
+#: ../td-client.cpp:2389
 #, c++-format
 msgid "Could not open {0}: {1}"
 msgstr "Nelze otevřít {0}: {1}"
 
-#: ../td-client.cpp:1020
+#: ../td-client.cpp:2390
 msgid "the file"
 msgstr "soubor"
 
-#. TRANSLATOR: In-chat error message, the reason in "Could not open {0}: {1}".
-#: ../td-client.cpp:972
-msgid "no file in the message"
-msgstr "zpráva neobsahuje soubor"
-
 #. TRANSLATOR: In-chat error message, arguments will be a file name and a proper reason
-#: ../td-client.cpp:1093
+#: ../td-client.cpp:2463
 #, c++-format
 msgid "Could not read sticker file {0}: {1}"
 msgstr "Nemohu číst soubor nálepky {0}: {1}"
 
 #. TRANSLATOR: Error dialog, content
-#: ../td-client.cpp:1542
+#: ../td-client.cpp:3075
 #, c++-format
 msgid "Failed to add contact: {}"
 msgstr "Selhalo přidání kontaktu: {}"
 
 #. TRANSLATOR: Error dialog, title
-#: ../td-client.cpp:1544
+#: ../td-client.cpp:3077
 msgid "Failed to add contact"
 msgstr "Selhání přidání kontaktu"
 
 #. TRANSLATOR: Buddy-window error message, title (no content), argument will be a phone number.
-#: ../td-client.cpp:1670
+#: ../td-client.cpp:3203
 #, c++-format
 msgid "No user found with phone number '{}'"
 msgstr "Uživatel s telefonním číslem '{}' nenalezen"
 
 #. TRANSLATOR: Error dialog, content
-#: ../td-client.cpp:1866
+#: ../td-client.cpp:3423
 #, c++-format
 msgid "Failed to join chat: {}"
 msgstr "Selhalo připojení k chatu: {}"
 
 #. TRANSLATOR: Error dialog, title
 #. TRANSLATOR: Join error dialog, title
-#: ../td-client.cpp:1868 ../td-client.cpp:1893 ../td-client.cpp:1900
-#: ../tdlib-purple.cpp:553 ../tdlib-purple.cpp:572
+#: ../td-client.cpp:3425 ../td-client.cpp:3453 ../td-client.cpp:3473
+#: ../td-client.cpp:3498 ../td-client.cpp:3505 ../tdlib-purple.cpp:770
+#: ../tdlib-purple.cpp:789
 msgid "Failed to join chat"
 msgstr "Selhání připojení k chatu"
 
 #. TRANSLATOR: Error dialog, content
-#: ../td-client.cpp:1895
+#: ../td-client.cpp:3455
+msgid "You are no longer a member of this group or channel"
+msgstr "Už nejste členem této skupiny ani kanálu"
+
+#. TRANSLATOR: Error dialog, content
+#: ../td-client.cpp:3475
+msgid "Telegram does not know this group or channel"
+msgstr "Telegram tuto skupinu ani kanál nezná"
+
+#. TRANSLATOR: Error dialog, content
+#: ../td-client.cpp:3500
 msgid "The name belongs to a user, not a group"
 msgstr "Jméno patří uživateli ne skupině"
 
 #. TRANSLATOR: Error dialog, content, argument is a reason (text)
-#: ../td-client.cpp:1898
+#: ../td-client.cpp:3503
 #, c++-format
 msgid "Could not find group: {}"
 msgstr "Nemohu nalézt skupinu: {}"
 
 #. TRANSLATOR: Error dialog, secondary content
-#: ../td-client.cpp:1916
+#: ../td-client.cpp:3521
 msgid "Cannot create basic group without additional members"
 msgstr "Nemohu vytvořit základní skupinu bez dalších členů"
 
-#: ../td-client.cpp:1922
+#: ../td-client.cpp:3527
 #, c++-format
 msgid "No known user with id {}"
 msgstr "Neznámý uživatel s ID {}"
 
 #. TRANSLATOR: Error dialog, secondary content, argument is a username
-#: ../td-client.cpp:1931
+#: ../td-client.cpp:3536
 #, c++-format
 msgid "No known user by the name '{}'"
 msgstr "Neznámý uživatel se jménem '{}'"
 
 #. TRANSLATOR: Error dialog, title
-#: ../td-client.cpp:1945
+#: ../td-client.cpp:3550
 msgid "Failed to create group"
 msgstr "Selhání vytvoření skupiny"
 
 #. TRANSLATOR: Error dialog, primary content
-#: ../td-client.cpp:1947
+#: ../td-client.cpp:3552
 msgid "Invalid group members"
 msgstr "Neplatný počet uživatelů"
 
 #. TRANSLATOR: Error dialog, title
-#: ../td-client.cpp:2010
+#: ../td-client.cpp:3615
 msgid "Failed to delete group or channel"
 msgstr "Selhání smazání skupiny nebo kanálu"
 
 #. TRANSLATOR: Error dialog, title
-#: ../td-client.cpp:2037
+#: ../td-client.cpp:3642
 msgid "Failed to set group description"
 msgstr "Selhání nastavení popisu skupiny"
 
 #. TRANSLATOR: In-chat error message, appears after a colon (':')
 #. TRANSLATOR: Buddy infobox, error
-#: ../td-client.cpp:2056 ../td-client.cpp:2131 ../tdlib-purple.cpp:367
+#: ../td-client.cpp:3661 ../td-client.cpp:3736 ../tdlib-purple.cpp:576
 msgid "User not found"
 msgstr "Uživatel nenalezen"
 
 #. TRANSLATOR: In-chat error message, argument is a reason (text)
-#: ../td-client.cpp:2060 ../td-client.cpp:2097
+#: ../td-client.cpp:3665 ../td-client.cpp:3702
 #, c++-format
 msgid "Cannot kick user: {}"
 msgstr "Nemohu vykopnout uživatele: {}"
 
 #. TRANSLATOR: In-chat error message, argument is a reason (text)
-#: ../td-client.cpp:2101 ../td-client.cpp:2135
+#: ../td-client.cpp:3706 ../td-client.cpp:3740
 #, c++-format
 msgid "Cannot add user to group: {}"
 msgstr "Nemohu přidat uživatele do skupiny: {}"
 
 #. TRANSLATOR: In-chat error message, argument is a reason (text)
-#: ../td-client.cpp:2105
+#: ../td-client.cpp:3710
 #, c++-format
 msgid "Cannot generate invite link: {}"
 msgstr "Nemohu vytvořit odkaz pro pozvání: {}"
 
 #. TRANSLATOR: In-chat error message, after "Show invite link" was chosen for a chat that has none
-#: ../td-client.cpp:2199
+#: ../td-client.cpp:3804
 msgid ""
 "This chat has no public link or invite link, and only its administrators can "
 "create one"
@@ -764,12 +1269,12 @@ msgstr ""
 
 #. "description" is hard-coded in bitlbee as possible field for chat topic
 #. TRANSLATOR: Groupchat infobox key
-#: ../td-client.cpp:2219
+#: ../td-client.cpp:3824
 msgid "Description"
 msgstr "Popis"
 
 #. TRANSLATOR: 2FA setup confirmation dialog, secondary content, argument is an e-mail description (address and code length)
-#: ../td-client.cpp:2297
+#: ../td-client.cpp:3914
 #, c++-format
 msgid ""
 "Password will be changed after new e-mail is confirmed\n"
@@ -782,181 +1287,273 @@ msgstr ""
 #. TRANSLATOR: 2FA success notification, title
 #. TRANSLATOR: 2FA failure notification, title
 #. TRANSLATOR: 2FA settings, title
-#: ../td-client.cpp:2300 ../td-client.cpp:2320 ../td-client.cpp:2346
-#: ../td-client.cpp:2369 ../td-client.cpp:2373 ../tdlib-purple.cpp:1243
+#: ../td-client.cpp:3917 ../td-client.cpp:3937 ../td-client.cpp:3963
+#: ../td-client.cpp:3986 ../td-client.cpp:3990 ../tdlib-purple.cpp:1776
 msgid "Two-factor authentication"
 msgstr "Dvou úrovňová autorizace"
 
 #. TRANSLATOR: 2FA setup confirmation dialog, primary content
-#: ../td-client.cpp:2302
+#: ../td-client.cpp:3919
 msgid "Enter verification code received in the e-mail"
 msgstr "Vložte autorizační kód poslaný e-mailem"
 
 #. TRANSLATOR: 2FA success notification, primary content
-#: ../td-client.cpp:2322
+#: ../td-client.cpp:3939
 msgid "Password set"
 msgstr "Heslo nastaveno"
 
 #. TRANSLATOR: 2FA success notification, primary content
-#: ../td-client.cpp:2324
+#: ../td-client.cpp:3941
 msgid "Password cleared"
 msgstr "Heslo odebráno"
 
 #. TRANSLATOR: 2FA success notification, secondary content
-#: ../td-client.cpp:2326
+#: ../td-client.cpp:3943
 msgid "Recovery e-mail is configured"
 msgstr "Nastaven e-mail pro obnovení"
 
 #. TRANSLATOR: 2FA success notification, secondary content
-#: ../td-client.cpp:2328
+#: ../td-client.cpp:3945
 msgid "No recovery e-mail configured"
 msgstr "Nenastaven e-mail pro obnovení"
 
 #. TRANSLATOR: 2FA setup confirmation dialog, e-mail description
-#: ../td-client.cpp:2337
+#: ../td-client.cpp:3954
 #, c++-format
 msgid "Code sent to {0} (length: {1})"
 msgstr "Kód poslán na {0} (délka: {1})"
 
 #. TRANSLATOR: 2FA failure notification, primary content
-#: ../td-client.cpp:2348
+#: ../td-client.cpp:3965
 msgid "Failed to set password"
 msgstr "Selhalo nastavení hesla"
 
 #. TRANSLATOR: 2FA failure notification, content
-#: ../td-client.cpp:2375
+#: ../td-client.cpp:3992
 msgid "Looks like the code was wrong"
 msgstr "Vypadá to na špatný kód"
 
 #. TRANSLATOR: In-chat error message
-#: ../td-client.cpp:2460
+#: ../td-client.cpp:4077
 msgid "Unable to send message: The message is too large."
 msgstr "Nemohu odeslat zprávu: Je příliš dlouhá."
 
 #. TRANSLATOR: In-chat error message
-#: ../td-client.cpp:2463
+#: ../td-client.cpp:4080
 msgid "Unable to send message."
 msgstr "Nemohu odeslat zprávu."
 
 #. TRANSLATOR: In-chat(?) error message, argument is an error description (text)
-#: ../td-client.cpp:2467
+#: ../td-client.cpp:4084
 #, c++-format
 msgid "Failed to open chat: {}"
 msgstr "Selhalo otevření chatu: {}"
 
 #. TRANSLATOR: Failure notification, title
-#: ../td-client.cpp:2548
+#: ../td-client.cpp:4175
 msgid "Failed to create secret chat"
 msgstr "Selhalo vytvoření tajného rozhovoru"
 
+#. TRANSLATOR: Error dialog, primary content. Argument is a user's name.
+#: ../td-client.cpp:4202
+#, c++-format
+msgid "Cannot block {}"
+msgstr "Nelze zablokovat {}"
+
+#. TRANSLATOR: Error dialog, primary content. Argument is a user's name.
+#: ../td-client.cpp:4204
+#, c++-format
+msgid "Cannot unblock {}"
+msgstr "Nelze odblokovat {}"
+
+#. TRANSLATOR: Block dialog, primary content. Argument is a user's name.
+#: ../td-client.cpp:4239
+#, c++-format
+msgid "Block {}?"
+msgstr "Zablokovat {}?"
+
+#. TRANSLATOR: Block dialog, title
+#: ../td-client.cpp:4241
+msgid "Block user"
+msgstr "Zablokovat uživatele"
+
+#. TRANSLATOR: Block dialog, secondary content
+#: ../td-client.cpp:4243
+msgid "They will not be able to write to you or call you."
+msgstr "Nebude vám moci psát ani volat."
+
+#. TRANSLATOR: Block dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
+#: ../td-client.cpp:4250
+msgid "_Block"
+msgstr "_Blokovat"
+
+#. TRANSLATOR: In-chat notification, after a report was sent.
+#: ../td-client.cpp:4330
+msgid "Reported to Telegram's moderators."
+msgstr "Nahlášeno moderátorům Telegramu."
+
+#. TRANSLATOR: Report dialog, title
+#: ../td-client.cpp:4345 ../td-client.cpp:4357
+msgid "Report"
+msgstr "Nahlásit"
+
+#. TRANSLATOR: Report dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
+#: ../td-client.cpp:4347
+msgid "_Next"
+msgstr "_Další"
+
+#. TRANSLATOR: Report dialog, primary content
+#: ../td-client.cpp:4359
+msgid "Tell Telegram's moderators more"
+msgstr "Řekněte moderátorům Telegramu víc"
+
+#. TRANSLATOR: Report dialog, secondary content, when the details may be left out.
+#: ../td-client.cpp:4362
+msgid "This may be left empty."
+msgstr "Může zůstat prázdné."
+
+#. TRANSLATOR: Report dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
+#: ../td-client.cpp:4368
+msgid "_Report"
+msgstr "_Nahlásit"
+
+#. TRANSLATOR: In-chat notification, not logged, after a chat was reported as a whole.
+#: ../td-client.cpp:4378
+msgid ""
+"Telegram wants messages to go with this report: report one from its menu "
+"instead, by right-clicking it."
+msgstr ""
+"Telegram k tomuto nahlášení chce zprávy: nahlaste raději některou z nich z "
+"její nabídky, kliknutím pravým tlačítkem."
+
+#. TRANSLATOR: In-chat error, after a report; followed by the reason.
+#: ../td-client.cpp:4384
+msgid "Cannot send the report"
+msgstr "Nelze odeslat hlášení"
+
 #. TRANSLATOR: Buddy infobox, value for "last online"
-#: ../tdlib-purple.cpp:37
+#: ../tdlib-purple.cpp:43
 msgid "now"
 msgstr "právě teď"
 
 #. TRANSLATOR: Buddy infobox, value for "last online"
-#: ../tdlib-purple.cpp:45
+#: ../tdlib-purple.cpp:51
 msgid "recently"
 msgstr "nedávno"
 
 #. TRANSLATOR: Buddy infobox, value for "last online"
-#: ../tdlib-purple.cpp:48
+#: ../tdlib-purple.cpp:54
 msgid "last week"
 msgstr "minulý týden"
 
 #. TRANSLATOR: Buddy infobox, value for "last online"
-#: ../tdlib-purple.cpp:51
+#: ../tdlib-purple.cpp:57
 msgid "last month"
 msgstr "minulý měsíc"
 
 #. TRANSLATOR: Buddy infobox, key
-#: ../tdlib-purple.cpp:69 ../tdlib-purple.cpp:387
+#: ../tdlib-purple.cpp:75 ../tdlib-purple.cpp:596
 msgid "Last online"
 msgstr "Naposledy online"
 
 #. TRANSLATOR: Owning group deletion dialog, title
 #. TRANSLATOR: Group leave dialog, title
-#: ../tdlib-purple.cpp:136 ../tdlib-purple.cpp:148
+#: ../tdlib-purple.cpp:142 ../tdlib-purple.cpp:154
 msgid "Leaving group"
 msgstr "Opuštění skupiny"
 
 #. TRANSLATOR: Owning group deletion dialog, primary content
-#: ../tdlib-purple.cpp:138
+#: ../tdlib-purple.cpp:144
 msgid "Confirm deleting group"
 msgstr "Potvrzení smazání skupiny"
 
 #. TRANSLATOR: Owning group deletion dialog, secondary content
-#: ../tdlib-purple.cpp:140
+#: ../tdlib-purple.cpp:146
 msgid "Leaving basic group you created will delete the group. Continue?"
 msgstr "Opuštěním základní skupiny dojde k jejímu smazání. Pokračovat?"
 
 #. TRANSLATOR: Group leave dialog, content
-#: ../tdlib-purple.cpp:150
+#: ../tdlib-purple.cpp:156
 msgid "Leave the group?"
 msgstr "Opustit skupinu?"
 
 #. TRANSLATOR: Group deletion error dialog, title
-#: ../tdlib-purple.cpp:173
+#: ../tdlib-purple.cpp:179
 msgid "Cannot delete group"
 msgstr "Nelze smazat skupinu"
 
 #. TRANSLATOR: Group deletion error dialog, content
-#: ../tdlib-purple.cpp:175
+#: ../tdlib-purple.cpp:181
 msgid "Cannot delete basic group created by someone else"
 msgstr "Nemůžete smazat základní skupinu vytvořenou někým jiným"
 
 #. TRANSLATOR: Group deletion confirmation dialog, title
-#: ../tdlib-purple.cpp:180
+#: ../tdlib-purple.cpp:186
 msgid "Deleting group"
 msgstr "Smazání skupiny"
 
 #. TRANSLATOR: Group deletion confirmation dialog, content
-#: ../tdlib-purple.cpp:182
+#: ../tdlib-purple.cpp:188
 msgid "Delete the group?"
 msgstr "Smazat skupinu?"
 
+#. TRANSLATOR: Contact and conversation menu item, while deleted messages stay in the conversation window, struck out. It has them removed from now on.
+#: ../tdlib-purple.cpp:235
+msgid "Remove deleted messages"
+msgstr "Odstraňovat smazané zprávy"
+
+#. TRANSLATOR: Contact and conversation menu item, while deleted messages are removed from the conversation window. It has them stay, struck out, from now on.
+#: ../tdlib-purple.cpp:237
+msgid "Keep deleted messages, struck out"
+msgstr "Ponechávat smazané zprávy, přeškrtnuté"
+
+#. TRANSLATOR: Contact, group and conversation menu item; it asks why, in a dialog or more.
+#: ../tdlib-purple.cpp:309
+msgid "Report…"
+msgstr "Nahlásit…"
+
 #. TRANSLATOR: Group menu action item
-#: ../tdlib-purple.cpp:227
+#: ../tdlib-purple.cpp:323
 msgid "Leave group"
 msgstr "Opustit skupinu"
 
 #. TRANSLATOR: Group menu action item
-#: ../tdlib-purple.cpp:233
+#: ../tdlib-purple.cpp:329
 msgid "Delete group"
 msgstr "Smazat skupinu"
 
 #. TRANSLATOR: Group menu action item
-#: ../tdlib-purple.cpp:239
+#: ../tdlib-purple.cpp:335
 msgid "Show invite link"
 msgstr "Zobrazit odkaz pro pozvání"
 
 #. TRANSLATOR: Buddy menu action item
-#: ../tdlib-purple.cpp:248
+#: ../tdlib-purple.cpp:347
 msgid "Start secret chat"
 msgstr "Zahájit tajný rozhovor"
 
 #. TRANSLATOR: Buddy infobox, key
-#: ../tdlib-purple.cpp:375
+#: ../tdlib-purple.cpp:584
 msgid "First name"
 msgstr "Jméno"
 
 #. TRANSLATOR: Buddy infobox, key
-#: ../tdlib-purple.cpp:377
+#: ../tdlib-purple.cpp:586
 msgid "Last name"
 msgstr "Příjmení"
 
 #. TRANSLATOR: Buddy infobox, key
-#: ../tdlib-purple.cpp:381
+#: ../tdlib-purple.cpp:590
 msgid "Phone number"
 msgstr "Telefonní číslo"
 
 #. TRANSLATOR: Buddy infobox, key
-#: ../tdlib-purple.cpp:392
+#: ../tdlib-purple.cpp:601
 msgid "Internal id"
 msgstr "Vlastní ID"
 
 #. TRANSLATOR: Group creation dialog, secondary content
-#: ../tdlib-purple.cpp:498
+#: ../tdlib-purple.cpp:715
 msgid ""
 "Invite at least one additional user by specifying their full name "
 "(autocompletion available)."
@@ -965,22 +1562,22 @@ msgstr ""
 "(doplňování dostupné)."
 
 #. TRANSLATOR: Group creation dialog, label
-#: ../tdlib-purple.cpp:501 ../tdlib-purple.cpp:505 ../tdlib-purple.cpp:509
+#: ../tdlib-purple.cpp:718 ../tdlib-purple.cpp:722 ../tdlib-purple.cpp:726
 msgid "Username"
 msgstr "Uživatelské jméno"
 
 #. TRANSLATOR: Group creation dialog, title
-#: ../tdlib-purple.cpp:518
+#: ../tdlib-purple.cpp:735
 msgid "Create group chat"
 msgstr "Vytvořit skupinový chat"
 
 #. TRANSLATOR: Group creation dialog, primary content
-#: ../tdlib-purple.cpp:520
+#: ../tdlib-purple.cpp:737
 msgid "Invite users"
 msgstr "Pozvat uživatele"
 
 #. TRANSLATOR: Join error dialog, secondary content. all five arguments are URLs. "name" should be part of the URL, and indicate that it can be a name in your language.
-#: ../tdlib-purple.cpp:549
+#: ../tdlib-purple.cpp:766
 #, c++-format
 msgid ""
 "Invite link must start with {0}, {1} or {2}. Public group link must be {3}"
@@ -990,45 +1587,117 @@ msgstr ""
 "nebo {4}jméno."
 
 #. TRANSLATOR: Join error dialog, primary content
-#: ../tdlib-purple.cpp:555
+#: ../tdlib-purple.cpp:772
 msgid "Must be invite link, public group link or group name"
 msgstr "Musí být odkaz k pozvání, odkaz ke skupině nebo jméno"
 
 #. TRANSLATOR: Join error dialog, primary content
-#: ../tdlib-purple.cpp:574
+#: ../tdlib-purple.cpp:791
 msgid "Please enter group name and valid type"
 msgstr "Prosím vložte jméno skupiny a platný typ"
 
 #. TRANSLATOR: Account creation, telephone hint. Keep it short!
-#: ../tdlib-purple.cpp:733
+#: ../tdlib-purple.cpp:952
 msgid "phone no. (+ country prefix)"
 msgstr "telefonní číslo. (+ s předvolbou země)"
 
+#. TRANSLATOR: Error after the /cancel command.
+#: ../tdlib-purple.cpp:1003
+msgid "No message is being edited."
+msgstr "Žádná zpráva se neupravuje."
+
+#. TRANSLATOR: Item of the menu of a pasted picture's or video's placeholder, such as [Image#1], in the message being written.
+#: ../tdlib-purple.cpp:1055
+msgid "Send as a file"
+msgstr "Odeslat jako soubor"
+
+#. TRANSLATOR: Item of the menu of a pasted video's placeholder by its file name, such as [holiday.mp4#2], in the message being written.
+#: ../tdlib-purple.cpp:1058
+msgid "Send as a video"
+msgstr "Odeslat jako video"
+
+#. TRANSLATOR: Item of the menu of a pasted recording's placeholder by its file name, such as [note.ogg#3], in the message being written.
+#: ../tdlib-purple.cpp:1061
+msgid "Send as a voice message"
+msgstr "Odeslat jako hlasovou zprávu"
+
+#. TRANSLATOR: Item of the menu of a pasted picture's placeholder by its file name, such as [holiday.jpg#1], in the message being written.
+#: ../tdlib-purple.cpp:1064
+msgid "Send as a photo"
+msgstr "Odeslat jako fotografii"
+
+#. TRANSLATOR: Item of the menu of a pasted thing's placeholder, such as [Image#1] or [report.pdf#3], in the message being written.
+#: ../tdlib-purple.cpp:1067
+msgid "Remove from the message"
+msgstr "Odstranit ze zprávy"
+
+#. TRANSLATOR: Error after the /paste command.
+#: ../tdlib-purple.cpp:1092 ../tdlib-purple.cpp:1109
+msgid "There are no files or picture on the clipboard."
+msgstr "Ve schránce nejsou žádné soubory ani obrázek."
+
+#. TRANSLATOR: In-chat notification, of a picture or video pasted, in the list after "Pasted". The arguments are its placeholders, the second by a file name, such as [Image#1] and [holiday.jpg#1].
+#: ../tdlib-purple.cpp:1118
+#, c++-format
+msgid "{0} (or {1}, as a file)"
+msgstr "{0} (nebo {1}, jako soubor)"
+
+#. TRANSLATOR: In-chat notification, not logged, after /paste. The argument is the pasted things' placeholders, such as [Image#1] or [report.pdf].
+#: ../tdlib-purple.cpp:1122
+#, c++-format
+msgid "Pasted {}: write it into the message, where it goes, to send it there."
+msgstr ""
+"Vloženo {}: napište to do zprávy na místo, kam patří, a odešle se s ní."
+
 #. TRANSLATOR: Error dialog, secondary content. Argument is the account's name, its phone number.
-#: ../tdlib-purple.cpp:928
+#: ../tdlib-purple.cpp:1264
 #, c++-format
 msgid "Account {} is not connected."
 msgstr "Účet {} není připojen."
 
 #. TRANSLATOR: Error dialog, primary content, after a file's link in a conversation was clicked.
-#: ../tdlib-purple.cpp:930
+#: ../tdlib-purple.cpp:1266
 msgid "Cannot open the file"
 msgstr "Soubor nelze otevřít"
 
+#. TRANSLATOR: Information dialog, after a link to a message in a conversation was clicked. Primary content.
+#: ../tdlib-purple.cpp:1309
+msgid "The message is not shown"
+msgstr "Zpráva není zobrazena"
+
+#. TRANSLATOR: Information dialog, secondary content.
+#: ../tdlib-purple.cpp:1311
+msgid "It is no longer in this conversation's window."
+msgstr "V okně této konverzace už není."
+
 #. TRANSLATOR: Command description, the initial "kick <user>" must remain verbatim!
-#: ../tdlib-purple.cpp:998
+#: ../tdlib-purple.cpp:1474
 msgid "kick <user>: Kick a user from the room using name or internal id"
 msgstr ""
 "vykopnout <user>: Vykopnout uživatele z místnosti pomocí jméno nebo "
 "vlastního ID"
 
 #. TRANSLATOR: Command description, the initial "hangup" must remain verbatim!
-#: ../tdlib-purple.cpp:1004
+#: ../tdlib-purple.cpp:1480
 msgid "hangup: Terminate any active call (with any user)"
 msgstr "hangup: Ukončit jakékoliv aktivní volání (s kýmkoliv)"
 
+#. TRANSLATOR: Command description, the initial "cancel" must remain verbatim!
+#: ../tdlib-purple.cpp:1486
+msgid "cancel: Leave the message being edited as it was"
+msgstr "cancel: Ponechat upravovanou zprávu beze změny"
+
+#. TRANSLATOR: Command description, the initial "paste" must remain verbatim!
+#: ../tdlib-purple.cpp:1492
+msgid ""
+"paste: Attach the files copied to the clipboard, or its picture, to the "
+"message being written"
+msgstr ""
+"paste: Připojit ke psané zprávě soubory zkopírované do schránky, nebo její "
+"obrázek"
+
 #. TRANSLATOR: Tdlib crash dialog, secondary content. Argument is a filesystem path. Please keep the space after it!
-#: ../tdlib-purple.cpp:1024
+#: ../tdlib-purple.cpp:1512
 #, c++-format
 msgid ""
 "The error may be caused by corrupt account data. If this is the case, it "
@@ -1039,137 +1708,148 @@ msgstr ""
 "opravena odstraněním dat z {}. Vyžaduje znovu přihlášení k účtu. "
 
 #. TRANSLATOR: Tdlib crash dialog, title
-#: ../tdlib-purple.cpp:1034
+#: ../tdlib-purple.cpp:1522
 msgid "Fatal error encountered in telegram plugin"
 msgstr "Nastala fatální chyba v zásuvném modulu Telegram"
 
 #. TRANSLATOR: Account settings, value for file downloads (hyperlink link file:///tmp/asdf)
-#: ../tdlib-purple.cpp:1117 ../tdlib-purple.cpp:1122
+#: ../tdlib-purple.cpp:1639 ../tdlib-purple.cpp:1644
 msgid "Inline (hyperlinks in chat)"
 msgstr "Vložené (odkaz v chatu)"
 
 #. TRANSLATOR: Account settings, value for file downloads (file transfer dialog)
-#: ../tdlib-purple.cpp:1119 ../tdlib-purple.cpp:1121
+#: ../tdlib-purple.cpp:1641 ../tdlib-purple.cpp:1643
 msgid "Standard file transfers"
 msgstr "Standardní stahování souborů"
 
 #. TRANSLATOR: Account settings, key (choice)
-#: ../tdlib-purple.cpp:1126
+#: ../tdlib-purple.cpp:1648
 msgid "File downloads"
 msgstr "Stahování souboru"
 
 #. TRANSLATOR: Account settings, key (choice)
-#: ../tdlib-purple.cpp:1131
+#: ../tdlib-purple.cpp:1653
 msgid "Inline auto-download size limit, MB (0 for unlimited)"
 msgstr "Limit pro automatické stahování, MB (0 pro nekonečno)"
 
 #. TRANSLATOR: Account settings, value for "Prefetch videos"; "the auto-download limit" is the option "Inline auto-download size limit".
-#: ../tdlib-purple.cpp:1140
+#: ../tdlib-purple.cpp:1662
 msgid "Highest resolution within the auto-download limit (if one is set)"
-msgstr "Nejvyšší rozlišení v rámci limitu automatického stahování (je-li nastaven)"
+msgstr ""
+"Nejvyšší rozlišení v rámci limitu automatického stahování (je-li nastaven)"
 
 #. TRANSLATOR: Account settings, value for "Prefetch videos": the highest resolution, or nothing if that is above the auto-download limit.
-#: ../tdlib-purple.cpp:1143
+#: ../tdlib-purple.cpp:1665
 msgid "Highest resolution only"
 msgstr "Pouze nejvyšší rozlišení"
 
 #. TRANSLATOR: Account settings, value for "Prefetch videos"
-#: ../tdlib-purple.cpp:1145
+#: ../tdlib-purple.cpp:1667
 msgid "Smallest file"
 msgstr "Nejmenší soubor"
 
 #. TRANSLATOR: Account settings, value for "Prefetch videos"
-#: ../tdlib-purple.cpp:1147
+#: ../tdlib-purple.cpp:1669
 msgid "Don't prefetch"
 msgstr "Nestahovat předem"
 
 #. TRANSLATOR: Account settings, key (choice). Videos are downloaded beforehand, so that they play as soon as clicked.
-#: ../tdlib-purple.cpp:1149
+#: ../tdlib-purple.cpp:1671
 msgid "Prefetch videos"
 msgstr "Stahovat videa předem"
 
 #. TRANSLATOR: Account settings, value for large file downloads
-#: ../tdlib-purple.cpp:1156
+#: ../tdlib-purple.cpp:1678
 msgid "Ask"
 msgstr "Zeptat se"
 
 #. TRANSLATOR: Account settings, value for large file downloads
-#: ../tdlib-purple.cpp:1158
+#: ../tdlib-purple.cpp:1680
 msgid "Discard"
 msgstr "Odmítnout"
 
 #. TRANSLATOR: Account settings, check box label
-#: ../tdlib-purple.cpp:1161
+#: ../tdlib-purple.cpp:1683
 msgid "Do not clean up inline downloads"
 msgstr "Nemazat soubory stažené do chatu"
 
 #. TRANSLATOR: Account settings, key (choice)
-#: ../tdlib-purple.cpp:1167
+#: ../tdlib-purple.cpp:1689
 msgid "Bigger inline file downloads"
 msgstr "Stahování větších souborů"
 
 #. TRANSLATOR: Account settings, key (boolean)
-#: ../tdlib-purple.cpp:1171
+#: ../tdlib-purple.cpp:1693
 msgid "Enable secret chats (takes effect at reconnect)"
 msgstr "Povolit tajné rozhovory (projeví se po novém připojení)"
 
 #. TRANSLATOR: Account settings, key (boolean)
-#: ../tdlib-purple.cpp:1178
+#: ../tdlib-purple.cpp:1700
 msgid "Show animated stickers"
 msgstr "Zobrazit animované nálepky"
 
 #. TRANSLATOR: Account settings, key (boolean)
-#: ../tdlib-purple.cpp:1184
+#: ../tdlib-purple.cpp:1706
 msgid "Show self-destructing messages anyway"
 msgstr "Přesto zobrazovat sebezničující zprávy"
 
 #. TRANSLATOR: Account settings, key (boolean)
-#: ../tdlib-purple.cpp:1189
+#: ../tdlib-purple.cpp:1711
+msgid "Strike out deleted messages in Pidgin, rather than remove them"
+msgstr "Smazané zprávy v Pidginu přeškrtnout místo odstranění"
+
+#. TRANSLATOR: Account settings, key (boolean)
+#: ../tdlib-purple.cpp:1716
 msgid "Show messages from channels and groups you have not joined"
 msgstr "Zobrazovat zprávy z kanálů a skupin, do kterých jste nevstoupili"
 
+#. TRANSLATOR: Account settings, key (boolean). Of a file sent by file transfer ("Send File..."): told by its content, as a pasted one is; otherwise it goes as a file.
+#: ../tdlib-purple.cpp:1722
+msgid "Send a file as a picture, video or voice message when it is one"
+msgstr "Odesílat soubor jako obrázek, video nebo hlasovou zprávu, pokud jím je"
+
 #. TRANSLATOR: Account settings, key (boolean). Custom emoji are pictures of their own, each standing for an ordinary emoji.
-#: ../tdlib-purple.cpp:1195
+#: ../tdlib-purple.cpp:1728
 msgid "Show custom emoji in reactions as ordinary emoji"
 msgstr "Zobrazovat vlastní emoji v reakcích jako běžné emoji"
 
 #. TRANSLATOR: 2FA settings, key
-#: ../tdlib-purple.cpp:1216
+#: ../tdlib-purple.cpp:1749
 msgid "Current password"
 msgstr "Aktuální heslo"
 
 #. TRANSLATOR: 2FA settings, key
-#: ../tdlib-purple.cpp:1221
+#: ../tdlib-purple.cpp:1754
 msgid "New password"
 msgstr "Nové heslo"
 
 #. TRANSLATOR: 2FA settings, key
-#: ../tdlib-purple.cpp:1226
+#: ../tdlib-purple.cpp:1759
 msgid "Repeat password"
 msgstr "Potvrdit heslo"
 
 #. TRANSLATOR: 2FA settings, key
-#: ../tdlib-purple.cpp:1231
+#: ../tdlib-purple.cpp:1764
 msgid "Password hint"
 msgstr "Nápověda k heslu"
 
 #. TRANSLATOR: 2FA settings, key
-#: ../tdlib-purple.cpp:1235
+#: ../tdlib-purple.cpp:1768
 msgid "Recovery e-mail"
 msgstr "E-mail k obnovení"
 
 #. TRANSLATOR: 2FA settings, primary content (after mistype)
-#: ../tdlib-purple.cpp:1256
+#: ../tdlib-purple.cpp:1789
 msgid "Please enter same password twice"
 msgstr "Prosím vložte dvakrát stejné heslo"
 
 #. TRANSLATOR: 2FA settings, primary content
-#: ../tdlib-purple.cpp:1287
+#: ../tdlib-purple.cpp:1820
 msgid "Enter new password and recovery e-mail address"
 msgstr "Zadejte heslo a e-mail pro obnovení"
 
 #. TRANSLATOR: 2FA settings, title
-#: ../tdlib-purple.cpp:1296
+#: ../tdlib-purple.cpp:1829
 msgid "Configure two-factor authentication..."
 msgstr "Nastavit dvou úrovňovou autorizaci..."
 
@@ -1227,362 +1907,5 @@ msgstr "Nastavit dvou úrovňovou autorizaci..."
 #~ msgid "Accept secret chats"
 #~ msgstr "Přijímat tajné chaty"
 
-#. TRANSLATOR: Of a video in several sizes, the one as it was sent, in place of a codec, as in "720×576 (original), 14 MiB".
-#: ../media-variants.cpp:34
-msgid "original"
-msgstr "originál"
-
-#. TRANSLATOR: Buddy-list group, holding buddies whose Telegram accounts were deleted.
-#: ../client-utils.cpp:374
-msgid "Deleted Accounts (Telegram)"
-msgstr "Smazané účty (Telegram)"
-
-#. TRANSLATOR: Buddy's name, of an account that was deleted. The argument is the name it had.
-#: ../client-utils.cpp:424
-#, c++-format
-msgid "{} (deleted)"
-msgstr "{} (smazáno)"
-
-#. TRANSLATOR: In-chat status update. The owner may have deleted it, or Telegram.
-#: ../client-utils.cpp:429
-msgid "This account has been deleted."
-msgstr "Tento účet byl smazán."
-
-#. TRANSLATOR: In-chat status update, of an account that had been deleted.
-#: ../client-utils.cpp:444
-msgid "This account has been restored."
-msgstr "Tento účet byl obnoven."
-
-#. TRANSLATOR: Information dialog, after a link to a message in a conversation was clicked. Primary content.
-#: ../tdlib-purple.cpp:977
-msgid "The message is not shown"
-msgstr "Zpráva není zobrazena"
-
-#. TRANSLATOR: Information dialog, secondary content.
-#: ../tdlib-purple.cpp:979
-msgid "It is no longer in this conversation's window."
-msgstr "V okně této konverzace už není."
-
-#. TRANSLATOR: Submenu of reactions, after the most likely ones.
-#: ../td-client.cpp:1083
-msgid "More"
-msgstr "Další"
-
-#. TRANSLATOR: Disabled item of the reactions' submenu, in a message's menu.
-#: ../td-client.cpp:1090
-msgid "No reactions allowed"
-msgstr "Reakce nejsou povoleny"
-
-#. TRANSLATOR: Submenu of a message's menu.
-#: ../td-client.cpp:1096
-msgid "Reactions"
-msgstr "Reakce"
-
-#. TRANSLATOR: Tooltip of the paid reaction in a message's menu.
-#: ../td-client.cpp:1060
-msgid "Spend Telegram Stars on a reaction"
-msgstr "Utratit Telegram Stars za reakci"
-
-#. TRANSLATOR: Paid reaction dialog, title
-#: ../td-client.cpp:1188
-msgid "Paid reaction"
-msgstr "Placená reakce"
-
-#. TRANSLATOR: Paid reaction dialog, primary content
-#: ../td-client.cpp:1190
-msgid "How many Telegram Stars to spend on this message?"
-msgstr "Kolik Telegram Stars utratit za tuto zprávu?"
-
-#. TRANSLATOR: Paid reaction dialog, secondary content
-#: ../td-client.cpp:1192
-msgid "They are spent at once, and cannot be taken back."
-msgstr "Utratí se okamžitě a nelze je vzít zpět."
-
-#. TRANSLATOR: In-chat error, when the paid reaction dialog got something other than a number of stars.
-#: ../td-client.cpp:1218
-#, c++-format
-msgid "Not a number of Telegram Stars: {}"
-msgstr "Není to počet Telegram Stars: {}"
-
-#. TRANSLATOR: Item of a message's menu; it opens a dialog.
-#: ../td-client.cpp:1192
-msgid "Edit…"
-msgstr "Upravit…"
-
-#. TRANSLATOR: Item of a message's menu; it asks for confirmation.
-#: ../td-client.cpp:1204
-msgid "Delete for everyone…"
-msgstr "Smazat pro všechny…"
-
-#. TRANSLATOR: Item of a message's menu; it asks for confirmation.
-#: ../td-client.cpp:1206
-msgid "Delete for me…"
-msgstr "Smazat pro mě…"
-
-#. TRANSLATOR: Message editing dialog, title
-#: ../td-client.cpp:1348
-msgid "Edit message"
-msgstr "Upravit zprávu"
-
-#. TRANSLATOR: Message editing dialog, primary content
-#: ../td-client.cpp:1350
-msgid "New caption of the message"
-msgstr "Nový popisek zprávy"
-
-#. TRANSLATOR: Message editing dialog, primary content
-#: ../td-client.cpp:1352
-msgid "New text of the message"
-msgstr "Nový text zprávy"
-
-#. TRANSLATOR: In-chat error, after a message was edited from its menu; followed by the reason.
-#: ../td-client.cpp:1389
-msgid "Cannot edit the message"
-msgstr "Zprávu nelze upravit"
-
-#. TRANSLATOR: Message deletion dialog, title
-#: ../td-client.cpp:1404
-msgid "Delete message"
-msgstr "Smazat zprávu"
-
-#. TRANSLATOR: Message deletion dialog, primary content
-#: ../td-client.cpp:1406
-msgid "Delete the message for everyone in the chat?"
-msgstr "Smazat zprávu pro všechny v chatu?"
-
-#. TRANSLATOR: Message deletion dialog, primary content
-#: ../td-client.cpp:1408
-msgid "Delete the message for yourself only?"
-msgstr "Smazat zprávu jen pro sebe?"
-
-#. TRANSLATOR: Message deletion dialog, secondary content
-#: ../td-client.cpp:1410
-msgid "This cannot be undone."
-msgstr "Tuto akci nelze vrátit zpět."
-
-#. TRANSLATOR: Message deletion dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
-#: ../td-client.cpp:1417
-msgid "_Delete"
-msgstr "_Smazat"
-
-#. TRANSLATOR: In-chat error, after a message was deleted from its menu; followed by the reason.
-#: ../td-client.cpp:1434
-msgid "Cannot delete the message"
-msgstr "Zprávu nelze smazat"
-
-#. TRANSLATOR: After the text of a message edited where it stands, in Pidgin's conversation window.
-#: ../receiving.cpp:1274
-msgid "edited"
-msgstr "upraveno"
-
-#. TRANSLATOR: Item of a message's menu, while the message is being edited in the input field.
-#: ../td-client.cpp:1195
-msgid "Cancel editing"
-msgstr "Zrušit úpravu"
-
-#. TRANSLATOR: In-chat notification, not logged, once editing a message was given up.
-#. TRANSLATOR: In-chat notification, not logged, after a message being edited was sent unchanged.
-#. TRANSLATOR: In-chat notification, not logged, after the /cancel command.
-#: ../td-client.cpp:1413 ../tdlib-purple.cpp:359 ../tdlib-purple.cpp:818
-msgid "The message is left as it was."
-msgstr "Zpráva zůstává beze změny."
-
-#. TRANSLATOR: Error after the /cancel command.
-#: ../tdlib-purple.cpp:814
-msgid "No message is being edited."
-msgstr "Žádná zpráva se neupravuje."
-
-#. TRANSLATOR: Command description, the initial "cancel" must remain verbatim!
-#: ../tdlib-purple.cpp:1094
-msgid "cancel: Leave the message being edited as it was"
-msgstr "cancel: Ponechat upravovanou zprávu beze změny"
-
-#. TRANSLATOR: In-chat notification, not logged. Argument is the time (or date and time) the message was sent at, as the conversation window shows it. "/cancel" must remain verbatim!
-#: ../td-client.cpp:1364
-#, c++-format
-msgid ""
-"Editing the message from {}: send it to save the change; Esc or /cancel "
-"leaves it as it was."
-msgstr "Úprava zprávy z {}: odesláním změnu uložíte; Esc nebo /cancel ji ponechá beze změny."
-
-#. TRANSLATOR: Error dialog, secondary content, when the message has been deleted.
-#: ../td-client.cpp:1057
-msgid "The message has been deleted."
-msgstr "Zpráva byla smazána."
-
-#. TRANSLATOR: Account settings, key (boolean)
-#: ../tdlib-purple.cpp:1313
-msgid "Strike out deleted messages in Pidgin, rather than remove them"
-msgstr "Smazané zprávy v Pidginu přeškrtnout místo odstranění"
-
-#. TRANSLATOR: Item of an edited message's menu, while its latest edit is shown: removed words put back, and added ones, each on its own color. It shows just the text as it now is.
-msgid "Show the latest version"
-msgstr "Zobrazit poslední verzi"
-
-#. TRANSLATOR: Item of an edited message's menu, while just its text as it now is is shown. It shows the latest edit: removed words put back, and added ones, each on its own color.
-msgid "Show the latest edit"
-msgstr "Zobrazit poslední úpravu"
-
-#. TRANSLATOR: Account settings, key (number): days counted back from the conversation's latest message. 0 leaves the conversation window as Pidgin opens it.
-msgid "Days of messages to show on opening a conversation, in Pidgin"
-msgstr "Dny zpráv k zobrazení při otevření konverzace v Pidginu"
-
-#. TRANSLATOR: At the end of a conversation window while it is being filled, followed by a turning character.
-msgid "Fetching messages from Telegram"
-msgstr "Načítání zpráv z Telegramu"
-
-#. TRANSLATOR: After the text of a message edited where it stands, in Pidgin's conversation window, when only the formatting of its words (bold, italic and the like) changed.
-msgid "formatting edited"
-msgstr "formátování upraveno"
-
-#. TRANSLATOR: Contact and conversation menu item, while deleted messages stay in the conversation window, struck out. It has them removed from now on.
-msgid "Remove deleted messages"
-msgstr "Odstraňovat smazané zprávy"
-
-#. TRANSLATOR: Contact and conversation menu item, while deleted messages are removed from the conversation window. It has them stay, struck out, from now on.
-msgid "Keep deleted messages, struck out"
-msgstr "Ponechávat smazané zprávy, přeškrtnuté"
-
-msgid "The message from {0} was edited"
-msgstr "Zpráva z {0} byla upravena"
-
-msgid "{0} edited the message from {1}"
-msgstr "{0} upravuje zprávu z {1}"
-
-msgid "Report the message…"
-msgstr "Nahlásit zprávu…"
-
-#, c++-format
-msgid "Unblock {}"
-msgstr "Odblokovat {}"
-
-#, c++-format
-msgid "Block {}…"
-msgstr "Zablokovat {}…"
-
-#, c++-format
-msgid "Cannot block {}"
-msgstr "Nelze zablokovat {}"
-
-#, c++-format
-msgid "Cannot unblock {}"
-msgstr "Nelze odblokovat {}"
-
-#, c++-format
-msgid "Block {}?"
-msgstr "Zablokovat {}?"
-
-msgid "Block user"
-msgstr "Zablokovat uživatele"
-
-msgid "They will not be able to write to you or call you."
-msgstr "Nebude vám moci psát ani volat."
-
-msgid "_Block"
-msgstr "_Blokovat"
-
-msgid "Reported to Telegram's moderators."
-msgstr "Nahlášeno moderátorům Telegramu."
-
-msgid "Report"
-msgstr "Nahlásit"
-
-msgid "_Next"
-msgstr "_Další"
-
-msgid "Tell Telegram's moderators more"
-msgstr "Řekněte moderátorům Telegramu víc"
-
-msgid "This may be left empty."
-msgstr "Může zůstat prázdné."
-
-msgid "_Report"
-msgstr "_Nahlásit"
-
-msgid "Telegram wants messages to go with this report: report one from its menu instead, by right-clicking it."
-msgstr "Telegram k tomuto nahlášení chce zprávy: nahlaste raději některou z nich z její nabídky, kliknutím pravým tlačítkem."
-
-msgid "Cannot send the report"
-msgstr "Nelze odeslat hlášení"
-
-msgid "Report…"
-msgstr "Nahlásit…"
-
-#, c++-format
-msgid "{} joined Telegram"
-msgstr "{} je nyní na Telegramu"
-
-#. TRANSLATOR: Error after the /paste command, when xclip fails without saying why.
-#, c++-format
-msgid "xclip failed, with status {}"
-msgstr "xclip selhal se stavem {}"
-
-#. TRANSLATOR: Error after the /paste command.
-msgid "There are no files or picture on the clipboard."
-msgstr "Ve schránce nejsou žádné soubory ani obrázek."
-
-#. TRANSLATOR: Command description, the initial "paste" must remain verbatim!
-msgid "paste: Attach the files copied to the clipboard, or its picture, to the message being written"
-msgstr "paste: Připojit ke psané zprávě soubory zkopírované do schránky, nebo její obrázek"
-
-#. TRANSLATOR: In-chat notification, not logged, after /paste. The argument is the pasted things' placeholders, such as [Image#1] or [report.pdf].
-#, c++-format
-msgid "Pasted {}: write it into the message, where it goes, to send it there."
-msgstr "Vloženo {}: napište to do zprávy na místo, kam patří, a odešle se s ní."
-
-#. TRANSLATOR: In-chat notification, of a picture or video pasted, in the list after "Pasted". The arguments are its placeholders, the second its file name, such as [Image#1] and [holiday.jpg].
-#, c++-format
-msgid "{0} (or {1}, as a file)"
-msgstr "{0} (nebo {1}, jako soubor)"
-
-#. TRANSLATOR: Item of the menu of a pasted picture's or video's placeholder, such as [Image#1], in the message being written.
-msgid "Send as a file"
-msgstr "Odeslat jako soubor"
-
-#. TRANSLATOR: Item of the menu of a pasted video's placeholder by its file name, such as [holiday.mp4], in the message being written.
-msgid "Send as a video"
-msgstr "Odeslat jako video"
-
-#. TRANSLATOR: Item of the menu of a pasted picture's placeholder by its file name, such as [holiday.jpg], in the message being written.
-msgid "Send as a photo"
-msgstr "Odeslat jako fotografii"
-
-#. TRANSLATOR: Item of the menu of a pasted thing's placeholder, such as [Image#1] or [report.pdf], in the message being written.
-msgid "Remove from the message"
-msgstr "Odstranit ze zprávy"
-
-#. TRANSLATOR: In-chat error message. The arguments are a pasted file's placeholder, such as [report.pdf#3], and where the file was.
-#, c++-format
-msgid "The message is not sent: {0} is gone from {1}."
-msgstr "Zpráva není odeslána: {0} zmizel z {1}."
-
-#. TRANSLATOR: In-chat notification, after an edit Telegram does not allow was sent. The argument is why.
-#, c++-format
-msgid "The message is left as it was: {}"
-msgstr "Zpráva zůstává, jak byla: {}"
-
-#. TRANSLATOR: In-chat notification, after "The message is left as it was:", when a placeholder of something pasted was put into a message of text being edited.
-msgid "Telegram adds no picture, video or file to a message of text."
-msgstr "Telegram nepřidá obrázek, video ani soubor do textové zprávy."
-
-#. TRANSLATOR: In-chat notification, after "The message is left as it was:", when the placeholder of a message's picture, video or file was taken out as it was edited.
-msgid "Telegram takes no picture, video or file out of a message; it can be replaced, or the message deleted."
-msgstr "Telegram z žádné zprávy obrázek, video ani soubor neodebere; lze je nahradit, nebo zprávu smazat."
-
-#. TRANSLATOR: In-chat notification, after "The message is left as it was:", when placeholders of more than one thing were put into a message with a picture, video or file being edited.
-msgid "A message holds one picture, video or file, which can be replaced, but no more."
-msgstr "Zpráva obsahuje jeden obrázek, video nebo soubor, který lze nahradit, ale nic víc."
-
-#. TRANSLATOR: In-chat notification, after "The message is left as it was:". The arguments are a pasted file's placeholder, such as [report.pdf#3], and where the file was.
-#, c++-format
-msgid "{0} is gone from {1}."
-msgstr "{0} zmizel z {1}."
-
-#. TRANSLATOR: Tooltip of a dimmed reaction in a message's menu; it can still be picked.
-#: ../td-client.cpp:1091
-msgid "Needs Telegram Premium"
-msgstr "Vyžaduje Telegram Premium"
-
-#. TRANSLATOR: In-chat error, after a reaction was picked from a message's menu; followed by the reaction.
-#: ../td-client.cpp:1115
-msgid "Cannot change the reaction"
-msgstr "Reakci nelze změnit"
+#~ msgid "Days of messages to show on opening a conversation, in Pidgin"
+#~ msgstr "Dny zpráv k zobrazení při otevření konverzace v Pidginu"

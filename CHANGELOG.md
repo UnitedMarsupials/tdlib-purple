@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Translations
+
+- **Czech, German, Polish, Albanian and Ukrainian are complete again**, with the strings 0.9.6 added: forwarding, copying a message's file or picture, a group's news, and who deleted a message.
+
 ## 0.9.6 (2026-11-14)
 
 ### Features
