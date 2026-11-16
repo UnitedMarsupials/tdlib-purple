@@ -11,9 +11,11 @@ whenever a failure is found that only the GUI showed.
 
 ## Setting up
 
-* Pidgin with the plugin installed, started with its debug output kept:
-  `pidgin -d > pidgin-debug.log 2>&1`. TDLib's own log goes there too, at the verbosity of
-  Pidgin's debug window; its verbose mode gives TDLib's requests and updates.
+* Pidgin with the plugin installed, started with its debug output kept, in a file only you can
+  read: `(umask 077; pidgin -d > pidgin-debug.log 2>&1)`. TDLib's own log goes there too, at the
+  verbosity of Pidgin's debug window; its verbose mode gives TDLib's requests and updates. The
+  log holds messages, names, phone numbers and, while signing in, the login code: take out what
+  is private before showing any of it to others.
 * A group of your own to test in, named however you like, with at least one other member who
   knows it is for testing: messages can then be sent, reacted to and deleted freely, and
   someone there can confirm what reached them. Do not test in others' groups.
@@ -46,7 +48,15 @@ Quit Pidgin with a group's tab open, start it, and open the tab.
 
 Since: the notice was logged at every quit and shown again when the tab was filled.
 
-### S3. Messages missed while offline
+### S3. Signing in
+
+With a fresh Pidgin profile (`pidgin -c <directory>`) or an account not yet signed in, add the
+account and enter the login code Telegram sends, and the two-step verification password if the
+account has one.
+
+* Pidgin's dialogs ask for each, take what is entered, and the account connects.
+
+### S4. Messages missed while offline
 
 Quit Pidgin, have someone send several messages to a private chat and a group, start Pidgin.
 
@@ -146,6 +156,14 @@ suggests. Drag a file's link out of the conversation into a file manager.
 
 * Each gives the message's own file, under its own name.
 
+### M4. Giving up an edit
+
+Type a message without sending it, then start editing one of ours from its menu, and press
+Escape. Do it again, and send the edit this time.
+
+* Escape leaves the message as it was; either way, the text typed before comes back into the
+  input field.
+
 ## History
 
 ### H1. Opening a chat
@@ -176,13 +194,38 @@ add text after the placeholder, and send.
 * The input field shows thumbnails; the message arrives with the picture as a photo, the files as
   files, the text as their caption.
 
-### F2. Stickers and custom emoji
+### F2. Dropping
+
+Drop a file from a file manager onto the input field, and another onto the conversation's text.
+Drag a picture from a web browser, and a link to a page that is not a picture.
+
+* Each file and the picture get their placeholders and thumbnails, and arrive when the message is
+  sent; the link to the page stays text.
+* Log: `Fetching <url>, dropped` for what is dragged from the browser, and
+  `Dropped <url>, not a picture` for the page.
+
+### F3. A pasted thing's menu
+
+Paste a picture, right-click its thumbnail in the input field and pick "Send as a file"; paste
+another, and remove it from the same menu.
+
+* The first arrives as a file rather than a photo; the one removed is not sent.
+
+### F4. Sending and receiving by file transfer
+
+Send a large file with "Send File...", and have someone send you one; cancel another while it is
+being received.
+
+* The transfer dialog's progress advances and the file arrives whole; the one cancelled stops.
+* Log: `Started uploading`, `Finishing uploading`; `Cancelling download` for the one cancelled.
+
+### F5. Stickers and custom emoji
 
 Send and receive an animated sticker, a video sticker and a message with custom emoji.
 
 * They are shown animated and transparent around the picture, not on a white square.
 
-### F3. Videos
+### F6. Videos
 
 Receive a video with a cover, and one without.
 
