@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <algorithm>
 #include <functional>
+#include <set>
 #include <ctime>
 
 enum {
@@ -2005,6 +2006,8 @@ void AccountThread::threadFunc()
 }
 
 static bool g_singleThread = false;
+// Started and not yet handed back to the main loop, which alone starts and takes them
+static std::set<AccountThread *> g_running;
 
 void AccountThread::setSingleThread()
 {
@@ -2019,8 +2022,10 @@ bool AccountThread::isSingleThread()
 void AccountThread::startThread()
 {
     if (!g_singleThread) {
-        if (!m_thread.joinable())
+        if (!m_thread.joinable()) {
+            g_running.insert(this);
             m_thread = std::thread(std::bind(&AccountThread::threadFunc, this));
+        }
     } else {
         run();
         mainThreadCallback(this);
@@ -2030,16 +2035,32 @@ void AccountThread::startThread()
 gboolean AccountThread::mainThreadCallback(gpointer data)
 {
     AccountThread  *self     = static_cast<AccountThread *>(data);
+    g_running.erase(self);
     PurpleAccount  *account  = purple_accounts_find(self->m_accountUserName.c_str(),
                                                     self->m_accountProtocolId.c_str());
     PurpleTdClient *tdClient = account ? getTdClient(account) : nullptr;
     if (self->m_thread.joinable())
         self->m_thread.join();
 
+    // Without its account, nobody is left to take the thread over
     if (tdClient)
         self->callback(tdClient);
+    else
+        delete self;
 
     return FALSE; // this idle callback will not be called again
+}
+
+void AccountThread::finishAll()
+{
+    for (AccountThread *thread: g_running) {
+        if (thread->m_thread.joinable())
+            thread->m_thread.join();
+        // Its hand-back, queued as it ended, is called off
+        g_idle_remove_by_data(thread);
+        delete thread;
+    }
+    g_running.clear();
 }
 
 void *findFrontEndSymbol(const char *name)

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- **An animated sticker's or custom emoji's GIF no longer stays behind in the temporary directory when its account or chat is gone by the time it is converted**, as when Pidgin quits or the account disconnects meanwhile.
+
 ## 0.9.6 (2026-11-14)
 
 ### Features
