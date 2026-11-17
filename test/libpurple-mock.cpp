@@ -1744,8 +1744,29 @@ char *purple_log_read(PurpleLog *log, PurpleLogReadFlags *flags)
     return g_strdup("");
 }
 
+PurpleLog *purple_log_new(PurpleLogType type, const char *name, PurpleAccount *account,
+                          PurpleConversation *conv, time_t time, const struct tm *tm)
+{
+    PurpleLog *log = g_new0(PurpleLog, 1);
+    log->type    = type;
+    log->name    = g_strdup(name);
+    log->account = account;
+    log->conv    = conv;
+    log->time    = time;
+    return log;
+}
+
+void purple_log_write(PurpleLog *log, PurpleMessageFlags type, const char *from, time_t time, const char *message)
+{
+    g_loggedMessages.push_back(message);
+}
+
 void purple_log_free(PurpleLog *log)
 {
+    if (log) {
+        g_free(log->name);
+        g_free(log);
+    }
 }
 
 PurpleRequestField *purple_request_field_choice_new(const char *id, const char *text, int default_value)

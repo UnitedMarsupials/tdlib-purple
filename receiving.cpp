@@ -897,28 +897,42 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
     if (unsent)
         account.addUnloggedSent(getId(chat), message.id,
                                 UnloggedSent{text, notification ? notification : "",
-                                             (uint32_t)(flags & ~PURPLE_MESSAGE_DELAYED), message.timestamp});
+                                             (uint32_t)(flags & ~PURPLE_MESSAGE_DELAYED), message.timestamp,
+                                             purple_conversation_get_type(unloggedConv),
+                                             purple_conversation_get_name(unloggedConv)});
 }
 
 void logSentMessage(TdAccountData &account, ChatId chatId, MessageId oldId, MessageId newId)
 {
-    UnloggedSent            sent;
-    const td::td_api::chat *chat = account.getChat(chatId);
-    PurpleConversation     *conv = (account.extractUnloggedSent(chatId, oldId, sent) && chat)
-                                   ? findMessageConversation(account, *chat) : nullptr;
-    if (!conv)
+    UnloggedSent sent;
+    if (!account.extractUnloggedSent(chatId, oldId, sent))
         return;
+    std::string             marked = sent.text + makeLogMarker(newId, sent.timestamp);
+    PurpleMessageFlags      flags  = (PurpleMessageFlags)sent.flags;
+    const char             *self   = purple_account_get_name_for_display(account.purpleAccount);
+    PurpleConversationType  type   = (PurpleConversationType)sent.conversationType;
+    PurpleConversation     *conv   = purple_find_conversation_with_account(type, sent.conversationName.c_str(),
+                                                                           account.purpleAccount);
+    if (!conv) {
+        // Its tab closed meanwhile: into a log of its own, as Pidgin would begin one for it
+        PurpleLog *log = purple_log_new((type == PURPLE_CONV_TYPE_CHAT) ? PURPLE_LOG_CHAT : PURPLE_LOG_IM,
+                                        sent.conversationName.c_str(), account.purpleAccount, NULL,
+                                        time(NULL), NULL);
+        purple_log_write(log, flags, self, sent.timestamp, marked.c_str());
+        if (!sent.notification.empty())
+            purple_log_write(log, getNotificationFlags(flags), "", sent.timestamp, sent.notification.c_str());
+        purple_log_free(log);
+        return;
+    }
     // For the log alone, which a tab filled anew takes it from: the tab has it already
-    std::string        text  = makeLogOnly(sent.text + makeLogMarker(newId, sent.timestamp));
-    PurpleMessageFlags flags = (PurpleMessageFlags)sent.flags;
-    const char        *self  = purple_account_get_name_for_display(account.purpleAccount);
-    if (purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_IM) {
+    std::string text = makeLogOnly(marked);
+    if (type == PURPLE_CONV_TYPE_IM) {
         purple_conv_im_write(purple_conversation_get_im_data(conv), self, text.c_str(), flags, sent.timestamp);
         if (!sent.notification.empty())
             purple_conv_im_write(purple_conversation_get_im_data(conv), purple_conversation_get_name(conv),
                                  makeLogOnly(sent.notification).c_str(), getNotificationFlags(flags),
                                  sent.timestamp);
-    } else if (purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_CHAT) {
+    } else if (type == PURPLE_CONV_TYPE_CHAT) {
         purple_conv_chat_write(purple_conversation_get_chat_data(conv), self, text.c_str(), flags, sent.timestamp);
         if (!sent.notification.empty())
             purple_conv_chat_write(purple_conversation_get_chat_data(conv), " ",

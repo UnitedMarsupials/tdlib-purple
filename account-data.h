@@ -375,6 +375,9 @@ struct UnloggedSent {
     std::string notification;
     uint32_t    flags     = 0;
     time_t      timestamp = 0;
+    // The conversation it was written into, which may be closed by the time it is sent
+    int         conversationType = 0;
+    std::string conversationName;
 };
 
 // An edit to a message that was still waiting to be shown at the time
