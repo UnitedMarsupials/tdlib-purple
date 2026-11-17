@@ -1468,6 +1468,7 @@ static gboolean tgprpl_unload (PurplePlugin *plugin)
 {
     unregisterMessageLinks();
     pidginUiUnload();
+    AccountThread::finishAll();
     return TRUE;
 }
 

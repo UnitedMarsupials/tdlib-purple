@@ -2406,7 +2406,6 @@ void PurpleTdClient::onReactionStickerConverted(AccountThread *arg)
         gsize  imageSize = 0;
         if (g_file_get_contents(thread->getOutputFileName().c_str(), &imageData, &imageSize, NULL))
             imageId = purple_imgstore_add_with_id(imageData, imageSize, NULL);
-        remove(thread->getOutputFileName().c_str());
     } else
         purple_debug_warning(config::pluginId, "Could not convert custom emoji %s: %s\n",
                              thread->inputFileName.c_str(), thread->getErrorMessage().c_str());
@@ -2437,7 +2436,6 @@ void PurpleTdClient::onAnimatedStickerConverted(AccountThread *arg)
             g_error_free(error);
         } else
             success = true;
-        remove(thread->getOutputFileName().c_str());
     }
 
     if (success) {

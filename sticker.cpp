@@ -217,6 +217,13 @@ void StickerConversionThread::run()
 
 #endif
 
+// Its GIF goes with it, read by then or never to be: its account gone, or its chat
+StickerConversionThread::~StickerConversionThread()
+{
+    if (!m_outputFileName.empty())
+        remove(m_outputFileName.c_str());
+}
+
 StickerConversionThread::Callback StickerConversionThread::g_callback = nullptr;
 
 void StickerConversionThread::setCallback(AccountThread::Callback callback)
