@@ -1687,3 +1687,24 @@ TEST_F(GroupChatTest, MessagesSentTogetherDeleted)
         "The message " + userFirstNames[1] + " " + userLastNames[1] + " sent at " + messageTime(date) +
         " has been deleted", PURPLE_MESSAGE_SYSTEM, 0));
 }
+
+TEST_F(GroupChatTest, NotLoggedAsPidginQuits)
+{
+    // Told, as Pidgin quits, that the account has signed off: that goes unlogged in this plugin's
+    // chats, and only in theirs
+    PurpleAccount      *other     = purple_account_new("someone@example.com", "prpl-jabber");
+    PurpleConversation *ours      = purple_conversation_new(PURPLE_CONV_TYPE_CHAT, account, "chat-1");
+    PurpleConversation *theirs    = purple_conversation_new(PURPLE_CONV_TYPE_CHAT, other, "room");
+    PurpleConversation *ourIm     = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, "1");
+    for (PurpleConversation *conv: {ours, theirs, ourIm})
+        purple_conversation_set_logging(conv, TRUE);
+    prpl.discardEvents();
+
+    emitSignal("quitting");
+    ASSERT_FALSE(purple_conversation_is_logging(ours));
+    ASSERT_TRUE(purple_conversation_is_logging(theirs));
+    ASSERT_TRUE(purple_conversation_is_logging(ourIm));
+
+    purple_account_destroy(other);
+    prpl.discardEvents();
+}

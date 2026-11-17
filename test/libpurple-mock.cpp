@@ -1847,7 +1847,14 @@ PurpleRequestField *purple_request_fields_get_field(const PurpleRequestFields *f
 
 GList *purple_get_chats(void)
 {
-    return NULL;
+    // libpurple's own list, not to be freed by the caller: made anew each time
+    static GList *chats = NULL;
+    g_list_free(chats);
+    chats = NULL;
+    for (GList *item = purple_get_conversations(); item; item = item->next)
+        if (purple_conversation_get_type(static_cast<PurpleConversation *>(item->data)) == PURPLE_CONV_TYPE_CHAT)
+            chats = g_list_append(chats, item->data);
+    return chats;
 }
 
 PurplePlugin *purple_connection_get_prpl(const PurpleConnection *gc)
@@ -2035,6 +2042,11 @@ void *purple_conversations_get_handle()
     return NULL;
 }
 
+PurpleCore *purple_get_core()
+{
+    return NULL;
+}
+
 PurpleConversationUiOps *purple_conversation_get_ui_ops(const PurpleConversation *conv)
 {
     return conv->ui_ops;
@@ -2046,15 +2058,39 @@ gboolean purple_conversation_has_focus(PurpleConversation *conv)
     return (conv->ui_ops != NULL);
 }
 
+struct SignalHandler {
+    std::string    signal;
+    PurpleCallback func;
+    void          *data;
+};
+static std::vector<SignalHandler> g_signalHandlers;
+
 gulong purple_signal_connect(void *instance, const char *signal,
 	void *handle, PurpleCallback func, void *data)
 {
+    // Once, as the plugin is loaded again for every test
+    for (const SignalHandler &handler: g_signalHandlers)
+        if ((handler.signal == signal) && (handler.func == func))
+            return 0;
+    g_signalHandlers.push_back({signal, func, data});
     return 0;
 }
 
 void purple_signal_disconnect(void *instance, const char *signal,
 	void *handle, PurpleCallback func)
 {
+    g_signalHandlers.erase(std::remove_if(g_signalHandlers.begin(), g_signalHandlers.end(),
+                                          [signal, func](const SignalHandler &handler) {
+                                              return (handler.signal == signal) && (handler.func == func);
+                                          }),
+                           g_signalHandlers.end());
+}
+
+void emitSignal(const char *signal)
+{
+    for (const SignalHandler &handler: g_signalHandlers)
+        if (handler.signal == signal)
+            reinterpret_cast<void (*)(void *)>(handler.func)(handler.data);
 }
 
 // As libpurple's, which Pidgin calls whenever it updates a tab
