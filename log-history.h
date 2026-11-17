@@ -14,6 +14,7 @@ struct LoggedLine {
     MessageId        messageId;       // which message it is, if the log says
     size_t           bodyStart = 0;   // where the message's own text starts in html, past its header
     std::vector<int> imageIds;        // pictures of the image store it shows, to unreference once shown
+    bool             closing = false; // the last of a log Pidgin has closed, as the account signed off
 };
 
 // The lines of a log in Pidgin's HTML, its session begun at logStart: times of day go on from that

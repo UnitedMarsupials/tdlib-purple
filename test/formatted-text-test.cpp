@@ -84,6 +84,19 @@ TEST(LogMarker, RoundTrip)
     ASSERT_EQ(std::string("Meow"), html);
     ASSERT_EQ(35577135104, id.value());
     ASSERT_FALSE(takeLogMarker(html, &id));
+
+    // Saying when the message was sent
+    html = "Meow" + makeLogMarker(MessageId::fromString("35577135104"), 1793000000);
+    ASSERT_EQ(std::string("Meow<!--tdlib-message 35577135104 1793000000-->"), html);
+    time_t sentAt = 0;
+    ASSERT_TRUE(takeLogMarker(html, &id, &sentAt));
+    ASSERT_EQ(std::string("Meow"), html);
+    ASSERT_EQ(35577135104, id.value());
+    ASSERT_EQ(1793000000, sentAt);
+
+    html = "Meow" + makeLogMarker(MessageId::fromString("35577135104"));
+    ASSERT_TRUE(takeLogMarker(html, &id, &sentAt));
+    ASSERT_EQ(0, sentAt);
 }
 
 TEST(LogOnly, Taken)
@@ -139,4 +152,46 @@ TEST(LoggedLines, Parse)
     ASSERT_TRUE(lines[2].message);
     ASSERT_EQ(logStart + 11 * 60 + 2, lines[2].when);
     ASSERT_EQ(std::string("Bye"), lines[2].html.substr(lines[2].bodyStart));
+
+    // The last of a log Pidgin has closed, and that one only
+    ASSERT_FALSE(lines[0].closing);
+    ASSERT_FALSE(lines[1].closing);
+    ASSERT_TRUE(lines[2].closing);
+}
+
+TEST(LoggedLines, SentLater)
+{
+    // Our message, logged as it was sent, long after it was written and after the line below; then
+    // the next line, still on the same day
+    struct tm start = {};
+    start.tm_year  = 2026 - 1900;
+    start.tm_mon   = 9;
+    start.tm_mday  = 28;
+    start.tm_hour  = 10;
+    start.tm_isdst = -1;
+    time_t      logStart = mktime(&start);
+    time_t      written  = logStart - 3600;
+    std::string content =
+        "<span style=\"color: #A82F2F\"><span style=\"font-size: smaller\">(10:05:00)</span> <b>Ann:</b></span> Hi<!--tdlib-message 1048576--><br>\n"
+        "<span style=\"color: #16569E\"><span style=\"font-size: smaller\">(09:00:00)</span> <b>Me:</b></span> <!--tdlib-log-only-->Bye" +
+        makeLogMarker(MessageId::fromString("2097152"), written) + "<!--/tdlib-log-only--><br>\n"
+        "<span style=\"color: #A82F2F\"><span style=\"font-size: smaller\">(10:06:00)</span> <b>Ann:</b></span> Hm<br>\n";
+    std::vector<LoggedLine> lines = parseLoggedLines(content, logStart);
+    ASSERT_EQ(3u, lines.size());
+
+    ASSERT_TRUE(lines[1].message);
+    ASSERT_EQ(2097152, lines[1].messageId.value());
+    ASSERT_EQ(written, lines[1].when);
+    ASSERT_EQ(std::string("Bye"), lines[1].html.substr(lines[1].bodyStart));
+    ASSERT_EQ(logStart + 6 * 60, lines[2].when);
+}
+
+TEST(LoggedLines, StillOpen)
+{
+    // A log still written to, which Pidgin has not ended
+    std::string content =
+        "<span style=\"font-size: smaller\">(10:00:00)</span><b> Ann left</b><br>\n";
+    std::vector<LoggedLine> lines = parseLoggedLines(content, time(nullptr));
+    ASSERT_EQ(1u, lines.size());
+    ASSERT_FALSE(lines[0].closing);
 }

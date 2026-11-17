@@ -76,6 +76,8 @@ void checkMessageReady(const IncomingMessage *message, TdTransceiver &transceive
 void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
                            td::td_api::object_ptr<td::td_api::message> message,
                            PendingMessageQueue::MessageAction action, bool redrawn = false);
+// Logs our message, sent, as written into its tab while it was being sent, under the id it now has
+void logSentMessage(TdAccountData &account, ChatId chatId, MessageId oldId, MessageId newId);
 // The chat's conversation, if it is open; none is opened
 PurpleConversation *findMessageConversation(TdAccountData &account, const td::td_api::chat &chat);
 // Names a message by when it was sent, as the conversation window shows it

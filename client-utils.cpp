@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <algorithm>
 #include <functional>
+#include <set>
 #include <ctime>
 
 enum {
@@ -1743,20 +1744,27 @@ void setLogMarkersEnabled(bool enabled)
     g_logMarkersEnabled = enabled;
 }
 
-std::string makeLogMarker(MessageId messageId)
+std::string makeLogMarker(MessageId messageId, time_t sentAt)
 {
-    return LOG_MARKER_START + std::to_string(messageId.value()) + LOG_MARKER_END;
+    std::string marker = LOG_MARKER_START + std::to_string(messageId.value());
+    if (sentAt)
+        marker += " " + std::to_string(sentAt);
+    return marker + LOG_MARKER_END;
 }
 
-bool takeLogMarker(std::string &html, MessageId *messageId)
+bool takeLogMarker(std::string &html, MessageId *messageId, time_t *sentAt)
 {
     size_t start = html.find(LOG_MARKER_START);
     size_t end   = (start == std::string::npos) ? std::string::npos : html.find(LOG_MARKER_END, start);
     if (end == std::string::npos)
         return false;
-    size_t numberStart = start + sizeof(LOG_MARKER_START) - 1;
+    size_t      numberStart = start + sizeof(LOG_MARKER_START) - 1;
+    std::string numbers     = html.substr(numberStart, end - numberStart);
+    size_t      space       = numbers.find(' ');
     if (messageId)
-        *messageId = MessageId::fromString(html.substr(numberStart, end - numberStart).c_str());
+        *messageId = MessageId::fromString(numbers.substr(0, space).c_str());
+    if (sentAt)
+        *sentAt = (space == std::string::npos) ? 0 : strtoll(numbers.c_str() + space + 1, nullptr, 10);
     html.erase(start, end + sizeof(LOG_MARKER_END) - 1 - start);
     return true;
 }
@@ -2005,6 +2013,8 @@ void AccountThread::threadFunc()
 }
 
 static bool g_singleThread = false;
+// Started and not yet handed back to the main loop, which alone starts and takes them
+static std::set<AccountThread *> g_running;
 
 void AccountThread::setSingleThread()
 {
@@ -2019,8 +2029,10 @@ bool AccountThread::isSingleThread()
 void AccountThread::startThread()
 {
     if (!g_singleThread) {
-        if (!m_thread.joinable())
+        if (!m_thread.joinable()) {
+            g_running.insert(this);
             m_thread = std::thread(std::bind(&AccountThread::threadFunc, this));
+        }
     } else {
         run();
         mainThreadCallback(this);
@@ -2030,16 +2042,32 @@ void AccountThread::startThread()
 gboolean AccountThread::mainThreadCallback(gpointer data)
 {
     AccountThread  *self     = static_cast<AccountThread *>(data);
+    g_running.erase(self);
     PurpleAccount  *account  = purple_accounts_find(self->m_accountUserName.c_str(),
                                                     self->m_accountProtocolId.c_str());
     PurpleTdClient *tdClient = account ? getTdClient(account) : nullptr;
     if (self->m_thread.joinable())
         self->m_thread.join();
 
+    // Without its account, nobody is left to take the thread over
     if (tdClient)
         self->callback(tdClient);
+    else
+        delete self;
 
     return FALSE; // this idle callback will not be called again
+}
+
+void AccountThread::finishAll()
+{
+    for (AccountThread *thread: g_running) {
+        if (thread->m_thread.joinable())
+            thread->m_thread.join();
+        // Its hand-back, queued as it ended, is called off
+        g_idle_remove_by_data(thread);
+        delete thread;
+    }
+    g_running.clear();
 }
 
 void *findFrontEndSymbol(const char *name)

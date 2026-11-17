@@ -565,6 +565,13 @@ void sendConversationReadReceipts(TdAccountData &account, PurpleConversation *co
         purple_debug_misc(config::pluginId, "Reading reactions in chat %" G_GINT64_FORMAT "\n", chatId.value());
         account.transceiver.sendQuery(td::td_api::make_object<td::td_api::readAllChatReactions>(chatId.value()), nullptr);
     }
+    // Oldest first, each once: TDLib keeps polling the reactions of only the last few it is told
+    std::sort(receipts.begin(), receipts.end(), [](const ReadReceipt &a, const ReadReceipt &b) {
+        return a.messageId < b.messageId;
+    });
+    receipts.erase(std::unique(receipts.begin(), receipts.end(),
+                               [](const ReadReceipt &a, const ReadReceipt &b) { return a.messageId == b.messageId; }),
+                   receipts.end());
     if (!receipts.empty()) {
         purple_debug_misc(config::pluginId, "Sending %zu read receipts for chat %" G_GINT64_FORMAT "\n",
                           receipts.size(), chatId.value());
@@ -818,12 +825,22 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
     PurpleMessageFlags flags = (PurpleMessageFlags) (extraFlags | directionFlag);
     // Not logged (again): with the conversation's logging off while it is written, as Pidgin shows
     // a message flagged as not to be logged without its time and sender
-    PurpleConversation *unloggedConv = (message.unlogged || message.redrawn) ? findMessageConversation(account, chat)
-                                                                             : nullptr;
+    // Ours, being sent, under an id it will not keep, is logged once sent, under the one it does, if
+    // the conversation logs then: its tab, if still open, or Pidgin's preference for a new one; and
+    // as ever where there is no tab to write it into unlogged. One sent already, while waiting to be
+    // shown, has that id now.
+    bool                unlogged     = message.unlogged || message.redrawn;
+    MessageId           loggedId     = message.sentLocally ? account.getSentMessageId(getId(chat), message.id)
+                                                           : message.id;
+    bool                sent         = !message.sentLocally || (loggedId != message.id);
+    bool                unsent       = text && !sent && message.id.valid() && !message.unlogged &&
+                                       logMarkersEnabled();
+    PurpleConversation *unloggedConv = (unlogged || unsent) ? findMessageConversation(account, chat) : nullptr;
+    unsent = unsent && unloggedConv && purple_conversation_is_logging(unloggedConv);
     bool                logging      = unloggedConv && purple_conversation_is_logging(unloggedConv);
     if (logging)
         purple_conversation_set_logging(unloggedConv, FALSE);
-    else if ((message.unlogged || message.redrawn) && !unloggedConv)
+    else if (unlogged && !unloggedConv)
         flags = (PurpleMessageFlags) (flags | PURPLE_MESSAGE_NO_LOG);
     if (message.outgoing && !message.sentLocally)
         flags = (PurpleMessageFlags) (flags | PURPLE_MESSAGE_REMOTE_SEND);
@@ -854,8 +871,8 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
     // Which message it is, for the log, once it has its id for good: whatever the front-end now, a
     // tab of Pidgin's may be filled from the log later
     std::string marked;
-    if (text && message.id.valid() && !message.sentLocally && logMarkersEnabled()) {
-        marked = text + makeLogMarker(message.id);
+    if (text && loggedId.valid() && sent && logMarkersEnabled()) {
+        marked = text + makeLogMarker(loggedId);
         text   = marked.c_str();
     }
 
@@ -878,6 +895,55 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
 
     if (logging && g_list_find(purple_get_conversations(), unloggedConv))
         purple_conversation_set_logging(unloggedConv, TRUE);
+    if (unsent)
+        account.addUnloggedSent(getId(chat), message.id,
+                                UnloggedSent{text, notification ? notification : "",
+                                             (uint32_t)(flags & ~PURPLE_MESSAGE_DELAYED), message.timestamp,
+                                             purple_conversation_get_type(unloggedConv),
+                                             purple_conversation_get_name(unloggedConv)});
+}
+
+void logSentMessage(TdAccountData &account, ChatId chatId, MessageId oldId, MessageId newId)
+{
+    UnloggedSent sent;
+    if (!account.extractUnloggedSent(chatId, oldId, sent))
+        return;
+    std::string             marked = sent.text + makeLogMarker(newId, sent.timestamp);
+    PurpleMessageFlags      flags  = (PurpleMessageFlags)sent.flags;
+    const char             *self   = purple_account_get_name_for_display(account.purpleAccount);
+    PurpleConversationType  type   = (PurpleConversationType)sent.conversationType;
+    PurpleConversation     *conv   = purple_find_conversation_with_account(type, sent.conversationName.c_str(),
+                                                                           account.purpleAccount);
+    if (!conv) {
+        // Its tab closed meanwhile: into a log of its own, as Pidgin would begin one for it, if a tab
+        // opened now would log
+        if (!purple_prefs_get_bool((type == PURPLE_CONV_TYPE_CHAT) ? "/purple/logging/log_chats"
+                                                                   : "/purple/logging/log_ims"))
+            return;
+        PurpleLog *log = purple_log_new((type == PURPLE_CONV_TYPE_CHAT) ? PURPLE_LOG_CHAT : PURPLE_LOG_IM,
+                                        sent.conversationName.c_str(), account.purpleAccount, NULL,
+                                        time(NULL), NULL);
+        purple_log_write(log, flags, self, sent.timestamp, marked.c_str());
+        if (!sent.notification.empty())
+            purple_log_write(log, getNotificationFlags(flags), "", sent.timestamp, sent.notification.c_str());
+        purple_log_free(log);
+        return;
+    }
+    // For the log alone, which a tab filled anew takes it from: the tab has it already
+    std::string text = makeLogOnly(marked);
+    if (type == PURPLE_CONV_TYPE_IM) {
+        purple_conv_im_write(purple_conversation_get_im_data(conv), self, text.c_str(), flags, sent.timestamp);
+        if (!sent.notification.empty())
+            purple_conv_im_write(purple_conversation_get_im_data(conv), purple_conversation_get_name(conv),
+                                 makeLogOnly(sent.notification).c_str(), getNotificationFlags(flags),
+                                 sent.timestamp);
+    } else if (type == PURPLE_CONV_TYPE_CHAT) {
+        purple_conv_chat_write(purple_conversation_get_chat_data(conv), self, text.c_str(), flags, sent.timestamp);
+        if (!sent.notification.empty())
+            purple_conv_chat_write(purple_conversation_get_chat_data(conv), " ",
+                                   makeLogOnly(sent.notification).c_str(), getNotificationFlags(flags),
+                                   sent.timestamp);
+    }
 }
 
 void showChatNotification(TdAccountData &account, const td::td_api::chat &chat,
@@ -2780,8 +2846,10 @@ void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messa
     edit.formattingOnly = (editedMessage.file == shownMessage->file) &&
                           (editedMessage.content == shownMessage->content);
     edit.previous    = *shownMessage;
-    editedMessage.timestamp = shownMessage->timestamp;
-    editedMessage.sender    = shownMessage->sender;
+    editedMessage.timestamp   = shownMessage->timestamp;
+    editedMessage.sender      = shownMessage->sender;
+    editedMessage.outgoing    = shownMessage->outgoing;
+    editedMessage.deletedHere = shownMessage->deletedHere;
     // Edits leave reactions be
     editedMessage.reactions = shownMessage->reactions;
     editedMessage.givers    = shownMessage->givers;
@@ -3122,7 +3190,9 @@ static bool isShownAsNotice(const td::td_api::message &message)
 // What of the log goes into the tab with TDLib's messages: a message the log names that TDLib no
 // longer has was deleted, and is struck out or left out, as set for the chat; one the log does not
 // name, or a notice, is left out if TDLib has a message written the same way at much the same time,
-// as it is that one. Other notices, such as of edits and reactions, go in.
+// as it is that one. Other notices, such as of edits and reactions, go in; but not the one closing a
+// log, of no message, which is Pidgin's own that the account has disconnected, and which the
+// messages shown since make no news.
 static std::vector<LoggedLine> getLoggedLines(TdAccountData &account, const td::td_api::chat &chat,
                                               PurpleConversation *conv, const Redraw &redraw)
 {
@@ -3156,7 +3226,8 @@ static std::vector<LoggedLine> getLoggedLines(TdAccountData &account, const td::
             if (keep)
                 line.html = line.html.substr(0, line.bodyStart) + "<s>" + line.html.substr(line.bodyStart) + "</s>";
         } else
-            keep = !hasNear(line.when, !line.message);
+            keep = !hasNear(line.when, !line.message) &&
+                   (line.message || !line.closing || (line.html.find(JUMP_LINK_SCHEME) != std::string::npos));
         if (keep)
             lines.push_back(std::move(line));
         else
@@ -3210,6 +3281,9 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
     std::vector<IncomingMessage> readyMessages;
     account.pendingMessages.setChatReady(redraw.chatId, readyMessages);
     showMessages(readyMessages, account);
+    // Shown again, the messages already read are no news, as Pidgin takes them to be
+    if (conv && chat && !chat->unread_count_)
+        clearUnseen(conv);
     // Opened: at the first unread, if any. Gone further back: what was at the top stays there,
     // unless all of it was in view, the end then staying in view too, as Pidgin keeps it.
     if (redraw.opening) {
@@ -3524,6 +3598,7 @@ static void unreadReactionsMessageResponse(TdAccountData &account, ChatId chatId
         ShownMessage shownMessage;
         getShownContent(*message.content_, shownMessage);
         shownMessage.timestamp = message.date_;
+        shownMessage.outgoing  = message.is_outgoing_;
 
         // Reactions other than the unread ones are no news
         std::set<std::string> unreadKeys;

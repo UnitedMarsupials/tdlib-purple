@@ -1381,6 +1381,172 @@ TEST_F(PrivateChatTest, SendMessage_SpecialCharactersAndHtml)
     ));
 }
 
+TEST_F(PrivateChatTest, SentMessageLoggedOnceSent)
+{
+    const int64_t tempId  = 0x100001;
+    const int64_t finalId = 0x200000;
+    const int32_t date    = 123456;
+    setLogMarkersEnabled(true);
+    loginWithOneContact();
+    getImConversation(account, purpleUserName(0).c_str());
+    prpl.discardEvents();
+
+    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "Bye", PURPLE_MESSAGE_SEND));
+    auto input = make_object<inputMessageText>();
+    input->text_ = makeFormattedText("Bye");
+    tgl.verifyRequest(*makeSendMessage(chatIds[0], 0, nullptr, nullptr, nullptr, std::move(input)));
+    object_ptr<message> pending = makeMessage(tempId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye"));
+    pending->sending_state_ = make_object<messageSendingStatePending>();
+    tgl.update(make_object<updateNewMessage>(std::move(pending)));
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), selfFirstName + " " + selfLastName, "Bye",
+                                             PURPLE_MESSAGE_SEND, date));
+    tgl.verifyRequest(viewMessages(chatIds[0], {tempId}, nullptr, true));
+    // Not logged under an id it will not keep
+    ASSERT_TRUE(takeLoggedMessages().empty());
+
+    // Logged once sent, for the log alone, under the id it keeps, saying when it was written
+    tgl.update(makeUpdateMessageSendSucceeded(
+        makeMessage(finalId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye")), tempId));
+    std::string logged = "<!--tdlib-log-only-->Bye<!--tdlib-message " + std::to_string(finalId) + " " +
+                         std::to_string(date) + "--><!--/tdlib-log-only-->";
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), selfFirstName + " " + selfLastName, logged,
+                                             PURPLE_MESSAGE_SEND, date));
+    ASSERT_EQ(std::vector<std::string>{logged}, takeLoggedMessages());
+}
+
+TEST_F(PrivateChatTest, SentMessageLoggedIfSentBeforeShown)
+{
+    const int64_t tempId    = 0x100001;
+    const int64_t finalId   = 0x200000;
+    const int64_t repliedId = 0x80000;
+    const int32_t date      = 123456;
+    setLogMarkersEnabled(true);
+    loginWithOneContact();
+    getImConversation(account, purpleUserName(0).c_str());
+    prpl.discardEvents();
+
+    // Waiting for the message it replies to, and sent meanwhile
+    object_ptr<message> pending = makeMessage(tempId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye"));
+    pending->sending_state_ = make_object<messageSendingStatePending>();
+    pending->reply_to_      = makeReplyTo(repliedId);
+    tgl.update(make_object<updateNewMessage>(std::move(pending)));
+    tgl.verifyRequest(getMessage(chatIds[0], repliedId));
+    tgl.update(makeUpdateMessageSendSucceeded(
+        makeMessage(finalId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye")), tempId));
+    prpl.verifyNoEvents();
+    ASSERT_TRUE(takeLoggedMessages().empty());
+
+    // Logged as it is shown, under the id it keeps
+    tgl.reply(makeMessage(repliedId, userIds[0], chatIds[0], false, date - 1, makeTextMessage("Hi")));
+    prpl.discardEvents();
+    tgl.verifyRequest(viewMessages(chatIds[0], {tempId}, nullptr, true));
+    std::vector<std::string> logged = takeLoggedMessages();
+    ASSERT_EQ(1u, logged.size());
+    ASSERT_NE(std::string::npos, logged[0].find("Bye<!--tdlib-message " + std::to_string(finalId) + "-->"));
+}
+
+TEST_F(PrivateChatTest, SentMessageNotLoggedWhenShownUnlogged)
+{
+    const int64_t tempId  = 0x100001;
+    const int64_t finalId = 0x200000;
+    const int32_t date    = 123456;
+    setLogMarkersEnabled(true);
+    loginWithOneContact();
+    PurpleConversation *conv = getImConversation(account, purpleUserName(0).c_str());
+    prpl.discardEvents();
+
+    // Shown with the conversation not logging, it is not logged once sent, logging or not by then
+    purple_conversation_set_logging(conv, FALSE);
+    object_ptr<message> pending = makeMessage(tempId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye"));
+    pending->sending_state_ = make_object<messageSendingStatePending>();
+    tgl.update(make_object<updateNewMessage>(std::move(pending)));
+    tgl.verifyRequest(viewMessages(chatIds[0], {tempId}, nullptr, true));
+    prpl.discardEvents();
+    purple_conversation_set_logging(conv, TRUE);
+    tgl.update(makeUpdateMessageSendSucceeded(
+        makeMessage(finalId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye")), tempId));
+    prpl.verifyNoEvents();
+    ASSERT_TRUE(takeLoggedMessages().empty());
+}
+
+TEST_F(PrivateChatTest, SentMessageLoggedWithTabClosed)
+{
+    const int64_t tempId  = 0x100001;
+    const int64_t finalId = 0x200000;
+    const int32_t date    = 123456;
+    setLogMarkersEnabled(true);
+    loginWithOneContact();
+    PurpleConversation *conv = getImConversation(account, purpleUserName(0).c_str());
+    prpl.discardEvents();
+
+    object_ptr<message> pending = makeMessage(tempId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye"));
+    pending->sending_state_ = make_object<messageSendingStatePending>();
+    tgl.update(make_object<updateNewMessage>(std::move(pending)));
+    tgl.verifyRequest(viewMessages(chatIds[0], {tempId}, nullptr, true));
+    prpl.discardEvents();
+    ASSERT_TRUE(takeLoggedMessages().empty());
+
+    // Its tab closed before it is sent, it is logged all the same, straight into the log
+    purple_conversation_destroy(conv);
+    prpl.discardEvents();
+    tgl.update(makeUpdateMessageSendSucceeded(
+        makeMessage(finalId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye")), tempId));
+    prpl.verifyNoEvents();
+    ASSERT_EQ(std::vector<std::string>{"Bye<!--tdlib-message " + std::to_string(finalId) + " " +
+                                       std::to_string(date) + "-->"},
+              takeLoggedMessages());
+}
+
+TEST_F(PrivateChatTest, SentMessageNotLoggedWithTabClosedIfNotLogging)
+{
+    const int64_t tempId  = 0x100001;
+    const int64_t finalId = 0x200000;
+    const int32_t date    = 123456;
+    setLogMarkersEnabled(true);
+    loginWithOneContact();
+    PurpleConversation *conv = getImConversation(account, purpleUserName(0).c_str());
+    prpl.discardEvents();
+
+    object_ptr<message> pending = makeMessage(tempId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye"));
+    pending->sending_state_ = make_object<messageSendingStatePending>();
+    tgl.update(make_object<updateNewMessage>(std::move(pending)));
+    tgl.verifyRequest(viewMessages(chatIds[0], {tempId}, nullptr, true));
+    prpl.discardEvents();
+
+    // Its tab closed before it is sent, with Pidgin not logging new conversations, it is not logged
+    purple_conversation_destroy(conv);
+    setLoggingPreferred(false);
+    prpl.discardEvents();
+    tgl.update(makeUpdateMessageSendSucceeded(
+        makeMessage(finalId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye")), tempId));
+    prpl.verifyNoEvents();
+    ASSERT_TRUE(takeLoggedMessages().empty());
+}
+
+TEST_F(PrivateChatTest, SentMessageNotLoggedIfLoggingTurnedOff)
+{
+    const int64_t tempId  = 0x100001;
+    const int64_t finalId = 0x200000;
+    const int32_t date    = 123456;
+    setLogMarkersEnabled(true);
+    loginWithOneContact();
+    PurpleConversation *conv = getImConversation(account, purpleUserName(0).c_str());
+    prpl.discardEvents();
+
+    object_ptr<message> pending = makeMessage(tempId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye"));
+    pending->sending_state_ = make_object<messageSendingStatePending>();
+    tgl.update(make_object<updateNewMessage>(std::move(pending)));
+    tgl.verifyRequest(viewMessages(chatIds[0], {tempId}, nullptr, true));
+    prpl.discardEvents();
+
+    // Logging turned off in its tab before it is sent: not logged
+    purple_conversation_set_logging(conv, FALSE);
+    tgl.update(makeUpdateMessageSendSucceeded(
+        makeMessage(finalId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye")), tempId));
+    prpl.discardEvents();
+    ASSERT_TRUE(takeLoggedMessages().empty());
+}
+
 TEST_F(PrivateChatTest, ReceiveMessage_SpecialCharacters)
 {
     constexpr int64_t messageId = 10000;

@@ -187,6 +187,8 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
             m_data.renameShownMessage(getChatId(*sendSucceeded.message_), getOldMessageId(sendSucceeded),
                                       getId(*sendSucceeded.message_));
             renameMessageMarks(m_data.purpleAccount, getOldMessageId(sendSucceeded), getId(*sendSucceeded.message_));
+            logSentMessage(m_data, getChatId(*sendSucceeded.message_), getOldMessageId(sendSucceeded),
+                           getId(*sendSucceeded.message_));
         }
         break;
     }
@@ -231,8 +233,12 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         auto &sendFailed = static_cast<const td::td_api::updateMessageSendFailed &>(update);
         purple_debug_misc(config::pluginId, "Incoming update: message %" G_GINT64_FORMAT " send failed\n",
                           sendFailed.old_message_id_);
-        if (sendFailed.message_)
+        if (sendFailed.message_) {
             removeTempFile(getChatId(*sendFailed.message_), sendFailed.old_message_id_);
+            // Never sent, it is not logged
+            UnloggedSent unsent;
+            m_data.extractUnloggedSent(getChatId(*sendFailed.message_), getOldMessageId(sendFailed), unsent);
+        }
         notifySendFailed(sendFailed, m_data);
         // TODO notify in chat
         break;
@@ -2406,7 +2412,6 @@ void PurpleTdClient::onReactionStickerConverted(AccountThread *arg)
         gsize  imageSize = 0;
         if (g_file_get_contents(thread->getOutputFileName().c_str(), &imageData, &imageSize, NULL))
             imageId = purple_imgstore_add_with_id(imageData, imageSize, NULL);
-        remove(thread->getOutputFileName().c_str());
     } else
         purple_debug_warning(config::pluginId, "Could not convert custom emoji %s: %s\n",
                              thread->inputFileName.c_str(), thread->getErrorMessage().c_str());
@@ -2437,7 +2442,6 @@ void PurpleTdClient::onAnimatedStickerConverted(AccountThread *arg)
             g_error_free(error);
         } else
             success = true;
-        remove(thread->getOutputFileName().c_str());
     }
 
     if (success) {
