@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- **In Pidgin, a chat's tab in a focused window is known to be shown again, so that its messages are read as they come into view and its reactions are kept up to date.** 0.9.6 followed the focus by a hook that GLib refuses, on GObject's "notify", so that no tab was ever taken to be shown.
+- **The reaction counts of every post on screen in a channel are kept up to date, not only those of the latest.** Telegram polls the reactions of the last messages it was told were viewed, which went newest first, so that the oldest on screen were the ones kept.
+
 ## 0.9.6 (2026-11-14)
 
 ### Features
