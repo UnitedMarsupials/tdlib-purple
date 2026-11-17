@@ -1497,6 +1497,56 @@ TEST_F(PrivateChatTest, SentMessageLoggedWithTabClosed)
               takeLoggedMessages());
 }
 
+TEST_F(PrivateChatTest, SentMessageNotLoggedWithTabClosedIfNotLogging)
+{
+    const int64_t tempId  = 0x100001;
+    const int64_t finalId = 0x200000;
+    const int32_t date    = 123456;
+    setLogMarkersEnabled(true);
+    loginWithOneContact();
+    PurpleConversation *conv = getImConversation(account, purpleUserName(0).c_str());
+    prpl.discardEvents();
+
+    object_ptr<message> pending = makeMessage(tempId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye"));
+    pending->sending_state_ = make_object<messageSendingStatePending>();
+    tgl.update(make_object<updateNewMessage>(std::move(pending)));
+    tgl.verifyRequest(viewMessages(chatIds[0], {tempId}, nullptr, true));
+    prpl.discardEvents();
+
+    // Its tab closed before it is sent, with Pidgin not logging new conversations, it is not logged
+    purple_conversation_destroy(conv);
+    setLoggingPreferred(false);
+    prpl.discardEvents();
+    tgl.update(makeUpdateMessageSendSucceeded(
+        makeMessage(finalId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye")), tempId));
+    prpl.verifyNoEvents();
+    ASSERT_TRUE(takeLoggedMessages().empty());
+}
+
+TEST_F(PrivateChatTest, SentMessageNotLoggedIfLoggingTurnedOff)
+{
+    const int64_t tempId  = 0x100001;
+    const int64_t finalId = 0x200000;
+    const int32_t date    = 123456;
+    setLogMarkersEnabled(true);
+    loginWithOneContact();
+    PurpleConversation *conv = getImConversation(account, purpleUserName(0).c_str());
+    prpl.discardEvents();
+
+    object_ptr<message> pending = makeMessage(tempId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye"));
+    pending->sending_state_ = make_object<messageSendingStatePending>();
+    tgl.update(make_object<updateNewMessage>(std::move(pending)));
+    tgl.verifyRequest(viewMessages(chatIds[0], {tempId}, nullptr, true));
+    prpl.discardEvents();
+
+    // Logging turned off in its tab before it is sent: not logged
+    purple_conversation_set_logging(conv, FALSE);
+    tgl.update(makeUpdateMessageSendSucceeded(
+        makeMessage(finalId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye")), tempId));
+    prpl.discardEvents();
+    ASSERT_TRUE(takeLoggedMessages().empty());
+}
+
 TEST_F(PrivateChatTest, ReceiveMessage_SpecialCharacters)
 {
     constexpr int64_t messageId = 10000;

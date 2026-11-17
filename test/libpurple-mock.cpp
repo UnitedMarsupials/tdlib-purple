@@ -678,6 +678,7 @@ void purple_conversation_set_title(PurpleConversation *conv, const char *title)
 }
 
 static std::vector<std::string> g_loggedMessages;
+static bool                     g_loggingPreferred = true;
 
 void purple_conversation_write(PurpleConversation *conv, const char *who,
 		const char *message, PurpleMessageFlags flags,
@@ -883,6 +884,12 @@ extern "C++" void clearConversationData()
 {
     g_conversationData.clear();
     g_loggedMessages.clear();
+    g_loggingPreferred = true;
+}
+
+extern "C++" void setLoggingPreferred(bool logging)
+{
+    g_loggingPreferred = logging;
 }
 
 extern "C++" std::vector<std::string> takeLoggedMessages()
@@ -969,6 +976,13 @@ gboolean purple_prefs_exists(const char *name)
 int purple_prefs_get_int(const char *name)
 {
     return 0;
+}
+
+gboolean purple_prefs_get_bool(const char *name)
+{
+    if (!strcmp(name, "/purple/logging/log_ims") || !strcmp(name, "/purple/logging/log_chats"))
+        return g_loggingPreferred;
+    return FALSE;
 }
 
 PurpleIdleUiOps *purple_idle_get_ui_ops(void)

@@ -825,9 +825,10 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
     PurpleMessageFlags flags = (PurpleMessageFlags) (extraFlags | directionFlag);
     // Not logged (again): with the conversation's logging off while it is written, as Pidgin shows
     // a message flagged as not to be logged without its time and sender
-    // Ours, being sent, under an id it will not keep, is logged once sent, under the one it does: as
-    // it would have been now, and as ever where there is no tab to write it into unlogged. One sent
-    // already, while waiting to be shown, has that id now.
+    // Ours, being sent, under an id it will not keep, is logged once sent, under the one it does, if
+    // the conversation logs then: its tab, if still open, or Pidgin's preference for a new one; and
+    // as ever where there is no tab to write it into unlogged. One sent already, while waiting to be
+    // shown, has that id now.
     bool                unlogged     = message.unlogged || message.redrawn;
     MessageId           loggedId     = message.sentLocally ? account.getSentMessageId(getId(chat), message.id)
                                                            : message.id;
@@ -914,7 +915,11 @@ void logSentMessage(TdAccountData &account, ChatId chatId, MessageId oldId, Mess
     PurpleConversation     *conv   = purple_find_conversation_with_account(type, sent.conversationName.c_str(),
                                                                            account.purpleAccount);
     if (!conv) {
-        // Its tab closed meanwhile: into a log of its own, as Pidgin would begin one for it
+        // Its tab closed meanwhile: into a log of its own, as Pidgin would begin one for it, if a tab
+        // opened now would log
+        if (!purple_prefs_get_bool((type == PURPLE_CONV_TYPE_CHAT) ? "/purple/logging/log_chats"
+                                                                   : "/purple/logging/log_ims"))
+            return;
         PurpleLog *log = purple_log_new((type == PURPLE_CONV_TYPE_CHAT) ? PURPLE_LOG_CHAT : PURPLE_LOG_IM,
                                         sent.conversationName.c_str(), account.purpleAccount, NULL,
                                         time(NULL), NULL);
