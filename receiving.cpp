@@ -825,12 +825,17 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
     PurpleMessageFlags flags = (PurpleMessageFlags) (extraFlags | directionFlag);
     // Not logged (again): with the conversation's logging off while it is written, as Pidgin shows
     // a message flagged as not to be logged without its time and sender
-    PurpleConversation *unloggedConv = (message.unlogged || message.redrawn) ? findMessageConversation(account, chat)
-                                                                             : nullptr;
+    // Ours, being sent, under an id it will not keep, is logged once sent, under the one it does; but
+    // as ever where there is no tab to write it into unlogged
+    bool                unlogged     = message.unlogged || message.redrawn;
+    bool                unsent       = text && message.outgoing && message.sentLocally && message.id.valid() &&
+                                       !message.unlogged && logMarkersEnabled();
+    PurpleConversation *unloggedConv = (unlogged || unsent) ? findMessageConversation(account, chat) : nullptr;
+    unsent = unsent && unloggedConv;
     bool                logging      = unloggedConv && purple_conversation_is_logging(unloggedConv);
     if (logging)
         purple_conversation_set_logging(unloggedConv, FALSE);
-    else if ((message.unlogged || message.redrawn) && !unloggedConv)
+    else if (unlogged && !unloggedConv)
         flags = (PurpleMessageFlags) (flags | PURPLE_MESSAGE_NO_LOG);
     if (message.outgoing && !message.sentLocally)
         flags = (PurpleMessageFlags) (flags | PURPLE_MESSAGE_REMOTE_SEND);
@@ -885,6 +890,37 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
 
     if (logging && g_list_find(purple_get_conversations(), unloggedConv))
         purple_conversation_set_logging(unloggedConv, TRUE);
+    if (unsent)
+        account.addUnloggedSent(getId(chat), message.id,
+                                UnloggedSent{text, notification ? notification : "",
+                                             (uint32_t)(flags & ~PURPLE_MESSAGE_DELAYED), message.timestamp});
+}
+
+void logSentMessage(TdAccountData &account, ChatId chatId, MessageId oldId, MessageId newId)
+{
+    UnloggedSent            sent;
+    const td::td_api::chat *chat = account.getChat(chatId);
+    PurpleConversation     *conv = (account.extractUnloggedSent(chatId, oldId, sent) && chat)
+                                   ? findMessageConversation(account, *chat) : nullptr;
+    if (!conv)
+        return;
+    // For the log alone, which a tab filled anew takes it from: the tab has it already
+    std::string        text  = makeLogOnly(sent.text + makeLogMarker(newId, sent.timestamp));
+    PurpleMessageFlags flags = (PurpleMessageFlags)sent.flags;
+    const char        *self  = purple_account_get_name_for_display(account.purpleAccount);
+    if (purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_IM) {
+        purple_conv_im_write(purple_conversation_get_im_data(conv), self, text.c_str(), flags, sent.timestamp);
+        if (!sent.notification.empty())
+            purple_conv_im_write(purple_conversation_get_im_data(conv), purple_conversation_get_name(conv),
+                                 makeLogOnly(sent.notification).c_str(), getNotificationFlags(flags),
+                                 sent.timestamp);
+    } else if (purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_CHAT) {
+        purple_conv_chat_write(purple_conversation_get_chat_data(conv), self, text.c_str(), flags, sent.timestamp);
+        if (!sent.notification.empty())
+            purple_conv_chat_write(purple_conversation_get_chat_data(conv), " ",
+                                   makeLogOnly(sent.notification).c_str(), getNotificationFlags(flags),
+                                   sent.timestamp);
+    }
 }
 
 void showChatNotification(TdAccountData &account, const td::td_api::chat &chat,

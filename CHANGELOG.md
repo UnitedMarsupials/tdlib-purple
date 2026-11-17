@@ -9,6 +9,7 @@
 - **The reaction counts of every post on screen in a channel are kept up to date, not only those of the latest.** Telegram polls the reactions of the last messages it was told were viewed, which went newest first, so that the oldest on screen were the ones kept.
 - **In Pidgin, a chat's tab no longer shows Pidgin's notice that the account has disconnected again after every start, nor turns red as having new messages when filled with those already read.** Quitting, Pidgin tells every chat the account has disconnected, and logged it, so that it came back with the rest of the log.
 - **An animated sticker's or custom emoji's GIF no longer stays behind in the temporary directory when its account or chat is gone by the time it is converted**, as when Pidgin quits or the account disconnects meanwhile.
+- **In Pidgin, our own messages deleted since are struck out, or left out, when a chat's tab is filled again, like everyone else's.** Ours were logged as they were written, before Telegram gave them the ids they keep, so that the log could not say which they were. Now each is logged once sent, under its lasting id; one never sent is not logged at all, though TDLib still shows it.
 
 ### Translations
 

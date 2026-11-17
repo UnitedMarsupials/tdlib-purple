@@ -677,10 +677,14 @@ void purple_conversation_set_title(PurpleConversation *conv, const char *title)
     EVENT(ConvSetTitleEvent, conv->name, conv->title);
 }
 
+static std::vector<std::string> g_loggedMessages;
+
 void purple_conversation_write(PurpleConversation *conv, const char *who,
 		const char *message, PurpleMessageFlags flags,
 		time_t mtime)
 {
+    if (conv->logging && !(flags & PURPLE_MESSAGE_NO_LOG))
+        g_loggedMessages.push_back(message);
     EVENT(ConversationWriteEvent, conv->name, who ? who : "", message, flags, mtime);
 }
 
@@ -878,6 +882,14 @@ static std::map<std::pair<PurpleConversation *, std::string>, gpointer> g_conver
 extern "C++" void clearConversationData()
 {
     g_conversationData.clear();
+    g_loggedMessages.clear();
+}
+
+extern "C++" std::vector<std::string> takeLoggedMessages()
+{
+    std::vector<std::string> logged;
+    logged.swap(g_loggedMessages);
+    return logged;
 }
 
 void purple_conversation_set_data(PurpleConversation *conv, const char *key, gpointer data)

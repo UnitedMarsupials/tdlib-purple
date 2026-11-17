@@ -1160,6 +1160,21 @@ void TdAccountData::renameShownMessage(ChatId chatId, MessageId oldId, MessageId
     }
 }
 
+void TdAccountData::addUnloggedSent(ChatId chatId, MessageId messageId, UnloggedSent &&sent)
+{
+    m_unloggedSent[ShownMessageKey(chatId, messageId)] = std::move(sent);
+}
+
+bool TdAccountData::extractUnloggedSent(ChatId chatId, MessageId messageId, UnloggedSent &sent)
+{
+    auto it = m_unloggedSent.find(ShownMessageKey(chatId, messageId));
+    if (it == m_unloggedSent.end())
+        return false;
+    sent = std::move(it->second);
+    m_unloggedSent.erase(it);
+    return true;
+}
+
 void TdAccountData::addPendingEdit(const PendingEdit &edit)
 {
     auto it = std::find_if(m_pendingEdits.begin(), m_pendingEdits.end(), [&edit](const PendingEdit &other) {

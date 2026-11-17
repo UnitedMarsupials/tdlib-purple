@@ -33,6 +33,9 @@ void setRequestInputSupported(bool supported);
 // at once otherwise, as by default
 void setRequestListChoice(int index);
 void clearConversationData();
+// What conversations have written while logging, as Pidgin would log it, oldest first; taken, so
+// that the next call has only what is written since
+std::vector<std::string> takeLoggedMessages();
 // Whether the account's presence is idle, as libpurple tells; not by default
 void setPresenceIdle(bool idle);
 

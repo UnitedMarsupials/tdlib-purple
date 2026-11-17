@@ -187,6 +187,8 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
             m_data.renameShownMessage(getChatId(*sendSucceeded.message_), getOldMessageId(sendSucceeded),
                                       getId(*sendSucceeded.message_));
             renameMessageMarks(m_data.purpleAccount, getOldMessageId(sendSucceeded), getId(*sendSucceeded.message_));
+            logSentMessage(m_data, getChatId(*sendSucceeded.message_), getOldMessageId(sendSucceeded),
+                           getId(*sendSucceeded.message_));
         }
         break;
     }
@@ -231,8 +233,12 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         auto &sendFailed = static_cast<const td::td_api::updateMessageSendFailed &>(update);
         purple_debug_misc(config::pluginId, "Incoming update: message %" G_GINT64_FORMAT " send failed\n",
                           sendFailed.old_message_id_);
-        if (sendFailed.message_)
+        if (sendFailed.message_) {
             removeTempFile(getChatId(*sendFailed.message_), sendFailed.old_message_id_);
+            // Never sent, it is not logged
+            UnloggedSent unsent;
+            m_data.extractUnloggedSent(getChatId(*sendFailed.message_), getOldMessageId(sendFailed), unsent);
+        }
         notifySendFailed(sendFailed, m_data);
         // TODO notify in chat
         break;

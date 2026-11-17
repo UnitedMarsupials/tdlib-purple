@@ -1381,6 +1381,39 @@ TEST_F(PrivateChatTest, SendMessage_SpecialCharactersAndHtml)
     ));
 }
 
+TEST_F(PrivateChatTest, SentMessageLoggedOnceSent)
+{
+    const int64_t tempId  = 0x100001;
+    const int64_t finalId = 0x200000;
+    const int32_t date    = 123456;
+    setLogMarkersEnabled(true);
+    loginWithOneContact();
+    getImConversation(account, purpleUserName(0).c_str());
+    prpl.discardEvents();
+
+    ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "Bye", PURPLE_MESSAGE_SEND));
+    tgl.verifyRequest(*makeSendMessage(chatIds[0], 0, nullptr, nullptr, nullptr,
+        make_object<inputMessageText>(make_object<formattedText>("Bye", std::vector<object_ptr<textEntity>>()),
+                                      nullptr, false)));
+    object_ptr<message> pending = makeMessage(tempId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye"));
+    pending->sending_state_ = make_object<messageSendingStatePending>();
+    tgl.update(make_object<updateNewMessage>(std::move(pending)));
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), selfFirstName + " " + selfLastName, "Bye",
+                                             PURPLE_MESSAGE_SEND, date));
+    tgl.verifyRequest(viewMessages(chatIds[0], {tempId}, nullptr, true));
+    // Not logged under an id it will not keep
+    ASSERT_TRUE(takeLoggedMessages().empty());
+
+    // Logged once sent, for the log alone, under the id it keeps, saying when it was written
+    tgl.update(makeUpdateMessageSendSucceeded(
+        makeMessage(finalId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye")), tempId));
+    std::string logged = "<!--tdlib-log-only-->Bye<!--tdlib-message " + std::to_string(finalId) + " " +
+                         std::to_string(date) + "--><!--/tdlib-log-only-->";
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), selfFirstName + " " + selfLastName, logged,
+                                             PURPLE_MESSAGE_SEND, date));
+    ASSERT_EQ(std::vector<std::string>{logged}, takeLoggedMessages());
+}
+
 TEST_F(PrivateChatTest, ReceiveMessage_SpecialCharacters)
 {
     constexpr int64_t messageId = 10000;
