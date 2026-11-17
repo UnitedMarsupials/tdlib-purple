@@ -12,8 +12,9 @@ whenever a failure is found that only the GUI showed.
 ## Setting up
 
 * Pidgin with the plugin installed, started with its debug output kept, in a file only you can
-  read: `rm -f pidgin-debug.log; (umask 077; pidgin -d > pidgin-debug.log 2>&1)`, the file
-  removed first, as one already there keeps its permissions. TDLib's own log goes there too, at the
+  read, in a directory only you can write to, such as your home:
+  `cd; rm -f pidgin-debug.log; (umask 077; pidgin -d > pidgin-debug.log 2>&1)`, the file removed
+  first, as one already there keeps its permissions. TDLib's own log goes there too, at the
   verbosity of Pidgin's debug window; its verbose mode gives TDLib's requests and updates. The
   log holds messages, names, phone numbers and, while signing in, the login code: take out what
   is private before showing any of it to others.
@@ -158,7 +159,10 @@ Have someone react to a message of ours, with its chat's tab closed.
 With the chat's tab open, have someone react to a message of ours older than the earliest the tab
 shows.
 
-* The tab is filled anew from that message to the latest, the reaction under it.
+* The tab is filled anew from that message to the latest, the reaction under it, if they fit in
+  the lines Pidgin is set to keep of a conversation (its "scrollback_lines" preference).
+* For one further back than that, the tab stays as it is, and the debug log says the message is
+  further back than the tab holds.
 
 ## A message's menu
 
