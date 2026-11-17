@@ -1222,7 +1222,7 @@ msgstr "Selhání vytvoření skupiny"
 #. TRANSLATOR: Error dialog, primary content
 #: ../td-client.cpp:3552
 msgid "Invalid group members"
-msgstr "Neplatný počet uživatelů"
+msgstr "Neplatní členové skupiny"
 
 #. TRANSLATOR: Error dialog, title
 #: ../td-client.cpp:3615
@@ -1674,8 +1674,8 @@ msgstr "V okně této konverzace už není."
 #: ../tdlib-purple.cpp:1474
 msgid "kick <user>: Kick a user from the room using name or internal id"
 msgstr ""
-"vykopnout <user>: Vykopnout uživatele z místnosti pomocí jméno nebo "
-"vlastního ID"
+"kick <user>: Vykopnout uživatele z místnosti pomocí jména nebo interního "
+"ID"
 
 #. TRANSLATOR: Command description, the initial "hangup" must remain verbatim!
 #: ../tdlib-purple.cpp:1480
@@ -1705,7 +1705,7 @@ msgid ""
 "log in into the account again."
 msgstr ""
 "Chyba může být způsobena poškozenými daty účtu. V tom případě, může být "
-"opravena odstraněním dat z {}. Vyžaduje znovu přihlášení k účtu. "
+"opravena odstraněním dat z {} . Vyžaduje znovu přihlášení k účtu. "
 
 #. TRANSLATOR: Tdlib crash dialog, title
 #: ../tdlib-purple.cpp:1522
