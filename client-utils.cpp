@@ -1744,20 +1744,27 @@ void setLogMarkersEnabled(bool enabled)
     g_logMarkersEnabled = enabled;
 }
 
-std::string makeLogMarker(MessageId messageId)
+std::string makeLogMarker(MessageId messageId, time_t sentAt)
 {
-    return LOG_MARKER_START + std::to_string(messageId.value()) + LOG_MARKER_END;
+    std::string marker = LOG_MARKER_START + std::to_string(messageId.value());
+    if (sentAt)
+        marker += " " + std::to_string(sentAt);
+    return marker + LOG_MARKER_END;
 }
 
-bool takeLogMarker(std::string &html, MessageId *messageId)
+bool takeLogMarker(std::string &html, MessageId *messageId, time_t *sentAt)
 {
     size_t start = html.find(LOG_MARKER_START);
     size_t end   = (start == std::string::npos) ? std::string::npos : html.find(LOG_MARKER_END, start);
     if (end == std::string::npos)
         return false;
-    size_t numberStart = start + sizeof(LOG_MARKER_START) - 1;
+    size_t      numberStart = start + sizeof(LOG_MARKER_START) - 1;
+    std::string numbers     = html.substr(numberStart, end - numberStart);
+    size_t      space       = numbers.find(' ');
     if (messageId)
-        *messageId = MessageId::fromString(html.substr(numberStart, end - numberStart).c_str());
+        *messageId = MessageId::fromString(numbers.substr(0, space).c_str());
+    if (sentAt)
+        *sentAt = (space == std::string::npos) ? 0 : strtoll(numbers.c_str() + space + 1, nullptr, 10);
     html.erase(start, end + sizeof(LOG_MARKER_END) - 1 - start);
     return true;
 }

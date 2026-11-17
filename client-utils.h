@@ -78,9 +78,11 @@ std::string linkToMessage(PurpleAccount *account, ChatId chatId, MessageId messa
 // markup. Not where it would go on to other clients, as from BitlBee; enabled when the plugin loads.
 bool        logMarkersEnabled();
 void        setLogMarkersEnabled(bool enabled);
-std::string makeLogMarker(MessageId messageId);
-// Takes the marker out of a message's markup, telling which message it is, if it has one
-bool        takeLogMarker(std::string &html, MessageId *messageId = nullptr);
+// With the time the message was sent at, where it is logged later than that
+std::string makeLogMarker(MessageId messageId, time_t sentAt = 0);
+// Takes the marker out of a message's markup, telling which message it is, if it has one, and when
+// it was sent, if it says (or 0)
+bool        takeLogMarker(std::string &html, MessageId *messageId = nullptr, time_t *sentAt = nullptr);
 // Markup for the log only, which Pidgin's tab leaves out
 std::string makeLogOnly(const std::string &html);
 // Takes what is for the log only out of a message's markup; false if there was none

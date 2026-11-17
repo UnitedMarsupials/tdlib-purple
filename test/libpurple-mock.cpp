@@ -677,10 +677,15 @@ void purple_conversation_set_title(PurpleConversation *conv, const char *title)
     EVENT(ConvSetTitleEvent, conv->name, conv->title);
 }
 
+static std::vector<std::string> g_loggedMessages;
+static bool                     g_loggingPreferred = true;
+
 void purple_conversation_write(PurpleConversation *conv, const char *who,
 		const char *message, PurpleMessageFlags flags,
 		time_t mtime)
 {
+    if (conv->logging && !(flags & PURPLE_MESSAGE_NO_LOG))
+        g_loggedMessages.push_back(message);
     EVENT(ConversationWriteEvent, conv->name, who ? who : "", message, flags, mtime);
 }
 
@@ -878,6 +883,20 @@ static std::map<std::pair<PurpleConversation *, std::string>, gpointer> g_conver
 extern "C++" void clearConversationData()
 {
     g_conversationData.clear();
+    g_loggedMessages.clear();
+    g_loggingPreferred = true;
+}
+
+extern "C++" void setLoggingPreferred(bool logging)
+{
+    g_loggingPreferred = logging;
+}
+
+extern "C++" std::vector<std::string> takeLoggedMessages()
+{
+    std::vector<std::string> logged;
+    logged.swap(g_loggedMessages);
+    return logged;
 }
 
 void purple_conversation_set_data(PurpleConversation *conv, const char *key, gpointer data)
@@ -957,6 +976,13 @@ gboolean purple_prefs_exists(const char *name)
 int purple_prefs_get_int(const char *name)
 {
     return 0;
+}
+
+gboolean purple_prefs_get_bool(const char *name)
+{
+    if (!strcmp(name, "/purple/logging/log_ims") || !strcmp(name, "/purple/logging/log_chats"))
+        return g_loggingPreferred;
+    return FALSE;
 }
 
 PurpleIdleUiOps *purple_idle_get_ui_ops(void)
@@ -1732,8 +1758,29 @@ char *purple_log_read(PurpleLog *log, PurpleLogReadFlags *flags)
     return g_strdup("");
 }
 
+PurpleLog *purple_log_new(PurpleLogType type, const char *name, PurpleAccount *account,
+                          PurpleConversation *conv, time_t time, const struct tm *tm)
+{
+    PurpleLog *log = g_new0(PurpleLog, 1);
+    log->type    = type;
+    log->name    = g_strdup(name);
+    log->account = account;
+    log->conv    = conv;
+    log->time    = time;
+    return log;
+}
+
+void purple_log_write(PurpleLog *log, PurpleMessageFlags type, const char *from, time_t time, const char *message)
+{
+    g_loggedMessages.push_back(message);
+}
+
 void purple_log_free(PurpleLog *log)
 {
+    if (log) {
+        g_free(log->name);
+        g_free(log);
+    }
 }
 
 PurpleRequestField *purple_request_field_choice_new(const char *id, const char *text, int default_value)

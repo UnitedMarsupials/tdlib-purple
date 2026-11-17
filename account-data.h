@@ -368,6 +368,18 @@ struct ShownMessage {
     }
 };
 
+// A message of ours as written into its tab while it was being sent, under an id it did not keep:
+// for the log once it is sent, under the one it does
+struct UnloggedSent {
+    std::string text;
+    std::string notification;
+    uint32_t    flags     = 0;
+    time_t      timestamp = 0;
+    // The conversation it was written into, which may be closed by the time it is sent
+    int         conversationType = 0;
+    std::string conversationName;
+};
+
 // An edit to a message that was still waiting to be shown at the time
 struct PendingEdit {
     ChatId       chatId;
@@ -525,6 +537,8 @@ public:
     MessageId                  getSentMessageId(ChatId chatId, MessageId messageId) const;
     void                       addPendingEdit(const PendingEdit &edit);
     bool                       extractPendingEdit(ChatId chatId, MessageId messageId, PendingEdit &edit);
+    void                       addUnloggedSent(ChatId chatId, MessageId messageId, UnloggedSent &&sent);
+    bool                       extractUnloggedSent(ChatId chatId, MessageId messageId, UnloggedSent &sent);
 private:
     TdAccountData(const TdAccountData &other) = delete;
     TdAccountData &operator=(const TdAccountData &other) = delete;
@@ -612,6 +626,7 @@ private:
     std::map<ShownMessageKey, MessageId>    m_sentMessageIds;
     std::deque<ShownMessageKey>             m_shownMessageOrder;
     std::vector<PendingEdit>                m_pendingEdits;
+    std::map<ShownMessageKey, UnloggedSent> m_unloggedSent;
 };
 
 #endif
