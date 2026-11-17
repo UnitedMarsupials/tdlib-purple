@@ -2610,8 +2610,13 @@ static gboolean menuShown(GSignalInvocationHint *, guint paramCount, const GValu
         return TRUE;
     PictureMenu picture = g_pictureMenu;
     g_pictureMenu.conv  = nullptr;
-    if (g_list_find(purple_get_conversations(), picture.conv))
-        addMessageMenu(picture.conv, menu, picture.messageId);
+    if (!g_list_find(purple_get_conversations(), picture.conv))
+        return TRUE;
+    // Opened as the right button is let go, the menu still takes that button for the one that
+    // picks, and so would its submenus, which hand a click of any other on to the menu, closing it
+    // with nothing picked: a menu opened as the button is pressed forgets it once it is let go
+    reinterpret_cast<GtkMenuShell *>(menu)->button = 0;
+    addMessageMenu(picture.conv, menu, picture.messageId);
     return TRUE;
 }
 
