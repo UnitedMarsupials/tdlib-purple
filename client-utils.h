@@ -142,6 +142,9 @@ public:
     using Callback = void (PurpleTdClient::*)(AccountThread *thread);
     static void setSingleThread();
     static bool isSingleThread();
+    // Waited for, and deleted with whatever they made, the threads not yet handed back: as the plugin
+    // is unloaded, after which the main loop may run no more
+    static void finishAll();
 
     AccountThread(PurpleAccount *purpleAccount);
     virtual ~AccountThread() {}

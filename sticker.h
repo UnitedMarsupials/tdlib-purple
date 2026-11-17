@@ -49,6 +49,7 @@ public:
         if (message)
             m_message.assign(*message);
     }
+    ~StickerConversionThread() override;
 
     const std::string &getOutputFileName() const { return m_outputFileName; }
     const std::string &getErrorMessage()   const { return m_errorMessage; }
