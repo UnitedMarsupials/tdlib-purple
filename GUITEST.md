@@ -167,7 +167,11 @@ shows.
 Edit a message of ours from its menu, then delete it.
 
 * The edit is written over the message in Pidgin and the other members see it; the deletion takes
-  it out, and the notice names us.
+  it out, and the notice names us, as having deleted our own message: in English, "deleted their
+  message".
+
+Since: an edit forgot that the message was ours, so that deleting it named us as its sender like
+anyone else's.
 
 ### M2. Forward
 
@@ -210,6 +214,16 @@ Scroll to the top of a conversation, or turn the mouse wheel up there.
 Click the time in a reply's quote, and in the notice of an edit or a reaction.
 
 * The conversation scrolls to that message.
+
+### H4. Our deleted messages, again
+
+Send a message, delete it, then close the chat's tab and open it again, or quit Pidgin and start it.
+
+* The message is struck out, as anyone else's deleted message is, or left out if the chat is set
+  not to keep deleted messages.
+
+Since: ours were logged before Telegram gave them their lasting ids, so the log could not tell
+which they were, and they came back as if never deleted.
 
 ## Files and pictures
 
