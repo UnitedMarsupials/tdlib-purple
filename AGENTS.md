@@ -67,9 +67,10 @@ group for it.
 * Comments say why, briefly, in plain sentences. Match the density and the
   idiom of the surrounding code.
 * What the user sees is translated: wrap it in `_()` (`translate.h`), and
-  update `po/` with `po/refresh-potfile.sh` when it changes. Where Pidgin's
-  own text is compared, look it up in Pidgin's domain (`g_dgettext("pidgin",
-  ...)`), so that it matches in every language.
+  update `po/` with `po/refresh-potfile.sh` when it changes. Do not tell
+  Pidgin's own lines by their words, which it translates and may change:
+  find a trait of their place or form instead. `g_dgettext` is one of the
+  template's keywords, so a literal passed to it would join the template.
 * Ask before adding a dependency, an option to the build or a new tool.
 
 ## Changelog, commits and pull requests
