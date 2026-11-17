@@ -129,6 +129,39 @@ TEST_F(MessageEditTest, DeletedFromHere)
                                              PURPLE_MESSAGE_SYSTEM, 0));
 }
 
+TEST_F(MessageEditTest, OwnEditedDeletedFromHere)
+{
+    loginWithOneContact();
+    tgl.update(make_object<updateNewMessage>(makeMessage(
+        messageId, userIds[0], chatIds[0], true, date, makeTextMessage("old")
+    )));
+    prpl.verifyEvents(NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+                      ConversationWriteEvent(purpleUserName(0), selfFirstName + " " + selfLastName, "old",
+                                             PURPLE_MESSAGE_SEND, date));
+    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
+
+    tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makeTextMessage("new")));
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    object_ptr<message> edited = makeMessage(messageId, userIds[0], chatIds[0], true, date,
+                                             makeTextMessage("new"));
+    edited->edit_date_ = editDate;
+    tgl.reply(std::move(edited));
+    prpl.discardEvents();
+
+    // Edited, it is still ours
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    client->deleteMessage(ChatId::fromString(std::to_string(chatIds[0]).c_str()),
+                          MessageId::fromString(std::to_string(messageId).c_str()), true);
+    tgl.verifyRequest(*makeDeleteMessages(chatIds[0], {messageId}, true));
+    tgl.reply(make_object<ok>());
+    tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                                             selfFirstName + " " + selfLastName + " deleted their message sent at " +
+                                             messageTime(date),
+                                             PURPLE_MESSAGE_SYSTEM, 0));
+}
+
 TEST_F(MessageEditTest, DeletedWhileFetchingEdit)
 {
     loginWithOneContact();

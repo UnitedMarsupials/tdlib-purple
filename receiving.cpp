@@ -2827,8 +2827,10 @@ void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messa
     edit.formattingOnly = (editedMessage.file == shownMessage->file) &&
                           (editedMessage.content == shownMessage->content);
     edit.previous    = *shownMessage;
-    editedMessage.timestamp = shownMessage->timestamp;
-    editedMessage.sender    = shownMessage->sender;
+    editedMessage.timestamp   = shownMessage->timestamp;
+    editedMessage.sender      = shownMessage->sender;
+    editedMessage.outgoing    = shownMessage->outgoing;
+    editedMessage.deletedHere = shownMessage->deletedHere;
     // Edits leave reactions be
     editedMessage.reactions = shownMessage->reactions;
     editedMessage.givers    = shownMessage->givers;
@@ -3577,6 +3579,7 @@ static void unreadReactionsMessageResponse(TdAccountData &account, ChatId chatId
         ShownMessage shownMessage;
         getShownContent(*message.content_, shownMessage);
         shownMessage.timestamp = message.date_;
+        shownMessage.outgoing  = message.is_outgoing_;
 
         // Reactions other than the unread ones are no news
         std::set<std::string> unreadKeys;
