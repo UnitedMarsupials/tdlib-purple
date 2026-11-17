@@ -187,6 +187,7 @@ private:
     // Keep the "Telegram" conversation out of the log while a value is asked for in it, and end that
     void       keepAuthInputUnlogged();
     void       endAuthInput();
+    void       removeAuthInputBuddy();
     void       authResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void       notifyAuthError(const td::td_api::object_ptr<td::td_api::Object> &response);
     void       setPurpleConnectionInProgress();
