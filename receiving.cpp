@@ -565,6 +565,13 @@ void sendConversationReadReceipts(TdAccountData &account, PurpleConversation *co
         purple_debug_misc(config::pluginId, "Reading reactions in chat %" G_GINT64_FORMAT "\n", chatId.value());
         account.transceiver.sendQuery(td::td_api::make_object<td::td_api::readAllChatReactions>(chatId.value()), nullptr);
     }
+    // Oldest first, each once: TDLib keeps polling the reactions of only the last few it is told
+    std::sort(receipts.begin(), receipts.end(), [](const ReadReceipt &a, const ReadReceipt &b) {
+        return a.messageId < b.messageId;
+    });
+    receipts.erase(std::unique(receipts.begin(), receipts.end(),
+                               [](const ReadReceipt &a, const ReadReceipt &b) { return a.messageId == b.messageId; }),
+                   receipts.end());
     if (!receipts.empty()) {
         purple_debug_misc(config::pluginId, "Sending %zu read receipts for chat %" G_GINT64_FORMAT "\n",
                           receipts.size(), chatId.value());
