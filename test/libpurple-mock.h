@@ -17,6 +17,8 @@ guint8 *arrayDup(gpointer data, size_t size);
 void setUiName(const char *name);
 void setUiInfoMissing(bool missing);
 void clearGroups();
+// Calls the handlers connected to a signal of libpurple's that passes nothing but their data
+void emitSignal(const char *signal);
 
 };
 
