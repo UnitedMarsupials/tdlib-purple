@@ -825,13 +825,17 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
     PurpleMessageFlags flags = (PurpleMessageFlags) (extraFlags | directionFlag);
     // Not logged (again): with the conversation's logging off while it is written, as Pidgin shows
     // a message flagged as not to be logged without its time and sender
-    // Ours, being sent, under an id it will not keep, is logged once sent, under the one it does; but
-    // as ever where there is no tab to write it into unlogged
+    // Ours, being sent, under an id it will not keep, is logged once sent, under the one it does: as
+    // it would have been now, and as ever where there is no tab to write it into unlogged. One sent
+    // already, while waiting to be shown, has that id now.
     bool                unlogged     = message.unlogged || message.redrawn;
-    bool                unsent       = text && message.outgoing && message.sentLocally && message.id.valid() &&
-                                       !message.unlogged && logMarkersEnabled();
+    MessageId           loggedId     = message.sentLocally ? account.getSentMessageId(getId(chat), message.id)
+                                                           : message.id;
+    bool                sent         = !message.sentLocally || (loggedId != message.id);
+    bool                unsent       = text && !sent && message.id.valid() && !message.unlogged &&
+                                       logMarkersEnabled();
     PurpleConversation *unloggedConv = (unlogged || unsent) ? findMessageConversation(account, chat) : nullptr;
-    unsent = unsent && unloggedConv;
+    unsent = unsent && unloggedConv && purple_conversation_is_logging(unloggedConv);
     bool                logging      = unloggedConv && purple_conversation_is_logging(unloggedConv);
     if (logging)
         purple_conversation_set_logging(unloggedConv, FALSE);
@@ -866,8 +870,8 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
     // Which message it is, for the log, once it has its id for good: whatever the front-end now, a
     // tab of Pidgin's may be filled from the log later
     std::string marked;
-    if (text && message.id.valid() && !message.sentLocally && logMarkersEnabled()) {
-        marked = text + makeLogMarker(message.id);
+    if (text && loggedId.valid() && sent && logMarkersEnabled()) {
+        marked = text + makeLogMarker(loggedId);
         text   = marked.c_str();
     }
 

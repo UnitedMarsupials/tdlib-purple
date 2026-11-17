@@ -1392,9 +1392,9 @@ TEST_F(PrivateChatTest, SentMessageLoggedOnceSent)
     prpl.discardEvents();
 
     ASSERT_EQ(0, pluginInfo().send_im(connection, purpleUserName(0).c_str(), "Bye", PURPLE_MESSAGE_SEND));
-    tgl.verifyRequest(*makeSendMessage(chatIds[0], 0, nullptr, nullptr, nullptr,
-        make_object<inputMessageText>(make_object<formattedText>("Bye", std::vector<object_ptr<textEntity>>()),
-                                      nullptr, false)));
+    auto input = make_object<inputMessageText>();
+    input->text_ = makeFormattedText("Bye");
+    tgl.verifyRequest(*makeSendMessage(chatIds[0], 0, nullptr, nullptr, nullptr, std::move(input)));
     object_ptr<message> pending = makeMessage(tempId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye"));
     pending->sending_state_ = make_object<messageSendingStatePending>();
     tgl.update(make_object<updateNewMessage>(std::move(pending)));
@@ -1412,6 +1412,61 @@ TEST_F(PrivateChatTest, SentMessageLoggedOnceSent)
     prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), selfFirstName + " " + selfLastName, logged,
                                              PURPLE_MESSAGE_SEND, date));
     ASSERT_EQ(std::vector<std::string>{logged}, takeLoggedMessages());
+}
+
+TEST_F(PrivateChatTest, SentMessageLoggedIfSentBeforeShown)
+{
+    const int64_t tempId    = 0x100001;
+    const int64_t finalId   = 0x200000;
+    const int64_t repliedId = 0x80000;
+    const int32_t date      = 123456;
+    setLogMarkersEnabled(true);
+    loginWithOneContact();
+    getImConversation(account, purpleUserName(0).c_str());
+    prpl.discardEvents();
+
+    // Waiting for the message it replies to, and sent meanwhile
+    object_ptr<message> pending = makeMessage(tempId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye"));
+    pending->sending_state_ = make_object<messageSendingStatePending>();
+    pending->reply_to_      = makeReplyTo(repliedId);
+    tgl.update(make_object<updateNewMessage>(std::move(pending)));
+    tgl.verifyRequest(getMessage(chatIds[0], repliedId));
+    tgl.update(makeUpdateMessageSendSucceeded(
+        makeMessage(finalId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye")), tempId));
+    prpl.verifyNoEvents();
+    ASSERT_TRUE(takeLoggedMessages().empty());
+
+    // Logged as it is shown, under the id it keeps
+    tgl.reply(makeMessage(repliedId, userIds[0], chatIds[0], false, date - 1, makeTextMessage("Hi")));
+    prpl.discardEvents();
+    tgl.verifyRequest(viewMessages(chatIds[0], {tempId}, nullptr, true));
+    std::vector<std::string> logged = takeLoggedMessages();
+    ASSERT_EQ(1u, logged.size());
+    ASSERT_NE(std::string::npos, logged[0].find("Bye<!--tdlib-message " + std::to_string(finalId) + "-->"));
+}
+
+TEST_F(PrivateChatTest, SentMessageNotLoggedWhenShownUnlogged)
+{
+    const int64_t tempId  = 0x100001;
+    const int64_t finalId = 0x200000;
+    const int32_t date    = 123456;
+    setLogMarkersEnabled(true);
+    loginWithOneContact();
+    PurpleConversation *conv = getImConversation(account, purpleUserName(0).c_str());
+    prpl.discardEvents();
+
+    // Shown with the conversation not logging, it is not logged once sent, logging or not by then
+    purple_conversation_set_logging(conv, FALSE);
+    object_ptr<message> pending = makeMessage(tempId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye"));
+    pending->sending_state_ = make_object<messageSendingStatePending>();
+    tgl.update(make_object<updateNewMessage>(std::move(pending)));
+    tgl.verifyRequest(viewMessages(chatIds[0], {tempId}, nullptr, true));
+    prpl.discardEvents();
+    purple_conversation_set_logging(conv, TRUE);
+    tgl.update(makeUpdateMessageSendSucceeded(
+        makeMessage(finalId, userIds[0], chatIds[0], true, date, makeTextMessage("Bye")), tempId));
+    prpl.verifyNoEvents();
+    ASSERT_TRUE(takeLoggedMessages().empty());
 }
 
 TEST_F(PrivateChatTest, ReceiveMessage_SpecialCharacters)
