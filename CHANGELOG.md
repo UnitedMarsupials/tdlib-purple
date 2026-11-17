@@ -10,6 +10,10 @@
 - **In Pidgin, a chat's tab no longer shows Pidgin's notice that the account has disconnected again after every start, nor turns red as having new messages when filled with those already read.** Quitting, Pidgin tells every chat the account has disconnected, and logged it, so that it came back with the rest of the log.
 - **An animated sticker's or custom emoji's GIF no longer stays behind in the temporary directory when its account or chat is gone by the time it is converted**, as when Pidgin quits or the account disconnects meanwhile.
 
+### Translations
+
+- **Czech, German, Polish, Albanian and Ukrainian are complete again**, with the strings 0.9.6 added: forwarding, copying a message's file or picture, a group's news, and who deleted a message.
+
 ## 0.9.6 (2026-11-14)
 
 ### Features
