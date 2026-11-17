@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixes
+
+- **In Pidgin, a reaction picked from the menu of a message's picture is given, rather than the menu closing with nothing done.** Pidgin opens that menu as the right button is let go, which left GTK taking that button for the one to pick a submenu's item with, and handing a click of the left one on to the menu instead.
+- **In Pidgin, a chat's tab in a focused window is known to be shown again, so that its messages are read as they come into view and its reactions are kept up to date.** 0.9.6 followed the focus by a hook that GLib refuses, on GObject's "notify", so that no tab was ever taken to be shown.
+- **The reaction counts of every post on screen in a channel are kept up to date, not only those of the latest.** Telegram polls the reactions of the last messages it was told were viewed, which went newest first, so that the oldest on screen were the ones kept.
+- **In Pidgin, a chat's tab no longer shows Pidgin's notice that the account has disconnected again after every start, nor turns red as having new messages when filled with those already read.** Quitting, Pidgin tells every chat the account has disconnected, and logged it, so that it came back with the rest of the log.
+
 ### Translations
 
 - **Czech, German, Polish, Albanian and Ukrainian are complete again**, with the strings 0.9.6 added: forwarding, copying a message's file or picture, a group's news, and who deleted a message.

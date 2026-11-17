@@ -95,6 +95,9 @@ std::vector<LoggedLine> parseLoggedLines(const std::string &content, time_t logS
         line.html = std::move(html);
         lines.push_back(std::move(line));
     }
+    // Pidgin ends the document only as it closes the log; one still written to has no end yet
+    if (!lines.empty() && (content.find("</body>") != std::string::npos))
+        lines.back().closing = true;
     return lines;
 }
 

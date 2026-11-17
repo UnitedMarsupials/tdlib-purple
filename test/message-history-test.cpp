@@ -70,7 +70,7 @@ TEST_F(MessageHistoryTest, TdlibSkipMessages)
         ServGotChatEvent(connection, purpleChatId, userNameInChat, "6", PURPLE_MESSAGE_RECV, 6),
         ServGotChatEvent(connection, purpleChatId, userNameInChat, "7", PURPLE_MESSAGE_RECV, 7)
     );
-    tgl.verifyRequest(viewMessages(groupChatId, {6, 7, 5, 4, 3, 2}, nullptr, true));
+    tgl.verifyRequest(viewMessages(groupChatId, {2, 3, 4, 5, 6, 7}, nullptr, true));
 
     tgl.update(make_object<updateNewMessage>(
         makeMessage(8, userIds[0], groupChatId, false, 8, makeTextMessage("8"))
@@ -136,7 +136,7 @@ TEST_F(MessageHistoryTest, TdlibSkipMessages_FlushAtLogout)
         ServGotChatEvent(connection, purpleChatId, userNameInChat, "5", (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_DELAYED), 5),
         ServGotChatEvent(connection, purpleChatId, userNameInChat, "6", PURPLE_MESSAGE_RECV, 6)
     );
-    tgl.verifyRequest(viewMessages(groupChatId, {6, 5, 4, 3, 2}, nullptr, true));
+    tgl.verifyRequest(viewMessages(groupChatId, {2, 3, 4, 5, 6}, nullptr, true));
 
     ASSERT_EQ(std::string("6"), std::string(purple_account_get_string(
         account, ("last-message-chat" + std::to_string(groupChatId)).c_str(), "")));
@@ -183,5 +183,5 @@ TEST_F(MessageHistoryTest, CatchingUpWaitsLonger)
                          (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_DELAYED), 3),
         ServGotChatEvent(connection, purpleChatId, userNameInChat, "4", PURPLE_MESSAGE_RECV, 4)
     );
-    tgl.verifyRequest(viewMessages(groupChatId, {4, 3}, nullptr, true));
+    tgl.verifyRequest(viewMessages(groupChatId, {3, 4}, nullptr, true));
 }
