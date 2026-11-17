@@ -565,6 +565,13 @@ void sendConversationReadReceipts(TdAccountData &account, PurpleConversation *co
         purple_debug_misc(config::pluginId, "Reading reactions in chat %" G_GINT64_FORMAT "\n", chatId.value());
         account.transceiver.sendQuery(td::td_api::make_object<td::td_api::readAllChatReactions>(chatId.value()), nullptr);
     }
+    // Oldest first, each once: TDLib keeps polling the reactions of only the last few it is told
+    std::sort(receipts.begin(), receipts.end(), [](const ReadReceipt &a, const ReadReceipt &b) {
+        return a.messageId < b.messageId;
+    });
+    receipts.erase(std::unique(receipts.begin(), receipts.end(),
+                               [](const ReadReceipt &a, const ReadReceipt &b) { return a.messageId == b.messageId; }),
+                   receipts.end());
     if (!receipts.empty()) {
         purple_debug_misc(config::pluginId, "Sending %zu read receipts for chat %" G_GINT64_FORMAT "\n",
                           receipts.size(), chatId.value());
@@ -3122,7 +3129,9 @@ static bool isShownAsNotice(const td::td_api::message &message)
 // What of the log goes into the tab with TDLib's messages: a message the log names that TDLib no
 // longer has was deleted, and is struck out or left out, as set for the chat; one the log does not
 // name, or a notice, is left out if TDLib has a message written the same way at much the same time,
-// as it is that one. Other notices, such as of edits and reactions, go in.
+// as it is that one. Other notices, such as of edits and reactions, go in; but not the one closing a
+// log, of no message, which is Pidgin's own that the account has disconnected, and which the
+// messages shown since make no news.
 static std::vector<LoggedLine> getLoggedLines(TdAccountData &account, const td::td_api::chat &chat,
                                               PurpleConversation *conv, const Redraw &redraw)
 {
@@ -3156,7 +3165,8 @@ static std::vector<LoggedLine> getLoggedLines(TdAccountData &account, const td::
             if (keep)
                 line.html = line.html.substr(0, line.bodyStart) + "<s>" + line.html.substr(line.bodyStart) + "</s>";
         } else
-            keep = !hasNear(line.when, !line.message);
+            keep = !hasNear(line.when, !line.message) &&
+                   (line.message || !line.closing || (line.html.find(JUMP_LINK_SCHEME) != std::string::npos));
         if (keep)
             lines.push_back(std::move(line));
         else
@@ -3210,6 +3220,9 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
     std::vector<IncomingMessage> readyMessages;
     account.pendingMessages.setChatReady(redraw.chatId, readyMessages);
     showMessages(readyMessages, account);
+    // Shown again, the messages already read are no news, as Pidgin takes them to be
+    if (conv && chat && !chat->unread_count_)
+        clearUnseen(conv);
     // Opened: at the first unread, if any. Gone further back: what was at the top stays there,
     // unless all of it was in view, the end then staying in view too, as Pidgin keeps it.
     if (redraw.opening) {

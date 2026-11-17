@@ -1453,6 +1453,17 @@ static void unregisterMessageLinks()
     setViewedHandler(nullptr);
 }
 
+// As Pidgin quits, its chats are told the account has signed off, which is no news once they are
+// shown again: not logged
+static void quitting(void *)
+{
+    for (GList *item = purple_get_chats(); item; item = item->next) {
+        PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
+        if (!strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId))
+            purple_conversation_set_logging(conv, FALSE);
+    }
+}
+
 static gboolean tgprpl_unload (PurplePlugin *plugin)
 {
     unregisterMessageLinks();
@@ -1467,6 +1478,8 @@ static gboolean tgprpl_load (PurplePlugin *plugin)
         return FALSE;
     pidginUiLoad(plugin);
     registerMessageLinks();
+    // Disconnected as the plugin is unloaded
+    purple_signal_connect(purple_get_core(), "quitting", plugin, PURPLE_CALLBACK(quitting), NULL);
 
     purple_cmd_register("kick", "s", PURPLE_CMD_P_PLUGIN,
                         (PurpleCmdFlag)(PURPLE_CMD_FLAG_CHAT | PURPLE_CMD_FLAG_PRPL_ONLY),
