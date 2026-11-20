@@ -1822,7 +1822,8 @@ gboolean purple_privacy_deny_remove(PurpleAccount *account, const char *who, gbo
 namespace {
 struct ListField {
     std::vector<std::pair<std::string, void *>> items;
-    GList                                      *selected = nullptr;
+    GList                                      *selected    = nullptr;
+    bool                                        multiSelect = false;
 };
 }
 static ListField *g_listField       = nullptr;
@@ -1849,6 +1850,11 @@ void *purple_request_fields(void *handle, const char *title, const char *primary
     std::vector<int> choices = std::move(g_requestListChoices);
     g_listField = nullptr;
     g_requestListChoices.clear();
+    // Several chosen only where the list lets them be
+    if (list && (choices.size() > 1) && !list->multiSelect) {
+        ADD_FAILURE() << "Several choices from a list of single choice";
+        choices.resize(1);
+    }
     if (list)
         for (int choice: choices)
             if ((choice >= 0) && (static_cast<size_t>(choice) < list->items.size()))
@@ -1882,6 +1888,8 @@ void purple_request_field_list_add(PurpleRequestField *field, const char *item, 
 
 void purple_request_field_list_set_multi_select(PurpleRequestField *field, gboolean multi_select)
 {
+    if (field)
+        reinterpret_cast<ListField *>(field)->multiSelect = multi_select;
 }
 
 GList *purple_request_field_list_get_selected(const PurpleRequestField *field)

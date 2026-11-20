@@ -892,13 +892,13 @@ TEST_F(MessageLinkTest, ForwardChosenToSeveral)
         return to;
     };
 
-    // Each chosen is forwarded to, in turn; not the one left out
+    // Each chosen is forwarded to, in turn; not the one left out, which need not be known
     setRequestListChoices({0, 2});
-    client->askForwardMessage(chat, message, {destination(chatIds[1], "First"), destination(chatIds[0], "Second"),
-                                              destination(chatIds[1], "Third")});
+    client->askForwardMessage(chat, message, {destination(chatIds[1], "First"), destination(2000, "Second"),
+                                              destination(chatIds[0], "Third")});
     tgl.verifyRequests({
         makeForwardMessages(chatIds[1], chatIds[0], messageId),
-        makeForwardMessages(chatIds[1], chatIds[0], messageId)
+        makeForwardMessages(chatIds[0], chatIds[0], messageId)
     });
 }
 
