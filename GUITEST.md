@@ -246,6 +246,9 @@ its tab still shows, and one that it no longer does.
   from the first unread, and an open one is left as it was.
 * Two links followed one right after the other, the first to a chat whose tab
   is just being opened, end up at the second.
+* So do two to an open tab, the first to a message it does not show, which
+  fills it anew, the second to one it shows: it ends at the second, not
+  scrolled back to the first once filled.
 
 ## Files and pictures
 
