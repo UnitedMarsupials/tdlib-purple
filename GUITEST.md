@@ -235,7 +235,8 @@ With Pidgin running, hand it a link to a post of a channel, joined or not, as
 README.md shows with `dbus-send`; then one to a message of an open chat that
 its tab still shows, and one that it no longer does.
 
-* The chat's conversation comes up, at the post, filled from it.
+* The chat's conversation comes up, its tab chosen in its window even while another was, at
+  the post, filled from it.
 * The tab still showing the message is scrolled to it; the other one is filled
   anew from the message.
 * A link to something else, such as `tg://settings`, or to a channel that does

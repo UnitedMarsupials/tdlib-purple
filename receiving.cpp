@@ -3484,7 +3484,7 @@ LinkedMessageShown showLinkedMessage(TdAccountData &account, const td::td_api::c
         else if (!startRedraw(account, chatId, messageId, false, EARLIER_BATCH, false, true))
             return LinkedMessageShown::Busy;
     }
-    purple_conversation_present(conv);
+    presentConversation(conv);
     return LinkedMessageShown::Shown;
 }
 
