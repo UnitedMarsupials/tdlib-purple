@@ -1,4 +1,6 @@
 #include "fixture.h"
+#include "client-utils.h"
+#include <glib/gstdio.h>
 
 class LoginTest: public CommTest {};
 
@@ -810,4 +812,172 @@ TEST_F(LoginThroughChatTest, Registration)
 
     finishLogin();
     EXPECT_TRUE(purple_conversation_is_logging(conv));
+}
+
+// The local database encrypted with the account's password, as its option says
+class DatabasePasswordTest: public CommTest {
+protected:
+    const std::string password = "correct horse";
+    const std::string directory = std::string(purple_user_dir()) + G_DIR_SEPARATOR_S + "tdlib" +
+                                  G_DIR_SEPARATOR_S + "+" + selfPhoneNumber;
+
+    void TearDown() override
+    {
+        setRequestAnswers({});
+        CommTest::TearDown();
+    }
+    // As the plugin makes it of a password, which takes long: once
+    std::string keyOf(const std::string &password)
+    {
+        static std::map<std::string, std::string> keys;
+        auto it = keys.find(password);
+        if (it == keys.end())
+            it = keys.emplace(password, deriveKey(password, "tdlib-purple database +" + selfPhoneNumber, 600000)).first;
+        return it->second;
+    }
+    // Up to TDLib asking for its parameters
+    void startLogin(bool encrypt)
+    {
+        purple_account_set_bool(account, "encrypt-database", encrypt);
+        pluginInfo().login(account);
+        prpl.verifyEvents(
+            ConnectionSetStateEvent(connection, PURPLE_CONNECTING),
+            ConnectionUpdateProgressEvent(connection, 1, 2)
+        );
+        auto update                  = make_object<updateAuthorizationState>();
+        update->authorization_state_ = make_object<authorizationStateWaitTdlibParameters>();
+        tgl.update(std::move(update));
+    }
+    // The request to reply to
+    uint64_t verifyFirstParameters(const std::string &key)
+    {
+        return tgl.verifyRequests({
+            make_object<disableProxy>(),
+            make_object<getProxies>(),
+            makeTdlibParameters(directory, true, key),
+            makeStorageOptimizerOption()
+        })[2];
+    }
+    void replyWrongKey(uint64_t requestId)
+    {
+        tgl.reply(requestId, makeError(401, "Wrong database encryption key"));
+    }
+};
+
+TEST_F(DatabasePasswordTest, PasswordRemembered)
+{
+    purple_account_set_password(account, password.c_str());
+    startLogin(true);
+    tgl.reply(verifyFirstParameters(keyOf(password)), make_object<ok>());
+    tgl.verifyNoRequests();
+    prpl.verifyNoEvents();
+}
+
+TEST_F(DatabasePasswordTest, PasswordAskedFor)
+{
+    setRequestAnswers({{{"password", password}}});
+    startLogin(true);
+    prpl.verifyEvents(RequestPasswordEvent(account));
+    uint64_t requestId = verifyFirstParameters(keyOf(password));
+    EXPECT_EQ(password, purple_account_get_password(account));
+    EXPECT_FALSE(account->remember_pass);
+    tgl.reply(requestId, make_object<ok>());
+    tgl.verifyNoRequests();
+}
+
+TEST_F(DatabasePasswordTest, PasswordNotGiven)
+{
+    startLogin(true);
+    prpl.verifyEvents(RequestPasswordEvent(account),
+                      ConnectionErrorEvent(connection, "The local database cannot be opened without its password"));
+    tgl.verifyRequests({make_object<disableProxy>(), make_object<getProxies>()});
+}
+
+TEST_F(DatabasePasswordTest, Encrypted)
+{
+    // Not encrypted yet: encrypted once the password is typed again
+    purple_account_set_password(account, password.c_str());
+    startLogin(true);
+    replyWrongKey(verifyFirstParameters(keyOf(password)));
+    tgl.verifyRequest(*makeTdlibParameters(directory, true));
+    setRequestAnswers({{{"password", password}}});
+    tgl.reply(make_object<ok>());
+    tgl.verifyRequest(setDatabaseEncryptionKey(keyOf(password)));
+    tgl.reply(make_object<ok>());
+    tgl.verifyNoRequests();
+}
+
+TEST_F(DatabasePasswordTest, NotEncryptedWithAnotherPassword)
+{
+    purple_account_set_password(account, password.c_str());
+    startLogin(true);
+    replyWrongKey(verifyFirstParameters(keyOf(password)));
+    tgl.verifyRequest(*makeTdlibParameters(directory, true));
+    setRequestAnswers({{{"password", "correct horsf"}}});
+    tgl.reply(make_object<ok>());
+    tgl.verifyNoRequests();
+    EXPECT_EQ(0u, getRequestAnswersLeft());
+}
+
+TEST_F(DatabasePasswordTest, WrongPassword)
+{
+    purple_account_set_password(account, password.c_str());
+    startLogin(true);
+    replyWrongKey(verifyFirstParameters(keyOf(password)));
+    replyWrongKey(tgl.verifyRequest(*makeTdlibParameters(directory, true)));
+    prpl.verifyEvents(ConnectionErrorEvent(connection, "The password does not open the account's local database"));
+    // Asked for at the next connection
+    EXPECT_EQ(nullptr, purple_account_get_password(account));
+    tgl.verifyNoRequests();
+}
+
+TEST_F(DatabasePasswordTest, Decrypted)
+{
+    // Encryption turned off: the database decrypted with its password
+    startLogin(false);
+    uint64_t requestId = verifyFirstParameters("");
+    setRequestAnswers({{{"password", password}}});
+    replyWrongKey(requestId);
+    tgl.verifyRequest(*makeTdlibParameters(directory, true, keyOf(password)));
+    tgl.reply(make_object<ok>());
+    tgl.verifyRequest(setDatabaseEncryptionKey(""));
+    tgl.reply(make_object<ok>());
+    tgl.verifyNoRequests();
+}
+
+TEST(DatabaseFileTest, PlainSqlite)
+{
+    char *dir = g_dir_make_tmp("tdlib-purple-test-XXXXXX", NULL);
+    ASSERT_NE(nullptr, dir);
+    std::string plain     = std::string(dir) + G_DIR_SEPARATOR_S + "plain";
+    std::string encrypted = std::string(dir) + G_DIR_SEPARATOR_S + "encrypted";
+    std::string shorter   = std::string(dir) + G_DIR_SEPARATOR_S + "short";
+    ASSERT_TRUE(g_file_set_contents(plain.c_str(), "SQLite format 3\0\x10\0\1\1", 20, NULL));
+    ASSERT_TRUE(g_file_set_contents(encrypted.c_str(), "\x8e\x12\x55\xa0SQLite format 3\0", 20, NULL));
+    ASSERT_TRUE(g_file_set_contents(shorter.c_str(), "SQLite", 6, NULL));
+    EXPECT_TRUE(isPlainSqliteFile(plain));
+    EXPECT_FALSE(isPlainSqliteFile(encrypted));
+    EXPECT_FALSE(isPlainSqliteFile(shorter));
+    EXPECT_FALSE(isPlainSqliteFile(std::string(dir) + G_DIR_SEPARATOR_S + "none"));
+    for (const std::string &path: {plain, encrypted, shorter})
+        g_unlink(path.c_str());
+    g_rmdir(dir);
+    g_free(dir);
+}
+
+TEST(DatabaseFileTest, KeyDerivation)
+{
+    // The vectors published for PBKDF2-HMAC-SHA256 with RFC 6070's inputs, of 32 bytes
+    auto hex = [](const std::string &bytes) {
+        std::string result;
+        for (unsigned char c: bytes) {
+            char digits[3];
+            snprintf(digits, sizeof(digits), "%02x", c);
+            result += digits;
+        }
+        return result;
+    };
+    EXPECT_EQ("120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b", hex(deriveKey("password", "salt", 1)));
+    EXPECT_EQ("c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a",
+              hex(deriveKey("password", "salt", 4096)));
 }

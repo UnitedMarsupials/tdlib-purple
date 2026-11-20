@@ -155,6 +155,16 @@ public:
 
     // The client of an account by its name, if it is connected
     static PurpleTdClient *findConnected(const char *accountName);
+
+    // The local database's password: what one typed is for, and its key, made of it in a thread
+    // of its own; asked for again, or changed from the account's action
+    enum class DatabaseKeyUse { Open, Confirm, Decrypt, Change };
+    void databasePasswordEntered(DatabaseKeyUse use, const std::string &password);
+    void databasePasswordCancelled(DatabaseKeyUse use);
+    void databaseKeyDerived(DatabaseKeyUse use, const std::string &password, const std::string &key);
+    void changeDatabasePassword(const std::string &password);
+    // That encrypting the database anew rewrites it, which takes as long as it is big
+    std::string getDatabaseRewriteWarning();
 private:
     using TdObjectPtr   = td::td_api::object_ptr<td::td_api::Object>;
     using ResponseCb    = void (PurpleTdClient::*)(uint64_t requestId, TdObjectPtr object);
@@ -171,6 +181,16 @@ private:
     enum class AuthInput { None, Code, Password, DisplayName };
 
     void       sendTdlibParameters();
+    // How the database is being opened: as the account's settings say, unencrypted or with the
+    // account's password; or, that failing, unencrypted for the password, to encrypt it then, or
+    // with the password asked for to decrypt it
+    enum class DatabaseOpening { Plain, Password, PlainForPassword, Decrypt };
+    void       openDatabase(const std::string &key, DatabaseOpening opening);
+    void       databaseOpenResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
+    void       askDatabasePassword(DatabaseKeyUse use);
+    void       wrongDatabasePassword();
+    bool       checkMessagesEncrypted();
+    void       setDatabaseKey(const std::string &key, const std::string &password, bool encrypted);
     void       sendPhoneNumber();
     void       requestAuthCode(const td::td_api::authenticationCodeInfo *authCodeInfo);
     void       requestPassword(const td::td_api::authorizationStateWaitPassword &pwInfo);
@@ -274,6 +294,13 @@ private:
     TdTransceiver         m_transceiver;
     TdAccountData         m_data;
     int32_t               m_lastAuthState = 0;
+    DatabaseOpening       m_databaseOpening = DatabaseOpening::Plain;
+    // Made of the account's password, while the database is being opened for it
+    std::string           m_passwordKey;
+    bool                  m_storageOptimizerSet = false;
+    // Shown while TDLib encrypts the database anew, until it is done
+    void                 *m_rekeyNotice = nullptr;
+    bool                  m_rekeying    = false;
     std::vector<UserId>   m_usersForNewPrivateChats;
     // At first login every contact needs a private chat materialized. Doing this strictly
     // serially (one createPrivateChat per server round-trip) is very slow for large contact
