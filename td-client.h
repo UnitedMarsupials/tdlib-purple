@@ -300,6 +300,7 @@ private:
     bool                  m_storageOptimizerSet = false;
     // Shown while TDLib encrypts the database anew, until it is done
     void                 *m_rekeyNotice = nullptr;
+    bool                  m_rekeying    = false;
     std::vector<UserId>   m_usersForNewPrivateChats;
     // At first login every contact needs a private chat materialized. Doing this strictly
     // serially (one createPrivateChat per server round-trip) is very slow for large contact

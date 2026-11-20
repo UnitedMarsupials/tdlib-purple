@@ -795,11 +795,28 @@ std::string PurpleTdClient::getDatabaseRewriteWarning()
     return warning;
 }
 
-// Re-encrypted, or decrypted, by TDLib; a password changed is the account's then
+// Told while the database is being rewritten already
+static void notifyRekeying(PurpleConnection *gc)
+{
+    // TRANSLATOR: Error dialog, title
+    purple_notify_error(gc, _("Database password"),
+                        // TRANSLATOR: Error dialog, primary content
+                        _("The local database is being encrypted anew already"),
+                        // TRANSLATOR: Error dialog, secondary content
+                        _("Try again once told it is done."));
+}
+
+// Re-encrypted, or decrypted, by TDLib; a password changed is the account's then. One at a time,
+// each with its notice up until it is done.
 void PurpleTdClient::setDatabaseKey(const std::string &key, const std::string &password, bool encrypted)
 {
-    purple_debug_misc(config::pluginId, "%s the database\n", encrypted ? "Encrypting" : "Decrypting");
     PurpleConnection *gc = purple_account_get_connection(m_account);
+    if (m_rekeying) {
+        notifyRekeying(gc);
+        return;
+    }
+    m_rekeying = true;
+    purple_debug_misc(config::pluginId, "%s the database\n", encrypted ? "Encrypting" : "Decrypting");
     // TRANSLATOR: Information dialog, title
     m_rekeyNotice = purple_notify_message(gc, PURPLE_NOTIFY_MSG_INFO, _("Database password"),
                                           encrypted ? _("Encrypting the local database...")
@@ -808,12 +825,15 @@ void PurpleTdClient::setDatabaseKey(const std::string &key, const std::string &p
                                           // TRANSLATOR: Information dialog, secondary content
                                           _("Do not quit the program, nor turn the computer off, until told it is done."),
                                           NULL, NULL);
-    m_transceiver.sendQuery(td::td_api::make_object<td::td_api::setDatabaseEncryptionKey>(key),
+    auto request = td::td_api::make_object<td::td_api::setDatabaseEncryptionKey>();
+    request->new_encryption_key_ = key;
+    m_transceiver.sendQuery(std::move(request),
         [this, password, encrypted](uint64_t, TdObjectPtr object) {
             PurpleConnection *gc = purple_account_get_connection(m_account);
             if (m_rekeyNotice)
                 purple_notify_close(PURPLE_NOTIFY_MESSAGE, m_rekeyNotice);
             m_rekeyNotice = nullptr;
+            m_rekeying    = false;
             if (!object || (object->get_id() != td::td_api::ok::ID)) {
                 // TRANSLATOR: Error dialog, title
                 purple_notify_error(gc, _("Database password"),
@@ -844,8 +864,14 @@ void PurpleTdClient::changeDatabasePassword(const std::string &password)
                             _("The local database is not encrypted with a password"),
                             // TRANSLATOR: Error dialog, secondary content
                             _("Encryption is turned on in the account's settings, and takes effect as it connects."));
-    else
+    else if (m_rekeying)
+        notifyRekeying(purple_account_get_connection(m_account));
+    else {
+        // Not to be confirmed any more: a dialog still asking for it would encrypt the database anew
+        // with the account's password from before
+        m_passwordKey.clear();
         databasePasswordEntered(DatabaseKeyUse::Change, password);
+    }
 }
 
 void PurpleTdClient::sendPhoneNumber()

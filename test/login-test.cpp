@@ -844,7 +844,9 @@ protected:
             ConnectionSetStateEvent(connection, PURPLE_CONNECTING),
             ConnectionUpdateProgressEvent(connection, 1, 2)
         );
-        tgl.update(make_object<updateAuthorizationState>(make_object<authorizationStateWaitTdlibParameters>()));
+        auto update                  = make_object<updateAuthorizationState>();
+        update->authorization_state_ = make_object<authorizationStateWaitTdlibParameters>();
+        tgl.update(std::move(update));
     }
     // The request to reply to
     uint64_t verifyFirstParameters(const std::string &key)
@@ -858,7 +860,7 @@ protected:
     }
     void replyWrongKey(uint64_t requestId)
     {
-        tgl.reply(requestId, make_object<error>(401, "Wrong database encryption key"));
+        tgl.reply(requestId, makeError(401, "Wrong database encryption key"));
     }
 };
 
