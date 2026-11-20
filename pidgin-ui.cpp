@@ -157,6 +157,10 @@ FRONT_END_FUNCTION(gtk_tree_view_append_column);
 FRONT_END_FUNCTION(gtk_tree_view_get_selection);
 FRONT_END_FUNCTION(gtk_tree_view_column_new_with_attributes);
 FRONT_END_FUNCTION(gtk_cell_renderer_text_new);
+FRONT_END_FUNCTION(gtk_cell_renderer_toggle_new);
+FRONT_END_FUNCTION(gtk_tree_model_get_iter_from_string);
+FRONT_END_FUNCTION(gtk_tree_model_filter_convert_iter_to_child_iter);
+FRONT_END_FUNCTION(gtk_tree_model_iter_next);
 FRONT_END_FUNCTION(gtk_tree_selection_get_selected);
 FRONT_END_FUNCTION(gtk_tree_selection_select_iter);
 FRONT_END_FUNCTION(gtk_scrolled_window_new);
@@ -639,7 +643,10 @@ void pidginUiLoad(PurplePlugin *plugin)
                 LOOK_UP(gtk_tree_model_get_iter_first) && LOOK_UP(gtk_tree_view_new_with_model) &&
                 LOOK_UP(gtk_tree_view_set_headers_visible) && LOOK_UP(gtk_tree_view_append_column) &&
                 LOOK_UP(gtk_tree_view_get_selection) && LOOK_UP(gtk_tree_view_column_new_with_attributes) &&
-                LOOK_UP(gtk_cell_renderer_text_new) && LOOK_UP(gtk_tree_selection_get_selected) &&
+                LOOK_UP(gtk_cell_renderer_text_new) && LOOK_UP(gtk_cell_renderer_toggle_new) &&
+                LOOK_UP(gtk_tree_model_get_iter_from_string) &&
+                LOOK_UP(gtk_tree_model_filter_convert_iter_to_child_iter) && LOOK_UP(gtk_tree_model_iter_next) &&
+                LOOK_UP(gtk_tree_selection_get_selected) &&
                 LOOK_UP(gtk_tree_selection_select_iter) && LOOK_UP(gtk_scrolled_window_new) &&
                 LOOK_UP(gtk_scrolled_window_set_policy) && LOOK_UP(gtk_box_pack_start) &&
                 LOOK_UP(gtk_widget_show_all) && LOOK_UP(gtk_widget_destroy) &&
@@ -3360,16 +3367,18 @@ static void disconnectPopup()
 }
 
 // The dialog choosing out of a list: what is typed in its field narrows the list down to the items
-// with that in them, the first of which is chosen by Enter; a double-click chooses too
+// with that in them, the first of which is chosen by Enter; a double-click chooses too. Several are
+// chosen by ticking them, which narrowing the list leaves ticked; then those are what is chosen.
 namespace {
 struct ListChooser {
-    std::function<void(int)> chosen;
-    GtkWidget               *entry  = nullptr;
-    GtkWidget               *view   = nullptr;
-    GtkTreeModel            *filter = nullptr;
-    std::string              needle;  // what is typed, case folded
+    std::function<void(const std::vector<int> &)> chosen;
+    GtkWidget                                    *entry  = nullptr;
+    GtkWidget                                    *view   = nullptr;
+    GtkListStore                                 *store  = nullptr;
+    GtkTreeModel                                 *filter = nullptr;
+    std::string                                   needle;  // what is typed, case folded
 };
-enum { COLUMN_LABEL, COLUMN_INDEX };
+enum { COLUMN_LABEL, COLUMN_INDEX, COLUMN_TICKED };
 }
 
 static gboolean listItemVisible(GtkTreeModel *model, GtkTreeIter *iter, gpointer data)
@@ -3407,29 +3416,62 @@ static void listItemActivated(GtkTreeView *, GtkTreePath *, GtkTreeViewColumn *,
     p_gtk_dialog_response(reinterpret_cast<GtkDialog *>(data), GTK_RESPONSE_OK);
 }
 
-static void listChooserResponse(GtkDialog *dialog, gint response, gpointer data)
+// The path is of the list as narrowed down; the tick goes into the whole one
+static void listItemToggled(GtkCellRendererToggle *, gchar *path, gpointer data)
 {
     ListChooser *chooser = static_cast<ListChooser *>(data);
-    int          index   = -1;
-    GtkTreeIter  iter;
+    GtkTreeIter  shown, item;
+    gboolean     ticked = FALSE;
+    if (!p_gtk_tree_model_get_iter_from_string(chooser->filter, &shown, path))
+        return;
+    p_gtk_tree_model_filter_convert_iter_to_child_iter(reinterpret_cast<GtkTreeModelFilter *>(chooser->filter),
+                                                       &item, &shown);
+    p_gtk_tree_model_get(reinterpret_cast<GtkTreeModel *>(chooser->store), &item, COLUMN_TICKED, &ticked, -1);
+    p_gtk_list_store_set(chooser->store, &item, COLUMN_TICKED, !ticked, -1);
+}
+
+static void listChooserResponse(GtkDialog *dialog, gint response, gpointer data)
+{
+    ListChooser     *chooser = static_cast<ListChooser *>(data);
+    std::vector<int> indices;
+    GtkTreeModel    *store   = reinterpret_cast<GtkTreeModel *>(chooser->store);
+    GtkTreeIter      iter;
+    for (bool more = (response == GTK_RESPONSE_OK) && p_gtk_tree_model_get_iter_first(store, &iter); more;
+         more = p_gtk_tree_model_iter_next(store, &iter))
+    {
+        gboolean ticked = FALSE;
+        int      index  = -1;
+        p_gtk_tree_model_get(store, &iter, COLUMN_TICKED, &ticked, COLUMN_INDEX, &index, -1);
+        if (ticked)
+            indices.push_back(index);
+    }
+    // None ticked: the one picked
     GtkTreeModel *model = nullptr;
-    if ((response == GTK_RESPONSE_OK) &&
+    if ((response == GTK_RESPONSE_OK) && indices.empty() &&
         p_gtk_tree_selection_get_selected(p_gtk_tree_view_get_selection(reinterpret_cast<GtkTreeView *>(chooser->view)),
                                           &model, &iter))
+    {
+        int index = -1;
         p_gtk_tree_model_get(model, &iter, COLUMN_INDEX, &index, -1);
-    std::function<void(int)> chosen = std::move(chooser->chosen);
+        if (index >= 0)
+            indices.push_back(index);
+    }
+    std::function<void(const std::vector<int> &)> chosen = std::move(chooser->chosen);
     p_gtk_widget_destroy(reinterpret_cast<GtkWidget *>(dialog));
-    if (index >= 0)
-        chosen(index);
+    if (!indices.empty())
+        chosen(indices);
 }
 
 static void deleteListChooser(gpointer data)
 {
-    delete static_cast<ListChooser *>(data);
+    ListChooser *chooser = static_cast<ListChooser *>(data);
+    if (chooser->store)
+        p_g_object_unref(chooser->store);
+    delete chooser;
 }
 
 bool chooseFromList(const std::string &title, const std::string &prompt, const std::vector<std::string> &labels,
-                    std::function<void(int index)> chosen)
+                    std::function<void(const std::vector<int> &indices)> chosen)
 {
     if (!g_pidginUi || !g_chooser)
         return false;
@@ -3444,19 +3486,26 @@ bool chooseFromList(const std::string &title, const std::string &prompt, const s
     // Let go with the dialog
     p_g_object_set_data_full(reinterpret_cast<GObject *>(dialog), "tdlib-purple-chooser", chooser, deleteListChooser);
 
-    GtkListStore *store = p_gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_INT);
+    // Kept with the chooser, for the ticks of the items not shown
+    GtkListStore *store = p_gtk_list_store_new(3, G_TYPE_STRING, G_TYPE_INT, G_TYPE_BOOLEAN);
     for (size_t i = 0; i < labels.size(); i++) {
         GtkTreeIter iter;
         p_gtk_list_store_append(store, &iter);
-        p_gtk_list_store_set(store, &iter, COLUMN_LABEL, labels[i].c_str(), COLUMN_INDEX, int(i), -1);
+        p_gtk_list_store_set(store, &iter, COLUMN_LABEL, labels[i].c_str(), COLUMN_INDEX, int(i),
+                             COLUMN_TICKED, FALSE, -1);
     }
+    chooser->store  = store;
     chooser->filter = p_gtk_tree_model_filter_new(reinterpret_cast<GtkTreeModel *>(store), nullptr);
-    p_g_object_unref(store);
     p_gtk_tree_model_filter_set_visible_func(reinterpret_cast<GtkTreeModelFilter *>(chooser->filter),
                                              listItemVisible, chooser, nullptr);
     chooser->view = p_gtk_tree_view_new_with_model(chooser->filter);
     p_g_object_unref(chooser->filter);
     p_gtk_tree_view_set_headers_visible(reinterpret_cast<GtkTreeView *>(chooser->view), FALSE);
+    GtkCellRenderer *toggle = p_gtk_cell_renderer_toggle_new();
+    p_g_signal_connect_data(toggle, "toggled", G_CALLBACK(listItemToggled), chooser, nullptr, GConnectFlags(0));
+    p_gtk_tree_view_append_column(reinterpret_cast<GtkTreeView *>(chooser->view),
+                                  p_gtk_tree_view_column_new_with_attributes("", toggle, "active", COLUMN_TICKED,
+                                                                             nullptr));
     p_gtk_tree_view_append_column(reinterpret_cast<GtkTreeView *>(chooser->view),
                                   p_gtk_tree_view_column_new_with_attributes("", p_gtk_cell_renderer_text_new(),
                                                                              "text", COLUMN_LABEL, nullptr));
@@ -3489,7 +3538,7 @@ void pidginUiLoad(PurplePlugin *plugin)
 }
 
 bool chooseFromList(const std::string &title, const std::string &prompt, const std::vector<std::string> &labels,
-                    std::function<void(int index)> chosen)
+                    std::function<void(const std::vector<int> &indices)> chosen)
 {
     return false;
 }

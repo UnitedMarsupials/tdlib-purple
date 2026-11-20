@@ -1826,11 +1826,16 @@ struct ListField {
 };
 }
 static ListField *g_listField       = nullptr;
-static int        g_requestListChoice = -1;
+static std::vector<int> g_requestListChoices;
 
 extern "C++" void setRequestListChoice(int index)
 {
-    g_requestListChoice = index;
+    g_requestListChoices = {index};
+}
+
+extern "C++" void setRequestListChoices(std::vector<int> indices)
+{
+    g_requestListChoices = std::move(indices);
 }
 
 void *purple_request_fields(void *handle, const char *title, const char *primary,
@@ -1840,12 +1845,15 @@ void *purple_request_fields(void *handle, const char *title, const char *primary
 	PurpleAccount *account, const char *who, PurpleConversation *conv,
 	void *user_data)
 {
-    ListField *list   = g_listField;
-    int        choice = g_requestListChoice;
-    g_listField         = nullptr;
-    g_requestListChoice = -1;
-    if (list && ok_cb && (choice >= 0) && (static_cast<size_t>(choice) < list->items.size())) {
-        list->selected = g_list_append(NULL, const_cast<char *>(list->items[choice].first.c_str()));
+    ListField       *list    = g_listField;
+    std::vector<int> choices = std::move(g_requestListChoices);
+    g_listField = nullptr;
+    g_requestListChoices.clear();
+    if (list)
+        for (int choice: choices)
+            if ((choice >= 0) && (static_cast<size_t>(choice) < list->items.size()))
+                list->selected = g_list_append(list->selected, const_cast<char *>(list->items[choice].first.c_str()));
+    if (list && ok_cb && list->selected) {
         g_listField    = list;
         reinterpret_cast<PurpleRequestFieldsCb>(ok_cb)(user_data, fields);
         g_listField    = nullptr;
@@ -1870,6 +1878,10 @@ void purple_request_field_list_add(PurpleRequestField *field, const char *item, 
     // As libpurple, which takes no item without data
     if (field && item && data)
         reinterpret_cast<ListField *>(field)->items.emplace_back(item, data);
+}
+
+void purple_request_field_list_set_multi_select(PurpleRequestField *field, gboolean multi_select)
+{
 }
 
 GList *purple_request_field_list_get_selected(const PurpleRequestField *field)
