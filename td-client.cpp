@@ -2591,6 +2591,17 @@ bool PurpleTdClient::fillConversation(PurpleConversation *conv)
     return fillChat(m_data, getId(*chat));
 }
 
+void PurpleTdClient::showFirstUnread(PurpleConversation *conv)
+{
+    // Not again later, if the chat is busy: being filled already, or its history fetched
+    const td::td_api::chat *chat = m_chatListReady ? findConversationChat(m_data, conv) : nullptr;
+    if (!chat || (chat->unread_count_ <= 0))
+        return;
+    purple_debug_misc(config::pluginId, "Chat %" G_GINT64_FORMAT " shown with %d unread: filling it anew\n",
+                      getId(*chat).value(), chat->unread_count_);
+    fillConversation(conv);
+}
+
 static bool isLeavingOf(const td::td_api::message &message, int64_t userId)
 {
     return userId && message.content_ &&
