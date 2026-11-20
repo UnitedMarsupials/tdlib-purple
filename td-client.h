@@ -68,8 +68,11 @@ public:
     // A Telegram link, such as tg://resolve?domain=...&post=..., to a chat or a message in it:
     // its tab is presented, at the message; what cannot be followed is told in a dialog
     void openLink(const std::string &link);
-    // Its tab presented, at the message if valid, or tried again later while the chat is busy
-    void showLinkedChat(const std::string &link, ChatId chatId, MessageId messageId, unsigned tries = 0);
+    // Its tab presented, at the message if valid, or tried again later while the chat is busy; the
+    // link numbered as it was handed over, to be given up for a later one
+    void showLinkedChat(const std::string &link, unsigned serial, ChatId chatId, MessageId messageId,
+                        unsigned tries = 0);
+    bool isLatestLink(unsigned serial);
     void createGroup(const char *name, int type, const std::vector<std::string> &basicGroupMembers);
     BasicGroupMembership getBasicGroupMembership(const char *purpleChatName);
     void leaveGroup(const std::string &purpleChatName, bool deleteSupergroup);
@@ -245,9 +248,10 @@ private:
     void       lookUpChat(ChatId chatId, const std::string &chatName);
     void       chatLookedUp(ChatId chatId, const std::string &chatName, td::td_api::object_ptr<td::td_api::Object> object,
                             bool byName);
-    void       linkTypeResponse(const std::string &link, td::td_api::object_ptr<td::td_api::Object> object);
-    void       publicChatFound(const std::string &link, td::td_api::object_ptr<td::td_api::Object> object);
-    void       messageLinkResponse(const std::string &link, td::td_api::object_ptr<td::td_api::Object> object);
+    void       linkTypeResponse(const std::string &link, unsigned serial, td::td_api::object_ptr<td::td_api::Object> object);
+    void       publicChatFound(const std::string &link, unsigned serial, td::td_api::object_ptr<td::td_api::Object> object);
+    void       messageLinkResponse(const std::string &link, unsigned serial,
+                                   td::td_api::object_ptr<td::td_api::Object> object);
     void       linkNotFollowed(const std::string &link, const std::string &reason);
     void       deleteSupergroupResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void       setGroupDescriptionResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);

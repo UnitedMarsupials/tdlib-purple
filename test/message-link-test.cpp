@@ -1035,3 +1035,21 @@ TEST_F(TelegramLinkTest, NotFollowed)
     tgl.verifyNoRequests();
     prpl.verifyNoEvents();
 }
+
+TEST_F(TelegramLinkTest, LaterLinkWins)
+{
+    loginWithOneContact();
+    // The first link's answer comes after the second was handed over: given up for that
+    ASSERT_TRUE(follow("tg", "//resolve", makeParams({{"domain", "first"}})));
+    uint64_t first = tgl.verifyRequest(getInternalLinkType("tg://resolve?domain=first"));
+    ASSERT_TRUE(follow("tg", "//resolve", makeParams({{"domain", "contact"}})));
+    uint64_t second = tgl.verifyRequest(getInternalLinkType("tg://resolve?domain=contact"));
+    auto linkType            = make_object<internalLinkTypePublicChat>();
+    linkType->chat_username_ = "first";
+    tgl.reply(first, std::move(linkType));
+    tgl.verifyNoRequests();
+    linkType                 = make_object<internalLinkTypePublicChat>();
+    linkType->chat_username_ = "contact";
+    tgl.reply(second, std::move(linkType));
+    tgl.verifyRequest(searchPublicChat("contact"));
+}
