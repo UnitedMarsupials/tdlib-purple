@@ -86,6 +86,7 @@ DEFINE_ID_CLASS(ChatId, int64_t)
     friend ChatId getChatId(const td::td_api::updateMessageInteractionInfo &update);
     friend ChatId getChatId(const td::td_api::updateMessageUnreadReactions &update);
     friend ChatId getChatId(const td::td_api::messageSenderChat &sender);
+    friend ChatId getChatId(const td::td_api::messageLinkInfo &info);
 };
 
 DEFINE_ID_CLASS(BasicGroupId, int64_t)
@@ -154,6 +155,7 @@ ChatId       getChatId(const td::td_api::updateDeleteMessages &update);
 ChatId       getChatId(const td::td_api::updateMessageInteractionInfo &update);
 ChatId       getChatId(const td::td_api::updateMessageUnreadReactions &update);
 ChatId       getChatId(const td::td_api::messageSenderChat &sender);
+ChatId       getChatId(const td::td_api::messageLinkInfo &info);
 
 BasicGroupId getBasicGroupId(const td::td_api::updateBasicGroupFullInfo &update);
 BasicGroupId getBasicGroupId(const td::td_api::chatTypeBasicGroup &chatType);

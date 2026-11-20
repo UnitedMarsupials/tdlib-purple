@@ -19,6 +19,8 @@ void setUiInfoMissing(bool missing);
 void clearGroups();
 // Calls the handlers connected to a signal of libpurple's that passes nothing but their data
 void emitSignal(const char *signal);
+// As libpurple's purple_got_protocol_handler_uri does; whether a handler took it
+bool emitUriHandler(const char *proto, const char *cmd, GHashTable *params);
 
 };
 

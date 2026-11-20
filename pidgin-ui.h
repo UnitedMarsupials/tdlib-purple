@@ -110,6 +110,8 @@ void appendTabLine(PurpleConversation *conv, const std::string &html);
 
 // Whether Pidgin shows the conversation, so that it can be emptied and filled anew
 bool canRedrawConversation(PurpleConversation *conv);
+// The conversation brought to the front, its tab chosen in its window
+void presentConversation(PurpleConversation *conv);
 // A line at the end of the tab saying what is under way, with a turning character after it, until
 // stopped; in Pidgin only
 void startProgress(PurpleConversation *conv, const std::string &html);

@@ -229,6 +229,27 @@ Send a message, delete it, then close the chat's tab and open it again, or quit 
 Since: ours were logged before Telegram gave them their lasting ids, so the log could not tell
 which they were, and they came back as if never deleted.
 
+### H5. Telegram links
+
+With Pidgin running, hand it a link to a post of a channel, joined or not, as
+README.md shows with `dbus-send`; then one to a message of an open chat that
+its tab still shows, and one that it no longer does.
+
+* The chat's conversation comes up, its tab chosen in its window even while another was, at
+  the post, filled from it.
+* The tab still showing the message is scrolled to it; the other one is filled
+  anew from the message.
+* A link to something else, such as `tg://settings`, or to a channel that does
+  not exist, gets a dialog saying it cannot be followed.
+* A link to a post further back than Pidgin's "scrollback_lines" preference
+  holds gets a dialog saying so; a tab opened for it shows the latest messages,
+  from the first unread, and an open one is left as it was.
+* Two links followed one right after the other, the first to a chat whose tab
+  is just being opened, end up at the second.
+* So do two to an open tab, the first to a message it does not show, which
+  fills it anew, the second to one it shows: it ends at the second, not
+  scrolled back to the first once filled.
+
 ## Files and pictures
 
 ### F1. Pasting

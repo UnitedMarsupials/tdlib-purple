@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Features
+
+- **A Telegram link, such as `tg://resolve?domain=channel&post=12`, handed to libpurple over D-Bus, as a web browser's handler for such links can, opens its chat at that post.** TDLib tells what the link leads to: a chat, or a message in it, which the chat's conversation is opened at, filled from it if it does not show it; a channel or group not joined is shown too. Another kind of link, or one that leads nowhere, is told in a dialog. The first Telegram account connected follows it, or the one its `account` parameter names. README.md says how to hand links over.
+
 ### Fixes
 
 - **In Pidgin, a reaction picked from the menu of a message's picture is given, rather than the menu closing with nothing done.** Pidgin opens that menu as the right button is let go, which left GTK taking that button for the one to pick a submenu's item with, and handing a click of the left one on to the menu instead.

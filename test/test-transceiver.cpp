@@ -617,6 +617,16 @@ static void compare(const searchPublicChat &actual, const searchPublicChat &expe
     COMPARE(username_);
 }
 
+static void compare(const getInternalLinkType &actual, const getInternalLinkType &expected)
+{
+    COMPARE(link_);
+}
+
+static void compare(const getMessageLinkInfo &actual, const getMessageLinkInfo &expected)
+{
+    COMPARE(url_);
+}
+
 static void compare(const joinChat &actual, const joinChat &expected)
 {
     COMPARE(chat_id_);
@@ -805,6 +815,8 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(createChatInviteLink)
         C(getSupergroupMembers)
         C(searchPublicChat)
+        C(getInternalLinkType)
+        C(getMessageLinkInfo)
         C(joinChat)
         C(createNewSecretChat)
         C(getChatHistory)
