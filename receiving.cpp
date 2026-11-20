@@ -3476,6 +3476,9 @@ LinkedMessageShown showLinkedMessage(TdAccountData &account, const td::td_api::c
         if (!conv)
             return LinkedMessageShown::NoConversation;
     } else if (messageId.valid()) {
+        // Filled meanwhile, for a link before, the tab would be scrolled away from the message
+        if (!account.pendingMessages.isChatReady(chatId))
+            return LinkedMessageShown::Busy;
         if (findMessageMarks(conv, messageId).start)
             scrollToMessageLater(conv, messageId);
         else if (!startRedraw(account, chatId, messageId, false, EARLIER_BATCH, false, true))
