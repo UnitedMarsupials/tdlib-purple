@@ -39,6 +39,9 @@ public:
     // Fills a tab just opened with the chat's latest messages, as set; false if it is to be tried
     // again later, the chat being busy or not known yet
     bool fillConversation(PurpleConversation *conv);
+    // A tab come into view filled anew, as if just opened, if its chat has messages unread: the
+    // tab may have kept at its end, as Pidgin does, while they were written to it unseen
+    void showFirstUnread(PurpleConversation *conv);
     // Its title marked, or not, as its chat has reactions unread
     void markConversation(PurpleConversation *conv);
     // The tab's chat is open in TDLib while it is shown, for the updates of its messages that TDLib

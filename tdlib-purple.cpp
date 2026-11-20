@@ -1359,8 +1359,13 @@ static void topReached(PurpleConversation *conv, double filling)
 static void conversationShown(PurpleConversation *conv, bool shown)
 {
     PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
-    if (tdClient)
-        tdClient->conversationShown(conv, shown);
+    if (!tdClient)
+        return;
+    tdClient->conversationShown(conv, shown);
+    // Come into view as a tab opened anew would, at its first unread; one just opened is being
+    // filled already
+    if (shown && canRedrawConversation(conv) && !purple_conversation_get_data(conv, FILL_PENDING_KEY))
+        tdClient->showFirstUnread(conv);
 }
 
 // The messages on screen in a tab shown, in Pidgin

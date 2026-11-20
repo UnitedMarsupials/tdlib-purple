@@ -207,11 +207,23 @@ Open a chat with unread messages.
 
 * It is scrolled to the first unread, with read ones before it.
 
+Leave a chat's tab open, but not the one shown in its window, while more
+than a screenful of messages comes to it. Then switch to it.
+
+* It is filled anew and scrolled to the first unread, as it was when opened,
+  not left at its end.
+* A tab with nothing unread is left as it was, scrolled where it was.
+
 ### H2. Going back
 
 Scroll to the top of a conversation, or turn the mouse wheel up there.
 
 * Fifty more messages are added before the earliest, which stays where it was.
+
+In a chat short enough, go back to its first message. Then have the tab filled
+anew from its first unread, as in H1, and go back again.
+
+* The earlier messages come back, up to the first one again.
 
 ### H3. Links to messages
 
