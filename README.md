@@ -63,6 +63,30 @@ option, "Send a file as a picture, video or voice message when it is one",
 makes it go as what its content is instead, as a pasted one does, for
 front-ends whose only way of sending a file is a file transfer.
 
+### Telegram links
+
+A Telegram link, such as `tg://resolve?domain=channel&post=12`, which a web
+page's "View in Telegram" leads to, opens the post's chat, at that post, once
+handed to libpurple: TDLib, which knows every kind of Telegram link, tells
+what it leads to. Links to chats and to their messages are followed, those of
+channels and groups not joined too, which are then shown though not joined;
+any other kind, or one leading nowhere, is told in a dialog. The first
+Telegram account connected follows it, or the one an `account` parameter
+names, as in `tg://resolve?domain=channel&post=12&account=%2B15551234567`.
+
+Libpurple takes such links over D-Bus, in Pidgin or Finch, as a desktop's
+handler for `tg:` passes them:
+
+    dbus-send --session --type=method_call --dest=im.pidgin.purple.PurpleService \
+        /im/pidgin/purple/PurpleObject \
+        im.pidgin.purple.PurpleInterface.PurpleGotProtocolHandlerUri \
+        string:'tg://resolve?domain=channel&post=12'
+
+A web browser finds the handler of `tg:` links as the desktop's settings say:
+a `.desktop` file declaring `MimeType=x-scheme-handler/tg;`, whose `Exec`
+line passes `%u` on, made the handler with
+`xdg-mime default <file>.desktop x-scheme-handler/tg`.
+
 ## Debugging vs. privacy
 
 It's good to have debug log at hand whenever a glitch is observed, or to be able to reproduce the glitch with logging turned on. With pidgin, debug log can be turned on like this:

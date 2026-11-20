@@ -952,3 +952,82 @@ TEST_F(MessageLinkTest, ForwardToAnotherAccount)
     ));
     other->gc = NULL;
 }
+
+// Telegram's own links, handed to libpurple as by a web browser's handler for tg: links
+class TelegramLinkTest: public CommTest {
+protected:
+    const int64_t messageId = 12 << 20;
+
+    // As libpurple splits it
+    static GHashTable *makeParams(std::initializer_list<std::pair<const char *, const char *>> pairs)
+    {
+        GHashTable *params = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+        for (const auto &pair: pairs)
+            g_hash_table_insert(params, g_strdup(pair.first), g_strdup(pair.second));
+        return params;
+    }
+    bool follow(const char *proto, const char *cmd, GHashTable *params)
+    {
+        bool taken = emitUriHandler(proto, cmd, params);
+        if (params)
+            g_hash_table_destroy(params);
+        return taken;
+    }
+    object_ptr<messageLinkInfo> makeLinkInfo(int64_t chatId, object_ptr<message> message)
+    {
+        auto info = make_object<messageLinkInfo>();
+        info->is_public_ = true;
+        info->chat_id_   = chatId;
+        info->message_   = std::move(message);
+        return info;
+    }
+};
+
+TEST_F(TelegramLinkTest, Post)
+{
+    loginWithOneContact();
+    ASSERT_TRUE(follow("tg", "//resolve", makeParams({{"post", "12"}, {"domain", "contact"}})));
+    const char *link = "tg://resolve?domain=contact&post=12";
+    tgl.verifyRequest(getInternalLinkType(link));
+    tgl.reply(make_object<internalLinkTypeMessage>(link));
+    tgl.verifyRequest(getMessageLinkInfo(link));
+    tgl.reply(makeLinkInfo(chatIds[0], makeMessage(messageId, userIds[0], chatIds[0], false, 12345,
+                                                   makeTextMessage("text"))));
+    prpl.verifyEvents(NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+                      PresentConversationEvent(purpleUserName(0)));
+    tgl.verifyNoRequests();
+}
+
+TEST_F(TelegramLinkTest, Chat)
+{
+    loginWithOneContact();
+    // The account named, which is not passed to TDLib
+    ASSERT_TRUE(follow("tg", "//resolve",
+                       makeParams({{"domain", "contact"}, {"account", ("%2B" + selfPhoneNumber).c_str()}})));
+    tgl.verifyRequest(getInternalLinkType("tg://resolve?domain=contact"));
+    tgl.reply(make_object<internalLinkTypePublicChat>("contact", "", false));
+    tgl.verifyRequest(searchPublicChat("contact"));
+    tgl.reply(std::move(standardPrivateChat(0)->chat_));
+    prpl.verifyEvents(NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+                      PresentConversationEvent(purpleUserName(0)));
+}
+
+TEST_F(TelegramLinkTest, NotFollowed)
+{
+    loginWithOneContact();
+    // Not ours
+    ASSERT_FALSE(follow("xmpp", "romeo@example.net", nullptr));
+    // The account named is not connected
+    ASSERT_TRUE(follow("tg", "//resolve", makeParams({{"domain", "contact"}, {"account", "%2B999"}})));
+    tgl.verifyNoRequests();
+
+    // Not a Telegram link, as TDLib has it; nor one that leads to a chat
+    ASSERT_TRUE(follow("tg", "//nonsense", nullptr));
+    tgl.verifyRequest(getInternalLinkType("tg://nonsense"));
+    tgl.reply(make_object<error>(404, "Not Found"));
+    ASSERT_TRUE(follow("tg", "//settings", nullptr));
+    tgl.verifyRequest(getInternalLinkType("tg://settings"));
+    tgl.reply(make_object<internalLinkTypeSettings>());
+    tgl.verifyNoRequests();
+    prpl.verifyNoEvents();
+}

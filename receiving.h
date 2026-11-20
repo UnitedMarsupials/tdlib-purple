@@ -96,8 +96,11 @@ bool getReactionTip(TdAccountData &account, PurpleConversation *conv, MessageId 
                     std::string &tip);
 // Fills the chat's tab anew, in Pidgin, with its messages from the first unread one, and some read
 // before it, as many as it can hold, scrolled to that one; false if the chat is busy, to be tried
-// again later
+// again later; or, if it was opened for a link to a message, from that one
 bool fillChat(TdAccountData &account, ChatId chatId);
+// Presents the chat's tab, opening it if need be, scrolled to the message, if one is given, or
+// filled anew from it if the tab does not show it; false if the chat has no tab
+bool showLinkedMessage(TdAccountData &account, const td::td_api::chat &chat, MessageId messageId);
 // The chat a conversation is of, if known
 const td::td_api::chat *findConversationChat(TdAccountData &account, PurpleConversation *conv);
 void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messageId,

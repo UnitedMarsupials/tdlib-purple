@@ -229,6 +229,18 @@ Send a message, delete it, then close the chat's tab and open it again, or quit 
 Since: ours were logged before Telegram gave them their lasting ids, so the log could not tell
 which they were, and they came back as if never deleted.
 
+### H5. Telegram links
+
+With Pidgin running, hand it a link to a post of a channel, joined or not, as
+README.md shows with `dbus-send`; then one to a message of an open chat that
+its tab still shows, and one that it no longer does.
+
+* The chat's conversation comes up, at the post, filled from it.
+* The tab still showing the message is scrolled to it; the other one is filled
+  anew from the message.
+* A link to something else, such as `tg://settings`, or to a channel that does
+  not exist, gets a dialog saying it cannot be followed.
+
 ## Files and pictures
 
 ### F1. Pasting

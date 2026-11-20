@@ -3421,9 +3421,44 @@ void showEarlierMessages(TdAccountData &account, PurpleConversation *conv, doubl
     startRedraw(account, getId(*chat), earliest, false, extra, filling > 0);
 }
 
+// Chats whose tabs, being opened for a link to a message, are to be filled from that one
+static std::map<int64_t, MessageId> g_linkedMessages;
+
 bool fillChat(TdAccountData &account, ChatId chatId)
 {
-    return startRedraw(account, chatId, MessageId::invalid, true, EARLIER_BATCH);
+    auto linked = g_linkedMessages.find(chatId.value());
+    if (linked == g_linkedMessages.end())
+        return startRedraw(account, chatId, MessageId::invalid, true, EARLIER_BATCH);
+    if (!startRedraw(account, chatId, linked->second, false, EARLIER_BATCH))
+        return false;
+    g_linkedMessages.erase(linked);
+    return true;
+}
+
+bool showLinkedMessage(TdAccountData &account, const td::td_api::chat &chat, MessageId messageId)
+{
+    ChatId              chatId = getId(chat);
+    PurpleConversation *conv   = findMessageConversation(account, chat);
+    // A group chat's tab kept from an earlier connection is opened again, as if anew
+    bool open = conv && ((purple_conversation_get_type(conv) != PURPLE_CONV_TYPE_CHAT) ||
+                         !purple_conv_chat_has_left(purple_conversation_get_chat_data(conv)));
+    if (!open) {
+        // Filled as it is opened, from the message rather than the first unread
+        if (messageId.valid())
+            g_linkedMessages[chatId.value()] = messageId;
+        conv = getMessageConversation(account, chat);
+        if (!conv || !canRedrawConversation(conv))
+            g_linkedMessages.erase(chatId.value());
+        if (!conv)
+            return false;
+    } else if (messageId.valid()) {
+        if (findMessageMarks(conv, messageId).start)
+            scrollToMessageLater(conv, messageId);
+        else
+            startRedraw(account, chatId, messageId, false, EARLIER_BATCH);
+    }
+    purple_conversation_present(conv);
+    return true;
 }
 
 // While a message waits to be shown, its reactions would come before it, and are part of what it
