@@ -329,6 +329,11 @@ static void compare(const RoomlistInProgressEvent &actual, const RoomlistInProgr
     COMPARE(inprogress);
 }
 
+static void compare(const RequestPasswordEvent &actual, const RequestPasswordEvent &expected)
+{
+    COMPARE(account);
+}
+
 static void compare(const RoomlistAddRoomEvent &actual, const RoomlistAddRoomEvent &expected)
 {
     COMPARE(roomlist);
@@ -400,6 +405,7 @@ static void compareEvents(const PurpleEvent &actual, const PurpleEvent &expected
         C(XferWriteFile)
         C(RoomlistInProgress)
         C(RoomlistAddRoom)
+        C(RequestPassword)
         default:
             ASSERT_TRUE(false) << "Unsupported libpurple event " << actual.toString();
     };
@@ -553,6 +559,7 @@ std::string PurpleEvent::toString() const
     C(SetUserPhoto)
     C(RoomlistInProgress)
     C(RoomlistAddRoom)
+    C(RequestPassword)
     }
     return std::to_string((unsigned)type);
 #undef C

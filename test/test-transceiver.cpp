@@ -108,6 +108,12 @@ static void compare(const setTdlibParameters &actual, const setTdlibParameters &
 {
     COMPARE(database_directory_);
     COMPARE(use_secret_chats_);
+    COMPARE(database_encryption_key_);
+}
+
+static void compare(const setDatabaseEncryptionKey &actual, const setDatabaseEncryptionKey &expected)
+{
+    COMPARE(new_encryption_key_);
 }
 
 static void compare(const setOption &actual, const setOption &expected)
@@ -764,6 +770,7 @@ static void compareRequests(const Function &actual, const Function &expected,
 
     switch (actual.get_id()) {
         C(setTdlibParameters)
+        C(setDatabaseEncryptionKey)
         C(setAuthenticationPhoneNumber)
         C(setOption)
         case getContacts::ID: break;
@@ -1011,12 +1018,13 @@ object_ptr<supergroup> makeSupergroup(std::int64_t id_, object_ptr<ChatMemberSta
 
 // Only the fields compare(setTdlibParameters) looks at; see the note on makeUser above.
 object_ptr<setTdlibParameters> makeTdlibParameters(const std::string &databaseDirectory,
-                                                   bool useSecretChats)
+                                                   bool useSecretChats, const std::string &encryptionKey)
 {
     auto result = make_object<setTdlibParameters>();
 
-    result->database_directory_ = databaseDirectory;
-    result->use_secret_chats_   = useSecretChats;
+    result->database_directory_      = databaseDirectory;
+    result->use_secret_chats_        = useSecretChats;
+    result->database_encryption_key_ = encryptionKey;
 
     return result;
 }

@@ -10,6 +10,7 @@
 #include "media-variants.h"
 #include "pidgin-ui.h"
 #include "receiving.h"
+#include <glib/gstdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <algorithm>
@@ -477,13 +478,172 @@ static void stuff(td::td_api::setTdlibParameters &parameters)
     parameters.api_hash_ = s.c_str()+i+1;
 }
 
+namespace {
+// As many iterations as OWASP asks of PBKDF2-HMAC-SHA256, under a second here; salted by the
+// account, so that the same password makes another key for another account
+enum { DATABASE_KEY_ITERATIONS = 600000 };
+
+class DatabaseKeyThread: public AccountThread {
+public:
+    DatabaseKeyThread(PurpleAccount *account, PurpleTdClient *client, PurpleTdClient::DatabaseKeyUse use,
+                      const std::string &password)
+    : AccountThread(account), m_client(client), m_use(use), m_password(password),
+      m_salt(std::string("tdlib-purple database ") + purple_account_get_username(account)) {}
+private:
+    PurpleTdClient                 *m_client;
+    PurpleTdClient::DatabaseKeyUse  m_use;
+    std::string                     m_password;
+    std::string                     m_salt;
+    std::string                     m_key;
+
+    void run() override
+    {
+        m_key = deriveKey(m_password, m_salt, DATABASE_KEY_ITERATIONS);
+    }
+    // Not for another connection of the account's, since begun
+    void callback(PurpleTdClient *tdClient) override
+    {
+        if (tdClient == m_client)
+            tdClient->databaseKeyDerived(m_use, m_password, m_key);
+        delete this;
+    }
+};
+
+struct DatabasePasswordRequest {
+    std::string                    accountName;
+    PurpleTdClient                *client;
+    PurpleTdClient::DatabaseKeyUse use;
+};
+
+PurpleTdClient *findRequestClient(const DatabasePasswordRequest &request)
+{
+    PurpleAccount  *account = purple_accounts_find(request.accountName.c_str(), config::pluginId);
+    PurpleTdClient *client  = account ? getTdClient(account) : nullptr;
+    return (client == request.client) ? client : nullptr;
+}
+
+// Pidgin's own dialog, its password remembered if the box is ticked
+void accountPasswordEntered(DatabasePasswordRequest *data, PurpleRequestFields *fields)
+{
+    std::unique_ptr<DatabasePasswordRequest> request(data);
+    PurpleTdClient *client   = findRequestClient(*request);
+    const char     *password = purple_request_fields_get_string(fields, "password");
+    if (!client)
+        return;
+    if (!password || !*password) {
+        client->databasePasswordCancelled(request->use);
+        return;
+    }
+    PurpleAccount *account = purple_accounts_find(request->accountName.c_str(), config::pluginId);
+    if (purple_request_fields_get_bool(fields, "remember"))
+        purple_account_set_remember_password(account, TRUE);
+    purple_account_set_password(account, password);
+    client->databasePasswordEntered(request->use, password);
+}
+
+void databasePasswordEntered(DatabasePasswordRequest *data, PurpleRequestFields *fields)
+{
+    std::unique_ptr<DatabasePasswordRequest> request(data);
+    PurpleTdClient *client   = findRequestClient(*request);
+    const char     *password = purple_request_fields_get_string(fields, "password");
+    if (client) {
+        if (password && *password)
+            client->databasePasswordEntered(request->use, password);
+        else
+            client->databasePasswordCancelled(request->use);
+    }
+}
+
+void databasePasswordCancelled(DatabasePasswordRequest *data, PurpleRequestFields *)
+{
+    std::unique_ptr<DatabasePasswordRequest> request(data);
+    PurpleTdClient *client = findRequestClient(*request);
+    if (client)
+        client->databasePasswordCancelled(request->use);
+}
+}
+
+// Unencrypted, unless the account's settings say to encrypt it, with the account's password,
+// which is asked for if Pidgin does not have it
 void PurpleTdClient::sendTdlibParameters()
 {
+    m_passwordKey.clear();
+    if (!purple_account_get_bool(m_account, AccountOptions::EncryptDatabase, AccountOptions::EncryptDatabaseDefault)) {
+        openDatabase(std::string(), DatabaseOpening::Plain);
+        return;
+    }
+    const char *password = purple_account_get_password(m_account);
+    if (password && *password)
+        databasePasswordEntered(DatabaseKeyUse::Open, password);
+    else {
+        purple_debug_misc(config::pluginId, "Asking for the password of the database\n");
+        purple_account_request_password(m_account, G_CALLBACK(accountPasswordEntered),
+                                        G_CALLBACK(::databasePasswordCancelled),
+                                        new DatabasePasswordRequest{purple_account_get_username(m_account), this,
+                                                                    DatabaseKeyUse::Open});
+    }
+}
+
+void PurpleTdClient::databasePasswordEntered(DatabaseKeyUse use, const std::string &password)
+{
+    (new DatabaseKeyThread(m_account, this, use, password))->startThread();
+}
+
+void PurpleTdClient::databaseKeyDerived(DatabaseKeyUse use, const std::string &password, const std::string &key)
+{
+    switch (use) {
+    case DatabaseKeyUse::Open:
+        m_passwordKey = key;
+        openDatabase(key, DatabaseOpening::Password);
+        break;
+    case DatabaseKeyUse::Confirm:
+        if (key == m_passwordKey)
+            setDatabaseKey(key, std::string(), true);
+        else
+            // TRANSLATOR: Error dialog, title
+            purple_notify_error(purple_account_get_connection(m_account), _("Database not encrypted with the password"),
+                                // TRANSLATOR: Error dialog, primary content
+                                _("The password typed again is not the account's"),
+                                // TRANSLATOR: Error dialog, secondary content
+                                _("The account's local database is left as it was until the account connects again."));
+        m_passwordKey.clear();
+        break;
+    case DatabaseKeyUse::Decrypt:
+        openDatabase(key, DatabaseOpening::Decrypt);
+        break;
+    case DatabaseKeyUse::Change:
+        setDatabaseKey(key, password, true);
+        break;
+    }
+}
+
+void PurpleTdClient::databasePasswordCancelled(DatabaseKeyUse use)
+{
+    switch (use) {
+    case DatabaseKeyUse::Open:
+    case DatabaseKeyUse::Decrypt:
+        purple_connection_error_reason(purple_account_get_connection(m_account),
+                                       PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED,
+                                       // TRANSLATOR: Connection error message
+                                       _("The local database cannot be opened without its password"));
+        break;
+    case DatabaseKeyUse::Confirm:
+        m_passwordKey.clear();
+        break;
+    case DatabaseKeyUse::Change:
+        break;
+    }
+}
+
+void PurpleTdClient::openDatabase(const std::string &key, DatabaseOpening opening)
+{
+    m_databaseOpening = opening;
     auto parameters = td::td_api::make_object<td::td_api::setTdlibParameters>();
     const char *username = purple_account_get_username(m_account);
     parameters->database_directory_ = getBaseDatabasePath() + G_DIR_SEPARATOR_S + username;
-    purple_debug_misc(config::pluginId, "Account %s using database directory %s\n",
-                      username, parameters->database_directory_.c_str());
+    purple_debug_misc(config::pluginId, "Account %s using database directory %s%s\n",
+                      username, parameters->database_directory_.c_str(), key.empty() ? "" : ", encrypted");
+    parameters->database_encryption_key_ = key;
     parameters->use_chat_info_database_ = true;
     parameters->use_message_database_ = true;
     parameters->use_secret_chats_ = (purple_account_get_bool(m_account, AccountOptions::EnableSecretChats,
@@ -497,10 +657,13 @@ void PurpleTdClient::sendTdlibParameters()
     parameters->system_version_ = "Unknown";
     parameters->application_version_ = "1.0";
     m_transceiver.sendQuery(std::move(parameters),
-                            &PurpleTdClient::authResponse);
+                            &PurpleTdClient::databaseOpenResponse);
 
     // enable_storage_optimizer is no longer a TDLib parameter but the use_storage_optimizer
     // option. TDLib queues it until the database is open.
+    if (m_storageOptimizerSet)
+        return;
+    m_storageOptimizerSet = true;
     bool useStorageOptimizer = (purple_account_get_bool(m_account, AccountOptions::KeepInlineDownloads,
                                                         AccountOptions::KeepInlineDownloadsDefault) == FALSE);
     auto value      = td::td_api::make_object<td::td_api::optionValueBoolean>();
@@ -509,6 +672,180 @@ void PurpleTdClient::sendTdlibParameters()
     option->name_   = "use_storage_optimizer";
     option->value_  = std::move(value);
     m_transceiver.sendQuery(std::move(option), nullptr);
+}
+
+// TDLib, told the wrong key, waits for the parameters again: tried, then, as it may have been
+// opened before. Only one typed twice is a database encrypted or its key changed with, never one
+// typed once, which a slip of a finger would lock the database with.
+void PurpleTdClient::databaseOpenResponse(uint64_t requestId, TdObjectPtr object)
+{
+    if (object && (object->get_id() == td::td_api::ok::ID)) {
+        purple_debug_misc(config::pluginId, "Database opened\n");
+        if (m_databaseOpening == DatabaseOpening::Password)
+            checkMessagesEncrypted();
+        if (m_databaseOpening == DatabaseOpening::PlainForPassword)
+            askDatabasePassword(DatabaseKeyUse::Confirm);
+        else if (m_databaseOpening == DatabaseOpening::Decrypt)
+            setDatabaseKey(std::string(), std::string(), false);
+        return;
+    }
+    if (!object || (object->get_id() != td::td_api::error::ID) ||
+        (static_cast<const td::td_api::error &>(*object).code_ != 401))
+    {
+        notifyAuthError(object);
+        return;
+    }
+    purple_debug_misc(config::pluginId, "Wrong database key\n");
+    switch (m_databaseOpening) {
+    case DatabaseOpening::Plain:
+        askDatabasePassword(DatabaseKeyUse::Decrypt);
+        break;
+    case DatabaseOpening::Password:
+        openDatabase(std::string(), DatabaseOpening::PlainForPassword);
+        break;
+    case DatabaseOpening::PlainForPassword:
+    case DatabaseOpening::Decrypt:
+        wrongDatabasePassword();
+        break;
+    }
+}
+
+// Not kept: asked for again at the next connection
+void PurpleTdClient::wrongDatabasePassword()
+{
+    m_passwordKey.clear();
+    if (m_databaseOpening == DatabaseOpening::PlainForPassword)
+        purple_account_set_password(m_account, NULL);
+    purple_connection_error_reason(purple_account_get_connection(m_account),
+                                   PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED,
+                                   // TRANSLATOR: Connection error message
+                                   _("The password does not open the account's local database"));
+}
+
+void PurpleTdClient::askDatabasePassword(DatabaseKeyUse use)
+{
+    PurpleRequestFields     *fields = purple_request_fields_new();
+    PurpleRequestFieldGroup *group  = purple_request_field_group_new(NULL);
+    // TRANSLATOR: Database password dialog, label of the field
+    PurpleRequestField      *field  = purple_request_field_string_new("password", _("Password"), NULL, FALSE);
+    purple_request_field_string_set_masked(field, TRUE);
+    purple_request_field_set_required(field, TRUE);
+    purple_request_field_group_add_field(group, field);
+    purple_request_fields_add_group(fields, group);
+    std::string primary, secondary;
+    if (use == DatabaseKeyUse::Confirm) {
+        // TRANSLATOR: Database password dialog, primary content
+        primary   = _("Encrypt the local database?");
+        // TRANSLATOR: Database password dialog, secondary content
+        secondary = _("The account's local database is encrypted only with the key built into TDLib, which opens it for anyone who has its files. Type the account's password again to encrypt it with that.");
+    } else {
+        // TRANSLATOR: Database password dialog, primary content
+        primary   = _("The local database is encrypted");
+        // TRANSLATOR: Database password dialog, secondary content
+        secondary = _("Encryption with the password is off in the account's settings. Type the password the database is encrypted with, to go back to the key built into TDLib.");
+    }
+    secondary += "\n\n" + getDatabaseRewriteWarning();
+    // TRANSLATOR: Database password dialog, title
+    purple_request_fields(purple_account_get_connection(m_account), _("Database password"), primary.c_str(),
+                          secondary.c_str(), fields,
+                          // TRANSLATOR: Database password dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
+                          _("_OK"), G_CALLBACK(::databasePasswordEntered),
+                          // TRANSLATOR: Database password dialog, alternative is "_OK". The underscore marks accelerator keys, they must be different!
+                          _("_Cancel"), G_CALLBACK(::databasePasswordCancelled),
+                          m_account, NULL, NULL,
+                          new DatabasePasswordRequest{purple_account_get_username(m_account), this, use});
+}
+
+// TDLib encrypts the binlog itself, but leaves the messages' database to SQLCipher
+bool PurpleTdClient::checkMessagesEncrypted()
+{
+    std::string path = getBaseDatabasePath() + G_DIR_SEPARATOR_S + purple_account_get_username(m_account) +
+                       G_DIR_SEPARATOR_S + "db.sqlite";
+    if (!isPlainSqliteFile(path))
+        return true;
+    purple_debug_warning(config::pluginId, "%s is not encrypted: TDLib uses SQLite, not SQLCipher\n", path.c_str());
+    // TRANSLATOR: Warning dialog, title
+    purple_notify_warning(purple_account_get_connection(m_account), _("Database password"),
+                          // TRANSLATOR: Warning dialog, primary content
+                          _("The messages of the local database are not encrypted"),
+                          // TRANSLATOR: Warning dialog, secondary content
+                          _("TDLib is built here with plain SQLite rather than SQLCipher, which ignores the password: only the record of the login is encrypted. The messages, chats and contacts stay readable to whoever can read the account's files."));
+    return false;
+}
+
+// Its own files, not the downloaded ones under it, which are not encrypted
+std::string PurpleTdClient::getDatabaseRewriteWarning()
+{
+    std::string directory = getBaseDatabasePath() + G_DIR_SEPARATOR_S + purple_account_get_username(m_account);
+    guint64     size      = 0;
+    GDir       *dir       = g_dir_open(directory.c_str(), 0, NULL);
+    for (const char *name; dir && (name = g_dir_read_name(dir)); ) {
+        std::string path = directory + G_DIR_SEPARATOR_S + name;
+        GStatBuf    st;
+        if (!g_stat(path.c_str(), &st) && S_ISREG(st.st_mode))
+            size += st.st_size;
+    }
+    if (dir)
+        g_dir_close(dir);
+    char       *shown   = g_format_size(size);
+    // TRANSLATOR: Database password dialog, secondary content. Argument is a size, as "12.9 GB".
+    std::string warning = formatMessage(_("This rewrites all of the account's local database, {}, which takes a long time if it is big: minutes, or hours. Meanwhile the account does nothing else. Do not quit the program, nor turn the computer off, until told it is done."),
+                                        std::string(shown));
+    g_free(shown);
+    return warning;
+}
+
+// Re-encrypted, or decrypted, by TDLib; a password changed is the account's then
+void PurpleTdClient::setDatabaseKey(const std::string &key, const std::string &password, bool encrypted)
+{
+    purple_debug_misc(config::pluginId, "%s the database\n", encrypted ? "Encrypting" : "Decrypting");
+    PurpleConnection *gc = purple_account_get_connection(m_account);
+    // TRANSLATOR: Information dialog, title
+    m_rekeyNotice = purple_notify_message(gc, PURPLE_NOTIFY_MSG_INFO, _("Database password"),
+                                          encrypted ? _("Encrypting the local database...")
+                                                    // TRANSLATOR: Information dialog, primary content
+                                                    : _("Encrypting the local database with the key built into TDLib..."),
+                                          // TRANSLATOR: Information dialog, secondary content
+                                          _("Do not quit the program, nor turn the computer off, until told it is done."),
+                                          NULL, NULL);
+    m_transceiver.sendQuery(td::td_api::make_object<td::td_api::setDatabaseEncryptionKey>(key),
+        [this, password, encrypted](uint64_t, TdObjectPtr object) {
+            PurpleConnection *gc = purple_account_get_connection(m_account);
+            if (m_rekeyNotice)
+                purple_notify_close(PURPLE_NOTIFY_MESSAGE, m_rekeyNotice);
+            m_rekeyNotice = nullptr;
+            if (!object || (object->get_id() != td::td_api::ok::ID)) {
+                // TRANSLATOR: Error dialog, title
+                purple_notify_error(gc, _("Database password"),
+                                    // TRANSLATOR: Error dialog, primary content
+                                    _("The local database's encryption could not be changed"),
+                                    getDisplayedError(object).c_str());
+                return;
+            }
+            if (!password.empty())
+                purple_account_set_password(m_account, password.c_str());
+            if (encrypted && !checkMessagesEncrypted())
+                return;
+            // TRANSLATOR: Information dialog, title
+            purple_notify_info(gc, _("Database password"),
+                               encrypted ? _("The local database is encrypted with the account's password")
+                                         // TRANSLATOR: Information dialog, primary content
+                                         : _("The local database is no longer encrypted with a password"),
+                               NULL);
+        });
+}
+
+void PurpleTdClient::changeDatabasePassword(const std::string &password)
+{
+    if (!purple_account_get_bool(m_account, AccountOptions::EncryptDatabase, AccountOptions::EncryptDatabaseDefault))
+        // TRANSLATOR: Error dialog, title
+        purple_notify_error(purple_account_get_connection(m_account), _("Database password"),
+                            // TRANSLATOR: Error dialog, primary content
+                            _("The local database is not encrypted with a password"),
+                            // TRANSLATOR: Error dialog, secondary content
+                            _("Encryption is turned on in the account's settings, and takes effect as it connects."));
+    else
+        databasePasswordEntered(DatabaseKeyUse::Change, password);
 }
 
 void PurpleTdClient::sendPhoneNumber()

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Features
+
+- **The local database of an account can be encrypted with the account's password, which Pidgin asks for at every connection unless told to remember it.** "Encrypt the local database with the password", in the account's settings, turns it on; the account's password is now optional, for it. Until now the database was encrypted with a key built into TDLib, which anyone with the files could open. An existing database is encrypted once the password is typed again to confirm it, and goes back to the built-in key when the option is turned off; "Change the database password..." encrypts it anew. Each rewrites the whole database, which takes long for a big one, and the dialogs say so. The password goes through PBKDF2 with 600,000 iterations before TDLib gets it, as TDLib takes its key for a strong one. Where TDLib is built with plain SQLite rather than SQLCipher, which leaves the messages unencrypted, a warning says so.
+
 ### Fixes
 
 - **In Pidgin, a reaction picked from the menu of a message's picture is given, rather than the menu closing with nothing done.** Pidgin opens that menu as the right button is let go, which left GTK taking that button for the one to pick a submenu's item with, and handing a click of the left one on to the menu instead.

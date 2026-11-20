@@ -167,4 +167,11 @@ protected:
 // where there is none such. GModule looks in every module loaded, on Windows as elsewhere.
 void *findFrontEndSymbol(const char *name);
 
+// PBKDF2-HMAC-SHA256 (RFC 8018), 32 bytes of it. TDLib takes the database's key as a strong one
+// already, deriving its own from it with only two iterations: a password is made into one first.
+std::string deriveKey(const std::string &password, const std::string &salt, unsigned iterations);
+// Whether the file is an SQLite database in the clear: TDLib built with plain SQLite rather than
+// SQLCipher ignores the key given for it. An encrypted one starts with random bytes instead.
+bool isPlainSqliteFile(const std::string &path);
+
 #endif
