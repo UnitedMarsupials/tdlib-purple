@@ -989,7 +989,9 @@ TEST_F(TelegramLinkTest, Post)
     ASSERT_TRUE(follow("tg", "//resolve", makeParams({{"post", "12"}, {"domain", "contact"}})));
     const char *link = "tg://resolve?domain=contact&post=12";
     tgl.verifyRequest(getInternalLinkType(link));
-    tgl.reply(make_object<internalLinkTypeMessage>(link));
+    auto linkType  = make_object<internalLinkTypeMessage>();
+    linkType->url_ = link;
+    tgl.reply(std::move(linkType));
     tgl.verifyRequest(getMessageLinkInfo(link));
     tgl.reply(makeLinkInfo(chatIds[0], makeMessage(messageId, userIds[0], chatIds[0], false, 12345,
                                                    makeTextMessage("text"))));
@@ -1005,7 +1007,9 @@ TEST_F(TelegramLinkTest, Chat)
     ASSERT_TRUE(follow("tg", "//resolve",
                        makeParams({{"domain", "contact"}, {"account", ("%2B" + selfPhoneNumber).c_str()}})));
     tgl.verifyRequest(getInternalLinkType("tg://resolve?domain=contact"));
-    tgl.reply(make_object<internalLinkTypePublicChat>("contact", "", false));
+    auto linkType            = make_object<internalLinkTypePublicChat>();
+    linkType->chat_username_ = "contact";
+    tgl.reply(std::move(linkType));
     tgl.verifyRequest(searchPublicChat("contact"));
     tgl.reply(std::move(standardPrivateChat(0)->chat_));
     prpl.verifyEvents(NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
@@ -1024,7 +1028,7 @@ TEST_F(TelegramLinkTest, NotFollowed)
     // Not a Telegram link, as TDLib has it; nor one that leads to a chat
     ASSERT_TRUE(follow("tg", "//nonsense", nullptr));
     tgl.verifyRequest(getInternalLinkType("tg://nonsense"));
-    tgl.reply(make_object<error>(404, "Not Found"));
+    tgl.reply(makeError(404, "Not Found"));
     ASSERT_TRUE(follow("tg", "//settings", nullptr));
     tgl.verifyRequest(getInternalLinkType("tg://settings"));
     tgl.reply(make_object<internalLinkTypeSettings>());

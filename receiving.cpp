@@ -3148,12 +3148,19 @@ struct Redraw {
     bool                                                    found  = false; // the earliest, or one read
     unsigned                                                beyond = 0; // found so far
     unsigned                                                limit;
+    bool                                                    linked = false; // from a message a link led to
     // Newest first, as TDLib gives them
     std::vector<td::td_api::object_ptr<td::td_api::message>> messages;
 };
 }
 
 static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw, MessageId from);
+static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earliest, bool opening,
+                        unsigned extra = 0, bool filling = false, bool linked = false);
+
+// Shown before the earliest message scrolled to, or before the first unread on opening a tab, at
+// least; a tab is filled with more if they still fit
+enum { EARLIER_BATCH = 50 };
 
 // Messages found too far back for their tab once, which they are no nearer to since
 static std::set<std::pair<int64_t, int64_t>> g_redrawTooFar;
@@ -3347,6 +3354,20 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
     std::vector<IncomingMessage> readyMessages;
     account.pendingMessages.setChatReady(redraw->chatId, readyMessages);
     showMessages(readyMessages, account);
+    // A tab ends at the latest message, and cannot reach so far back: one just opened for the link,
+    // still empty, is filled as it would be opened anyway; one showing messages is left as it is
+    if (redraw->linked) {
+        const td::td_api::chat *chat  = account.getChat(redraw->chatId);
+        PurpleConversation     *conv  = chat ? findMessageConversation(account, *chat) : nullptr;
+        bool                    empty = conv && !findFirstMessage(conv).valid();
+        // TRANSLATOR: Information dialog, primary content, after a link to a message was followed.
+        purple_notify_info(purple_account_get_connection(account.purpleAccount), config::pluginName,
+                           _("The message is further back than the conversation holds"),
+                           // TRANSLATOR: Information dialog, secondary content.
+                           empty ? _("It shows the latest messages instead, from the first unread one.") : NULL);
+        if (empty)
+            startRedraw(account, redraw->chatId, MessageId::invalid, true, EARLIER_BATCH);
+    }
 }
 
 static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw, MessageId from)
@@ -3365,7 +3386,7 @@ static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw
 
 // False if the chat is busy
 static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earliest, bool opening,
-                        unsigned extra = 0, bool filling = false)
+                        unsigned extra, bool filling, bool linked)
 {
     const td::td_api::chat *chat = account.getChat(chatId);
     PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
@@ -3387,6 +3408,7 @@ static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earlies
     redraw->readUpTo = getLastReadMessageId(*chat);
     redraw->extra    = extra;
     redraw->filling  = filling;
+    redraw->linked   = linked;
     redraw->limit    = getRedrawLimit();
     redrawRequest(account, redraw, MessageId::invalid);
     return true;
@@ -3397,10 +3419,6 @@ void redrawChat(TdAccountData &account, ChatId chatId, MessageId earliest)
     if (!g_redrawTooFar.count({chatId.value(), earliest.value()}))
         startRedraw(account, chatId, earliest, false);
 }
-
-// Shown before the earliest message scrolled to, or before the first unread on opening a tab, at
-// least; a tab is filled with more if they still fit
-enum { EARLIER_BATCH = 50 };
 
 void showEarlierMessages(TdAccountData &account, PurpleConversation *conv, double filling)
 {
@@ -3421,21 +3439,27 @@ void showEarlierMessages(TdAccountData &account, PurpleConversation *conv, doubl
     startRedraw(account, getId(*chat), earliest, false, extra, filling > 0);
 }
 
-// Chats whose tabs, being opened for a link to a message, are to be filled from that one
-static std::map<int64_t, MessageId> g_linkedMessages;
+// Chats whose tabs, being opened for a link to a message, are to be filled from that one; by
+// account, as every account has the same chat under the same id
+static std::map<std::pair<std::string, int64_t>, MessageId> g_linkedMessages;
+
+static std::pair<std::string, int64_t> getLinkedKey(TdAccountData &account, ChatId chatId)
+{
+    return {purple_account_get_username(account.purpleAccount), chatId.value()};
+}
 
 bool fillChat(TdAccountData &account, ChatId chatId)
 {
-    auto linked = g_linkedMessages.find(chatId.value());
+    auto linked = g_linkedMessages.find(getLinkedKey(account, chatId));
     if (linked == g_linkedMessages.end())
         return startRedraw(account, chatId, MessageId::invalid, true, EARLIER_BATCH);
-    if (!startRedraw(account, chatId, linked->second, false, EARLIER_BATCH))
+    if (!startRedraw(account, chatId, linked->second, false, EARLIER_BATCH, false, true))
         return false;
     g_linkedMessages.erase(linked);
     return true;
 }
 
-bool showLinkedMessage(TdAccountData &account, const td::td_api::chat &chat, MessageId messageId)
+LinkedMessageShown showLinkedMessage(TdAccountData &account, const td::td_api::chat &chat, MessageId messageId)
 {
     ChatId              chatId = getId(chat);
     PurpleConversation *conv   = findMessageConversation(account, chat);
@@ -3445,20 +3469,20 @@ bool showLinkedMessage(TdAccountData &account, const td::td_api::chat &chat, Mes
     if (!open) {
         // Filled as it is opened, from the message rather than the first unread
         if (messageId.valid())
-            g_linkedMessages[chatId.value()] = messageId;
+            g_linkedMessages[getLinkedKey(account, chatId)] = messageId;
         conv = getMessageConversation(account, chat);
         if (!conv || !canRedrawConversation(conv))
-            g_linkedMessages.erase(chatId.value());
+            g_linkedMessages.erase(getLinkedKey(account, chatId));
         if (!conv)
-            return false;
+            return LinkedMessageShown::NoConversation;
     } else if (messageId.valid()) {
         if (findMessageMarks(conv, messageId).start)
             scrollToMessageLater(conv, messageId);
-        else
-            startRedraw(account, chatId, messageId, false, EARLIER_BATCH);
+        else if (!startRedraw(account, chatId, messageId, false, EARLIER_BATCH, false, true))
+            return LinkedMessageShown::Busy;
     }
     purple_conversation_present(conv);
-    return true;
+    return LinkedMessageShown::Shown;
 }
 
 // While a message waits to be shown, its reactions would come before it, and are part of what it

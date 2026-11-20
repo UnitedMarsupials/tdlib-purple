@@ -3482,7 +3482,9 @@ void PurpleTdClient::chatLookedUp(ChatId chatId, const std::string &chatName, td
 void PurpleTdClient::openLink(const std::string &link)
 {
     purple_debug_misc(config::pluginId, "Following link %s\n", link.c_str());
-    m_transceiver.sendQuery(td::td_api::make_object<td::td_api::getInternalLinkType>(link),
+    auto request = td::td_api::make_object<td::td_api::getInternalLinkType>();
+    request->link_ = link;
+    m_transceiver.sendQuery(std::move(request),
         [this, link](uint64_t, TdObjectPtr object) {
             linkTypeResponse(link, std::move(object));
         });
@@ -3492,18 +3494,20 @@ void PurpleTdClient::linkTypeResponse(const std::string &link, TdObjectPtr objec
 {
     switch (object ? object->get_id() : 0) {
     case td::td_api::internalLinkTypeMessage::ID: {
-        const std::string &url = static_cast<const td::td_api::internalLinkTypeMessage &>(*object).url_;
-        m_transceiver.sendQuery(td::td_api::make_object<td::td_api::getMessageLinkInfo>(url),
+        auto request  = td::td_api::make_object<td::td_api::getMessageLinkInfo>();
+        request->url_ = static_cast<const td::td_api::internalLinkTypeMessage &>(*object).url_;
+        m_transceiver.sendQuery(std::move(request),
             [this, link](uint64_t, TdObjectPtr object) {
                 messageLinkResponse(link, std::move(object));
             });
         break;
     }
     case td::td_api::internalLinkTypePublicChat::ID: {
-        const std::string &name = static_cast<const td::td_api::internalLinkTypePublicChat &>(*object).chat_username_;
-        m_transceiver.sendQuery(td::td_api::make_object<td::td_api::searchPublicChat>(name),
+        auto request       = td::td_api::make_object<td::td_api::searchPublicChat>();
+        request->username_ = static_cast<const td::td_api::internalLinkTypePublicChat &>(*object).chat_username_;
+        m_transceiver.sendQuery(std::move(request),
             [this, link](uint64_t, TdObjectPtr object) {
-                showLinkedChat(link, std::move(object));
+                publicChatFound(link, std::move(object));
             });
         break;
     }
@@ -3518,16 +3522,56 @@ void PurpleTdClient::linkTypeResponse(const std::string &link, TdObjectPtr objec
 }
 
 // TDLib tells of a chat it returns with updateNewChat first
-void PurpleTdClient::showLinkedChat(const std::string &link, TdObjectPtr object)
+void PurpleTdClient::publicChatFound(const std::string &link, TdObjectPtr object)
 {
     if (!object || (object->get_id() != td::td_api::chat::ID)) {
         linkNotFollowed(link, getDisplayedError(object));
         return;
     }
-    const td::td_api::chat *chat = m_data.getChat(getId(static_cast<const td::td_api::chat &>(*object)));
-    if (!chat || !showLinkedMessage(m_data, *chat, MessageId::invalid))
+    showLinkedChat(link, getId(static_cast<const td::td_api::chat &>(*object)), MessageId::invalid);
+}
+
+namespace {
+// A link to a message of a chat busy being filled or fetched, followed once it is not
+struct LinkRetry {
+    std::string accountName;
+    std::string link;
+    ChatId      chatId;
+    MessageId   messageId;
+    unsigned    tries;
+};
+}
+
+static gboolean retryLink(gpointer data)
+{
+    std::unique_ptr<LinkRetry> retry(static_cast<LinkRetry *>(data));
+    PurpleTdClient *client = PurpleTdClient::findConnected(retry->accountName.c_str());
+    if (client)
+        client->showLinkedChat(retry->link, retry->chatId, retry->messageId, retry->tries);
+    return G_SOURCE_REMOVE;
+}
+
+void PurpleTdClient::showLinkedChat(const std::string &link, ChatId chatId, MessageId messageId, unsigned tries)
+{
+    // As long as a tab just opened is waited for to be filled
+    enum { RETRY_MS = 1000, MAX_TRIES = 60 };
+    const td::td_api::chat *chat = m_data.getChat(chatId);
+    switch (chat ? showLinkedMessage(m_data, *chat, messageId) : LinkedMessageShown::NoConversation) {
+    case LinkedMessageShown::Shown:
+        break;
+    case LinkedMessageShown::Busy:
+        if (tries + 1 < MAX_TRIES)
+            g_timeout_add(RETRY_MS, retryLink,
+                          new LinkRetry{purple_account_get_username(m_account), link, chatId, messageId, tries + 1});
+        else
+            purple_debug_misc(config::pluginId, "Chat %" G_GINT64_FORMAT " still busy, link not followed\n",
+                              chatId.value());
+        break;
+    case LinkedMessageShown::NoConversation:
         // TRANSLATOR: Error dialog, secondary content, after a Telegram link was handed to Pidgin, as by a web browser.
         linkNotFollowed(link, _("The chat cannot be shown in a conversation."));
+        break;
+    }
 }
 
 void PurpleTdClient::messageLinkResponse(const std::string &link, TdObjectPtr object)
@@ -3536,14 +3580,14 @@ void PurpleTdClient::messageLinkResponse(const std::string &link, TdObjectPtr ob
         linkNotFollowed(link, getDisplayedError(object));
         return;
     }
-    const auto             &info = static_cast<const td::td_api::messageLinkInfo &>(*object);
-    const td::td_api::chat *chat = m_data.getChat(getChatId(info));
-    if (!chat)
+    const auto &info = static_cast<const td::td_api::messageLinkInfo &>(*object);
+    if (!m_data.getChat(getChatId(info))) {
         // TRANSLATOR: Error dialog, secondary content, after a Telegram link was handed to Pidgin, as by a web browser.
         linkNotFollowed(link, _("The chat of the message is not accessible."));
-    else if (!showLinkedMessage(m_data, *chat, info.message_ ? getId(*info.message_) : MessageId::invalid))
-        linkNotFollowed(link, _("The chat cannot be shown in a conversation."));
-    else if (!info.message_)
+        return;
+    }
+    showLinkedChat(link, getChatId(info), info.message_ ? getId(*info.message_) : MessageId::invalid);
+    if (!info.message_)
         // TRANSLATOR: Information dialog, secondary content, after a Telegram link was handed to Pidgin and its chat shown.
         purple_notify_info(purple_account_get_connection(m_account), config::pluginName, link.c_str(),
                            _("The message is not found: it may have been deleted."));

@@ -240,6 +240,9 @@ its tab still shows, and one that it no longer does.
   anew from the message.
 * A link to something else, such as `tg://settings`, or to a channel that does
   not exist, gets a dialog saying it cannot be followed.
+* A link to a post further back than Pidgin's "scrollback_lines" preference
+  holds gets a dialog saying so; a tab opened for it shows the latest messages,
+  from the first unread, and an open one is left as it was.
 
 ## Files and pictures
 
