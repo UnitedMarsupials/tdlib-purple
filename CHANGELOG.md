@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Features
+
+- **A message can be forwarded to several buddies and chats at once, ticked in the dialog that asks where to.** In Pidgin's dialog, the ticks stay as what is typed narrows the list down, so that one can be found, ticked, and the next one looked for; with none ticked, the one picked is forwarded to, as before. Other front-ends' dialogs let several be chosen. A destination that cannot take the message is told of, and the others still get it.
+
 ### Fixes
 
 - **In Pidgin, a reaction picked from the menu of a message's picture is given, rather than the menu closing with nothing done.** Pidgin opens that menu as the right button is let go, which left GTK taking that button for the one to pick a submenu's item with, and handing a click of the left one on to the menu instead.

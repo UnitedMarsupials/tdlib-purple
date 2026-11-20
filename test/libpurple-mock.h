@@ -32,6 +32,7 @@ void setRequestInputSupported(bool supported);
 // Which item of its list the next request of fields is answered with, by its OK button; given up
 // at once otherwise, as by default
 void setRequestListChoice(int index);
+void setRequestListChoices(std::vector<int> indices);
 void clearConversationData();
 // What conversations have written while logging, as Pidgin would log it, oldest first; taken, so
 // that the next call has only what is written since
