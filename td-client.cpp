@@ -3539,14 +3539,21 @@ struct LinkRetry {
     ChatId      chatId;
     MessageId   messageId;
     unsigned    tries;
+    unsigned    serial;
 };
 }
+
+// The latest link each account followed: only that one is tried again, not one followed before it,
+// which would take the tab back from it
+static std::map<std::string, unsigned> g_latestLinks;
+static unsigned                        g_linkSerial = 0;
 
 static gboolean retryLink(gpointer data)
 {
     std::unique_ptr<LinkRetry> retry(static_cast<LinkRetry *>(data));
     PurpleTdClient *client = PurpleTdClient::findConnected(retry->accountName.c_str());
-    if (client)
+    auto            latest = g_latestLinks.find(retry->accountName);
+    if (client && (latest != g_latestLinks.end()) && (latest->second == retry->serial))
         client->showLinkedChat(retry->link, retry->chatId, retry->messageId, retry->tries);
     return G_SOURCE_REMOVE;
 }
@@ -3555,6 +3562,9 @@ void PurpleTdClient::showLinkedChat(const std::string &link, ChatId chatId, Mess
 {
     // As long as a tab just opened is waited for to be filled
     enum { RETRY_MS = 1000, MAX_TRIES = 60 };
+    std::string accountName = purple_account_get_username(m_account);
+    if (!tries)
+        g_latestLinks[accountName] = ++g_linkSerial;
     const td::td_api::chat *chat = m_data.getChat(chatId);
     switch (chat ? showLinkedMessage(m_data, *chat, messageId) : LinkedMessageShown::NoConversation) {
     case LinkedMessageShown::Shown:
@@ -3562,10 +3572,10 @@ void PurpleTdClient::showLinkedChat(const std::string &link, ChatId chatId, Mess
     case LinkedMessageShown::Busy:
         if (tries + 1 < MAX_TRIES)
             g_timeout_add(RETRY_MS, retryLink,
-                          new LinkRetry{purple_account_get_username(m_account), link, chatId, messageId, tries + 1});
+                          new LinkRetry{accountName, link, chatId, messageId, tries + 1, g_latestLinks[accountName]});
         else
-            purple_debug_misc(config::pluginId, "Chat %" G_GINT64_FORMAT " still busy, link not followed\n",
-                              chatId.value());
+            // TRANSLATOR: Error dialog, secondary content, after a Telegram link was handed to Pidgin, as by a web browser.
+            linkNotFollowed(link, _("The chat's messages were still being fetched. Try the link again later."));
         break;
     case LinkedMessageShown::NoConversation:
         // TRANSLATOR: Error dialog, secondary content, after a Telegram link was handed to Pidgin, as by a web browser.

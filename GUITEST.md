@@ -243,6 +243,8 @@ its tab still shows, and one that it no longer does.
 * A link to a post further back than Pidgin's "scrollback_lines" preference
   holds gets a dialog saying so; a tab opened for it shows the latest messages,
   from the first unread, and an open one is left as it was.
+* Two links followed one right after the other, the first to a chat whose tab
+  is just being opened, end up at the second.
 
 ## Files and pictures
 
