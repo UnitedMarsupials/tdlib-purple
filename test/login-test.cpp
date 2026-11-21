@@ -809,6 +809,10 @@ TEST_F(LoginThroughChatTest, LoggedAgainAfterDisconnectWhileWaiting)
     PurpleConversation *conv = telegramConversation();
     ASSERT_NE(nullptr, conv);
     EXPECT_FALSE(purple_conversation_is_logging(conv));
+    // Never saved, should the program quit meanwhile
+    PurpleBuddy *buddy = purple_find_buddy(account, authBuddy);
+    ASSERT_NE(nullptr, buddy);
+    EXPECT_TRUE(purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
 
     // The login given up, nothing is left to answer
     pluginInfo().close(connection);

@@ -554,9 +554,10 @@ void PurpleTdClient::promptAuthInputViaChat(AuthInput type, const std::string &m
 {
     m_authInputPending = type;
     // The buddy is added, until logged in, so that the prompt is shown as from "Telegram" rather
-    // than from an id
+    // than from an id; never saved, so that it is gone with the program at the latest
     if (!purple_find_buddy(m_account, AUTH_INPUT_BUDDY)) {
         PurpleBuddy *buddy = purple_buddy_new(m_account, AUTH_INPUT_BUDDY, AUTH_INPUT_ALIAS);
+        purple_blist_node_set_flags(PURPLE_BLIST_NODE(buddy), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
         purple_blist_add_buddy(buddy, NULL, NULL, NULL);
     }
     // The conversation is opened here, rather than by serv_got_im, so that its logging is off
