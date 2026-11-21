@@ -3263,6 +3263,8 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
                           " or the first unread %" G_GINT64_FORMAT ": %zu messages\n", redraw.chatId.value(),
                           redraw.earliest.value(), redraw.firstUnread.value(), redraw.messages.size());
         purple_conversation_clear_message_history(conv);
+        // Its first message is shown only if gone back to it again, below
+        g_historyComplete.erase(redraw.chatId.value());
         g_redrawnCounts[redraw.chatId.value()] = redraw.messages.size();
         std::vector<LoggedLine> lines = getLoggedLines(account, *chat, conv, redraw);
         // Newest first, as the messages, each going ahead of what is queued

@@ -4,6 +4,7 @@
 
 ### Fixes
 
+- **In Pidgin, switching to a chat's tab that was open but not shown while messages came takes the user to the first unread one, as opening the tab anew does, rather than to the end.** Pidgin keeps a tab at its end as messages are written to it, whether or not anyone looks; a tab coming into view with messages unread is now filled anew from the first unread, with read ones before it.
 - **In Pidgin, a reaction picked from the menu of a message's picture is given, rather than the menu closing with nothing done.** Pidgin opens that menu as the right button is let go, which left GTK taking that button for the one to pick a submenu's item with, and handing a click of the left one on to the menu instead.
 - **In Pidgin, a chat's tab in a focused window is known to be shown again, so that its messages are read as they come into view and its reactions are kept up to date.** 0.9.6 followed the focus by a hook that GLib refuses, on GObject's "notify", so that no tab was ever taken to be shown.
 - **The reaction counts of every post on screen in a channel are kept up to date, not only those of the latest.** Telegram polls the reactions of the last messages it was told were viewed, which went newest first, so that the oldest on screen were the ones kept.
