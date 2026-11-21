@@ -1053,11 +1053,11 @@ TEST_F(FileTransferTest, SendFileToNonContact)
     // Send ﬁle successfully
     pluginInfo().send_file(
         connection,
-        (userFirstNames[0] + " " + userLastNames[0]).c_str(),
+        purpleUserName(0).c_str(),
         PATH
     );
     prpl.verifyEvents(
-        XferAcceptedEvent(userFirstNames[0] + " " + userLastNames[0], PATH)
+        XferAcceptedEvent(purpleUserName(0), PATH)
     );
     tgl.verifyRequest(createPrivateChat(userIds[0], false));
 
@@ -1065,7 +1065,7 @@ TEST_F(FileTransferTest, SendFileToNonContact)
     tgl.reply(makeChat(
         chatIds[0],
         make_object<chatTypePrivate>(userIds[0]),
-        userFirstNames[0] + " " + userLastNames[0],
+        purpleUserName(0),
         nullptr, 0, 0, 0
     ));
     tgl.verifyRequest(preliminaryUploadFile(
@@ -1107,7 +1107,7 @@ TEST_F(FileTransferTest, SendFileToNonContact)
     ));
     ASSERT_EQ(0, pluginInfo().send_im(
         connection,
-        (userFirstNames[0] + " " + userLastNames[0]).c_str(),
+        purpleUserName(0).c_str(),
         "message2",
         PURPLE_MESSAGE_SEND
     ));
@@ -1137,11 +1137,11 @@ TEST_F(FileTransferTest, SendFileToNonContact_CreatePrivateChatFail)
 
     pluginInfo().send_file(
         connection,
-        (userFirstNames[1] + " " + userLastNames[1]).c_str(),
+        purpleUserName(1).c_str(),
         PATH
     );
     prpl.verifyEvents(
-        XferAcceptedEvent(userFirstNames[1] + " " + userLastNames[1], PATH)
+        XferAcceptedEvent(purpleUserName(1), PATH)
     );
     tgl.verifyRequest(createPrivateChat(userIds[1], false));
 
@@ -1161,11 +1161,11 @@ TEST_F(FileTransferTest, SendFileToNonContact_TurboCancel)
 
     pluginInfo().send_file(
         connection,
-        (userFirstNames[1] + " " + userLastNames[1]).c_str(),
+        purpleUserName(1).c_str(),
         PATH
     );
     prpl.verifyEvents(
-        XferAcceptedEvent(userFirstNames[1] + " " + userLastNames[1], PATH)
+        XferAcceptedEvent(purpleUserName(1), PATH)
     );
     tgl.verifyRequest(createPrivateChat(userIds[1], false));
 
@@ -1458,11 +1458,11 @@ TEST_F(FileTransferTest, ActiveUploadAtLogout_SendFileToNonContact_LogoutBeforeC
     // Send ﬁle successfully
     pluginInfo().send_file(
         connection,
-        (userFirstNames[0] + " " + userLastNames[0]).c_str(),
+        purpleUserName(0).c_str(),
         PATH
     );
     prpl.verifyEvents(
-        XferAcceptedEvent(userFirstNames[0] + " " + userLastNames[0], PATH)
+        XferAcceptedEvent(purpleUserName(0), PATH)
     );
     tgl.verifyRequest(createPrivateChat(userIds[0], false));
 

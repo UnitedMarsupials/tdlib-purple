@@ -66,14 +66,21 @@ std::vector<LoggedLine> parseLoggedLines(const std::string &content, time_t logS
             html.erase(html.size() - 4);
 
         LoggedLine line;
+        // At the line's end, past what is parsed by place below
+        time_t sentAt = 0;
+        takeLogMarker(html, &line.messageId, &sentAt);
         timeStart += sizeof(TIME_START) - 1;
         bool timeOfDay;
         if (!parseLoggedTime(html.substr(timeStart, timeEnd - timeStart), day, line.when, timeOfDay)) {
             purple_debug_warning(config::pluginId, "Logged line without a time: %s\n", html.c_str());
             continue;
         }
+        // A message of ours logged as it was sent, which may be well after it was written, says when
+        // that was; that time of day is no later one than those before it
+        if (sentAt)
+            line.when = sentAt;
         // Times of day go on past midnight
-        if (timeOfDay) {
+        else if (timeOfDay) {
             for (unsigned days = 0; (line.when + 60 < latest) && (days < 2); days++) {
                 day       = nextDay(day);
                 line.when = nextDay(line.when);
@@ -90,7 +97,6 @@ std::vector<LoggedLine> parseLoggedLines(const std::string &content, time_t logS
                 line.bodyStart = headerEnd + strlen("</b></span> ");
             }
         }
-        takeLogMarker(html, &line.messageId);
         unmarkLogOnly(html);
         line.html = std::move(html);
         lines.push_back(std::move(line));

@@ -39,6 +39,9 @@ public:
     // Fills a tab just opened with the chat's latest messages, as set; false if it is to be tried
     // again later, the chat being busy or not known yet
     bool fillConversation(PurpleConversation *conv);
+    // A tab come into view filled anew, as if just opened, if its chat has messages unread: the
+    // tab may have kept at its end, as Pidgin does, while they were written to it unseen
+    void showFirstUnread(PurpleConversation *conv);
     // Its title marked, or not, as its chat has reactions unread
     void markConversation(PurpleConversation *conv);
     // The tab's chat is open in TDLib while it is shown, for the updates of its messages that TDLib
@@ -50,6 +53,9 @@ public:
     void setIdle(bool idle);
     void showEarlierMessages(PurpleConversation *conv, double filling = 0);
     bool getReactionTip(PurpleConversation *conv, MessageId messageId, const std::string &key, std::string &tip);
+    // A reaction on a message's line clicked: ours taken back, or given if not; the paid one asked
+    // for, as from the message's menu
+    void reactionClicked(PurpleConversation *conv, MessageId messageId, const std::string &key);
     bool hasUnreadReactions(PurpleBuddy *buddy);
 
     void addContact(const std::string &purpleName, const std::string &alias, const std::string &groupName);
@@ -114,6 +120,8 @@ public:
     // False if the conversation's chat is not known
     bool showMessagePopup(PurpleConversation *conv, MessageId messageId, const OpenMenuRef &openMenu);
     void setMessageReaction(ChatId chatId, MessageId messageId, const std::string &emoji, bool chosen);
+    void setMessageReaction(ChatId chatId, MessageId messageId, td::td_api::object_ptr<td::td_api::ReactionType> type,
+                            const std::string &emoji, bool chosen);
     void askPaidReaction(ChatId chatId, MessageId messageId);
     // What the dialogs of a message's menu do, once answered
     void editMessage(ChatId chatId, MessageId messageId, td::td_api::object_ptr<td::td_api::formattedText> text,
@@ -155,6 +163,16 @@ public:
 
     // The client of an account by its name, if it is connected
     static PurpleTdClient *findConnected(const char *accountName);
+
+    // The local database's password: what one typed is for, and its key, made of it in a thread
+    // of its own; asked for again, or changed from the account's action
+    enum class DatabaseKeyUse { Open, Confirm, Decrypt, Change };
+    void databasePasswordEntered(DatabaseKeyUse use, const std::string &password);
+    void databasePasswordCancelled(DatabaseKeyUse use);
+    void databaseKeyDerived(DatabaseKeyUse use, const std::string &password, const std::string &key);
+    void changeDatabasePassword(const std::string &password);
+    // That encrypting the database anew rewrites it, which takes as long as it is big
+    std::string getDatabaseRewriteWarning();
 private:
     using TdObjectPtr   = td::td_api::object_ptr<td::td_api::Object>;
     using ResponseCb    = void (PurpleTdClient::*)(uint64_t requestId, TdObjectPtr object);
@@ -171,6 +189,16 @@ private:
     enum class AuthInput { None, Code, Password, DisplayName };
 
     void       sendTdlibParameters();
+    // How the database is being opened: as the account's settings say, unencrypted or with the
+    // account's password; or, that failing, unencrypted for the password, to encrypt it then, or
+    // with the password asked for to decrypt it
+    enum class DatabaseOpening { Plain, Password, PlainForPassword, Decrypt };
+    void       openDatabase(const std::string &key, DatabaseOpening opening);
+    void       databaseOpenResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
+    void       askDatabasePassword(DatabaseKeyUse use);
+    void       wrongDatabasePassword();
+    bool       checkMessagesEncrypted();
+    void       setDatabaseKey(const std::string &key, const std::string &password, bool encrypted);
     void       sendPhoneNumber();
     void       requestAuthCode(const td::td_api::authenticationCodeInfo *authCodeInfo);
     void       requestPassword(const td::td_api::authorizationStateWaitPassword &pwInfo);
@@ -275,6 +303,13 @@ private:
     TdTransceiver         m_transceiver;
     TdAccountData         m_data;
     int32_t               m_lastAuthState = 0;
+    DatabaseOpening       m_databaseOpening = DatabaseOpening::Plain;
+    // Made of the account's password, while the database is being opened for it
+    std::string           m_passwordKey;
+    bool                  m_storageOptimizerSet = false;
+    // Shown while TDLib encrypts the database anew, until it is done
+    void                 *m_rekeyNotice = nullptr;
+    bool                  m_rekeying    = false;
     std::vector<UserId>   m_usersForNewPrivateChats;
     // At first login every contact needs a private chat materialized. Doing this strictly
     // serially (one createPrivateChat per server round-trip) is very slow for large contact

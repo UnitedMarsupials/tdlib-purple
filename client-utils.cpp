@@ -235,13 +235,14 @@ std::string getSecretChatBuddyName(SecretChatId secretChatId)
 }
 
 std::vector<const td::td_api::user *> getUsersByPurpleName(const char *buddyName, TdAccountData &account,
-                                                           const char *action)
+                                                           const char *action, bool byDisplayName)
 {
     std::vector<const td::td_api::user *> result;
 
-    UserId userId = purpleBuddyNameToUserId(buddyName);
-    if (userId.valid()) {
-        const td::td_api::user *tdUser = account.getUser(userId);
+    // By id, as the plugin names users; nobody, if no user has it
+    if (isUserIdName(buddyName)) {
+        UserId                  userId = purpleBuddyNameToUserId(buddyName);
+        const td::td_api::user *tdUser = userId.valid() ? account.getUser(userId) : nullptr;
         if (tdUser != nullptr)
             result.push_back(tdUser);
         else if (action)
@@ -262,10 +263,10 @@ std::vector<const td::td_api::user *> getUsersByPurpleName(const char *buddyName
         else if (action)
             purple_debug_warning(config::pluginId, "Cannot %s: no Telegram user with phone number %s\n", action, buddyName);
     } else {
-        account.getUsersByDisplayName(buddyName, result);
-        // A conversation may also be addressed by Telegram @username rather than an "id<n>" buddy
-        // or the display name; fall back to a username match so those sends resolve instead of
-        // failing with "User not found".
+        // A display name, which anyone may choose, only where a person types it, as for a group;
+        // else, as there too failing that, a @username, which is someone's own
+        if (byDisplayName)
+            account.getUsersByDisplayName(buddyName, result);
         if (result.empty())
             account.getUsersByUsername(buddyName, result);
         if (action) {
@@ -512,6 +513,35 @@ void restoreDeletedBuddy(TdAccountData &account, const td::td_api::user &user)
         purple_blist_alias_buddy(buddy, alias.c_str());
 }
 
+bool isTransientBuddy(PurpleBuddy *buddy)
+{
+    return buddy && (purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+}
+
+// A conversation with a user goes by their id, which Pidgin shows by the name of the user's buddy:
+// one not a contact gets a buddy for as long as the program runs, in a group of its own; neither is
+// saved. Becoming a contact makes it a lasting one (see updatePrivateChat).
+std::string addTransientBuddy(TdAccountData &account, const td::td_api::user &user)
+{
+    std::string buddyName = getPurpleBuddyName(user);
+    if (purple_find_buddy(account.purpleAccount, buddyName.c_str()))
+        return buddyName;
+    // TRANSLATOR: Buddy-list group, holding users written with though not contacts. It lasts until the program quits.
+    const char  *groupName = _("Telegram: not in contacts");
+    PurpleGroup *group     = purple_find_group(groupName);
+    if (!group) {
+        group = purple_group_new(groupName);
+        purple_blist_node_set_flags(PURPLE_BLIST_NODE(group), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+        purple_blist_add_group(group, NULL);
+    }
+    std::string alias = account.getDisplayName(user);
+    purple_debug_misc(config::pluginId, "Adding %s to the buddy list until the program quits\n", buddyName.c_str());
+    PurpleBuddy *buddy = purple_buddy_new(account.purpleAccount, buddyName.c_str(), alias.empty() ? NULL : alias.c_str());
+    purple_blist_node_set_flags(PURPLE_BLIST_NODE(buddy), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+    purple_blist_add_buddy(buddy, NULL, group, NULL);
+    return buddyName;
+}
+
 void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, const td::td_api::user &user)
 {
     if (isDeletedUser(user)) {
@@ -523,7 +553,7 @@ void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, con
     std::string alias          = chat ? chat->title_ : makeBasicDisplayName(user);
 
     PurpleBuddy *buddy = purple_find_buddy(account.purpleAccount, purpleUserName.c_str());
-    if (buddy == NULL) {
+    if ((buddy == NULL) || isTransientBuddy(buddy)) {
         purple_debug_misc(config::pluginId, "Adding new buddy %s for user %s\n",
                           alias.c_str(), purpleUserName.c_str());
 
@@ -533,21 +563,20 @@ void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, con
         if (group)
             purple_debug_misc(config::pluginId, "Adding into group %s\n", purple_group_get_name(group));
 
-        buddy = purple_buddy_new(account.purpleAccount, purpleUserName.c_str(), alias.c_str());
+        // One written with before, as no contact, is the same buddy, a lasting one now, so that the
+        // conversation with them stays the same tab
+        if (buddy) {
+            purple_blist_node_set_flags(PURPLE_BLIST_NODE(buddy), PurpleBlistNodeFlags(
+                purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & ~PURPLE_BLIST_NODE_FLAG_NO_SAVE));
+            if (!alias.empty())
+                purple_blist_alias_buddy(buddy, alias.c_str());
+        } else
+            buddy = purple_buddy_new(account.purpleAccount, purpleUserName.c_str(), alias.c_str());
         purple_blist_add_buddy(buddy, NULL, group, NULL);
         // If a new buddy has been added here, it means that there was updateNewChat with the private
         // chat. This means either we added them to contacts or started messaging them, or they
         // messaged us. Either way, there is no need to for any extra notification about new contact
         // because the user will be aware anyway.
-
-        // Until now, a conversation with this user went by their display name (see
-        // getPrivateChatPurpleName). Rename it, so that it stays the same tab from now on.
-        std::string displayName = account.getDisplayName(user);
-        PurpleConversation *oldConv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, displayName.c_str(),
-                                                                            account.purpleAccount);
-        if (oldConv && !purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, purpleUserName.c_str(),
-                                                               account.purpleAccount))
-            purple_conversation_set_name(oldConv, purpleUserName.c_str());
     } else {
         // An empty title, as of a deleted user's chat, would leave the buddy known by its id
         if (!alias.empty())
@@ -1744,20 +1773,27 @@ void setLogMarkersEnabled(bool enabled)
     g_logMarkersEnabled = enabled;
 }
 
-std::string makeLogMarker(MessageId messageId)
+std::string makeLogMarker(MessageId messageId, time_t sentAt)
 {
-    return LOG_MARKER_START + std::to_string(messageId.value()) + LOG_MARKER_END;
+    std::string marker = LOG_MARKER_START + std::to_string(messageId.value());
+    if (sentAt)
+        marker += " " + std::to_string(sentAt);
+    return marker + LOG_MARKER_END;
 }
 
-bool takeLogMarker(std::string &html, MessageId *messageId)
+bool takeLogMarker(std::string &html, MessageId *messageId, time_t *sentAt)
 {
     size_t start = html.find(LOG_MARKER_START);
     size_t end   = (start == std::string::npos) ? std::string::npos : html.find(LOG_MARKER_END, start);
     if (end == std::string::npos)
         return false;
-    size_t numberStart = start + sizeof(LOG_MARKER_START) - 1;
+    size_t      numberStart = start + sizeof(LOG_MARKER_START) - 1;
+    std::string numbers     = html.substr(numberStart, end - numberStart);
+    size_t      space       = numbers.find(' ');
     if (messageId)
-        *messageId = MessageId::fromString(html.substr(numberStart, end - numberStart).c_str());
+        *messageId = MessageId::fromString(numbers.substr(0, space).c_str());
+    if (sentAt)
+        *sentAt = (space == std::string::npos) ? 0 : strtoll(numbers.c_str() + space + 1, nullptr, 10);
     html.erase(start, end + sizeof(LOG_MARKER_END) - 1 - start);
     return true;
 }
@@ -2073,4 +2109,46 @@ void *findFrontEndSymbol(const char *name)
         g_module_close(program);
     }
     return symbol;
+}
+
+std::string deriveKey(const std::string &password, const std::string &salt, unsigned iterations)
+{
+    enum { KEY_SIZE = 32 };
+    // A single block: the key is as long as the digest. U1 is of the salt and the block's number,
+    // each U after of the one before, and the key all of them XORed.
+    guint8 block[KEY_SIZE];
+    guint8 key[KEY_SIZE];
+    gsize  length = sizeof(block);
+    GHmac *empty  = g_hmac_new(G_CHECKSUM_SHA256, reinterpret_cast<const guchar *>(password.data()),
+                               password.size());
+    GHmac *hmac   = g_hmac_copy(empty);
+    const guchar number[] = {0, 0, 0, 1};
+    g_hmac_update(hmac, reinterpret_cast<const guchar *>(salt.data()), salt.size());
+    g_hmac_update(hmac, number, sizeof(number));
+    g_hmac_get_digest(hmac, block, &length);
+    g_hmac_unref(hmac);
+    memcpy(key, block, sizeof(key));
+    for (unsigned i = 1; i < iterations; i++) {
+        hmac   = g_hmac_copy(empty);
+        g_hmac_update(hmac, block, sizeof(block));
+        length = sizeof(block);
+        g_hmac_get_digest(hmac, block, &length);
+        g_hmac_unref(hmac);
+        for (unsigned j = 0; j < KEY_SIZE; j++)
+            key[j] ^= block[j];
+    }
+    g_hmac_unref(empty);
+    return std::string(reinterpret_cast<const char *>(key), sizeof(key));
+}
+
+bool isPlainSqliteFile(const std::string &path)
+{
+    static const char HEADER[] = "SQLite format 3";
+    char  start[sizeof(HEADER)] = {};
+    FILE *f    = fopen(path.c_str(), "rb");
+    bool  read = f && (fread(start, 1, sizeof(start), f) == sizeof(start));
+    if (f)
+        fclose(f);
+    // The header's terminating NUL included
+    return read && !memcmp(start, HEADER, sizeof(HEADER));
 }

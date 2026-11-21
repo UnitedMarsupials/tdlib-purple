@@ -76,6 +76,8 @@ void checkMessageReady(const IncomingMessage *message, TdTransceiver &transceive
 void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
                            td::td_api::object_ptr<td::td_api::message> message,
                            PendingMessageQueue::MessageAction action, bool redrawn = false);
+// Logs our message, sent, as written into its tab while it was being sent, under the id it now has
+void logSentMessage(TdAccountData &account, ChatId chatId, MessageId oldId, MessageId newId);
 // The chat's conversation, if it is open; none is opened
 PurpleConversation *findMessageConversation(TdAccountData &account, const td::td_api::chat &chat);
 // Names a message by when it was sent, as the conversation window shows it
@@ -90,6 +92,10 @@ void redrawChat(TdAccountData &account, ChatId chatId, MessageId earliest);
 void showEarlierMessages(TdAccountData &account, PurpleConversation *conv, double filling = 0);
 // Who gave the reaction to the message, as plain text, a name a line, for its tooltip; asked for
 // the first time, those not named yet are fetched, the tooltip asked for again once they are
+// A reaction's type by a key, as its tooltip is asked for by, and back: the paid one for any key
+// of no emoji, custom or not
+std::string getReactionTypeKey(const td::td_api::ReactionType &type);
+td::td_api::object_ptr<td::td_api::ReactionType> makeReactionType(const std::string &typeKey);
 bool getReactionTip(TdAccountData &account, PurpleConversation *conv, MessageId messageId, const std::string &typeKey,
                     std::string &tip);
 // Fills the chat's tab anew, in Pidgin, with its messages from the first unread one, and some read

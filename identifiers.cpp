@@ -238,3 +238,8 @@ MessageId getOldMessageId(const td::td_api::updateMessageSendSucceeded &update)
 {
     return MessageId(update.old_message_id_);
 }
+
+MessageId getOldMessageId(const td::td_api::updateMessageSendFailed &update)
+{
+    return MessageId(update.old_message_id_);
+}

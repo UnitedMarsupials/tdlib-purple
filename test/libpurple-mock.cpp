@@ -115,6 +115,22 @@ const gchar *purple_account_get_name_for_display(const PurpleAccount *account)
     return purple_account_get_alias(account) ? : purple_account_get_username(account);
 }
 
+const char *purple_account_get_password(const PurpleAccount *account)
+{
+    return account->password;
+}
+
+void purple_account_set_password(PurpleAccount *account, const char *password)
+{
+    g_free(account->password);
+    account->password = g_strdup(password);
+}
+
+void purple_account_set_remember_password(PurpleAccount *account, gboolean value)
+{
+    account->remember_pass = value;
+}
+
 PurpleConnection *purple_account_get_connection(const PurpleAccount *account)
 {
     return account->gc;
@@ -180,6 +196,7 @@ void purple_account_destroy(PurpleAccount *account)
     free(account->username);
     free(account->protocol_id);
     free(account->alias);
+    g_free(account->password);
     g_slist_free_full(account->deny, g_free);
 
     auto it = std::find_if(g_accounts.begin(), g_accounts.end(),
@@ -519,6 +536,11 @@ void purple_connection_error(PurpleConnection *gc, const char *reason)
     EVENT(ConnectionErrorEvent, gc, reason);
 }
 
+void purple_connection_error_reason(PurpleConnection *gc, PurpleConnectionError reason, const char *description)
+{
+    EVENT(ConnectionErrorEvent, gc, description);
+}
+
 PurpleAccount *purple_connection_get_account(const PurpleConnection *gc)
 {
     return gc->account;
@@ -677,10 +699,15 @@ void purple_conversation_set_title(PurpleConversation *conv, const char *title)
     EVENT(ConvSetTitleEvent, conv->name, conv->title);
 }
 
+static std::vector<std::string> g_loggedMessages;
+static bool                     g_loggingPreferred = true;
+
 void purple_conversation_write(PurpleConversation *conv, const char *who,
 		const char *message, PurpleMessageFlags flags,
 		time_t mtime)
 {
+    if (conv->logging && !(flags & PURPLE_MESSAGE_NO_LOG))
+        g_loggedMessages.push_back(message);
     EVENT(ConversationWriteEvent, conv->name, who ? who : "", message, flags, mtime);
 }
 
@@ -833,6 +860,10 @@ GList *purple_get_conversations(void)
     return conversations;
 }
 
+void purple_notify_close(PurpleNotifyType type, void *ui_handle)
+{
+}
+
 void *purple_notify_message(void *handle, PurpleNotifyMsgType type,
 						  const char *title, const char *primary,
 						  const char *secondary, PurpleNotifyCloseCallback cb,
@@ -875,6 +906,20 @@ static std::map<std::pair<PurpleConversation *, std::string>, gpointer> g_conver
 extern "C++" void clearConversationData()
 {
     g_conversationData.clear();
+    g_loggedMessages.clear();
+    g_loggingPreferred = true;
+}
+
+extern "C++" void setLoggingPreferred(bool logging)
+{
+    g_loggingPreferred = logging;
+}
+
+extern "C++" std::vector<std::string> takeLoggedMessages()
+{
+    std::vector<std::string> logged;
+    logged.swap(g_loggedMessages);
+    return logged;
 }
 
 void purple_conversation_set_data(PurpleConversation *conv, const char *key, gpointer data)
@@ -954,6 +999,13 @@ gboolean purple_prefs_exists(const char *name)
 int purple_prefs_get_int(const char *name)
 {
     return 0;
+}
+
+gboolean purple_prefs_get_bool(const char *name)
+{
+    if (!strcmp(name, "/purple/logging/log_ims") || !strcmp(name, "/purple/logging/log_chats"))
+        return g_loggingPreferred;
+    return FALSE;
 }
 
 PurpleIdleUiOps *purple_idle_get_ui_ops(void)
@@ -1701,10 +1753,62 @@ void purple_request_fields_add_group(PurpleRequestFields *fields,
 {
 }
 
+// What the next dialogs asking for text are answered with, field by field, in turn; given up if none
+static std::vector<std::map<std::string, std::string>> g_requestAnswers;
+static const std::map<std::string, std::string>       *g_requestAnswer = nullptr;
+
+extern "C++" void setRequestAnswers(std::vector<std::map<std::string, std::string>> answers)
+{
+    g_requestAnswers = std::move(answers);
+}
+
+extern "C++" size_t getRequestAnswersLeft()
+{
+    return g_requestAnswers.size();
+}
+
+// The dialog answered, if an answer is waiting
+static bool answerRequest(GCallback ok_cb, GCallback cancel_cb, void *user_data)
+{
+    if (g_requestAnswers.empty() || !ok_cb) {
+        if (cancel_cb)
+            reinterpret_cast<PurpleRequestFieldsCb>(cancel_cb)(user_data, NULL);
+        return false;
+    }
+    std::map<std::string, std::string> answer = std::move(g_requestAnswers.front());
+    g_requestAnswers.erase(g_requestAnswers.begin());
+    g_requestAnswer = &answer;
+    reinterpret_cast<PurpleRequestFieldsCb>(ok_cb)(user_data, NULL);
+    g_requestAnswer = nullptr;
+    return true;
+}
+
 const char *purple_request_fields_get_string(const PurpleRequestFields *fields,
 										   const char *id)
 {
-    return "";
+    auto it = g_requestAnswer ? g_requestAnswer->find(id) : decltype(g_requestAnswer->end())();
+    return (g_requestAnswer && (it != g_requestAnswer->end())) ? it->second.c_str() : "";
+}
+
+gboolean purple_request_fields_get_bool(const PurpleRequestFields *fields, const char *id)
+{
+    return g_requestAnswer && g_requestAnswer->count(id) && (g_requestAnswer->at(id) == "1");
+}
+
+PurpleRequestField *purple_request_field_bool_new(const char *id, const char *text, gboolean default_value)
+{
+    return NULL;
+}
+
+void purple_request_field_set_required(PurpleRequestField *field, gboolean required)
+{
+}
+
+void purple_account_request_password(PurpleAccount *account, GCallback ok_cb, GCallback cancel_cb,
+                                     void *user_data)
+{
+    EVENT(RequestPasswordEvent, account);
+    answerRequest(ok_cb, cancel_cb, user_data);
 }
 
 // No buddy list window to draw anew
@@ -1729,8 +1833,29 @@ char *purple_log_read(PurpleLog *log, PurpleLogReadFlags *flags)
     return g_strdup("");
 }
 
+PurpleLog *purple_log_new(PurpleLogType type, const char *name, PurpleAccount *account,
+                          PurpleConversation *conv, time_t time, const struct tm *tm)
+{
+    PurpleLog *log = g_new0(PurpleLog, 1);
+    log->type    = type;
+    log->name    = g_strdup(name);
+    log->account = account;
+    log->conv    = conv;
+    log->time    = time;
+    return log;
+}
+
+void purple_log_write(PurpleLog *log, PurpleMessageFlags type, const char *from, time_t time, const char *message)
+{
+    g_loggedMessages.push_back(message);
+}
+
 void purple_log_free(PurpleLog *log)
 {
+    if (log) {
+        g_free(log->name);
+        g_free(log);
+    }
 }
 
 PurpleRequestField *purple_request_field_choice_new(const char *id, const char *text, int default_value)
@@ -1772,15 +1897,21 @@ gboolean purple_privacy_deny_remove(PurpleAccount *account, const char *who, gbo
 namespace {
 struct ListField {
     std::vector<std::pair<std::string, void *>> items;
-    GList                                      *selected = nullptr;
+    GList                                      *selected    = nullptr;
+    bool                                        multiSelect = false;
 };
 }
 static ListField *g_listField       = nullptr;
-static int        g_requestListChoice = -1;
+static std::vector<int> g_requestListChoices;
 
 extern "C++" void setRequestListChoice(int index)
 {
-    g_requestListChoice = index;
+    g_requestListChoices = {index};
+}
+
+extern "C++" void setRequestListChoices(std::vector<int> indices)
+{
+    g_requestListChoices = std::move(indices);
 }
 
 void *purple_request_fields(void *handle, const char *title, const char *primary,
@@ -1790,12 +1921,22 @@ void *purple_request_fields(void *handle, const char *title, const char *primary
 	PurpleAccount *account, const char *who, PurpleConversation *conv,
 	void *user_data)
 {
-    ListField *list   = g_listField;
-    int        choice = g_requestListChoice;
-    g_listField         = nullptr;
-    g_requestListChoice = -1;
-    if (list && ok_cb && (choice >= 0) && (static_cast<size_t>(choice) < list->items.size())) {
-        list->selected = g_list_append(NULL, const_cast<char *>(list->items[choice].first.c_str()));
+    ListField       *list    = g_listField;
+    std::vector<int> choices = std::move(g_requestListChoices);
+    g_listField = nullptr;
+    g_requestListChoices.clear();
+    // Several chosen only where the list lets them be
+    if (list && (choices.size() > 1) && !list->multiSelect) {
+        ADD_FAILURE() << "Several choices from a list of single choice";
+        choices.resize(1);
+    }
+    if (list)
+        for (int choice: choices)
+            if ((choice >= 0) && (static_cast<size_t>(choice) < list->items.size()))
+                list->selected = g_list_append(list->selected, const_cast<char *>(list->items[choice].first.c_str()));
+    if (!list)
+        answerRequest(ok_cb, cancel_cb, user_data);
+    else if (ok_cb && list->selected) {
         g_listField    = list;
         reinterpret_cast<PurpleRequestFieldsCb>(ok_cb)(user_data, fields);
         g_listField    = nullptr;
@@ -1820,6 +1961,12 @@ void purple_request_field_list_add(PurpleRequestField *field, const char *item, 
     // As libpurple, which takes no item without data
     if (field && item && data)
         reinterpret_cast<ListField *>(field)->items.emplace_back(item, data);
+}
+
+void purple_request_field_list_set_multi_select(PurpleRequestField *field, gboolean multi_select)
+{
+    if (field)
+        reinterpret_cast<ListField *>(field)->multiSelect = multi_select;
 }
 
 GList *purple_request_field_list_get_selected(const PurpleRequestField *field)
