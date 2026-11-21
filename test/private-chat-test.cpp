@@ -200,7 +200,12 @@ TEST_F(PrivateChatTest, AddContactByUsername_DoesntBecomeContact)
         "Local Alias",
         nullptr, 0, 0, 0
     ));
-    prpl.verifyEvents(NewConversationEvent(PURPLE_CONV_TYPE_IM, account, "Local Alias"));
+    // Its conversation, by id, with a buddy until the program quits showing the name
+    prpl.verifyEvents(
+        AddBuddyEvent(purpleUserName(0), "Local Alias", account, nullptr,
+                      purple_find_group("Telegram: not in contacts"), nullptr),
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0))
+    );
 }
 
 TEST_F(PrivateChatTest, ContactedByNew)
@@ -294,24 +299,26 @@ void PrivateChatTest::contactedByStranger(object_ptr<ChatActionBar> &&actionBar)
         date,
         makeTextMessage("text")
     )));
-    prpl.verifyEvents(ServGotImEvent(
-        connection,
-        displayName,
-        "text",
-        PURPLE_MESSAGE_RECV,
-        date
-    ));
-    // Not marked as read while the conversation goes by the display name
-    tgl.verifyNoRequests();
+    // The conversation goes by their id, a buddy until the program quits showing their name
+    PurpleGroup *transient = purple_find_group("Telegram: not in contacts");
+    ASSERT_NE(nullptr, transient);
+    EXPECT_TRUE(purple_blist_node_get_flags(PURPLE_BLIST_NODE(transient)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+    prpl.verifyEvents(
+        AddBuddyEvent(purpleUserName(0), displayName, account, nullptr, transient, nullptr),
+        ServGotImEvent(connection, purpleUserName(0), "text", PURPLE_MESSAGE_RECV, date)
+    );
+    PurpleBuddy *buddy = purple_find_buddy(account, purpleUserName(0).c_str());
+    ASSERT_NE(nullptr, buddy);
+    EXPECT_TRUE(purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
 
-    // We dismiss the offer: the buddy is added, keeping the conversation's tab
+    // We dismiss the offer: the same buddy is a lasting one, keeping the conversation's tab
     auto actionBarUpdate = make_object<updateChatActionBar>();
     actionBarUpdate->chat_id_ = chatIds[0];
     tgl.update(std::move(actionBarUpdate));
-    prpl.verifyEvents(
-        AddBuddyEvent(purpleUserName(0), displayName, account, nullptr, nullptr, nullptr),
-        ConvSetTitleEvent(purpleUserName(0), displayName)
-    );
+    prpl.verifyEvents(AddBuddyEvent(purpleUserName(0), displayName, account, nullptr, nullptr, nullptr));
+    EXPECT_EQ(buddy, purple_find_buddy(account, purpleUserName(0).c_str()));
+    EXPECT_FALSE(purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
 }
 
 TEST_F(PrivateChatTest, ContactedByStranger)
@@ -1579,7 +1586,7 @@ TEST_F(PrivateChatTest, WriteToNonContact_CreatePrivateChatFail)
 
     ASSERT_EQ(0, pluginInfo().send_im(
         connection,
-        (userFirstNames[1] + " " + userLastNames[1]).c_str(),
+        purpleUserName(1).c_str(),
         "message",
         PURPLE_MESSAGE_SEND
     ));
@@ -1589,11 +1596,11 @@ TEST_F(PrivateChatTest, WriteToNonContact_CreatePrivateChatFail)
     prpl.verifyEvents(
         NewConversationEvent(
             PURPLE_CONV_TYPE_IM, account,
-            userFirstNames[1] + " " + userLastNames[1]
+            purpleUserName(1)
         ),
         ConversationWriteEvent(
-            userFirstNames[1] + " " + userLastNames[1],
-            userFirstNames[1] + " " + userLastNames[1],
+            purpleUserName(1),
+            purpleUserName(1),
             "Failed to open chat: code 100 (error)",
             PURPLE_MESSAGE_ERROR, 0
         )
@@ -2072,4 +2079,70 @@ TEST_F(PrivateChatTest, OpenOrViewRejected)
     tgl.reply(requestId, make_object<ok>());
     client->messagesViewed(conv, seen);
     tgl.verifyNoRequests();
+}
+
+// Names the plugin gives are "id" or "secret" and digits only: anything else is no id, however it
+// begins, and is not read past its end
+TEST(BuddyNameTest, IdsAreDigitsOnly)
+{
+    EXPECT_EQ(1972, purpleBuddyNameToUserId("id1972").value());
+    EXPECT_TRUE(isUserIdName("id0"));
+    EXPECT_FALSE(purpleBuddyNameToUserId("id0").valid());
+    for (const char *name: {"id1972abc", "id 1972", "idris", "id", "Id1972", "+1972"}) {
+        EXPECT_FALSE(isUserIdName(name)) << name;
+        EXPECT_FALSE(purpleBuddyNameToUserId(name).valid()) << name;
+    }
+    EXPECT_EQ(12, purpleBuddyNameToSecretChatId("secret12").value());
+    for (const char *name: {"se", "Sean", "secret", "secret12x", "secrets"})
+        EXPECT_FALSE(purpleBuddyNameToSecretChatId(name).valid()) << name;
+}
+
+TEST_F(PrivateChatTest, SentByIdOnly)
+{
+    loginWithOneContact();
+    tgl.update(standardUpdateUser(1));
+    prpl.discardEvents();
+
+    // A display name, which anyone may choose, is no one to send to; nor is an id no user has
+    for (const std::string &name: {userFirstNames[1] + " " + userLastNames[1], std::string("id0")}) {
+        EXPECT_EQ(-1, pluginInfo().send_im(connection, name.c_str(), "text", PURPLE_MESSAGE_SEND)) << name;
+        tgl.verifyNoRequests();
+        prpl.discardEvents();
+    }
+    // The id is
+    EXPECT_EQ(0, pluginInfo().send_im(connection, purpleUserName(1).c_str(), "text", PURPLE_MESSAGE_SEND));
+    tgl.verifyRequest(createPrivateChat(userIds[1], false));
+}
+
+TEST_F(PrivateChatTest, TransientBuddyRemoved)
+{
+    loginWithOneContact();
+    tgl.update(standardUpdateUser(1));
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    // As a group's member's conversation is asked for, from the member list
+    EXPECT_EQ(purpleUserName(1), client->getChatMemberImName(purpleUserName(1).c_str()));
+    PurpleBuddy *buddy = purple_find_buddy(account, purpleUserName(1).c_str());
+    ASSERT_NE(nullptr, buddy);
+    EXPECT_TRUE(purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+    prpl.discardEvents();
+
+    // Taken out of the list by hand: nothing is removed from Telegram, no contact nor chat
+    pluginInfo().remove_buddy(connection, buddy, purple_buddy_get_group(buddy));
+    tgl.verifyNoRequests();
+}
+
+TEST_F(PrivateChatTest, AddBuddyById)
+{
+    loginWithOneContact();
+    tgl.update(standardUpdateUser(1));
+    prpl.discardEvents();
+
+    // As from a group's member list, the member being named by id
+    PurpleBuddy *buddy = purple_buddy_new(account, purpleUserName(1).c_str(), NULL);
+    purple_blist_add_buddy(buddy, NULL, &standardPurpleGroup, NULL);
+    prpl.discardEvents();
+    pluginInfo().add_buddy(connection, buddy, &standardPurpleGroup);
+    prpl.verifyEvents(RemoveBuddyEvent(account, purpleUserName(1)));
+    tgl.verifyRequest(*makeAddContact(userIds[1], "", userFirstNames[1], userLastNames[1]));
 }

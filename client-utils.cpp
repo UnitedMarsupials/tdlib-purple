@@ -235,13 +235,14 @@ std::string getSecretChatBuddyName(SecretChatId secretChatId)
 }
 
 std::vector<const td::td_api::user *> getUsersByPurpleName(const char *buddyName, TdAccountData &account,
-                                                           const char *action)
+                                                           const char *action, bool byDisplayName)
 {
     std::vector<const td::td_api::user *> result;
 
-    UserId userId = purpleBuddyNameToUserId(buddyName);
-    if (userId.valid()) {
-        const td::td_api::user *tdUser = account.getUser(userId);
+    // By id, as the plugin names users; nobody, if no user has it
+    if (isUserIdName(buddyName)) {
+        UserId                  userId = purpleBuddyNameToUserId(buddyName);
+        const td::td_api::user *tdUser = userId.valid() ? account.getUser(userId) : nullptr;
         if (tdUser != nullptr)
             result.push_back(tdUser);
         else if (action)
@@ -262,10 +263,10 @@ std::vector<const td::td_api::user *> getUsersByPurpleName(const char *buddyName
         else if (action)
             purple_debug_warning(config::pluginId, "Cannot %s: no Telegram user with phone number %s\n", action, buddyName);
     } else {
-        account.getUsersByDisplayName(buddyName, result);
-        // A conversation may also be addressed by Telegram @username rather than an "id<n>" buddy
-        // or the display name; fall back to a username match so those sends resolve instead of
-        // failing with "User not found".
+        // A display name, which anyone may choose, only where a person types it, as for a group;
+        // else, as there too failing that, a @username, which is someone's own
+        if (byDisplayName)
+            account.getUsersByDisplayName(buddyName, result);
         if (result.empty())
             account.getUsersByUsername(buddyName, result);
         if (action) {
@@ -512,6 +513,35 @@ void restoreDeletedBuddy(TdAccountData &account, const td::td_api::user &user)
         purple_blist_alias_buddy(buddy, alias.c_str());
 }
 
+bool isTransientBuddy(PurpleBuddy *buddy)
+{
+    return buddy && (purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+}
+
+// A conversation with a user goes by their id, which Pidgin shows by the name of the user's buddy:
+// one not a contact gets a buddy for as long as the program runs, in a group of its own; neither is
+// saved. Becoming a contact makes it a lasting one (see updatePrivateChat).
+std::string addTransientBuddy(TdAccountData &account, const td::td_api::user &user)
+{
+    std::string buddyName = getPurpleBuddyName(user);
+    if (purple_find_buddy(account.purpleAccount, buddyName.c_str()))
+        return buddyName;
+    // TRANSLATOR: Buddy-list group, holding users written with though not contacts. It lasts until the program quits.
+    const char  *groupName = _("Telegram: not in contacts");
+    PurpleGroup *group     = purple_find_group(groupName);
+    if (!group) {
+        group = purple_group_new(groupName);
+        purple_blist_node_set_flags(PURPLE_BLIST_NODE(group), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+        purple_blist_add_group(group, NULL);
+    }
+    std::string alias = account.getDisplayName(user);
+    purple_debug_misc(config::pluginId, "Adding %s to the buddy list until the program quits\n", buddyName.c_str());
+    PurpleBuddy *buddy = purple_buddy_new(account.purpleAccount, buddyName.c_str(), alias.empty() ? NULL : alias.c_str());
+    purple_blist_node_set_flags(PURPLE_BLIST_NODE(buddy), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+    purple_blist_add_buddy(buddy, NULL, group, NULL);
+    return buddyName;
+}
+
 void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, const td::td_api::user &user)
 {
     if (isDeletedUser(user)) {
@@ -523,7 +553,7 @@ void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, con
     std::string alias          = chat ? chat->title_ : makeBasicDisplayName(user);
 
     PurpleBuddy *buddy = purple_find_buddy(account.purpleAccount, purpleUserName.c_str());
-    if (buddy == NULL) {
+    if ((buddy == NULL) || isTransientBuddy(buddy)) {
         purple_debug_misc(config::pluginId, "Adding new buddy %s for user %s\n",
                           alias.c_str(), purpleUserName.c_str());
 
@@ -533,21 +563,20 @@ void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, con
         if (group)
             purple_debug_misc(config::pluginId, "Adding into group %s\n", purple_group_get_name(group));
 
-        buddy = purple_buddy_new(account.purpleAccount, purpleUserName.c_str(), alias.c_str());
+        // One written with before, as no contact, is the same buddy, a lasting one now, so that the
+        // conversation with them stays the same tab
+        if (buddy) {
+            purple_blist_node_set_flags(PURPLE_BLIST_NODE(buddy), PurpleBlistNodeFlags(
+                purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & ~PURPLE_BLIST_NODE_FLAG_NO_SAVE));
+            if (!alias.empty())
+                purple_blist_alias_buddy(buddy, alias.c_str());
+        } else
+            buddy = purple_buddy_new(account.purpleAccount, purpleUserName.c_str(), alias.c_str());
         purple_blist_add_buddy(buddy, NULL, group, NULL);
         // If a new buddy has been added here, it means that there was updateNewChat with the private
         // chat. This means either we added them to contacts or started messaging them, or they
         // messaged us. Either way, there is no need to for any extra notification about new contact
         // because the user will be aware anyway.
-
-        // Until now, a conversation with this user went by their display name (see
-        // getPrivateChatPurpleName). Rename it, so that it stays the same tab from now on.
-        std::string displayName = account.getDisplayName(user);
-        PurpleConversation *oldConv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, displayName.c_str(),
-                                                                            account.purpleAccount);
-        if (oldConv && !purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, purpleUserName.c_str(),
-                                                               account.purpleAccount))
-            purple_conversation_set_name(oldConv, purpleUserName.c_str());
     } else {
         // An empty title, as of a deleted user's chat, would leave the buddy known by its id
         if (!alias.empty())

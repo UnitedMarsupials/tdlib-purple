@@ -645,6 +645,10 @@ static void request_delete_contact_on_server_yes (RequestData *data, int action)
 static void tgprpl_request_delete_contact (PurpleConnection *gc, PurpleBuddy *buddy, PurpleGroup *group)
 {
     g_return_if_fail(buddy);
+    // A buddy of one written with though no contact is only taken out of the list: there is no
+    // contact to remove, and the chat with them is theirs too
+    if (isTransientBuddy(buddy))
+        return;
 
     RequestData *data = new RequestData(purple_connection_get_account(gc));
     data->stringData = purple_buddy_get_name(buddy);

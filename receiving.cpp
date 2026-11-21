@@ -774,15 +774,11 @@ static std::string quoteMessage(const td::td_api::message *message, TdAccountDat
 }
 
 // The name a private chat's conversation goes by
+// By id, as any user's buddy goes; the buddy, which shows it by the user's name, added if they are
+// not a contact
 static std::string getPrivateChatPurpleName(TdAccountData &account, const td::td_api::user &user)
 {
-    std::string userName = getPurpleBuddyName(user);
-
-    // If there is no buddy in the buddy list, libpurple won't be able to translate buddy name
-    // to alias, so use display name instead of idXXXXXXXXX
-    if (!purple_find_buddy(account.purpleAccount, userName.c_str()))
-        userName = account.getDisplayName(user);
-    return userName;
+    return addTransientBuddy(account, user);
 }
 
 // The chat's conversation, if it is open; none is opened
@@ -790,8 +786,7 @@ PurpleConversation *findMessageConversation(TdAccountData &account, const td::td
 {
     const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
     if (privateUser)
-        return purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM,
-                                                     getPrivateChatPurpleName(account, *privateUser).c_str(),
+        return purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, getPurpleBuddyName(*privateUser).c_str(),
                                                      account.purpleAccount);
     SecretChatId secretChatId = getSecretChatId(chat);
     if (secretChatId.valid())

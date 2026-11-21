@@ -285,3 +285,17 @@ Receive a video with a cover, and one without.
 Add someone to the test group, have them leave, pin a message.
 
 * Each is told in words: "X added Y", "X left", "X pinned a message".
+
+### G2. A member who is not a contact
+
+In the test group, open a private conversation with a member who is not in the buddy list, from
+the menu of their name in the member list, and send them a message (or have them write first).
+
+* The conversation's tab shows their name; it goes by `id<their id>`, as the debug log shows.
+* They are in the buddy list, in "Telegram: not in contacts", until Pidgin quits; `blist.xml`
+  does not keep them.
+* Their messages are marked read as they are seen, as a contact's are.
+* "Add Buddy..." from the menu of their name adds them as a contact, under their name, and the
+  same tab stays open.
+* Removing them from "Telegram: not in contacts" only takes them out of the list: the chat with
+  them is still there, on the phone too.

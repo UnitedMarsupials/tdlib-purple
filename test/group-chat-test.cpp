@@ -926,7 +926,7 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
     // Send message to chat member
     ASSERT_EQ(0, pluginInfo().send_im(
         connection,
-        (userFirstNames[0] + " " + userLastNames[0]).c_str(),
+        purpleUserName(0).c_str(),
         "message",
         PURPLE_MESSAGE_SEND
     ));
@@ -980,37 +980,32 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
         makeTextMessage("message")
     )));
 
-    // No read receipt yet because PurpleConversation cannot be tied to user id: it uses display name
-    // for conversation name. Rare quirks like this one don't matter.
-
+    // Not a contact yet: the conversation goes by their id all the same, a buddy until the program
+    // quits showing their name
     prpl.verifyEvents(
-        NewConversationEvent(
-            PURPLE_CONV_TYPE_IM, account,
-            // No buddy yet – display name is used as user name
-            userFirstNames[0] + " " + userLastNames[0]
-        ),
+        AddBuddyEvent(purpleUserName(0), userFirstNames[0] + " " + userLastNames[0], account, NULL,
+                      purple_find_group("Telegram: not in contacts"), NULL),
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
         ConversationWriteEvent(
-            // ditto
-            userFirstNames[0] + " " + userLastNames[0],
+            purpleUserName(0),
             selfFirstName + " " + selfLastName,
             "message",
             PURPLE_MESSAGE_SEND, echoDate[0]
         )
     );
+    // Read, the conversation being the chat's
+    tgl.verifyRequest(viewMessages(chatIds[0], {echoMessageId[0]}, nullptr, true));
 
     tgl.update(makeUpdateChatList(chatIds[0], make_object<chatListMain>()));
     prpl.verifyEvents(
+        // The same buddy, a lasting one now, keeping the conversation's tab
         AddBuddyEvent(
             purpleUserName(0),
             userFirstNames[0] + " " + userLastNames[0],
             account, NULL, NULL, NULL
         ),
-        // The conversation is renamed after the buddy, keeping its tab
-        ConvSetTitleEvent(purpleUserName(0), userFirstNames[0] + " " + userLastNames[0]),
         ChatSetTopicEvent(groupChatPurpleName, "basic group", ""),
         ChatClearUsersEvent(groupChatPurpleName),
-        // This group member has become a libpurple buddy, so member username will now be changed
-        // from display name to buddy username
         ChatAddUserEvent(
             groupChatPurpleName,
             purpleUserName(0),
@@ -1026,7 +1021,7 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
 
     ASSERT_EQ(0, pluginInfo().send_im(
         connection,
-        (userFirstNames[0] + " " + userLastNames[0]).c_str(),
+        purpleUserName(0).c_str(),
         "message2",
         PURPLE_MESSAGE_SEND
     ));
@@ -1053,7 +1048,7 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
     )));
 
     // Both read receipts now - whatever.
-    tgl.verifyRequest(viewMessages(chatIds[0], {echoMessageId[0], echoMessageId[1]}, nullptr, true));
+    tgl.verifyRequest(viewMessages(chatIds[0], {echoMessageId[1]}, nullptr, true));
     prpl.verifyEvents(
         ConversationWriteEvent(
             // Now there is buddy, so the renamed conversation, by user-id user name
