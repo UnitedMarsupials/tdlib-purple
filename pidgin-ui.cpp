@@ -2236,35 +2236,51 @@ void setReactionClickHandler(ReactionClickHandler handler)
     g_reactionClickHandler = handler;
 }
 
+// The reaction under the pointer, and its message, if any
+static bool findPointedReaction(GtkWidget *view, PurpleConversation *conv, std::string &key, MessageId &messageId)
+{
+    GtkTextView *textView = reinterpret_cast<GtkTextView *>(view);
+    gint         x, y;
+    GtkTextIter  where;
+    p_gtk_widget_get_pointer(view, &x, &y);
+    p_gtk_text_view_window_to_buffer_coords(textView, GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
+    if (!getCharAt(textView, x, y, where))
+        return false;
+    key       = getReactionKey(where);
+    messageId = key.empty() ? MessageId() : findMessageAt(getTextBuffer(conv), where);
+    return messageId.valid();
+}
+
 static void pressingReaction(GtkWidget *view, GdkEventButton *event)
 {
     g_pressedReaction = PressedReaction();
     PurpleConversation *conv = (g_reactionClickHandler && (event->type == GDK_BUTTON_PRESS) && (event->button == 1))
                                ? findTabConversation(view) : nullptr;
-    GtkTextView        *textView = reinterpret_cast<GtkTextView *>(view);
-    gint                x, y;
-    GtkTextIter         where;
-    if (!conv)
-        return;
-    p_gtk_widget_get_pointer(view, &x, &y);
-    p_gtk_text_view_window_to_buffer_coords(textView, GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
-    if (!getCharAt(textView, x, y, where))
-        return;
-    std::string key       = getReactionKey(where);
-    MessageId   messageId = key.empty() ? MessageId() : findMessageAt(getTextBuffer(conv), where);
-    if (messageId.valid())
+    std::string         key;
+    MessageId           messageId;
+    if (conv && findPointedReaction(view, conv, key, messageId))
         g_pressedReaction = PressedReaction{view, event->x_root, event->y_root, key, messageId};
 }
 
-// Let go where it was pressed, not dragged off it
+// Moved as far as a drag, it is no click, even if back where it was pressed by the time it is let go
+static void movingOverReaction(GtkWidget *view, GdkEventMotion *event)
+{
+    if ((g_pressedReaction.view == view) &&
+        p_gtk_drag_check_threshold(view, g_pressedReaction.x, g_pressedReaction.y, event->x_root, event->y_root))
+        g_pressedReaction = PressedReaction();
+}
+
+// Let go on the reaction it was pressed on
 static void releasingReaction(GtkWidget *view, GdkEventButton *event)
 {
-    PressedReaction pressed = g_pressedReaction;
+    PressedReaction     pressed = g_pressedReaction;
     g_pressedReaction = PressedReaction();
-    PurpleConversation *conv = ((pressed.view == view) && (event->button == 1) && g_reactionClickHandler &&
-                                !p_gtk_drag_check_threshold(view, pressed.x, pressed.y, event->x_root, event->y_root))
+    PurpleConversation *conv = ((pressed.view == view) && (event->button == 1) && g_reactionClickHandler)
                                ? findTabConversation(view) : nullptr;
-    if (conv)
+    std::string         key;
+    MessageId           messageId;
+    if (conv && findPointedReaction(view, conv, key, messageId) && (key == pressed.key) &&
+        (messageId == pressed.messageId))
         g_reactionClickHandler(conv, pressed.messageId, pressed.key);
 }
 
@@ -2329,6 +2345,7 @@ static gboolean releasingTab(GtkWidget *view, GdkEventButton *event, gpointer)
 
 static gboolean movingOverTab(GtkWidget *view, GdkEventMotion *event, gpointer)
 {
+    movingOverReaction(view, event);
     std::shared_ptr<DraggedFile> pressed = g_pressedFile;
     if (!pressed || (pressed->view != view) || !(event->state & GDK_BUTTON1_MASK) ||
         !p_gtk_drag_check_threshold(view, pressed->x, pressed->y, event->x_root, event->y_root))

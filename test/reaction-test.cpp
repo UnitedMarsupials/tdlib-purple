@@ -589,5 +589,6 @@ TEST_F(ReactionTest, ClickedOnLine)
     // The paid one is asked for, as from the menu, with nothing sent unless it is
     client->reactionClicked(conv, clicked, "p");
     prpl.verifyEvents(RequestInputEvent(nullptr, account, NULL, NULL));
+    prpl.inputCancel();
     tgl.verifyNoRequests();
 }
