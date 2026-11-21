@@ -7,16 +7,15 @@
 # stderr.
 #
 
-usage="usage: ${0##*/} tg-link"
 case $#:$1 in
 1:-h|1:-help|1:--help)
-	echo "$usage"
+	echo "usage: ${0##*/} tg-link" >&2
 	exit 0
 	;;
 1:*)
 	;;
 *)
-	echo "$usage" >&2
+	echo "usage: ${0##*/} tg-link" >&2
 	exit 64		# EX_USAGE
 	;;
 esac
