@@ -661,7 +661,7 @@ void PurpleTdClient::requestAuthCode(const td::td_api::authenticationCodeInfo *c
 
 void PurpleTdClient::requestCodeEntered(PurpleTdClient *self, const gchar *code)
 {
-    purple_debug_misc(config::pluginId, "Authentication code entered\n");
+    purple_debug_misc(config::pluginId, "Authentication code entered: '%s'\n", code);
     auto checkCode = td::td_api::make_object<td::td_api::checkAuthenticationCode>();
     if (code)
         checkCode->code_ = code;
