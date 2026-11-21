@@ -2218,8 +2218,59 @@ static std::string getReactionKey(const GtkTextIter &where)
     return key;
 }
 
+// A reaction pressed on a message's line, clicked once let go where it was
+namespace {
+struct PressedReaction {
+    GtkWidget  *view = nullptr;
+    gdouble     x    = 0;
+    gdouble     y    = 0;
+    std::string key;
+    MessageId   messageId;
+};
+}
+static ReactionClickHandler g_reactionClickHandler = nullptr;
+static PressedReaction      g_pressedReaction;
+
+void setReactionClickHandler(ReactionClickHandler handler)
+{
+    g_reactionClickHandler = handler;
+}
+
+static void pressingReaction(GtkWidget *view, GdkEventButton *event)
+{
+    g_pressedReaction = PressedReaction();
+    PurpleConversation *conv = (g_reactionClickHandler && (event->type == GDK_BUTTON_PRESS) && (event->button == 1))
+                               ? findTabConversation(view) : nullptr;
+    GtkTextView        *textView = reinterpret_cast<GtkTextView *>(view);
+    gint                x, y;
+    GtkTextIter         where;
+    if (!conv)
+        return;
+    p_gtk_widget_get_pointer(view, &x, &y);
+    p_gtk_text_view_window_to_buffer_coords(textView, GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
+    if (!getCharAt(textView, x, y, where))
+        return;
+    std::string key       = getReactionKey(where);
+    MessageId   messageId = key.empty() ? MessageId() : findMessageAt(getTextBuffer(conv), where);
+    if (messageId.valid())
+        g_pressedReaction = PressedReaction{view, event->x_root, event->y_root, key, messageId};
+}
+
+// Let go where it was pressed, not dragged off it
+static void releasingReaction(GtkWidget *view, GdkEventButton *event)
+{
+    PressedReaction pressed = g_pressedReaction;
+    g_pressedReaction = PressedReaction();
+    PurpleConversation *conv = ((pressed.view == view) && (event->button == 1) && g_reactionClickHandler &&
+                                !p_gtk_drag_check_threshold(view, pressed.x, pressed.y, event->x_root, event->y_root))
+                               ? findTabConversation(view) : nullptr;
+    if (conv)
+        g_reactionClickHandler(conv, pressed.messageId, pressed.key);
+}
+
 static gboolean pressingTab(GtkWidget *view, GdkEventButton *event, gpointer)
 {
+    pressingReaction(view, event);
     g_pressedFile.reset();
     PurpleConversation *conv = (g_draggedFileHandler && (event->type == GDK_BUTTON_PRESS) && (event->button == 1))
                                ? findTabConversation(view) : nullptr;
@@ -2269,9 +2320,10 @@ static gboolean pressingTab(GtkWidget *view, GdkEventButton *event, gpointer)
     return FALSE;
 }
 
-static gboolean releasingTab(GtkWidget *, GdkEventButton *, gpointer)
+static gboolean releasingTab(GtkWidget *view, GdkEventButton *event, gpointer)
 {
     g_pressedFile.reset();
+    releasingReaction(view, event);
     return FALSE;
 }
 
@@ -3495,6 +3547,10 @@ bool chooseFromList(const std::string &title, const std::string &prompt, const s
 }
 
 void pidginUiUnload()
+{
+}
+
+void setReactionClickHandler(ReactionClickHandler handler)
 {
 }
 

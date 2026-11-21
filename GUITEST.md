@@ -116,6 +116,13 @@ Right-click a text message, pick a reaction from the menu.
 * The reaction appears under the message, in Pidgin and the phone app.
 * Log: `Reaction <emoji> to message <id> picked`, then `addMessageReaction`.
 
+Click a reaction someone else gave, on the line under a message; then click it again.
+
+* The first click gives it as ours too, in bold, its count one more; the second takes it back.
+* Log: `Reaction e<emoji> to message <id> clicked: giving it`, then `taking it back`.
+* Pressing on a reaction and dragging off it before letting go does nothing; clicking the paid
+  one (⭐) asks how many stars, as the menu does.
+
 ### R2. Reaction to a picture
 
 Right-click the picture of a photo sent without text, and pick a reaction from the message's

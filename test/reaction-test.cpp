@@ -552,3 +552,42 @@ TEST_F(ReactionTest, GiversInTooltip_OursAdded)
     ASSERT_TRUE(client->getReactionTip(conv, MessageId::fromString("1"), "e\U0001F44D", tip));
     ASSERT_EQ(selfFirstName + " " + selfLastName + "\n" + userFirstNames[0] + " " + userLastNames[0], tip);
 }
+
+TEST_F(ReactionTest, ClickedOnLine)
+{
+    loginWithOneContact();
+    receive(makeTextMessage("Did you ask already?"), "Did you ask already?");
+    PurpleTdClient     *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    PurpleConversation *conv   = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, purpleUserName(0).c_str(),
+                                                                       account);
+    ASSERT_NE(nullptr, client);
+    ASSERT_NE(nullptr, conv);
+    const MessageId clicked = MessageId::fromString(std::to_string(messageId).c_str());
+    auto withReactions = [this](bool chosen) {
+        object_ptr<message> reacted = makeMessage(messageId, userIds[0], chatIds[0], false, date,
+                                                  makeTextMessage("Did you ask already?"));
+        reacted->interaction_info_ = makeInteractionInfo(makeReactions(selfId, {
+            {"\U0001F63F", chosen ? 2 : 1, chosen, {userIds[0]}},
+            {"❤", 1, false, {userIds[0]}}
+        }));
+        return reacted;
+    };
+
+    // Given by someone else only: ours too, then
+    client->reactionClicked(conv, clicked, "e\U0001F63F");
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(withReactions(false));
+    tgl.verifyRequest(addMessageReaction(chatIds[0], messageId, make_object<reactionTypeEmoji>("\U0001F63F"),
+                                         false, true));
+
+    // Ours: taken back
+    client->reactionClicked(conv, clicked, "e\U0001F63F");
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(withReactions(true));
+    tgl.verifyRequest(removeMessageReaction(chatIds[0], messageId, make_object<reactionTypeEmoji>("\U0001F63F")));
+
+    // The paid one is asked for, as from the menu, with nothing sent unless it is
+    client->reactionClicked(conv, clicked, "p");
+    prpl.verifyEvents(RequestInputEvent(nullptr, account, NULL, NULL));
+    tgl.verifyNoRequests();
+}

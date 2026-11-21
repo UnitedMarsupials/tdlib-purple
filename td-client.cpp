@@ -1586,14 +1586,30 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
 
 void PurpleTdClient::setMessageReaction(ChatId chatId, MessageId messageId, const std::string &emoji, bool chosen)
 {
-    td::td_api::object_ptr<td::td_api::Function>     request;
-    td::td_api::object_ptr<td::td_api::ReactionType> type = td::td_api::make_object<td::td_api::reactionTypeEmoji>(emoji);
-    if (chosen)
-        request = td::td_api::make_object<td::td_api::addMessageReaction>(chatId.value(), messageId.value(),
-                                                                          std::move(type), false, true);
-    else
-        request = td::td_api::make_object<td::td_api::removeMessageReaction>(chatId.value(), messageId.value(),
-                                                                             std::move(type));
+    auto type    = td::td_api::make_object<td::td_api::reactionTypeEmoji>();
+    type->emoji_ = emoji;
+    setMessageReaction(chatId, messageId, std::move(type), emoji, chosen);
+}
+
+void PurpleTdClient::setMessageReaction(ChatId chatId, MessageId messageId,
+                                        td::td_api::object_ptr<td::td_api::ReactionType> type,
+                                        const std::string &emoji, bool chosen)
+{
+    td::td_api::object_ptr<td::td_api::Function> request;
+    if (chosen) {
+        auto add = td::td_api::make_object<td::td_api::addMessageReaction>();
+        add->chat_id_                 = chatId.value();
+        add->message_id_              = messageId.value();
+        add->reaction_type_           = std::move(type);
+        add->update_recent_reactions_ = true;
+        request = std::move(add);
+    } else {
+        auto remove = td::td_api::make_object<td::td_api::removeMessageReaction>();
+        remove->chat_id_       = chatId.value();
+        remove->message_id_    = messageId.value();
+        remove->reaction_type_ = std::move(type);
+        request = std::move(remove);
+    }
     // What changes comes back as an update, as from any other client
     m_transceiver.sendQuery(std::move(request), [this, chatId, emoji](uint64_t, TdObjectPtr object) {
         reportReactionError(chatId, emoji, object);
@@ -2488,6 +2504,38 @@ bool PurpleTdClient::getReactionTip(PurpleConversation *conv, MessageId messageI
                                     std::string &tip)
 {
     return ::getReactionTip(m_data, conv, messageId, key, tip);
+}
+
+// Whether it is ours is asked of TDLib, as the line may not be up to date with it
+void PurpleTdClient::reactionClicked(PurpleConversation *conv, MessageId messageId, const std::string &key)
+{
+    const td::td_api::chat *chat = findConversationChat(m_data, conv);
+    if (!chat)
+        return;
+    ChatId chatId = getId(*chat);
+    if (makeReactionType(key)->get_id() == td::td_api::reactionTypePaid::ID) {
+        askPaidReaction(chatId, messageId);
+        return;
+    }
+    auto request = td::td_api::make_object<td::td_api::getMessage>();
+    request->chat_id_    = chatId.value();
+    request->message_id_ = messageId.value();
+    m_transceiver.sendQuery(std::move(request), [this, chatId, messageId, key](uint64_t, TdObjectPtr object) {
+        if (!object || (object->get_id() != td::td_api::message::ID))
+            return;
+        auto &message = static_cast<td::td_api::message &>(*object);
+        bool  chosen  = false;
+        if (message.interaction_info_ && message.interaction_info_->reactions_)
+            for (const auto &reaction: message.interaction_info_->reactions_->reactions_)
+                if (reaction && reaction->type_ && (getReactionTypeKey(*reaction->type_) == key))
+                    chosen = reaction->is_chosen_;
+        auto        type  = makeReactionType(key);
+        std::string shown = (type->get_id() == td::td_api::reactionTypeEmoji::ID)
+                            ? static_cast<const td::td_api::reactionTypeEmoji &>(*type).emoji_ : std::string();
+        purple_debug_misc(config::pluginId, "Reaction %s to message %" G_GINT64_FORMAT " clicked: %s\n", key.c_str(),
+                          messageId.value(), chosen ? "taking it back" : "giving it");
+        setMessageReaction(chatId, messageId, std::move(type), shown, !chosen);
+    });
 }
 
 void PurpleTdClient::markConversation(PurpleConversation *conv)

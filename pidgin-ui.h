@@ -130,6 +130,9 @@ void showMessageReactions(PurpleConversation *conv, MessageId messageId, const s
 using ReactionTipHandler = bool (*)(PurpleConversation *conv, MessageId messageId, const std::string &key,
                                     std::string &tip);
 void setReactionTipHandler(ReactionTipHandler handler);
+// A reaction on a message's line clicked, by the key its tooltip is asked for by
+using ReactionClickHandler = void (*)(PurpleConversation *conv, MessageId messageId, const std::string &key);
+void setReactionClickHandler(ReactionClickHandler handler);
 // Asks again for the tooltip shown, if any, as what it said has changed
 void refreshReactionTip(PurpleConversation *conv);
 

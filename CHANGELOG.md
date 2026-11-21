@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Features
+
+- **In Pidgin, clicking a reaction on the line under a message gives it as ours too, or takes ours back, in one click, as the phone app does.** Until now a reaction could only be given from the message's menu. Whether we gave it is asked of Telegram as it is clicked, so a line not yet up to date does not mislead it; the paid reaction asks how many stars, as from the menu.
+
 ### Fixes
 
 - **In Pidgin, a reaction picked from the menu of a message's picture is given, rather than the menu closing with nothing done.** Pidgin opens that menu as the right button is let go, which left GTK taking that button for the one to pick a submenu's item with, and handing a click of the left one on to the menu instead.

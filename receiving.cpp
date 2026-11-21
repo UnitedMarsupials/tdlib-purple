@@ -1505,7 +1505,7 @@ struct ReactionCount {
 };
 }
 
-static std::string getReactionTypeKey(const td::td_api::ReactionType &type)
+std::string getReactionTypeKey(const td::td_api::ReactionType &type)
 {
     switch (type.get_id()) {
     case td::td_api::reactionTypeEmoji::ID:
@@ -3479,7 +3479,7 @@ void updateMessageReactions(TdAccountData &account, ChatId chatId, MessageId mes
     }
 }
 
-static td::td_api::object_ptr<td::td_api::ReactionType> makeReactionType(const std::string &typeKey)
+td::td_api::object_ptr<td::td_api::ReactionType> makeReactionType(const std::string &typeKey)
 {
     if ((typeKey.size() > 1) && (typeKey[0] == 'e'))
         return td::td_api::make_object<td::td_api::reactionTypeEmoji>(typeKey.substr(1));
