@@ -1384,6 +1384,14 @@ static bool reactionTipAsked(PurpleConversation *conv, MessageId messageId, cons
     return tdClient && tdClient->getReactionTip(conv, messageId, key, tip);
 }
 
+// A reaction to a message clicked
+static void reactionClicked(PurpleConversation *conv, MessageId messageId, const std::string &key)
+{
+    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    if (tdClient)
+        tdClient->reactionClicked(conv, messageId, key);
+}
+
 // The menu of a tab's text, opened on a message
 static bool messagePopupOpened(PurpleConversation *conv, MessageId messageId, const OpenMenuRef &menu)
 {
@@ -1436,6 +1444,7 @@ static void registerMessageLinks()
     setBuddyMarkHandler(buddyMarked, UNREAD_REACTIONS_MARK);
     setTopReachedHandler(topReached);
     setReactionTipHandler(reactionTipAsked);
+    setReactionClickHandler(reactionClicked);
     setShownHandler(conversationShown);
     setViewedHandler(messagesViewed);
 }
@@ -1455,6 +1464,7 @@ static void unregisterMessageLinks()
     setBuddyMarkHandler(nullptr, nullptr);
     setTopReachedHandler(nullptr);
     setReactionTipHandler(nullptr);
+    setReactionClickHandler(nullptr);
     setShownHandler(nullptr);
     setViewedHandler(nullptr);
 }

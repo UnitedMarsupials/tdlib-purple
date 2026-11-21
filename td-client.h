@@ -53,6 +53,9 @@ public:
     void setIdle(bool idle);
     void showEarlierMessages(PurpleConversation *conv, double filling = 0);
     bool getReactionTip(PurpleConversation *conv, MessageId messageId, const std::string &key, std::string &tip);
+    // A reaction on a message's line clicked: ours taken back, or given if not; the paid one asked
+    // for, as from the message's menu
+    void reactionClicked(PurpleConversation *conv, MessageId messageId, const std::string &key);
     bool hasUnreadReactions(PurpleBuddy *buddy);
 
     void addContact(const std::string &purpleName, const std::string &alias, const std::string &groupName);
@@ -117,6 +120,8 @@ public:
     // False if the conversation's chat is not known
     bool showMessagePopup(PurpleConversation *conv, MessageId messageId, const OpenMenuRef &openMenu);
     void setMessageReaction(ChatId chatId, MessageId messageId, const std::string &emoji, bool chosen);
+    void setMessageReaction(ChatId chatId, MessageId messageId, td::td_api::object_ptr<td::td_api::ReactionType> type,
+                            const std::string &emoji, bool chosen);
     void askPaidReaction(ChatId chatId, MessageId messageId);
     // What the dialogs of a message's menu do, once answered
     void editMessage(ChatId chatId, MessageId messageId, td::td_api::object_ptr<td::td_api::formattedText> text,
