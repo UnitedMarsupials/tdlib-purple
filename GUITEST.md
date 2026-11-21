@@ -200,6 +200,12 @@ picking each in the dialog by typing part of its name.
 
 * It arrives at both, as a forward where the destination is Telegram.
 
+Forward one again, ticking two destinations: type part of one's name, tick it, type part of the
+other's, tick that too, and press OK.
+
+* The first one stays ticked while the list shows only the second.
+* It arrives at both; with none ticked, Enter forwards it to the one picked, as before.
+
 ### M3. Files of a message
 
 On a photo: "Copy the picture", paste into another program; "Save Image...", check the name it

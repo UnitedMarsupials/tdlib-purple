@@ -2395,12 +2395,13 @@ void PurpleTdClient::askForwardMessage(ChatId chatId, MessageId messageId,
         labels.push_back(to.label);
     // TRANSLATOR: Title of the dialog asking where to forward a message to.
     if (chooseFromList(_("Forward the message"),
-                       // TRANSLATOR: Prompt of the dialog asking where to forward a message to; typing in its field searches the list.
-                       _("To whom, or to which chat?"), labels,
-                       [accountName, chatId, messageId, destinations](int index) {
+                       // TRANSLATOR: Prompt of the dialog asking where to forward a message to; typing in its field searches the list, and ticking several forwards it to each.
+                       _("To whom, or to which chats? Tick several to forward it to each."), labels,
+                       [accountName, chatId, messageId, destinations](const std::vector<int> &indices) {
                            PurpleTdClient *client = findConnected(accountName.c_str());
-                           if (client && (index >= 0) && (static_cast<size_t>(index) < destinations.size()))
-                               client->forwardMessage(chatId, messageId, destinations[index]);
+                           for (int index: indices)
+                               if (client && (index >= 0) && (static_cast<size_t>(index) < destinations.size()))
+                                   client->forwardMessage(chatId, messageId, destinations[index]);
                        }))
         return;
 
@@ -2409,6 +2410,7 @@ void PurpleTdClient::askForwardMessage(ChatId chatId, MessageId messageId,
     PurpleRequestFieldGroup *group  = purple_request_field_group_new(NULL);
     // TRANSLATOR: Label of the list of destinations, in the dialog asking where to forward a message to.
     PurpleRequestField      *field  = purple_request_field_list_new("to", _("To"));
+    purple_request_field_list_set_multi_select(field, TRUE);
     for (size_t i = 0; i < request->destinations.size(); i++)
         purple_request_field_list_add(field, request->destinations[i].label.c_str(),
                                       &request->destinations[i]);
@@ -2416,8 +2418,8 @@ void PurpleTdClient::askForwardMessage(ChatId chatId, MessageId messageId,
     purple_request_fields_add_group(fields, group);
     // TRANSLATOR: Title of the dialog asking where to forward a message to.
     purple_request_fields(NULL, _("Forward the message"),
-                          // TRANSLATOR: Prompt of the dialog asking where to forward a message to.
-                          _("To whom, or to which chat?"), NULL, fields,
+                          // TRANSLATOR: Prompt of the dialog asking where to forward a message to; several can be chosen, to forward it to each.
+                          _("To whom, or to which chats?"), NULL, fields,
                           // TRANSLATOR: Forward dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
                           _("_Forward"), G_CALLBACK(forwardDestinationChosen),
                           // TRANSLATOR: Forward dialog, alternative is "_Forward". The underscore marks accelerator keys, they must be different!
@@ -2433,11 +2435,13 @@ void PurpleTdClient::forwardDestinationChosen(void *data, PurpleRequestFields *f
     PurpleTdClient     *client   = findConnected(request->accountName.c_str());
     if (!client || !selected)
         return;
-    const char *label = static_cast<const char *>(selected->data);
-    const auto *to    = label ? static_cast<const ForwardDestination *>(purple_request_field_list_get_data(field, label))
-                              : nullptr;
-    if (to)
-        client->forwardMessage(request->chatId, request->messageId, *to);
+    for (; selected; selected = selected->next) {
+        const char *label = static_cast<const char *>(selected->data);
+        const auto *to    = label ? static_cast<const ForwardDestination *>(purple_request_field_list_get_data(field, label))
+                                  : nullptr;
+        if (to)
+            client->forwardMessage(request->chatId, request->messageId, *to);
+    }
 }
 
 void PurpleTdClient::forwardDestinationCancelled(void *data, PurpleRequestFields *)

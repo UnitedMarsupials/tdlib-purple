@@ -37,6 +37,7 @@ void setRequestListChoice(int index);
 // ticked); those asked for with none left are given up
 void setRequestAnswers(std::vector<std::map<std::string, std::string>> answers);
 size_t getRequestAnswersLeft();
+void setRequestListChoices(std::vector<int> indices);
 void clearConversationData();
 // What conversations have written while logging, as Pidgin would log it, oldest first; taken, so
 // that the next call has only what is written since
