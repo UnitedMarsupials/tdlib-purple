@@ -25,6 +25,9 @@ namespace tgvoip {
 
 bool        isPhoneNumber(const char *s);
 const char *getCanonicalPhoneNumber(const char *s);
+// A name as the plugin names a user: "id" and the user's id, in digits and nothing else; an id no
+// user has, such as 0, too
+bool        isUserIdName(const char *s);
 UserId      purpleBuddyNameToUserId(const char *s);
 SecretChatId purpleBuddyNameToSecretChatId(const char *s);
 bool        isPrivateChat(const td::td_api::chat &chat);

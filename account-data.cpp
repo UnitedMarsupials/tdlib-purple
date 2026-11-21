@@ -34,18 +34,26 @@ const char *getCanonicalPhoneNumber(const char *s)
         return s;
 }
 
+// The prefix, then digits and nothing else, as the plugin writes them
+static bool isNumberedName(const char *s, const char *prefix)
+{
+    size_t length = strlen(prefix);
+    return s && !strncmp(s, prefix, length) && s[length] && (strspn(s + length, "0123456789") == strlen(s + length));
+}
+
+bool isUserIdName(const char *s)
+{
+    return isNumberedName(s, "id");
+}
+
 UserId purpleBuddyNameToUserId(const char *s)
 {
-    if (strncmp(s, "id", 2))
-        return UserId::invalid;
-    return UserId::fromString(s+2);
+    return isUserIdName(s) ? UserId::fromString(s + 2) : UserId::invalid;
 }
 
 SecretChatId purpleBuddyNameToSecretChatId(const char *s)
 {
-    if (strncmp(s, "secret", 2))
-        return SecretChatId::invalid;
-    return SecretChatId::fromString(s+6);
+    return isNumberedName(s, "secret") ? SecretChatId::fromString(s + 6) : SecretChatId::invalid;
 }
 
 static bool isPhoneEqual(const std::string &n1, const std::string &n2)
@@ -145,19 +153,6 @@ bool isSameUser(const td::td_api::MessageSender &member1, const td::td_api::Mess
     }
 
     return false;
-}
-
-static std::string makeDisplayName(const td::td_api::user &user)
-{
-    std::string result = makeBasicDisplayName(user);
-
-    // If some sneaky user sets their name equal to someone else's libpurple username, or to our
-    // phone number which is libpurple account name, make sure display name is different, because
-    // of how it is used for group chat members
-    if ((purpleBuddyNameToUserId(result.c_str()).valid()) || isPhoneNumber(result.c_str()))
-        result += ' ';
-
-    return result;
 }
 
 auto PendingMessageQueue::getChatQueue(ChatId chatId) -> std::vector<ChatQueue>::iterator 
@@ -333,7 +328,7 @@ void TdAccountData::updateUser(TdUserPtr userPtr)
 
         UserInfo &entry = it->second;
         entry.user = std::move(userPtr);
-        entry.displayName = makeDisplayName(*user);
+        entry.displayName = makeBasicDisplayName(*user);
         for (unsigned n = 0; n != UINT32_MAX; n++) {
             std::string displayName = entry.displayName;
             if (n != 0) {

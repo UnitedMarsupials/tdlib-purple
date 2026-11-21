@@ -3528,15 +3528,28 @@ void PurpleTdClient::addContact(const std::string &purpleName, const std::string
         return;
     }
 
+    // By id, as a group's member is named; by a display name typed in, as long as it is one person's
     std::vector<const td::td_api::user *> users;
-    m_data.getUsersByDisplayName(purpleName.c_str(), users);
+    if (isUserIdName(purpleName.c_str())) {
+        const td::td_api::user *user = m_data.getUser(purpleBuddyNameToUserId(purpleName.c_str()));
+        if (!user) {
+            // TRANSLATOR: Error dialog, secondary content, argument is a user's id (a number)
+            notifyFailedContactDeferred(formatMessage(_("No known user with id {}"), purpleName.substr(2)));
+            return;
+        }
+        users.push_back(user);
+    } else
+        m_data.getUsersByDisplayName(purpleName.c_str(), users);
     if (users.size() > 1) {
         notifyFailedContactDeferred(formatMessage("More than one user known with name '{}'", purpleName));
         return;
     }
 
     if (users.size() == 1)
-        addContactById(getId(*users[0]), "", purpleName, groupName);
+        // libpurple gives a buddy with no alias its name as one, an id here: the user's own name then
+        addContactById(getId(*users[0]), "", ((alias.empty() || (alias == purpleName)) ? makeBasicDisplayName(*users[0])
+                                                                                        : alias),
+                       groupName);
     else if (isPhoneNumber(purpleName.c_str())) {
 #if TDLIB_API_IMPORTED_CONTACT
         auto contact = td::td_api::make_object<td::td_api::importedContact>();
@@ -3662,11 +3675,8 @@ void PurpleTdClient::addContactCreatePrivateChatResponse(uint64_t requestId, td:
         if (user && !isChatInContactList(chat, user)) {
             // Normally, the user will become a contact and this won't happen. But it does happen
             // when adding BotFather, for example. Nothing will be added to buddy list, so open chat
-            // window just to make something happen.
-            // Since the user is not in buddy list, we have to use display name as libpurple name,
-            // otherwise conversation title will be idXXXXXXX
-            std::string displayName = m_data.getDisplayName(*user);
-            getImConversation(m_account, displayName.c_str());
+            // window just to make something happen, with a buddy until the program quits.
+            getImConversation(m_account, addTransientBuddy(m_data, *user).c_str());
         }
     } else {
         purple_debug_misc(config::pluginId, "Failed to create private chat to %s\n",
@@ -3747,9 +3757,9 @@ std::string PurpleTdClient::getChatMemberImName(const char *name)
     const td::td_api::user *user   = userId.valid() ? m_data.getUser(userId) : nullptr;
     if (!user)
         return std::string();
-    // As private chats' conversations are named: by the contact, or by the display name without one
-    std::string buddyName = getPurpleBuddyName(*user);
-    return purple_find_buddy(m_account, buddyName.c_str()) ? buddyName : m_data.getDisplayName(*user);
+    // As private chats' conversations are named: by id, the user's buddy, added if need be, showing
+    // their name
+    return addTransientBuddy(m_data, *user);
 }
 
 bool PurpleTdClient::joinChat(const char *chatName, bool lookUp)
@@ -3952,9 +3962,9 @@ void PurpleTdClient::createGroup(const char *name, int type,
         }
         for (const std::string &memberName: basicGroupMembers) {
             UserId userId = purpleBuddyNameToUserId(memberName.c_str());
-            if (userId.valid()) {
-                if (!m_data.getUser(userId)) {
-                    errorMessage = formatMessage(_("No known user with id {}"), userId);
+            if (isUserIdName(memberName.c_str())) {
+                if (!userId.valid() || !m_data.getUser(userId)) {
+                    errorMessage = formatMessage(_("No known user with id {}"), memberName.substr(2));
                 }
             } else {
                 std::vector<const td::td_api::user*> users;
@@ -4085,7 +4095,7 @@ void PurpleTdClient::kickUserFromChat(PurpleConversation *conv, const char *name
         return;
     }
 
-    std::vector<const td::td_api::user *> users = getUsersByPurpleName(name, m_data, "kick user");
+    std::vector<const td::td_api::user *> users = getUsersByPurpleName(name, m_data, "kick user", true);
     if (users.size() != 1) {
         // TRANSLATOR: In-chat error message, appears after a colon (':')
         const char *reason = users.empty() ? _("User not found") :
@@ -4160,7 +4170,7 @@ void PurpleTdClient::addUserToChat(int purpleChatId, const char *name)
         return;
     }
 
-    std::vector<const td::td_api::user *> users = getUsersByPurpleName(name, m_data, "kick user");
+    std::vector<const td::td_api::user *> users = getUsersByPurpleName(name, m_data, "invite user", true);
     if (users.size() != 1) {
         // TRANSLATOR: In-chat error message, appears after a colon (':')
         const char *reason = users.empty() ? _("User not found") :
