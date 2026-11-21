@@ -751,6 +751,27 @@ TEST_F(LoginThroughChatTest, AnswerOnlyToChatId)
     finishLogin();
 }
 
+// Once logged in, what is typed into the chat, still open, goes to no one, even to a user calling
+// themselves by the name it goes by
+TEST_F(LoginThroughChatTest, NobodyAfterLogin)
+{
+    loginUntilCode();
+    prpl.verifyEvents(
+        AddBuddyEvent(authBuddy, "Telegram", account, NULL, NULL, NULL),
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, authBuddy),
+        ServGotImEvent(connection, authBuddy, codePrompt, PURPLE_MESSAGE_RECV, 0)
+    );
+    ASSERT_LT(0, send(authBuddy, "12345"));
+    tgl.verifyRequest(checkAuthenticationCode("12345"));
+    finishLogin();
+
+    tgl.update(make_object<updateUser>(makeUser(7000, authBuddy, "", "", make_object<userStatusOffline>())));
+    prpl.discardEvents();
+    ASSERT_GT(0, send(authBuddy, "the code was 12345"));
+    tgl.verifyNoRequests();
+    prpl.discardEvents();
+}
+
 TEST_F(LoginThroughChatTest, NotLoggedWhileWaiting)
 {
     loginUntilCode();
