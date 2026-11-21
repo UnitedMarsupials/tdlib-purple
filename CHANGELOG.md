@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Features
+
+- **The local database of an account can be encrypted with the account's password, which Pidgin asks for at every connection unless told to remember it.** "Encrypt the local database with the password", in the account's settings, turns it on; the account's password is now optional, for it. Until now the database was encrypted with a key built into TDLib, which anyone with the files could open. An existing database is encrypted once the password is typed again to confirm it, and goes back to the built-in key when the option is turned off; "Change the database password..." encrypts it anew. Each rewrites the whole database, which takes long for a big one, and the dialogs say so. The password goes through PBKDF2 with 600,000 iterations before TDLib gets it, as TDLib takes its key for a strong one. Where TDLib is built with plain SQLite rather than SQLCipher, which leaves the messages unencrypted, a warning says so.
+
 ### Fixes
 
 - **In Pidgin, switching to a chat's tab that was open but not shown while messages came takes the user to the first unread one, as opening the tab anew does, rather than to the end.** Pidgin keeps a tab at its end as messages are written to it, whether or not anyone looks; a tab coming into view with messages unread is now filled anew from the first unread, with read ones before it.

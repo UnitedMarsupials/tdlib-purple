@@ -1130,7 +1130,8 @@ static PurpleCmdRet pasteCommand(PurpleConversation *conv, const gchar *cmd, gch
 static char png[] = "png";
 
 static PurplePluginProtocolInfo prpl_info = {
-    .options          = (PurpleProtocolOptions)(OPT_PROTO_NO_PASSWORD | OPT_PROTO_IM_IMAGE | OPT_PROTO_CHAT_TOPIC),
+    // The password is the local database's, if it is encrypted
+    .options          = (PurpleProtocolOptions)(OPT_PROTO_PASSWORD_OPTIONAL | OPT_PROTO_IM_IMAGE | OPT_PROTO_CHAT_TOPIC),
     .user_splits      = NULL, // was initialized in tgprpl_init()
     .protocol_options = NULL, // was initialized in tgprpl_init()
 
@@ -1708,6 +1709,11 @@ static void tgprpl_init (PurplePlugin *plugin)
     opt = purple_account_option_list_new (_("Bigger inline file downloads"), AccountOptions::BigDownloadHandling, choices);
     prpl_info.protocol_options = g_list_append (prpl_info.protocol_options, opt);
 
+    // TRANSLATOR: Account settings, key (boolean). The password is the one of the account's settings, not Telegram's two-step verification password.
+    opt = purple_account_option_bool_new(_("Encrypt the local database with the password (takes effect at reconnect)"),
+                                         AccountOptions::EncryptDatabase, AccountOptions::EncryptDatabaseDefault);
+    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+
     // TRANSLATOR: Account settings, key (boolean)
     opt = purple_account_option_bool_new (_("Enable secret chats (takes effect at reconnect)"),
                                           AccountOptions::EnableSecretChats,
@@ -1839,6 +1845,68 @@ static void configureTwoFactorAuth(PurplePluginAction *action)
     requestTwoFactorAuth(gc, _("Enter new password and recovery e-mail address"), NULL);
 }
 
+static void requestDatabasePassword(PurpleConnection *gc, const char *primary);
+
+static int reRequestDatabasePassword(gpointer user_data)
+{
+    std::unique_ptr<RequestData> request(static_cast<RequestData *>(user_data));
+    PurpleConnection *gc = purple_account_get_connection(request->account);
+    if (gc)
+        // TRANSLATOR: Database password dialog, primary content (after mistype)
+        requestDatabasePassword(gc, _("Please enter same password twice"));
+    return FALSE;
+}
+
+static void setDatabasePassword(RequestData *data, PurpleRequestFields *fields)
+{
+    std::unique_ptr<RequestData> request(data);
+    PurpleTdClient *tdClient  = getTdClient(request->account);
+    const char     *password1 = purple_request_fields_get_string(fields, "pw1");
+    const char     *password2 = purple_request_fields_get_string(fields, "pw2");
+    if (!tdClient)
+        return;
+    if (!password1 || !*password1 || !password2 || strcmp(password1, password2))
+        // Calling purple_request_fields synchronously causes glitch in pidgin
+        g_idle_add(reRequestDatabasePassword, new RequestData(request->account));
+    else
+        tdClient->changeDatabasePassword(password1);
+}
+
+static void requestDatabasePassword(PurpleConnection *gc, const char *primary)
+{
+    PurpleRequestFields     *fields = purple_request_fields_new();
+    PurpleRequestFieldGroup *group  = purple_request_field_group_new(NULL);
+    // TRANSLATOR: Database password dialog, key
+    PurpleRequestField      *field  = purple_request_field_string_new("pw1", _("New password"), NULL, FALSE);
+    purple_request_field_string_set_masked(field, TRUE);
+    purple_request_field_group_add_field(group, field);
+    // TRANSLATOR: Database password dialog, key
+    field = purple_request_field_string_new("pw2", _("Confirm password"), NULL, FALSE);
+    purple_request_field_string_set_masked(field, TRUE);
+    purple_request_field_group_add_field(group, field);
+    purple_request_fields_add_group(fields, group);
+
+    RequestData    *data      = new RequestData(purple_connection_get_account(gc));
+    PurpleTdClient *tdClient  = getTdClient(purple_connection_get_account(gc));
+    // TRANSLATOR: Database password dialog, secondary content
+    std::string     secondary = _("The local database is encrypted with the new password, which becomes the account's.");
+    if (tdClient)
+        secondary += "\n\n" + tdClient->getDatabaseRewriteWarning();
+    // TRANSLATOR: Database password dialog, title
+    purple_request_fields(gc, _("Database password"), primary, secondary.c_str(), fields,
+                          // TRANSLATOR: Database password dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
+                          _("_OK"), G_CALLBACK(setDatabasePassword),
+                          // TRANSLATOR: Database password dialog, alternative is "_OK". The underscore marks accelerator keys, they must be different!
+                          _("_Cancel"), G_CALLBACK(cancelRequest),
+                          purple_connection_get_account(gc), NULL, NULL, data);
+}
+
+static void changeDatabasePassword(PurplePluginAction *action)
+{
+    // TRANSLATOR: Database password dialog, primary content
+    requestDatabasePassword(static_cast<PurpleConnection *>(action->context), _("Change the local database's password"));
+}
+
 static GList *tgprpl_actions (PurplePlugin *plugin, gpointer context)
 {
     GList *actionsList = NULL;
@@ -1847,6 +1915,9 @@ static GList *tgprpl_actions (PurplePlugin *plugin, gpointer context)
     // TRANSLATOR: 2FA settings, title
     action = purple_plugin_action_new(_("Configure two-factor authentication..."),
                                       configureTwoFactorAuth);
+    actionsList = g_list_append(actionsList, action);
+    // TRANSLATOR: Account action, opening the dialog of the database's password
+    action = purple_plugin_action_new(_("Change the database password..."), changeDatabasePassword);
     actionsList = g_list_append(actionsList, action);
 
     return actionsList;

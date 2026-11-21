@@ -84,6 +84,22 @@ Quit Pidgin, have someone send several messages to a private chat and a group, s
 
 * All of them are shown, in order, not only the latest.
 
+### S5. Encrypting the local database
+
+On a copy of the profile, or with an account whose database can be lost, turn on "Encrypt the
+local database with the password" in the account's settings, with a password not remembered, and
+connect.
+
+* Pidgin asks for the password; then the plugin asks for it again, warning how long rewriting the
+  database takes, and a notice not to quit stays up until it says the database is encrypted.
+* The debug log names the database directory as encrypted ("using database directory ..., encrypted").
+* Connecting again asks for the password, and a wrong one is refused, the account staying
+  disconnected; the right one connects.
+* "Change the database password..." with two different passwords asks again; with the same one,
+  the database is encrypted anew and the new password opens it next time.
+* Turning the option off asks for the password at the next connection, and goes back to TDLib's
+  built-in key.
+
 ## Reading and the tabs shown
 
 ### T1. Read as seen

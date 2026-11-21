@@ -114,7 +114,8 @@ enum class PurpleEventType: uint8_t {
     XferWriteFile,
     SetUserPhoto,
     RoomlistInProgress,
-    RoomlistAddRoom
+    RoomlistAddRoom,
+    RequestPassword
 };
 
 struct PurpleEvent {
@@ -615,6 +616,13 @@ struct RoomlistAddRoomEvent: PurpleEvent {
                          const char *valueToCheck)
     : PurpleEvent(PurpleEventType::RoomlistAddRoom), roomlist(roomlist), fieldToCheck(fieldToCheck),
       valueToCheck(valueToCheck) {}
+};
+
+struct RequestPasswordEvent: PurpleEvent {
+    PurpleAccount *account;
+
+    RequestPasswordEvent(PurpleAccount *account)
+    : PurpleEvent(PurpleEventType::RequestPassword), account(account) {}
 };
 
 #endif

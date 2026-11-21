@@ -2081,3 +2081,45 @@ void *findFrontEndSymbol(const char *name)
     }
     return symbol;
 }
+
+std::string deriveKey(const std::string &password, const std::string &salt, unsigned iterations)
+{
+    enum { KEY_SIZE = 32 };
+    // A single block: the key is as long as the digest. U1 is of the salt and the block's number,
+    // each U after of the one before, and the key all of them XORed.
+    guint8 block[KEY_SIZE];
+    guint8 key[KEY_SIZE];
+    gsize  length = sizeof(block);
+    GHmac *empty  = g_hmac_new(G_CHECKSUM_SHA256, reinterpret_cast<const guchar *>(password.data()),
+                               password.size());
+    GHmac *hmac   = g_hmac_copy(empty);
+    const guchar number[] = {0, 0, 0, 1};
+    g_hmac_update(hmac, reinterpret_cast<const guchar *>(salt.data()), salt.size());
+    g_hmac_update(hmac, number, sizeof(number));
+    g_hmac_get_digest(hmac, block, &length);
+    g_hmac_unref(hmac);
+    memcpy(key, block, sizeof(key));
+    for (unsigned i = 1; i < iterations; i++) {
+        hmac   = g_hmac_copy(empty);
+        g_hmac_update(hmac, block, sizeof(block));
+        length = sizeof(block);
+        g_hmac_get_digest(hmac, block, &length);
+        g_hmac_unref(hmac);
+        for (unsigned j = 0; j < KEY_SIZE; j++)
+            key[j] ^= block[j];
+    }
+    g_hmac_unref(empty);
+    return std::string(reinterpret_cast<const char *>(key), sizeof(key));
+}
+
+bool isPlainSqliteFile(const std::string &path)
+{
+    static const char HEADER[] = "SQLite format 3";
+    char  start[sizeof(HEADER)] = {};
+    FILE *f    = fopen(path.c_str(), "rb");
+    bool  read = f && (fread(start, 1, sizeof(start), f) == sizeof(start));
+    if (f)
+        fclose(f);
+    // The header's terminating NUL included
+    return read && !memcmp(start, HEADER, sizeof(HEADER));
+}
