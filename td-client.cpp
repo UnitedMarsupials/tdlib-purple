@@ -3538,7 +3538,7 @@ void PurpleTdClient::createGroup(const char *name, int type,
             UserId userId = purpleBuddyNameToUserId(memberName.c_str());
             if (isUserIdName(memberName.c_str())) {
                 if (!userId.valid() || !m_data.getUser(userId)) {
-                    errorMessage = formatMessage(_("No known user with id {}"), userId);
+                    errorMessage = formatMessage(_("No known user with id {}"), memberName.substr(2));
                 }
             } else {
                 std::vector<const td::td_api::user*> users;
