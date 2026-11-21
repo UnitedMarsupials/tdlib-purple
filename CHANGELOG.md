@@ -4,7 +4,7 @@
 
 ### Features
 
-- **A Telegram link, such as `tg://resolve?domain=channel&post=12`, handed to libpurple over D-Bus, as a web browser's handler for such links can, opens its chat at that post.** TDLib tells what the link leads to: a chat, or a message in it, which the chat's conversation is opened at, filled from it if it does not show it; a channel or group not joined is shown too. Another kind of link, or one that leads nowhere, is told in a dialog. The first Telegram account connected follows it, or the one its `account` parameter names. README.md says how to hand links over.
+- **A Telegram link, such as `tg://resolve?domain=channel&post=12`, handed to libpurple over D-Bus, as a web browser's handler for such links can, opens its chat at that post.** TDLib tells what the link leads to: a chat, or a message in it, which the chat's conversation is opened at, filled from it if it does not show it; a channel or group not joined is shown too. Another kind of link, or one that leads nowhere, is told in a dialog. The first Telegram account connected follows it, or the one its `account` parameter names. `tdlib-purple-tg-link`, installed with the plugin, hands a link over, with `gdbus` only, telling what went wrong as a notification or with `xmessage`; `tdlib-purple-tg-link.desktop`, made the handler of `tg:` links, has a web browser start it, as README.md says.
 
 ### Fixes
 

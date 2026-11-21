@@ -231,8 +231,8 @@ which they were, and they came back as if never deleted.
 
 ### H5. Telegram links
 
-With Pidgin running, hand it a link to a post of a channel, joined or not, as
-README.md shows with `dbus-send`; then one to a message of an open chat that
+With Pidgin running, hand it a link to a post of a channel, joined or not,
+with `tdlib-purple-tg-link`, as README.md shows; then one to a message of an open chat that
 its tab still shows, and one that it no longer does.
 
 * The chat's conversation comes up, its tab chosen in its window even while another was, at
@@ -241,6 +241,11 @@ its tab still shows, and one that it no longer does.
   anew from the message.
 * A link to something else, such as `tg://settings`, or to a channel that does
   not exist, gets a dialog saying it cannot be followed.
+* With Pidgin not running, `tdlib-purple-tg-link` says so, as a desktop
+  notification or with `xmessage`.
+* Made the handler of `tg:` links (`xdg-mime default
+  tdlib-purple-tg-link.desktop x-scheme-handler/tg`), a "View in Telegram"
+  link on a channel's page in Firefox opens the post in Pidgin.
 * A link to a post further back than Pidgin's "scrollback_lines" preference
   holds gets a dialog saying so; a tab opened for it shows the latest messages,
   from the first unread, and an open one is left as it was.

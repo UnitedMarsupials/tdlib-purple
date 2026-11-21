@@ -74,18 +74,20 @@ any other kind, or one leading nowhere, is told in a dialog. The first
 Telegram account connected follows it, or the one an `account` parameter
 names, as in `tg://resolve?domain=channel&post=12&account=%2B15551234567`.
 
-Libpurple takes such links over D-Bus, in Pidgin or Finch, as a desktop's
-handler for `tg:` passes them:
+Libpurple takes such links over D-Bus, in Pidgin, Finch or another program
+built with it, which `tdlib-purple-tg-link`, installed with the plugin, hands
+them over by:
 
-    dbus-send --session --type=method_call --dest=im.pidgin.purple.PurpleService \
-        /im/pidgin/purple/PurpleObject \
-        im.pidgin.purple.PurpleInterface.PurpleGotProtocolHandlerUri \
-        string:'tg://resolve?domain=channel&post=12'
+    tdlib-purple-tg-link 'tg://resolve?domain=channel&post=12'
 
-A web browser finds the handler of `tg:` links as the desktop's settings say:
-a `.desktop` file declaring `MimeType=x-scheme-handler/tg;`, whose `Exec`
-line passes `%u` on, made the handler with
-`xdg-mime default <file>.desktop x-scheme-handler/tg`.
+It needs only `gdbus`, which comes with GLib. What goes wrong, such as no
+libpurple program running, it tells as a desktop notification, or else with
+`xmessage`, or on stderr. A web browser starts it for `tg:` links once
+`tdlib-purple-tg-link.desktop`, installed with it, is made their handler:
+
+    xdg-mime default tdlib-purple-tg-link.desktop x-scheme-handler/tg
+
+Firefox asks the first time whether to open such a link with it.
 
 ## Debugging vs. privacy
 

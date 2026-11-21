@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Telegram link in libpurple
+Comment=Opens Telegram links in Pidgin, Finch or another libpurple program, through tdlib-purple
+Exec=tdlib-purple-tg-link %u
+MimeType=x-scheme-handler/tg;
+NoDisplay=true
+Terminal=false
