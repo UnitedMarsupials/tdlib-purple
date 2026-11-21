@@ -58,6 +58,8 @@ PurpleTdClient::~PurpleTdClient()
 
     showMessages(messages, m_data);
     endAuthInput();
+    // A login given up, as the account is disabled before it is done, leaves nothing to answer
+    removeAuthInputBuddy();
 }
 
 void PurpleTdClient::setLogLevel(int level)
@@ -584,7 +586,8 @@ void PurpleTdClient::promptAuthInputViaChat(AuthInput type, const std::string &m
         serv_got_im(gc, AUTH_INPUT_BUDDY, prompt.c_str(), PURPLE_MESSAGE_RECV, time(NULL));
 }
 
-// Logged in, nothing more is asked for: the buddy the login input was asked for by goes
+// Logged in, or disconnected, nothing more is asked for: the buddy the login input was asked for
+// by goes
 void PurpleTdClient::removeAuthInputBuddy()
 {
     PurpleBuddy *buddy = purple_find_buddy(m_account, AUTH_INPUT_BUDDY);

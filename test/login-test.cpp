@@ -810,7 +810,9 @@ TEST_F(LoginThroughChatTest, LoggedAgainAfterDisconnectWhileWaiting)
     ASSERT_NE(nullptr, conv);
     EXPECT_FALSE(purple_conversation_is_logging(conv));
 
+    // The login given up, nothing is left to answer
     pluginInfo().close(connection);
+    prpl.verifyEvents(RemoveBuddyEvent(account, authBuddy));
     EXPECT_TRUE(purple_conversation_is_logging(conv));
 }
 
