@@ -114,6 +114,8 @@ bool canRedrawConversation(PurpleConversation *conv);
 // stopped; in Pidgin only
 void startProgress(PurpleConversation *conv, const std::string &html);
 void stopProgress(PurpleConversation *conv);
+// What the line says, the turning character after it as it was
+void updateProgress(PurpleConversation *conv, const std::string &html);
 
 // Whether the message's text is in the conversation's tab, to be written over
 bool canReplaceMessage(PurpleConversation *conv, MessageId messageId);
@@ -166,6 +168,29 @@ void scrollToMessageLater(PurpleConversation *conv, MessageId messageId);
 // window's is, if known
 using TopReachedHandler = void (*)(PurpleConversation *conv, double filling);
 void setTopReachedHandler(TopReachedHandler handler);
+
+// A tab may show part of its chat only, stopping short of the newest message: kept to so many
+// lines, with whole messages taken out of it, as Pidgin, which trims by the line, would take them
+// before they were seen. Its lines, as Pidgin counts them; none if they cannot be counted.
+unsigned countTabLines(PurpleConversation *conv);
+// The latest message the tab shows, if any
+MessageId findLastMessage(PurpleConversation *conv);
+// Takes whole messages out of the tab, from its top or from its end, until it has no more than so
+// many lines, if it can, keeping the message given, if any. True if it took any out.
+bool trimTab(PurpleConversation *conv, unsigned maxLines, bool fromTop, MessageId keep = MessageId());
+// The newest message the tab shows, where it stops short of the chat's newest; none if it does
+// not. Messages after it are not shown in it, written though they are, for the log and for Pidgin
+// to tell of, if hidden before.
+void setTabEnd(PurpleConversation *conv, MessageId messageId);
+MessageId getTabEnd(PurpleConversation *conv);
+void hideMessage(PurpleConversation *conv, MessageId messageId);
+// Once Pidgin is done scrolling to the end as the tab is written, scrolls it back so that what is
+// at its top now is there again
+void keepViewLater(PurpleConversation *conv);
+// Told when a tab that stops short of its chat's newest message is scrolled to its end, or has
+// no more than fits, for later messages to be shown
+using BottomReachedHandler = void (*)(PurpleConversation *conv);
+void setBottomReachedHandler(BottomReachedHandler handler);
 
 // The conversation shows no messages as unseen any more, as when its tab is looked at: its tab,
 // and Pidgin's counts of unread messages, in the buddy list's menu and the tray. False if it showed none.

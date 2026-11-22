@@ -129,6 +129,10 @@ FRONT_END_FUNCTION(gtk_text_view_window_to_buffer_coords);
 FRONT_END_FUNCTION(gtk_text_view_get_iter_at_location);
 FRONT_END_FUNCTION(gtk_text_iter_get_marks);
 FRONT_END_FUNCTION(gtk_text_mark_get_name);
+FRONT_END_FUNCTION(gtk_text_buffer_get_line_count);
+FRONT_END_FUNCTION(gtk_text_buffer_get_iter_at_line);
+FRONT_END_FUNCTION(gtk_text_mark_get_deleted);
+FRONT_END_FUNCTION(gtk_text_iter_get_line);
 FRONT_END_FUNCTION(gtk_separator_menu_item_new);
 FRONT_END_FUNCTION(gtk_menu_get_type);
 FRONT_END_FUNCTION(g_type_check_instance_is_a);
@@ -248,7 +252,8 @@ enum class MarkKind {
     Reactions // the end of the line of reactions after the message, if it has one
 };
 
-static const char START_MARK_PREFIX[] = "tdlib-message-start-";
+static const char MESSAGE_MARK_PREFIX[] = "tdlib-message-";
+static const char START_MARK_PREFIX[]   = "tdlib-message-start-";
 
 static std::string getMarkName(MessageId messageId, MarkKind kind)
 {
@@ -507,6 +512,7 @@ static gboolean displayingMessage(PurpleAccount *account, const char *who, char 
 }
 
 static void scheduleViewCheck(PurpleConversation *conv);
+static bool isMessageHidden(PurpleConversation *conv, MessageId messageId);
 
 // Emitted by Pidgin once it has written into a tab; not if another plugin stopped the writing.
 // The marks are set (again) after each part of the message, while the conversation surely exists.
@@ -535,6 +541,9 @@ static void displayedMessage(PurpleAccount *account, const char *who, char *mess
             setMark(buffer, getMarkName(g_messageBeingWritten->messageId, MarkKind::Body), marker);
         }
         g_messageBeingWritten->bodyMarked = true;
+        // Written for the log, and for Pidgin to tell of it, but past the end of what the tab shows
+        if (isMessageHidden(conv, g_messageBeingWritten->messageId))
+            removeMessage(conv, g_messageBeingWritten->messageId);
     }
     if (conv)
         scheduleViewCheck(conv);
@@ -563,11 +572,18 @@ static char *drawingBuddy(PurpleBuddy *buddy)
 
 static guint g_connectSource = 0;
 
+// Emptied, as by /clear: what comes is shown again
+static void historyCleared(PurpleConversation *conv)
+{
+    setTabEnd(conv, MessageId());
+}
+
 // Disconnected by libpurple when the plugin is unloaded
 static void connectPaste(gpointer plugin);
 static void connectPopup();
 static void connectScroll();
 static void connectShown(gpointer plugin);
+static void findTabWindowFunctions();
 
 static gboolean connectSignals(gpointer plugin)
 {
@@ -580,6 +596,8 @@ static gboolean connectSignals(gpointer plugin)
     for (const char *signal: {"displayed-im-msg", "displayed-chat-msg"})
         connected = purple_signal_connect(handle, signal, plugin, PURPLE_CALLBACK(displayedMessage), NULL) &&
                     connected;
+    connected = purple_signal_connect(purple_conversations_get_handle(), "cleared-message-history", plugin,
+                                      PURPLE_CALLBACK(historyCleared), NULL) && connected;
     if (!connected)
         purple_debug_warning(config::pluginId, "Cannot follow Pidgin's conversation window\n");
     if (!LOOK_UP(pidgin_blist_get_handle) ||
@@ -651,6 +669,8 @@ void pidginUiLoad(PurplePlugin *plugin)
                 LOOK_UP(gtk_scrolled_window_set_policy) && LOOK_UP(gtk_box_pack_start) &&
                 LOOK_UP(gtk_widget_show_all) && LOOK_UP(gtk_widget_destroy) &&
                 LOOK_UP(g_signal_connect_data) && LOOK_UP(gtk_container_add);
+
+    findTabWindowFunctions();
 
     // A protocol plugin is loaded before Pidgin's window registers its signals: they are
     // connected to once the main loop is idle
@@ -880,6 +900,30 @@ void stopProgress(PurpleConversation *conv)
     for (const char *name: {PROGRESS_START, PROGRESS_SPINNER, PROGRESS_END})
         if (GtkTextMark *mark = getProgressMark(buffer, name))
             p_gtk_text_buffer_delete_mark(buffer, mark);
+}
+
+void updateProgress(PurpleConversation *conv, const std::string &html)
+{
+    GtkIMHtml     *imhtml  = purple_conversation_get_data(conv, PROGRESS_KEY) ? getIMHtml(conv) : nullptr;
+    GtkTextBuffer *buffer  = imhtml ? imhtml->text_buffer : nullptr;
+    GtkTextMark   *start   = buffer ? getProgressMark(buffer, PROGRESS_START) : nullptr;
+    GtkTextMark   *spinner = buffer ? getProgressMark(buffer, PROGRESS_SPINNER) : nullptr;
+    if (!start || !spinner)
+        return;
+    // Its text only, between the line break before it, if any, and the spinner; the marks put
+    // back around what takes its place, which their gravity would not keep them around
+    GtkTextIter from, to;
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &from, start);
+    gint startOffset = p_gtk_text_iter_get_offset(&from);
+    if (p_gtk_text_iter_get_char(&from) == '\n')
+        p_gtk_text_iter_forward_char(&from);
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &to, spinner);
+    p_gtk_imhtml_delete(imhtml, &from, &to);
+    std::string line = std::string("<font color=\"#777777\">") + html + " </font>";
+    p_gtk_imhtml_insert_html_at_iter(imhtml, line.c_str(), GTK_IMHTML_NO_SCROLL, &from);
+    p_gtk_text_buffer_move_mark(buffer, spinner, &from);
+    p_gtk_text_buffer_get_iter_at_offset(buffer, &from, startOffset);
+    p_gtk_text_buffer_move_mark(buffer, start, &from);
 }
 
 // The edit in progress in a conversation's input field, and what the field held before
@@ -2761,6 +2805,20 @@ void refreshReactionTip(PurpleConversation *conv)
         p_gtk_widget_trigger_tooltip_query(reinterpret_cast<GtkWidget *>(imhtml));
 }
 
+// The message that starts where the iterator is, if one does
+static MessageId findMessageStart(const GtkTextIter &iter)
+{
+    GSList   *marks = p_gtk_text_iter_get_marks(&iter);
+    MessageId messageId;
+    for (GSList *item = marks; item && !messageId.valid(); item = item->next) {
+        const char *name = p_gtk_text_mark_get_name(static_cast<GtkTextMark *>(item->data));
+        if (name && g_str_has_prefix(name, START_MARK_PREFIX))
+            messageId = MessageId::fromString(name + strlen(START_MARK_PREFIX));
+    }
+    g_slist_free(marks);
+    return messageId;
+}
+
 MessageId findFirstMessage(PurpleConversation *conv)
 {
     GtkTextBuffer *buffer = getTextBuffer(conv);
@@ -2769,19 +2827,183 @@ MessageId findFirstMessage(PurpleConversation *conv)
         return MessageId();
     p_gtk_text_buffer_get_iter_at_offset(buffer, &iter, 0);
     do {
-        GSList   *marks = p_gtk_text_iter_get_marks(&iter);
-        MessageId messageId;
-        for (GSList *item = marks; item && !messageId.valid(); item = item->next) {
-            const char *name = p_gtk_text_mark_get_name(static_cast<GtkTextMark *>(item->data));
-            if (name && g_str_has_prefix(name, START_MARK_PREFIX))
-                messageId = MessageId::fromString(name + strlen(START_MARK_PREFIX));
-        }
-        g_slist_free(marks);
+        MessageId messageId = findMessageStart(iter);
         if (messageId.valid())
             return messageId;
     } while (p_gtk_text_iter_forward_char(&iter));
     return MessageId();
 }
+
+MessageId findLastMessage(PurpleConversation *conv)
+{
+    GtkTextBuffer *buffer = getTextBuffer(conv);
+    GtkTextIter    iter;
+    if (!buffer)
+        return MessageId();
+    p_gtk_text_buffer_get_end_iter(buffer, &iter);
+    do {
+        MessageId messageId = findMessageStart(iter);
+        if (messageId.valid())
+            return messageId;
+    } while (p_gtk_text_iter_backward_char(&iter));
+    return MessageId();
+}
+
+// Whether a tab's lines can be counted and its messages taken out by the line, as GTK is found
+static bool g_tabWindows = false;
+
+static void findTabWindowFunctions()
+{
+    g_tabWindows = LOOK_UP(gtk_text_buffer_get_line_count) && LOOK_UP(gtk_text_buffer_get_iter_at_line) &&
+                   LOOK_UP(gtk_text_iter_get_marks) && LOOK_UP(gtk_text_mark_get_name) &&
+                   LOOK_UP(gtk_text_mark_get_deleted) && LOOK_UP(gtk_text_iter_get_line) &&
+                   LOOK_UP(gtk_text_view_get_visible_rect) &&
+                   LOOK_UP(gtk_text_view_get_iter_at_location);
+    if (!g_tabWindows)
+        purple_debug_warning(config::pluginId, "Cannot keep tabs to part of a chat: some of GTK is not found\n");
+}
+
+unsigned countTabLines(PurpleConversation *conv)
+{
+    GtkTextBuffer *buffer = g_tabWindows ? getTextBuffer(conv) : nullptr;
+    return buffer ? p_gtk_text_buffer_get_line_count(buffer) : 0;
+}
+
+static const char TAB_END_KEY[]         = "tdlib-tab-end";
+static const char HIDDEN_MESSAGES_KEY[] = "tdlib-hidden-messages";
+
+static std::set<int64_t> *getHiddenMessages(GtkIMHtml *imhtml)
+{
+    return static_cast<std::set<int64_t> *>(p_g_object_get_data(reinterpret_cast<GObject *>(imhtml),
+                                                                HIDDEN_MESSAGES_KEY));
+}
+
+static void deleteHiddenMessages(gpointer data)
+{
+    delete static_cast<std::set<int64_t> *>(data);
+}
+
+static void deleteTabEnd(gpointer data)
+{
+    delete static_cast<MessageId *>(data);
+}
+
+void setTabEnd(PurpleConversation *conv, MessageId messageId)
+{
+    GtkIMHtml *imhtml = g_tabWindows ? getIMHtml(conv) : nullptr;
+    if (!imhtml)
+        return;
+    p_g_object_set_data_full(reinterpret_cast<GObject *>(imhtml), TAB_END_KEY,
+                             messageId.valid() ? new MessageId(messageId) : nullptr, deleteTabEnd);
+    // Those up to its end are to be shown now
+    std::set<int64_t> *hidden = getHiddenMessages(imhtml);
+    if (hidden && messageId.valid())
+        hidden->erase(hidden->begin(), hidden->upper_bound(messageId.value()));
+    else if (hidden)
+        hidden->clear();
+}
+
+MessageId getTabEnd(PurpleConversation *conv)
+{
+    GtkIMHtml *imhtml = g_tabWindows ? getIMHtml(conv) : nullptr;
+    MessageId *end    = imhtml ? static_cast<MessageId *>(p_g_object_get_data(reinterpret_cast<GObject *>(imhtml),
+                                                                              TAB_END_KEY))
+                               : nullptr;
+    return end ? *end : MessageId();
+}
+
+void hideMessage(PurpleConversation *conv, MessageId messageId)
+{
+    GtkIMHtml *imhtml = g_tabWindows ? getIMHtml(conv) : nullptr;
+    if (!imhtml)
+        return;
+    std::set<int64_t> *hidden = getHiddenMessages(imhtml);
+    if (!hidden) {
+        hidden = new std::set<int64_t>;
+        p_g_object_set_data_full(reinterpret_cast<GObject *>(imhtml), HIDDEN_MESSAGES_KEY, hidden,
+                                 deleteHiddenMessages);
+    }
+    hidden->insert(messageId.value());
+}
+
+static bool isMessageHidden(PurpleConversation *conv, MessageId messageId)
+{
+    GtkIMHtml         *imhtml = g_tabWindows ? getIMHtml(conv) : nullptr;
+    std::set<int64_t> *hidden = imhtml ? getHiddenMessages(imhtml) : nullptr;
+    return hidden && hidden->count(messageId.value());
+}
+
+// The line from which on, in either direction, the first message starts, if any does there but the
+// first line
+static gint findStartLine(GtkTextBuffer *buffer, gint line, bool forward)
+{
+    gint        lines = p_gtk_text_buffer_get_line_count(buffer);
+    GtkTextIter iter;
+    for (; (line > 0) && (line < lines); line += (forward ? 1 : -1)) {
+        p_gtk_text_buffer_get_iter_at_line(buffer, &iter, line);
+        if (findMessageStart(iter).valid())
+            return line;
+    }
+    return -1;
+}
+
+bool trimTab(PurpleConversation *conv, unsigned maxLines, bool fromTop, MessageId keep)
+{
+    GtkIMHtml     *imhtml = g_tabWindows ? getIMHtml(conv) : nullptr;
+    GtkTextBuffer *buffer = imhtml ? imhtml->text_buffer : nullptr;
+    gint           lines  = buffer ? p_gtk_text_buffer_get_line_count(buffer) : 0;
+    if (!maxLines || (lines <= gint(maxLines)))
+        return false;
+    GtkTextMark *keepMark = keep.valid() ? p_gtk_text_buffer_get_mark(buffer, getMarkName(keep, true).c_str())
+                                         : nullptr;
+    // From the top, the first message to stay; from the end, the first to go
+    gint line = findStartLine(buffer, fromTop ? (lines - maxLines) : maxLines, fromTop);
+    if (keepMark) {
+        GtkTextIter keepIter, cutIter;
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &keepIter, keepMark);
+        if (line >= 0)
+            p_gtk_text_buffer_get_iter_at_line(buffer, &cutIter, line);
+        if (fromTop && ((line < 0) || (p_gtk_text_iter_compare(&cutIter, &keepIter) > 0)))
+            line = p_gtk_text_iter_get_line(&keepIter);
+        else if (!fromTop && ((line < 0) || (p_gtk_text_iter_compare(&cutIter, &keepIter) <= 0)))
+            line = findStartLine(buffer, p_gtk_text_iter_get_line(&keepIter) + 1, true);
+    }
+    if (line <= 0)
+        return false;
+
+    // Taken out with the line break before the first message to go, or before the first to stay;
+    // with the marks of those that go, which would otherwise stay, where the text was
+    GtkTextIter from, to, cut;
+    p_gtk_text_buffer_get_iter_at_line(buffer, &cut, line);
+    if (fromTop) {
+        p_gtk_text_buffer_get_iter_at_offset(buffer, &from, 0);
+        to = cut;
+    } else {
+        from = cut;
+        p_gtk_text_iter_backward_char(&from);
+        p_gtk_text_buffer_get_end_iter(buffer, &to);
+    }
+    std::vector<GtkTextMark *> gone;
+    GtkTextIter                iter = fromTop ? from : cut;
+    for (bool more = true; more; more = p_gtk_text_iter_forward_char(&iter)) {
+        if (fromTop && (p_gtk_text_iter_compare(&iter, &to) >= 0))
+            break;
+        GSList *marks = p_gtk_text_iter_get_marks(&iter);
+        for (GSList *item = marks; item; item = item->next) {
+            const char *name = p_gtk_text_mark_get_name(static_cast<GtkTextMark *>(item->data));
+            if (name && g_str_has_prefix(name, MESSAGE_MARK_PREFIX))
+                gone.push_back(static_cast<GtkTextMark *>(item->data));
+        }
+        g_slist_free(marks);
+    }
+    purple_debug_misc(config::pluginId, "Taking lines %s %d out of %d in the tab\n", fromTop ? "up to" : "from",
+                      line, lines);
+    p_gtk_imhtml_delete(imhtml, &from, &to);
+    for (GtkTextMark *mark: gone)
+        p_gtk_text_buffer_delete_mark(buffer, mark);
+    return true;
+}
+
 
 namespace {
 struct ScrollToMessage {
@@ -2797,6 +3019,8 @@ struct ScrollToMessage {
 enum { SCROLLED_CHECK_MS = 100, SCROLLED_CHECKS = 50 };
 
 static TopReachedHandler g_topReachedHandler = nullptr;
+
+static void checkBottomReached(PurpleConversation *conv, GtkIMHtml *imhtml);
 
 static gboolean scrollToMessageTop(gpointer data)
 {
@@ -2814,6 +3038,10 @@ static gboolean scrollToMessageTop(gpointer data)
     if (adjustment && (reinterpret_cast<GtkObject *>(imhtml)->flags & GTK_MAPPED) &&
         (adjustment->upper <= adjustment->page_size) && g_topReachedHandler)
         g_topReachedHandler(scroll->conv, (adjustment->upper > 0) ? adjustment->page_size / adjustment->upper : 0);
+    // Or what follows does, where the tab stops short of the newest; but not taken to be at its
+    // end otherwise, which it still seems to be until GTK has scrolled it
+    if (adjustment && (adjustment->upper <= adjustment->page_size))
+        checkBottomReached(scroll->conv, imhtml);
     delete scroll;
     return G_SOURCE_REMOVE;
 }
@@ -2825,6 +3053,78 @@ void scrollToMessageLater(PurpleConversation *conv, MessageId messageId)
                            new ScrollToMessage{conv, messageId}, NULL);
 }
 
+namespace {
+struct KeptView {
+    PurpleConversation *conv;
+    GtkTextMark        *mark;
+    unsigned            checks = 0;
+};
+}
+
+static BottomReachedHandler g_bottomReachedHandler = nullptr;
+
+void setBottomReachedHandler(BottomReachedHandler handler)
+{
+    g_bottomReachedHandler = handler;
+}
+
+// Whether the tab's text is scrolled to its end, or has no more than fits
+static bool isAtBottom(GtkIMHtml *imhtml)
+{
+    GtkAdjustment *adjustment = reinterpret_cast<GtkTextView *>(imhtml)->vadjustment;
+    return adjustment && (adjustment->value + adjustment->page_size >= adjustment->upper);
+}
+
+// While what was in view is still to be put back, the tab is at the end only as written to
+static const char KEEPING_VIEW_KEY[] = "tdlib-purple-keeping-view";
+
+// Still at the end, where the tab stops short of the chat's newest, it goes on to later messages
+static void checkBottomReached(PurpleConversation *conv, GtkIMHtml *imhtml)
+{
+    if (g_bottomReachedHandler && (reinterpret_cast<GtkObject *>(imhtml)->flags & GTK_MAPPED) &&
+        !purple_conversation_get_data(conv, KEEPING_VIEW_KEY) && isAtBottom(imhtml) && getTabEnd(conv).valid())
+        g_bottomReachedHandler(conv);
+}
+
+// Scrolled back so that what was at the top is there again, once Pidgin is done scrolling to
+// the end; with no more than fits, it goes on
+static gboolean keptViewBack(gpointer data)
+{
+    KeptView  *kept   = static_cast<KeptView *>(data);
+    GtkIMHtml *imhtml = g_list_find(purple_get_conversations(), kept->conv) ? getIMHtml(kept->conv) : nullptr;
+    if (imhtml && imhtml->scroll_src && (++kept->checks < SCROLLED_CHECKS))
+        return G_SOURCE_CONTINUE;
+    if (imhtml) {
+        purple_conversation_set_data(kept->conv, KEEPING_VIEW_KEY, nullptr);
+        if (!p_gtk_text_mark_get_deleted(kept->mark)) {
+            p_gtk_text_view_scroll_to_mark(reinterpret_cast<GtkTextView *>(imhtml), kept->mark, 0.0, TRUE, 0.0, 0.0);
+            p_gtk_text_buffer_delete_mark(imhtml->text_buffer, kept->mark);
+        }
+        // Still at the end only if it has no more than fits: otherwise it seems to be until GTK
+        // has scrolled it
+        GtkAdjustment *adjustment = reinterpret_cast<GtkTextView *>(imhtml)->vadjustment;
+        if (adjustment && (adjustment->upper <= adjustment->page_size))
+            checkBottomReached(kept->conv, imhtml);
+    }
+    delete kept;
+    return G_SOURCE_REMOVE;
+}
+
+void keepViewLater(PurpleConversation *conv)
+{
+    GtkIMHtml *imhtml = g_tabWindows ? getIMHtml(conv) : nullptr;
+    if (!imhtml)
+        return;
+    GtkTextView *view = reinterpret_cast<GtkTextView *>(imhtml);
+    GdkRectangle rect;
+    GtkTextIter  top;
+    p_gtk_text_view_get_visible_rect(view, &rect);
+    p_gtk_text_view_get_iter_at_location(view, &top, rect.x, rect.y);
+    GtkTextMark *mark = p_gtk_text_buffer_create_mark(imhtml->text_buffer, NULL, &top, TRUE);
+    purple_conversation_set_data(conv, KEEPING_VIEW_KEY, conv);
+    g_timeout_add_full(G_PRIORITY_LOW, SCROLLED_CHECK_MS, keptViewBack, new KeptView{conv, mark}, NULL);
+}
+
 // A tab's text scrolled to its top: not again until it is scrolled down from there, nor while it
 // fits, emptied to be filled anew, which starts at the top too
 static guint             g_scrollSignal = 0;
@@ -2832,6 +3132,7 @@ static gulong            g_scrollHook   = 0;
 static guint             g_wheelSignal  = 0;
 static gulong            g_wheelHook    = 0;
 static const char        AT_TOP_KEY[]   = "tdlib-purple-at-top";
+static const char        AT_BOTTOM_KEY[] = "tdlib-purple-at-bottom";
 
 void setTopReachedHandler(TopReachedHandler handler)
 {
@@ -2850,6 +3151,12 @@ static gboolean scrolled(GSignalInvocationHint *, guint paramCount, const GValue
         if (!imhtml || (reinterpret_cast<GtkTextView *>(imhtml)->vadjustment != adjustment))
             continue;
         scheduleViewCheck(conv);
+        // Not while Pidgin scrolls to the end by itself, as it is written to
+        bool atBottom  = isAtBottom(imhtml);
+        bool wasBottom = purple_conversation_get_data(conv, AT_BOTTOM_KEY) != nullptr;
+        purple_conversation_set_data(conv, AT_BOTTOM_KEY, atBottom ? conv : nullptr);
+        if (atBottom && !wasBottom && !imhtml->scroll_src)
+            checkBottomReached(conv, imhtml);
         if (!g_topReachedHandler)
             break;
         bool atTop  = adjustment->value <= adjustment->lower;
@@ -2864,11 +3171,24 @@ static gboolean scrolled(GSignalInvocationHint *, guint paramCount, const GValue
     return TRUE;
 }
 
-// The wheel turned up at the top, or in a tab with no more than fits, where nothing scrolls
+// The wheel turned up at the top, or down at the end, or in a tab with no more than fits, where
+// nothing scrolls
 static gboolean wheelTurned(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
 {
     GtkWidget      *widget = (paramCount > 1) ? static_cast<GtkWidget *>(p_g_value_get_object(&params[0])) : nullptr;
     GdkEventScroll *event  = widget ? static_cast<GdkEventScroll *>(p_g_value_get_boxed(&params[1])) : nullptr;
+    if (event && (event->direction == GDK_SCROLL_DOWN)) {
+        for (GList *item = purple_get_conversations(); item; item = item->next) {
+            PurpleConversation *conv   = static_cast<PurpleConversation *>(item->data);
+            GtkIMHtml          *imhtml = strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)),
+                                                config::pluginId) ? nullptr : getIMHtml(conv);
+            if (imhtml && (reinterpret_cast<GtkWidget *>(imhtml) == widget)) {
+                checkBottomReached(conv, imhtml);
+                break;
+            }
+        }
+        return TRUE;
+    }
     if (!event || (event->direction != GDK_SCROLL_UP) || !g_topReachedHandler)
         return TRUE;
     for (GList *item = purple_get_conversations(); item; item = item->next) {
@@ -3701,6 +4021,10 @@ void stopProgress(PurpleConversation *conv)
 {
 }
 
+void updateProgress(PurpleConversation *conv, const std::string &html)
+{
+}
+
 bool canReplaceMessage(PurpleConversation *conv, MessageId messageId)
 {
     return false;
@@ -3755,6 +4079,42 @@ void scrollToMessageLater(PurpleConversation *conv, MessageId messageId)
 }
 
 void setTopReachedHandler(TopReachedHandler handler)
+{
+}
+
+unsigned countTabLines(PurpleConversation *conv)
+{
+    return 0;
+}
+
+MessageId findLastMessage(PurpleConversation *conv)
+{
+    return MessageId();
+}
+
+bool trimTab(PurpleConversation *conv, unsigned maxLines, bool fromTop, MessageId keep)
+{
+    return false;
+}
+
+void setTabEnd(PurpleConversation *conv, MessageId messageId)
+{
+}
+
+MessageId getTabEnd(PurpleConversation *conv)
+{
+    return MessageId();
+}
+
+void hideMessage(PurpleConversation *conv, MessageId messageId)
+{
+}
+
+void keepViewLater(PurpleConversation *conv)
+{
+}
+
+void setBottomReachedHandler(BottomReachedHandler handler)
 {
 }
 

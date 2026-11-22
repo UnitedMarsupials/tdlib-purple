@@ -102,6 +102,12 @@ bool getReactionTip(TdAccountData &account, PurpleConversation *conv, MessageId 
 // before it, as many as it can hold, scrolled to that one; false if the chat is busy, to be tried
 // again later
 bool fillChat(TdAccountData &account, ChatId chatId);
+// Where the chat's tab stops short of its newest message, the messages after it, written at its end,
+// those at its top taken out as they would not fit
+void showLaterMessages(TdAccountData &account, PurpleConversation *conv);
+// Where the chat's tab stops short of its newest message, fills it anew with the latest ones, as
+// before anything is sent from it
+void showNewestMessages(TdAccountData &account, ChatId chatId);
 // The chat a conversation is of, if known
 const td::td_api::chat *findConversationChat(TdAccountData &account, PurpleConversation *conv);
 void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messageId,

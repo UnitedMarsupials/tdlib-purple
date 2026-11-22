@@ -270,6 +270,44 @@ Send a message, delete it, then close the chat's tab and open it again, or quit 
 Since: ours were logged before Telegram gave them their lasting ids, so the log could not tell
 which they were, and they came back as if never deleted.
 
+### H5. A tab short of the newest
+
+Open a chat, a channel best, with more than 200 messages unread. Watch the
+line at the end while its messages are fetched.
+
+* The line counts the messages fetched so far.
+* The tab is scrolled to the first unread, with read ones before it, and holds
+  at most 200 messages; the debug log says it is "short of the newest".
+* It took seconds, not minutes.
+
+Scroll up to its top, as in H2.
+
+* Fifty earlier messages come, and the tab still ends where it did, not at
+  the newest.
+
+Scroll down to its end, or turn the mouse wheel down there.
+
+* Fifty more messages are added after the last, and what was in view stays
+  there; earlier ones are taken from the top, so that the tab keeps to half of
+  Pidgin's "scrollback_lines".
+* Going on to the end, the newest messages come, and the debug log says "up
+  to the newest".
+
+While the tab stops short of the newest, have a message come to the chat.
+
+* It is not shown at the end, after the gap, but it is logged, and the tab
+  turns red if not looked at.
+
+Then type a message into that tab and send it.
+
+* The tab is filled anew with the newest messages, and the one sent comes
+  after them.
+
+Since: the tab was filled with every message from the first unread to the
+newest, which Pidgin took longer to write the more it held, and then trimmed,
+by the line, from the top: a fill of 2938 channel posts took fifteen minutes,
+and the first unread was trimmed away.
+
 ## Files and pictures
 
 ### F1. Pasting

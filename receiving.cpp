@@ -1691,6 +1691,18 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
         purple_debug_misc(config::pluginId, "Not displaying deleted message %" G_GINT64_FORMAT "\n", message.id_);
         return;
     }
+    // Past the end of what its tab shows, if it stops short of the newest: not shown again, nor yet
+    // as it comes, though logged and told of
+    PurpleConversation *conv   = findMessageConversation(account, chat);
+    MessageId           tabEnd = conv ? getTabEnd(conv) : MessageId();
+    if (tabEnd.valid() && (message.id_ > tabEnd.value())) {
+        if (fullMessage.messageInfo.redrawn) {
+            purple_debug_misc(config::pluginId, "Not displaying message %" G_GINT64_FORMAT " past the tab's end\n",
+                              message.id_);
+            return;
+        }
+        hideMessage(conv, getId(message));
+    }
     purple_debug_misc(config::pluginId, "Displaying message %" G_GINT64_FORMAT "\n", message.id_);
 
     TgMessageInfo &messageInfo = fullMessage.messageInfo;
@@ -3130,6 +3142,20 @@ static unsigned getRedrawLimit()
     return (lines > 0) ? lines : std::numeric_limits<unsigned>::max();
 }
 
+// Lines a tab that stops short of its chat's newest message is kept to: half of what Pidgin keeps,
+// trimming by the line, so that it never takes away what was just shown; none if it keeps all, or
+// if the tab's lines cannot be counted
+static unsigned getWindowLines(PurpleConversation *conv)
+{
+    unsigned limit = getRedrawLimit();
+    return ((limit != std::numeric_limits<unsigned>::max()) && countTabLines(conv)) ? limit / 2 : 0;
+}
+
+// Written into a tab at once, at most, the earliest of the messages found; the tab then stops
+// short of the rest, which are shown as it is scrolled down to its end, so many at a time. Pidgin
+// takes the longer the more its tab holds, for each message written.
+enum { WINDOW_MESSAGES = 200, LATER_BATCH = 50 };
+
 namespace {
 struct Redraw {
     ChatId                                                  chatId;
@@ -3140,6 +3166,8 @@ struct Redraw {
     MessageId                                               firstUnread; // found so far
     unsigned                                                extra = 0; // messages wanted before the earliest
     bool                                                    filling = false; // a tab that fit, kept at its end
+    bool                                                    newest = false; // its latest messages only
+    MessageId                                               latest; // the tab's end, if it stops short
     bool                                                    found  = false; // the earliest, or one read
     unsigned                                                beyond = 0; // found so far
     unsigned                                                limit;
@@ -3189,18 +3217,22 @@ static bool isShownAsNotice(const td::td_api::message &message)
 // log, of no message, which is Pidgin's own that the account has disconnected, and which the
 // messages shown since make no news.
 static std::vector<LoggedLine> getLoggedLines(TdAccountData &account, const td::td_api::chat &chat,
-                                              PurpleConversation *conv, const Redraw &redraw)
+                                              PurpleConversation *conv,
+                                              const std::vector<td::td_api::object_ptr<td::td_api::message>> &messages,
+                                              bool stopsShort)
 {
     enum { SAME_TIME = 10 };
     std::vector<LoggedLine> lines;
     time_t since = 0;
-    if (!redraw.messages.empty() && redraw.messages.back())
-        since = redraw.messages.back()->date_;
+    if (!messages.empty() && messages.back())
+        since = messages.back()->date_;
     if (!since)
         return lines;
+    // Nothing past the last of them, in a tab that stops there
+    time_t until = (stopsShort && messages.front()) ? messages.front()->date_ : std::numeric_limits<time_t>::max();
     std::set<int64_t>           ids;
     std::multimap<time_t, bool> dates; // whether shown as a notice
-    for (const auto &message: redraw.messages)
+    for (const auto &message: messages)
         if (message) {
             ids.insert(message->id_);
             dates.emplace(message->date_, isShownAsNotice(*message));
@@ -3216,7 +3248,9 @@ static std::vector<LoggedLine> getLoggedLines(TdAccountData &account, const td::
                                            purple_conversation_get_name(conv), since))
     {
         bool keep;
-        if (line.messageId.valid()) {
+        if (line.when > until)
+            keep = false;
+        else if (line.messageId.valid()) {
             keep = !ids.count(line.messageId.value()) && keepDeleted;
             if (keep)
                 line.html = line.html.substr(0, line.bodyStart) + "<s>" + line.html.substr(line.bodyStart) + "</s>";
@@ -3253,15 +3287,24 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
     const td::td_api::chat *chat = account.getChat(redraw.chatId);
     PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
     stopProgress(conv);
+    unsigned windowLines = conv ? getWindowLines(conv) : 0;
+    // The earliest of them only, the rest shown later, if there are too many to write at once
+    bool stopsShort = redraw.latest.valid();
+    if (windowLines && (redraw.messages.size() > WINDOW_MESSAGES)) {
+        redraw.messages.erase(redraw.messages.begin(), redraw.messages.end() - WINDOW_MESSAGES);
+        stopsShort = true;
+    }
     if (conv) {
         purple_debug_misc(config::pluginId, "Redrawing chat %" G_GINT64_FORMAT " from message %" G_GINT64_FORMAT
-                          " or the first unread %" G_GINT64_FORMAT ": %zu messages\n", redraw.chatId.value(),
-                          redraw.earliest.value(), redraw.firstUnread.value(), redraw.messages.size());
+                          " or the first unread %" G_GINT64_FORMAT ": %zu messages%s\n", redraw.chatId.value(),
+                          redraw.earliest.value(), redraw.firstUnread.value(), redraw.messages.size(),
+                          stopsShort ? ", short of the newest" : "");
         purple_conversation_clear_message_history(conv);
+        setTabEnd(conv, (stopsShort && redraw.messages.front()) ? getId(*redraw.messages.front()) : MessageId());
         // Its first message is shown only if gone back to it again, below
         g_historyComplete.erase(redraw.chatId.value());
         g_redrawnCounts[redraw.chatId.value()] = redraw.messages.size();
-        std::vector<LoggedLine> lines = getLoggedLines(account, *chat, conv, redraw);
+        std::vector<LoggedLine> lines = getLoggedLines(account, *chat, conv, redraw.messages, stopsShort);
         // Newest first, as the messages, each going ahead of what is queued
         auto line = lines.rbegin();
         auto queueLinesSince = [&](time_t since) {
@@ -3278,6 +3321,14 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
     std::vector<IncomingMessage> readyMessages;
     account.pendingMessages.setChatReady(redraw.chatId, readyMessages);
     showMessages(readyMessages, account);
+    // Kept to what Pidgin will not trim: the message scrolled to and what follows, as much as fits,
+    // or the latest
+    MessageId scrolledTo = (redraw.filling || redraw.newest) ? MessageId() :
+                           redraw.opening ? redraw.firstUnread : redraw.earliest;
+    if (conv && windowLines && scrolledTo.valid() && trimTab(conv, windowLines, false, scrolledTo))
+        setTabEnd(conv, findLastMessage(conv));
+    else if (conv && windowLines)
+        trimTab(conv, windowLines, true);
     // Shown again, the messages already read are no news, as Pidgin takes them to be
     if (conv && chat && !chat->unread_count_)
         clearUnseen(conv);
@@ -3329,6 +3380,12 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
                 return;
             }
         } else if (!full && added) {
+            const td::td_api::chat *chat = account.getChat(redraw->chatId);
+            PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+            if (conv)
+                // TRANSLATOR: At the end of a conversation window while it is being filled, followed by a turning character. Argument is a number.
+                updateProgress(conv, escapeForDisplay(formatMessage(_("Fetching messages from Telegram: {}"),
+                                                                    redraw->messages.size())));
             redrawRequest(account, redraw, more);
             return;
         } else {
@@ -3362,7 +3419,7 @@ static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw
 
 // False if the chat is busy
 static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earliest, bool opening,
-                        unsigned extra = 0, bool filling = false)
+                        unsigned extra = 0, bool filling = false, bool newest = false)
 {
     const td::td_api::chat *chat = account.getChat(chatId);
     PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
@@ -3384,8 +3441,14 @@ static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earlies
     redraw->readUpTo = getLastReadMessageId(*chat);
     redraw->extra    = extra;
     redraw->filling  = filling;
+    redraw->newest   = newest;
+    redraw->found    = newest;
     redraw->limit    = getRedrawLimit();
-    redrawRequest(account, redraw, MessageId::invalid);
+    // Down to where the tab ends, if it stops short of the newest and the message is before that
+    MessageId end = getTabEnd(conv);
+    if (!opening && !newest && end.valid() && (!earliest.valid() || (earliest.value() <= end.value())))
+        redraw->latest = end;
+    redrawRequest(account, redraw, redraw->latest);
     return true;
 }
 
@@ -3421,6 +3484,87 @@ void showEarlierMessages(TdAccountData &account, PurpleConversation *conv, doubl
 bool fillChat(TdAccountData &account, ChatId chatId)
 {
     return startRedraw(account, chatId, MessageId::invalid, true, EARLIER_BATCH);
+}
+
+void showNewestMessages(TdAccountData &account, ChatId chatId)
+{
+    const td::td_api::chat *chat = account.getChat(chatId);
+    PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+    if (conv && getTabEnd(conv).valid())
+        startRedraw(account, chatId, MessageId::invalid, false, EARLIER_BATCH, false, true);
+}
+
+// Written after what the tab shows, oldest first, ahead of any that came meanwhile, then as much
+// taken from its top as keeps it short of Pidgin's limit; what was in view stays there
+static void laterMessagesResponse(TdAccountData &account, ChatId chatId, MessageId end,
+                                  td::td_api::object_ptr<td::td_api::Object> response)
+{
+    const td::td_api::chat *chat = account.getChat(chatId);
+    PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+    stopProgress(conv);
+    // Newest first, as TDLib gives them
+    std::vector<td::td_api::object_ptr<td::td_api::message>> later;
+    bool                                                     fetched = false;
+    if (response && (response->get_id() == td::td_api::messages::ID)) {
+        fetched = true;
+        for (auto &message: static_cast<td::td_api::messages &>(*response).messages_)
+            if (message && (getId(*message).value() > end.value()))
+                later.push_back(std::move(message));
+    } else
+        purple_debug_warning(config::pluginId, "Cannot fetch messages after %" G_GINT64_FORMAT ": %s\n",
+                             end.value(), getDisplayedError(response).c_str());
+    // Unless filled anew meanwhile
+    if (fetched && conv && (getTabEnd(conv) == end)) {
+        // A chat not joined may have no latest message given: then it is reached once none follow
+        MessageId lastId  = chat->last_message_ ? getId(*chat->last_message_) : MessageId();
+        bool      reached = later.empty() || (lastId.valid() && (getId(*later.front()).value() >= lastId.value()));
+        purple_debug_misc(config::pluginId, "Showing %zu messages after %" G_GINT64_FORMAT " in chat %"
+                          G_GINT64_FORMAT "%s\n", later.size(), end.value(), chatId.value(),
+                          reached ? ", up to the newest" : "");
+        setTabEnd(conv, reached ? MessageId() : getId(*later.front()));
+        keepViewLater(conv);
+        std::vector<LoggedLine> lines = getLoggedLines(account, *chat, conv, later, !reached);
+        auto line = lines.rbegin();
+        auto queueLinesSince = [&](time_t since) {
+            for (; (line != lines.rend()) && (line->when >= since); ++line)
+                queueLoggedLine(account, chatId, *line);
+        };
+        for (auto &message: later)
+            if (!account.pendingMessages.findPendingMessage(chatId, getId(*message))) {
+                queueLinesSince(message->date_);
+                handleIncomingMessage(account, *chat, std::move(message), PendingMessageQueue::Prepend, true);
+            }
+        queueLinesSince(0);
+    }
+    std::vector<IncomingMessage> readyMessages;
+    account.pendingMessages.setChatReady(chatId, readyMessages);
+    showMessages(readyMessages, account);
+    unsigned windowLines = conv ? getWindowLines(conv) : 0;
+    if (windowLines)
+        trimTab(conv, windowLines, true, end);
+}
+
+void showLaterMessages(TdAccountData &account, PurpleConversation *conv)
+{
+    const td::td_api::chat *chat = findConversationChat(account, conv);
+    MessageId               end  = chat ? getTabEnd(conv) : MessageId();
+    // Not while history is being fetched, or the tab filled already
+    if (!end.valid() || !account.pendingMessages.isChatReady(getId(*chat)))
+        return;
+    ChatId chatId = getId(*chat);
+    account.pendingMessages.setChatNotReady(chatId);
+    startProgress(conv, escapeForDisplay(_("Fetching messages from Telegram")));
+    // From the one after it: TDLib's newer ones are asked for by a negative offset, with that one too
+    auto request = td::td_api::make_object<td::td_api::getChatHistory>();
+    request->chat_id_         = chatId.value();
+    request->from_message_id_ = end.value();
+    request->offset_          = -LATER_BATCH;
+    request->limit_           = LATER_BATCH + 1;
+    request->only_local_      = false;
+    account.transceiver.sendQuery(std::move(request),
+        [&account, chatId, end](uint64_t, td::td_api::object_ptr<td::td_api::Object> response) {
+            laterMessagesResponse(account, chatId, end, std::move(response));
+        });
 }
 
 // While a message waits to be shown, its reactions would come before it, and are part of what it
