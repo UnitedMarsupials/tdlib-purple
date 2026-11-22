@@ -229,6 +229,7 @@ struct MessageBeingWritten {
     bool                markChanges = false; // its text, words added and removed marked
     bool                bodyMarked = false;
     bool                extending  = false; // a part coming after the message was shown
+    bool                hidden     = false; // past the end of what the tab shows, taken out once written
 };
 static MessageBeingWritten *g_messageBeingWritten = nullptr;
 
@@ -546,9 +547,10 @@ static void displayedMessage(PurpleAccount *account, const char *who, char *mess
             setMark(buffer, getMarkName(g_messageBeingWritten->messageId, MarkKind::Body), marker);
         }
         g_messageBeingWritten->bodyMarked = true;
-        // Written for the log, and for Pidgin to tell of it, but past the end of what the tab shows
+        // Written for the log, and for Pidgin to tell of it, but past the end of what the tab shows:
+        // taken out once all its parts are, which go by its marks
         if (isMessageHidden(conv, g_messageBeingWritten->messageId))
-            removeMessage(conv, g_messageBeingWritten->messageId);
+            g_messageBeingWritten->hidden = true;
     }
     if (conv)
         scheduleViewCheck(conv);
@@ -729,6 +731,9 @@ MessageMarkScope::MessageMarkScope(MessageId messageId, const char *editNote, bo
 MessageMarkScope::~MessageMarkScope()
 {
     if (m_active) {
+        PurpleConversation *conv = g_messageBeingWritten->conv;
+        if (g_messageBeingWritten->hidden && g_list_find(purple_get_conversations(), conv))
+            removeMessage(conv, g_messageBeingWritten->messageId);
         delete g_messageBeingWritten;
         g_messageBeingWritten = nullptr;
     }
@@ -3658,6 +3663,11 @@ static gboolean checkViewed(gpointer data)
         if (!messageIds.empty())
             g_viewedHandler(conv, messageIds);
     }
+    // Written to, as messages that waited for something came, a tab stopping short of the newest
+    // with no more than fits goes on to later ones, nothing else telling it to
+    GtkAdjustment *adjustment = imhtml ? reinterpret_cast<GtkTextView *>(imhtml)->vadjustment : nullptr;
+    if (adjustment && (adjustment->upper <= adjustment->page_size))
+        checkBottomReached(conv, imhtml);
     return G_SOURCE_REMOVE;
 }
 

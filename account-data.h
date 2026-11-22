@@ -317,6 +317,8 @@ public:
     void             setChatNotReady(ChatId chatId);
     void             setChatReady(ChatId chatId, std::vector<IncomingMessage> &readyMessages);
     bool             isChatReady(ChatId chatId);
+    // Whether any of the chat's messages wait to be shown, as for what goes with them
+    bool             hasWaitingMessages(ChatId chatId);
 private:
     struct Message {
         IncomingMessage message;

@@ -272,8 +272,8 @@ which they were, and they came back as if never deleted.
 
 ### H5. A tab short of the newest
 
-Open a chat, a channel best, with more than 200 messages unread. Watch the
-line at the end while its messages are fetched.
+Open a chat, a channel best, with more than 200 messages unread and at least
+50 read before them. Watch the line at the end while its messages are fetched.
 
 * The line counts the messages fetched so far, then says how many are being
   shown, and stays until they are.
@@ -290,14 +290,14 @@ Scroll up to its top, as in H2.
 Scroll down to its end, or turn the mouse wheel down there.
 
 * A line at the end says later messages are being fetched, then shown.
-
 * Fifty more messages are added after the last, and what was in view stays
   there; earlier ones are taken from the top, so that the tab keeps to half of
   Pidgin's "scrollback_lines".
 * Going on to the end, the newest messages come, and the debug log says "up
   to the newest".
 
-While the tab stops short of the newest, have a message come to the chat.
+Close the tab and open it again as at first, so that it stops short of the
+newest again; then have a message come to the chat.
 
 * It is not shown at the end, after the gap, but it is logged, and the tab
   turns red if not looked at.
@@ -308,10 +308,12 @@ While it stops short, right-click a message in it, and then its tab's title.
   the newest messages; neither has it once the tab ends at the newest, nor in
   another account's tab.
 
-Then type a message into that tab and send it.
+Open it again as at first, then type a message into it and send it; and once
+more, sending it while later messages are being fetched, as the wheel is
+turned down at the end.
 
 * The tab is filled anew with the newest messages, and the one sent comes
-  after them.
+  after them, either way.
 
 Since: the tab was filled with every message from the first unread to the
 newest, which Pidgin took longer to write the more it held, and then trimmed,

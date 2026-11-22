@@ -3051,6 +3051,9 @@ void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessag
 static void fetchHistoryRequest(TdAccountData &account, ChatId chatId, unsigned messagesFetched,
                                 MessageId fetchBackFrom, MessageId lastReceivedMessage);
 
+// Fills the tab with the newest messages, if that was asked for while the chat was busy
+static void showPendingNewest(TdAccountData &account, ChatId chatId);
+
 static void fetchHistoryResponse(TdAccountData &account, ChatId chatId, MessageId stopAt,
                                  unsigned messagesFetched,
                                  td::td_api::object_ptr<td::td_api::Object> response)
@@ -3104,6 +3107,7 @@ static void fetchHistoryResponse(TdAccountData &account, ChatId chatId, MessageI
         std::vector<IncomingMessage> readyMessages;
         account.pendingMessages.setChatReady(chatId, readyMessages);
         showMessages(readyMessages, account);
+        showPendingNewest(account, chatId);
     }
 }
 
@@ -3229,8 +3233,9 @@ static std::vector<LoggedLine> getLoggedLines(TdAccountData &account, const td::
         since = messages.back()->date_;
     if (!since)
         return lines;
-    // Nothing past the last of them, in a tab that stops there
-    time_t until = (stopsShort && messages.front()) ? messages.front()->date_ : std::numeric_limits<time_t>::max();
+    // Nothing past the last of them, in a tab that stops there: by its id, for a message the log names
+    time_t  until   = (stopsShort && messages.front()) ? messages.front()->date_ : std::numeric_limits<time_t>::max();
+    int64_t untilId = (stopsShort && messages.front()) ? messages.front()->id_ : std::numeric_limits<int64_t>::max();
     std::set<int64_t>           ids;
     std::multimap<time_t, bool> dates; // whether shown as a notice
     for (const auto &message: messages)
@@ -3249,7 +3254,7 @@ static std::vector<LoggedLine> getLoggedLines(TdAccountData &account, const td::
                                            purple_conversation_get_name(conv), since))
     {
         bool keep;
-        if (line.when > until)
+        if ((line.when > until) || (line.messageId.valid() && (line.messageId.value() > untilId)))
             keep = false;
         else if (line.messageId.valid()) {
             keep = !ids.count(line.messageId.value()) && keepDeleted;
@@ -3322,6 +3327,7 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
     std::vector<IncomingMessage> readyMessages;
     account.pendingMessages.setChatReady(redraw.chatId, readyMessages);
     showMessages(readyMessages, account);
+    showPendingNewest(account, redraw.chatId);
     // Kept to what Pidgin will not trim: the message scrolled to and what follows, as much as fits,
     // or the latest
     MessageId scrolledTo = (redraw.filling || redraw.newest) ? MessageId() :
@@ -3416,6 +3422,7 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
     std::vector<IncomingMessage> readyMessages;
     account.pendingMessages.setChatReady(redraw->chatId, readyMessages);
     showMessages(readyMessages, account);
+    showPendingNewest(account, redraw->chatId);
 }
 
 static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw, MessageId from)
@@ -3507,12 +3514,24 @@ bool fillChat(TdAccountData &account, ChatId chatId)
     return startRedraw(account, chatId, MessageId::invalid, true, EARLIER_BATCH);
 }
 
+// Chats, by account, whose tabs are to be filled with the newest messages once not busy
+static std::set<std::pair<std::string, int64_t>> g_newestPending;
+
 void showNewestMessages(TdAccountData &account, ChatId chatId)
 {
     const td::td_api::chat *chat = account.getChat(chatId);
     PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
-    if (conv && getTabEnd(conv).valid())
-        startRedraw(account, chatId, MessageId::invalid, false, EARLIER_BATCH, false, true);
+    // Busy, as with later messages being fetched: once it is not, or what is sent meanwhile would be
+    // past the end it comes to
+    if (conv && getTabEnd(conv).valid() &&
+        !startRedraw(account, chatId, MessageId::invalid, false, EARLIER_BATCH, false, true))
+        g_newestPending.insert({purple_account_get_username(account.purpleAccount), chatId.value()});
+}
+
+static void showPendingNewest(TdAccountData &account, ChatId chatId)
+{
+    if (g_newestPending.erase({purple_account_get_username(account.purpleAccount), chatId.value()}))
+        showNewestMessages(account, chatId);
 }
 
 using MessagesNewestFirst = std::vector<td::td_api::object_ptr<td::td_api::message>>;
@@ -3551,6 +3570,7 @@ static void showFetchedLater(TdAccountData &account, ChatId chatId, MessageId en
     std::vector<IncomingMessage> readyMessages;
     account.pendingMessages.setChatReady(chatId, readyMessages);
     showMessages(readyMessages, account);
+    showPendingNewest(account, chatId);
     unsigned windowLines = conv ? getWindowLines(conv) : 0;
     if (windowLines)
         trimTab(conv, windowLines, true, end);
@@ -3585,8 +3605,10 @@ void showLaterMessages(TdAccountData &account, PurpleConversation *conv)
 {
     const td::td_api::chat *chat = findConversationChat(account, conv);
     MessageId               end  = chat ? getTabEnd(conv) : MessageId();
-    // Not while history is being fetched, or the tab filled already
-    if (!end.valid() || !account.pendingMessages.isChatReady(getId(*chat)))
+    // Not while history is being fetched, or the tab filled already, nor ahead of messages that wait
+    // to be shown still, as later ones would be; once they are, it is told again
+    if (!end.valid() || !account.pendingMessages.isChatReady(getId(*chat)) ||
+        account.pendingMessages.hasWaitingMessages(getId(*chat)))
         return;
     ChatId chatId = getId(*chat);
     account.pendingMessages.setChatNotReady(chatId);
