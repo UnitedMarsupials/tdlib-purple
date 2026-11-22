@@ -134,6 +134,10 @@ FRONT_END_FUNCTION(gtk_text_buffer_get_iter_at_line);
 FRONT_END_FUNCTION(gtk_text_mark_get_deleted);
 FRONT_END_FUNCTION(gtk_text_iter_get_line);
 FRONT_END_FUNCTION(gtk_text_iter_is_end);
+FRONT_END_FUNCTION(gtk_widget_hide);
+FRONT_END_FUNCTION(pidgin_conv_windows_get_list);
+FRONT_END_FUNCTION(pidgin_conv_get_tab_at_xy);
+FRONT_END_FUNCTION(pidgin_conv_window_get_gtkconv_at_index);
 FRONT_END_FUNCTION(gtk_separator_menu_item_new);
 FRONT_END_FUNCTION(gtk_menu_get_type);
 FRONT_END_FUNCTION(g_type_check_instance_is_a);
@@ -585,6 +589,8 @@ static void connectPopup();
 static void connectScroll();
 static void connectShown(gpointer plugin);
 static void findTabWindowFunctions();
+static void connectTabMenu();
+static void disconnectTabMenu();
 
 static gboolean connectSignals(gpointer plugin)
 {
@@ -607,6 +613,7 @@ static gboolean connectSignals(gpointer plugin)
     connectPaste(plugin);
     connectPopup();
     connectScroll();
+    connectTabMenu();
     connectShown(plugin);
     return FALSE;
 }
@@ -691,6 +698,7 @@ void pidginUiUnload()
     disconnectPaste();
     disconnectPopup();
     disconnectScroll();
+    disconnectTabMenu();
     if (g_connectSource) {
         g_source_remove(g_connectSource);
         g_connectSource = 0;
@@ -3109,6 +3117,95 @@ void setBottomReachedHandler(BottomReachedHandler handler)
     g_bottomReachedHandler = handler;
 }
 
+// An item of ours in the menu of a window's tabs, which Pidgin puts its own in, and the separator
+// before it; shown for a tab that stops short of its chat's newest message
+static LatestAskedHandler g_latestAskedHandler = nullptr;
+static std::string        g_latestLabel;
+static guint              g_pressSignal = 0;
+static gulong             g_pressHook   = 0;
+static const char         LATEST_ITEM_KEY[]      = "tdlib-purple-latest-item";
+static const char         LATEST_SEPARATOR_KEY[] = "tdlib-purple-latest-separator";
+
+void setLatestAskedHandler(LatestAskedHandler handler, const std::string &label)
+{
+    g_latestAskedHandler = handler;
+    g_latestLabel        = label;
+}
+
+// The tab Pidgin says the menu was opened on, as it does for its own items
+static void latestChosen(GtkWidget *, gpointer menu)
+{
+    PidginConversation *gtkconv = static_cast<PidginConversation *>(
+        p_g_object_get_data(static_cast<GObject *>(menu), "clicked_tab"));
+    if (gtkconv && gtkconv->active_conv && g_latestAskedHandler &&
+        g_list_find(purple_get_conversations(), gtkconv->active_conv))
+        g_latestAskedHandler(gtkconv->active_conv);
+}
+
+// The right button pressed on a window's tabs: ahead of Pidgin and of GTK, which opens the menu
+static gboolean tabsPressed(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
+{
+    GtkWidget      *widget = (paramCount > 1) ? static_cast<GtkWidget *>(p_g_value_get_object(&params[0])) : nullptr;
+    GdkEventButton *event  = widget ? static_cast<GdkEventButton *>(p_g_value_get_boxed(&params[1])) : nullptr;
+    if (!event || (event->type != GDK_BUTTON_PRESS) || (event->button != 3) || !g_latestAskedHandler)
+        return TRUE;
+    for (GList *item = p_pidgin_conv_windows_get_list(); item; item = item->next) {
+        PidginWindow *win = static_cast<PidginWindow *>(item->data);
+        if (win->notebook != widget)
+            continue;
+        GtkWidget *menu = reinterpret_cast<GtkNotebook *>(win->notebook)->menu;
+        if (!menu)
+            break;
+        PidginConversation *gtkconv = p_pidgin_conv_window_get_gtkconv_at_index(
+            win, p_pidgin_conv_get_tab_at_xy(win, event->x_root, event->y_root, NULL));
+        PurpleConversation *conv    = gtkconv ? gtkconv->active_conv : nullptr;
+        bool show = conv && !strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)),
+                                    config::pluginId) && getTabEnd(conv).valid();
+        GtkWidget *latest    = static_cast<GtkWidget *>(p_g_object_get_data(G_OBJECT(menu), LATEST_ITEM_KEY));
+        GtkWidget *separator = static_cast<GtkWidget *>(p_g_object_get_data(G_OBJECT(menu), LATEST_SEPARATOR_KEY));
+        if (!latest && show) {
+            separator = p_gtk_separator_menu_item_new();
+            p_gtk_menu_shell_append(reinterpret_cast<GtkMenuShell *>(menu), separator);
+            latest = p_gtk_menu_item_new_with_label(g_latestLabel.c_str());
+            p_gtk_menu_shell_append(reinterpret_cast<GtkMenuShell *>(menu), latest);
+            p_g_signal_connect_data(latest, "activate", G_CALLBACK(latestChosen), menu, NULL, GConnectFlags(0));
+            p_g_object_set_data(G_OBJECT(menu), LATEST_ITEM_KEY, latest);
+            p_g_object_set_data(G_OBJECT(menu), LATEST_SEPARATOR_KEY, separator);
+        }
+        for (GtkWidget *menuItem: {separator, latest})
+            if (menuItem && show)
+                p_gtk_widget_show(menuItem);
+            else if (menuItem)
+                p_gtk_widget_hide(menuItem);
+        break;
+    }
+    return TRUE;
+}
+
+static void connectTabMenu()
+{
+    if (!LOOK_UP(pidgin_conv_windows_get_list) || !LOOK_UP(pidgin_conv_get_tab_at_xy) ||
+        !LOOK_UP(pidgin_conv_window_get_gtkconv_at_index) || !LOOK_UP(gtk_separator_menu_item_new) ||
+        !LOOK_UP(gtk_widget_show) || !LOOK_UP(gtk_widget_hide) || !LOOK_UP(g_object_set_data) ||
+        !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
+        !LOOK_UP(g_signal_remove_emission_hook) || !LOOK_UP(g_value_get_object) ||
+        !LOOK_UP(gtk_widget_get_type) || !LOOK_UP(g_value_get_boxed))
+    {
+        purple_debug_warning(config::pluginId, "Cannot add to the menu of tabs: some of GTK is not found\n");
+        return;
+    }
+    g_pressSignal = p_g_signal_lookup("button-press-event", p_gtk_widget_get_type());
+    if (g_pressSignal)
+        g_pressHook = p_g_signal_add_emission_hook(g_pressSignal, 0, tabsPressed, nullptr, nullptr);
+}
+
+static void disconnectTabMenu()
+{
+    if (g_pressHook)
+        p_g_signal_remove_emission_hook(g_pressSignal, g_pressHook);
+    g_pressHook = 0;
+}
+
 // Whether the tab's text is scrolled to its end, or has no more than fits
 static bool isAtBottom(GtkIMHtml *imhtml)
 {
@@ -4161,6 +4258,10 @@ void keepViewLater(PurpleConversation *conv)
 }
 
 void setBottomReachedHandler(BottomReachedHandler handler)
+{
+}
+
+void setLatestAskedHandler(LatestAskedHandler handler, const std::string &label)
 {
 }
 

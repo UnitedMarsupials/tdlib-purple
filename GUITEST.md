@@ -302,6 +302,12 @@ While the tab stops short of the newest, have a message come to the chat.
 * It is not shown at the end, after the gap, but it is logged, and the tab
   turns red if not looked at.
 
+While it stops short, right-click a message in it, and then its tab's title.
+
+* Both menus have "Go to the latest message", which fills the tab anew with
+  the newest messages; neither has it once the tab ends at the newest, nor in
+  another account's tab.
+
 Then type a message into that tab and send it.
 
 * The tab is filled anew with the newest messages, and the one sent comes

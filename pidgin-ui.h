@@ -194,6 +194,10 @@ void keepViewLater(PurpleConversation *conv);
 // no more than fits, for later messages to be shown
 using BottomReachedHandler = void (*)(PurpleConversation *conv);
 void setBottomReachedHandler(BottomReachedHandler handler);
+// Told when the menu of a window's tabs, opened on a tab that stops short of its chat's newest
+// message, has the item of that label chosen, for the tab to be filled with the newest
+using LatestAskedHandler = void (*)(PurpleConversation *conv);
+void setLatestAskedHandler(LatestAskedHandler handler, const std::string &label);
 
 // The conversation shows no messages as unseen any more, as when its tab is looked at: its tab,
 // and Pidgin's counts of unread messages, in the buddy list's menu and the tray. False if it showed none.

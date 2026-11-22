@@ -53,6 +53,7 @@ public:
     void setIdle(bool idle);
     void showEarlierMessages(PurpleConversation *conv, double filling = 0);
     void showLaterMessages(PurpleConversation *conv);
+    void showNewestMessages(PurpleConversation *conv);
     bool getReactionTip(PurpleConversation *conv, MessageId messageId, const std::string &key, std::string &tip);
     // A reaction on a message's line clicked: ours taken back, or given if not; the paid one asked
     // for, as from the message's menu
