@@ -4740,7 +4740,9 @@ void PurpleTdClient::reportChat(ChatId chatId, const std::vector<MessageId> &mes
 
 void PurpleTdClient::reportSender(ChatId groupChatId, UserId userId)
 {
-    auto request = td::td_api::make_object<td::td_api::createPrivateChat>(userId.value(), false);
+    auto request = td::td_api::make_object<td::td_api::createPrivateChat>();
+    request->user_id_ = userId.value();
+    request->force_   = false;
     m_transceiver.sendQuery(std::move(request), [this, groupChatId, userId](uint64_t, TdObjectPtr object) {
         if (!object || (object->get_id() != td::td_api::chat::ID)) {
             // TRANSLATOR: In-chat error, after a message's sender was to be reported; followed by the reason.
@@ -4750,10 +4752,11 @@ void PurpleTdClient::reportSender(ChatId groupChatId, UserId userId)
         const auto             &chat  = static_cast<const td::td_api::chat &>(*object);
         const td::td_api::chat *group = m_data.getChat(groupChatId);
         if (!chat.can_be_reported_) {
+            std::string name = escapeForDisplay(m_data.getDisplayName(userId));
             if (group)
                 // TRANSLATOR: In-chat notification, not logged, after a message's sender was to be reported. Argument is their name.
                 showChatNotification(m_data, *group, formatMessage(_("Telegram takes no report about {} from here."),
-                                                                   m_data.getDisplayName(userId)).c_str(),
+                                                                   name).c_str(),
                                      PURPLE_MESSAGE_NO_LOG);
             return;
         }

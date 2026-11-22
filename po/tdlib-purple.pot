@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: tdlib-purple\n"
 "Report-Msgid-Bugs-To: https://github.com/UnitedMarsupials/tdlib-purple/issues/new \n"
-"POT-Creation-Date: 2026-11-22 10:51-0500\n"
+"POT-Creation-Date: 2026-11-22 17:43-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -95,8 +95,8 @@ msgstr ""
 #: ../call.cpp:222 ../td-client.cpp:754 ../td-client.cpp:1000
 #: ../td-client.cpp:1068 ../td-client.cpp:1103 ../td-client.cpp:2042
 #: ../td-client.cpp:2168 ../td-client.cpp:2458 ../td-client.cpp:2674
-#: ../td-client.cpp:4383 ../td-client.cpp:4708 ../td-client.cpp:4836
-#: ../td-client.cpp:4857 ../tdlib-purple.cpp:745 ../tdlib-purple.cpp:1819
+#: ../td-client.cpp:4383 ../td-client.cpp:4708 ../td-client.cpp:4839
+#: ../td-client.cpp:4860 ../tdlib-purple.cpp:745 ../tdlib-purple.cpp:1819
 #: ../tdlib-purple.cpp:1914
 msgid "_Cancel"
 msgstr ""
@@ -1532,48 +1532,48 @@ msgstr ""
 
 #. TRANSLATOR: In-chat error, after a message's sender was to be reported; followed by the reason.
 #. TRANSLATOR: In-chat error, after a report; followed by the reason.
-#: ../td-client.cpp:4747 ../td-client.cpp:4871
+#: ../td-client.cpp:4749 ../td-client.cpp:4874
 msgid "Cannot send the report"
 msgstr ""
 
 #. TRANSLATOR: In-chat notification, not logged, after a message's sender was to be reported. Argument is their name.
-#: ../td-client.cpp:4755
+#: ../td-client.cpp:4758
 #, c++-format
 msgid "Telegram takes no report about {} from here."
 msgstr ""
 
 #. TRANSLATOR: In-chat notification, after a report was sent.
-#: ../td-client.cpp:4817
+#: ../td-client.cpp:4820
 msgid "Reported to Telegram's moderators."
 msgstr ""
 
 #. TRANSLATOR: Report dialog, title
-#: ../td-client.cpp:4832 ../td-client.cpp:4844
+#: ../td-client.cpp:4835 ../td-client.cpp:4847
 msgid "Report"
 msgstr ""
 
 #. TRANSLATOR: Report dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
-#: ../td-client.cpp:4834
+#: ../td-client.cpp:4837
 msgid "_Next"
 msgstr ""
 
 #. TRANSLATOR: Report dialog, primary content
-#: ../td-client.cpp:4846
+#: ../td-client.cpp:4849
 msgid "Tell Telegram's moderators more"
 msgstr ""
 
 #. TRANSLATOR: Report dialog, secondary content, when the details may be left out.
-#: ../td-client.cpp:4849
+#: ../td-client.cpp:4852
 msgid "This may be left empty."
 msgstr ""
 
 #. TRANSLATOR: Report dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
-#: ../td-client.cpp:4855
+#: ../td-client.cpp:4858
 msgid "_Report"
 msgstr ""
 
 #. TRANSLATOR: In-chat notification, not logged, after a chat was reported as a whole.
-#: ../td-client.cpp:4865
+#: ../td-client.cpp:4868
 msgid ""
 "Telegram wants messages to go with this report: report one from its menu "
 "instead, by right-clicking it."

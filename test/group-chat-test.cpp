@@ -1,5 +1,6 @@
 #include "fixture.h"
 #include "libpurple-mock.h"
+#include "td-client.h"
 #include <glib/gstrfuncs.h>
 #include <fmt/format.h>
 
@@ -1702,4 +1703,48 @@ TEST_F(GroupChatTest, NotLoggedAsPidginQuits)
 
     purple_account_destroy(other);
     prpl.discardEvents();
+}
+
+TEST_F(GroupChatTest, ReportMember)
+{
+    loginWithBasicGroup();
+    tgl.update(standardUpdateUser(0));
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    const ChatId group = ChatId::fromString(std::to_string(groupChatId).c_str());
+    const UserId user  = UserId::fromString(std::to_string(userIds[0]).c_str());
+
+    // Through our private chat with them, which Telegram may take no report about: told in the group
+    client->reportSender(group, user);
+    tgl.verifyRequest(createPrivateChat(userIds[0], false));
+    tgl.reply(std::move(standardPrivateChat(0)->chat_));
+    prpl.verifyEvents(ServGotJoinedChatEvent(connection, 1, groupChatPurpleName, groupChatTitle),
+                      ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+                                             "Telegram takes no report about " + userFirstNames[0] + " " +
+                                             userLastNames[0] + " from here.",
+                                             PURPLE_MESSAGE_NO_LOG, 0));
+
+    // The reason chosen, then details, all told in the group, the private chat not opened
+    client->reportSender(group, user);
+    tgl.verifyRequest(createPrivateChat(userIds[0], false));
+    {
+        object_ptr<updateNewChat> update = standardPrivateChat(0);
+        update->chat_->can_be_reported_ = true;
+        tgl.reply(std::move(update->chat_));
+    }
+    tgl.verifyRequest(reportChat(chatIds[0], "", {}, ""));
+    setRequestAnswers({{{"reason", "0"}}});
+    {
+        std::vector<object_ptr<reportOption>> options;
+        options.push_back(make_object<reportOption>("spam", "Spam"));
+        tgl.reply(make_object<reportChatResultOptionRequired>("Why?", std::move(options)));
+    }
+    tgl.verifyRequest(reportChat(chatIds[0], "spam", {}, ""));
+    tgl.reply(make_object<reportChatResultTextRequired>("spam2", true));
+    prpl.verifyEvents(RequestInputEvent(NULL, account, NULL, NULL));
+    prpl.inputEnter("Sells things");
+    tgl.verifyRequest(reportChat(chatIds[0], "spam2", {}, "Sells things"));
+    tgl.reply(make_object<reportChatResultOk>());
+    prpl.verifyEvents(ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+                                             "Reported to Telegram's moderators.", PURPLE_MESSAGE_SYSTEM, 0));
 }
