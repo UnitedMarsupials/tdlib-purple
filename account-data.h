@@ -416,6 +416,9 @@ public:
     TdAccountData(PurpleAccount *purpleAccount, TdTransceiver &transceiver)
     : purpleAccount(purpleAccount), transceiver(transceiver) {}
 
+    // Gone with this, for work put off to tell whether there is still an account to do it for
+    std::shared_ptr<int> lifetime = std::make_shared<int>(0);
+
     void updateUser(TdUserPtr user);
     void setUserStatus(UserId UserId, td::td_api::object_ptr<td::td_api::UserStatus> status);
     void updateSmallProfilePhoto(UserId userId, td::td_api::object_ptr<td::td_api::file> photo);

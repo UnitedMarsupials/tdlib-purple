@@ -3167,6 +3167,7 @@ struct Redraw {
     unsigned                                                extra = 0; // messages wanted before the earliest
     bool                                                    filling = false; // a tab that fit, kept at its end
     bool                                                    newest = false; // its latest messages only
+    bool                                                    back = false; // going back from its top
     MessageId                                               latest; // the tab's end, if it stops short
     bool                                                    found  = false; // the earliest, or one read
     unsigned                                                beyond = 0; // found so far
@@ -3376,16 +3377,30 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
         bool enough = found && ((redraw->beyond >= redraw->extra) || !added || full);
         if (enough || (redraw->opening && (full || !added))) {
             if (!redraw->messages.empty()) {
-                redrawShow(account, *redraw);
+                // Said while they are written, which nothing is drawn during
+                const td::td_api::chat *chat = account.getChat(redraw->chatId);
+                PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+                if (conv)
+                    // TRANSLATOR: At the end or the top of a conversation window while it is being filled, followed by a turning character. Argument is a number.
+                    updateProgress(conv, escapeForDisplay(formatMessage(_("Showing {} messages"),
+                                                                        redraw->messages.size())));
+                std::weak_ptr<int> alive = account.lifetime;
+                runAfterDrawing([&account, alive, redraw]() {
+                    if (!alive.expired())
+                        redrawShow(account, *redraw);
+                });
                 return;
             }
         } else if (!full && added) {
             const td::td_api::chat *chat = account.getChat(redraw->chatId);
             PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
             if (conv)
-                // TRANSLATOR: At the end of a conversation window while it is being filled, followed by a turning character. Argument is a number.
-                updateProgress(conv, escapeForDisplay(formatMessage(_("Fetching messages from Telegram: {}"),
-                                                                    redraw->messages.size())));
+                updateProgress(conv, escapeForDisplay(formatMessage(
+                    // TRANSLATOR: At the top of a conversation window while earlier messages are fetched, followed by a turning character. Argument is a number.
+                    redraw->back ? _("Fetching earlier messages from Telegram: {}")
+                                 // TRANSLATOR: At the end of a conversation window while it is being filled, followed by a turning character. Argument is a number.
+                                 : _("Fetching messages from Telegram: {}"),
+                    redraw->messages.size())));
             redrawRequest(account, redraw, more);
             return;
         } else {
@@ -3419,7 +3434,7 @@ static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw
 
 // False if the chat is busy
 static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earliest, bool opening,
-                        unsigned extra = 0, bool filling = false, bool newest = false)
+                        unsigned extra = 0, bool filling = false, bool newest = false, bool back = false)
 {
     const td::td_api::chat *chat = account.getChat(chatId);
     PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
@@ -3431,8 +3446,12 @@ static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earlies
         return false;
     }
     account.pendingMessages.setChatNotReady(chatId);
-    // TRANSLATOR: At the end of a conversation window while it is being filled, followed by a turning character.
-    startProgress(conv, escapeForDisplay(_("Fetching messages from Telegram")));
+    // Where it is looked for: at the top, going back from there
+    // TRANSLATOR: At the top of a conversation window while earlier messages are fetched, followed by a turning character.
+    startProgress(conv, escapeForDisplay(back ? _("Fetching earlier messages from Telegram")
+                                              // TRANSLATOR: At the end of a conversation window while it is being filled, followed by a turning character.
+                                              : _("Fetching messages from Telegram")),
+                  back);
     auto redraw = std::make_shared<Redraw>();
     redraw->chatId   = chatId;
     redraw->earliest = earliest;
@@ -3443,6 +3462,7 @@ static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earlies
     redraw->filling  = filling;
     redraw->newest   = newest;
     redraw->found    = newest;
+    redraw->back     = back;
     redraw->limit    = getRedrawLimit();
     // Down to where the tab ends, if it stops short of the newest and the message is before that
     MessageId end = getTabEnd(conv);
@@ -3478,7 +3498,8 @@ void showEarlierMessages(TdAccountData &account, PurpleConversation *conv, doubl
         size_t shown = (it != g_redrawnCounts.end()) ? it->second : 0;
         extra        = unsigned(std::ceil(shown * std::max(filling - 1, 0.0))) + 1;
     }
-    startRedraw(account, getId(*chat), earliest, false, extra, filling > 0);
+    // Filling a tab that fits goes on at its end, which is what shows
+    startRedraw(account, getId(*chat), earliest, false, extra, filling > 0, false, !filling);
 }
 
 bool fillChat(TdAccountData &account, ChatId chatId)
@@ -3494,25 +3515,16 @@ void showNewestMessages(TdAccountData &account, ChatId chatId)
         startRedraw(account, chatId, MessageId::invalid, false, EARLIER_BATCH, false, true);
 }
 
+using MessagesNewestFirst = std::vector<td::td_api::object_ptr<td::td_api::message>>;
+
 // Written after what the tab shows, oldest first, ahead of any that came meanwhile, then as much
 // taken from its top as keeps it short of Pidgin's limit; what was in view stays there
-static void laterMessagesResponse(TdAccountData &account, ChatId chatId, MessageId end,
-                                  td::td_api::object_ptr<td::td_api::Object> response)
+static void showFetchedLater(TdAccountData &account, ChatId chatId, MessageId end, bool fetched,
+                             MessagesNewestFirst later)
 {
     const td::td_api::chat *chat = account.getChat(chatId);
     PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
     stopProgress(conv);
-    // Newest first, as TDLib gives them
-    std::vector<td::td_api::object_ptr<td::td_api::message>> later;
-    bool                                                     fetched = false;
-    if (response && (response->get_id() == td::td_api::messages::ID)) {
-        fetched = true;
-        for (auto &message: static_cast<td::td_api::messages &>(*response).messages_)
-            if (message && (getId(*message).value() > end.value()))
-                later.push_back(std::move(message));
-    } else
-        purple_debug_warning(config::pluginId, "Cannot fetch messages after %" G_GINT64_FORMAT ": %s\n",
-                             end.value(), getDisplayedError(response).c_str());
     // Unless filled anew meanwhile
     if (fetched && conv && (getTabEnd(conv) == end)) {
         // A chat not joined may have no latest message given: then it is reached once none follow
@@ -3544,6 +3556,31 @@ static void laterMessagesResponse(TdAccountData &account, ChatId chatId, Message
         trimTab(conv, windowLines, true, end);
 }
 
+static void laterMessagesResponse(TdAccountData &account, ChatId chatId, MessageId end,
+                                  td::td_api::object_ptr<td::td_api::Object> response)
+{
+    auto later   = std::make_shared<MessagesNewestFirst>();
+    bool fetched = false;
+    if (response && (response->get_id() == td::td_api::messages::ID)) {
+        fetched = true;
+        for (auto &message: static_cast<td::td_api::messages &>(*response).messages_)
+            if (message && (getId(*message).value() > end.value()))
+                later->push_back(std::move(message));
+    } else
+        purple_debug_warning(config::pluginId, "Cannot fetch messages after %" G_GINT64_FORMAT ": %s\n",
+                             end.value(), getDisplayedError(response).c_str());
+    // Said while they are written, which nothing is drawn during
+    const td::td_api::chat *chat = account.getChat(chatId);
+    PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+    if (conv && !later->empty())
+        updateProgress(conv, escapeForDisplay(formatMessage(_("Showing {} messages"), later->size())));
+    std::weak_ptr<int> alive = account.lifetime;
+    runAfterDrawing([&account, alive, chatId, end, fetched, later]() {
+        if (!alive.expired())
+            showFetchedLater(account, chatId, end, fetched, std::move(*later));
+    });
+}
+
 void showLaterMessages(TdAccountData &account, PurpleConversation *conv)
 {
     const td::td_api::chat *chat = findConversationChat(account, conv);
@@ -3553,7 +3590,8 @@ void showLaterMessages(TdAccountData &account, PurpleConversation *conv)
         return;
     ChatId chatId = getId(*chat);
     account.pendingMessages.setChatNotReady(chatId);
-    startProgress(conv, escapeForDisplay(_("Fetching messages from Telegram")));
+    // TRANSLATOR: At the end of a conversation window while later messages are fetched, followed by a turning character.
+    startProgress(conv, escapeForDisplay(_("Fetching later messages from Telegram")));
     // From the one after it: TDLib's newer ones are asked for by a negative offset, with that one too
     auto request = td::td_api::make_object<td::td_api::getChatHistory>();
     request->chat_id_         = chatId.value();

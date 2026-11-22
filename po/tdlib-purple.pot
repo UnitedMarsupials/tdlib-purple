@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: tdlib-purple\n"
 "Report-Msgid-Bugs-To: https://github.com/UnitedMarsupials/tdlib-purple/issues/new \n"
-"POT-Creation-Date: 2026-11-21 23:21-0500\n"
+"POT-Creation-Date: 2026-11-22 10:27-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -659,19 +659,42 @@ msgstr ""
 msgid "Failed to fetch earlier messages: {}"
 msgstr ""
 
+#. TRANSLATOR: At the end or the top of a conversation window while it is being filled, followed by a turning character. Argument is a number.
+#: ../receiving.cpp:3385 ../receiving.cpp:3576
+#, c++-format
+msgid "Showing {} messages"
+msgstr ""
+
+#. TRANSLATOR: At the top of a conversation window while earlier messages are fetched, followed by a turning character. Argument is a number.
+#: ../receiving.cpp:3400
+#, c++-format
+msgid "Fetching earlier messages from Telegram: {}"
+msgstr ""
+
 #. TRANSLATOR: At the end of a conversation window while it is being filled, followed by a turning character. Argument is a number.
-#: ../receiving.cpp:3387
+#: ../receiving.cpp:3402
 #, c++-format
 msgid "Fetching messages from Telegram: {}"
 msgstr ""
 
+#. Where it is looked for: at the top, going back from there
+#. TRANSLATOR: At the top of a conversation window while earlier messages are fetched, followed by a turning character.
+#: ../receiving.cpp:3451
+msgid "Fetching earlier messages from Telegram"
+msgstr ""
+
 #. TRANSLATOR: At the end of a conversation window while it is being filled, followed by a turning character.
-#: ../receiving.cpp:3435 ../receiving.cpp:3555
+#: ../receiving.cpp:3453
 msgid "Fetching messages from Telegram"
 msgstr ""
 
+#. TRANSLATOR: At the end of a conversation window while later messages are fetched, followed by a turning character.
+#: ../receiving.cpp:3594
+msgid "Fetching later messages from Telegram"
+msgstr ""
+
 #. TRANSLATOR: Under the names of those who gave a reaction, in its tooltip, when not all are known. Argument is a number.
-#: ../receiving.cpp:3693
+#: ../receiving.cpp:3732
 #, c++-format
 msgid "and {} more"
 msgstr ""

@@ -275,17 +275,21 @@ which they were, and they came back as if never deleted.
 Open a chat, a channel best, with more than 200 messages unread. Watch the
 line at the end while its messages are fetched.
 
-* The line counts the messages fetched so far.
+* The line counts the messages fetched so far, then says how many are being
+  shown, and stays until they are.
 * The tab is scrolled to the first unread, with read ones before it, and holds
   at most 200 messages; the debug log says it is "short of the newest".
 * It took seconds, not minutes.
 
 Scroll up to its top, as in H2.
 
+* A line at the top says earlier messages are being fetched, then shown.
 * Fifty earlier messages come, and the tab still ends where it did, not at
   the newest.
 
 Scroll down to its end, or turn the mouse wheel down there.
+
+* A line at the end says later messages are being fetched, then shown.
 
 * Fifty more messages are added after the last, and what was in view stays
   there; earlier ones are taken from the top, so that the tab keeps to half of

@@ -133,6 +133,7 @@ FRONT_END_FUNCTION(gtk_text_buffer_get_line_count);
 FRONT_END_FUNCTION(gtk_text_buffer_get_iter_at_line);
 FRONT_END_FUNCTION(gtk_text_mark_get_deleted);
 FRONT_END_FUNCTION(gtk_text_iter_get_line);
+FRONT_END_FUNCTION(gtk_text_iter_is_end);
 FRONT_END_FUNCTION(gtk_separator_menu_item_new);
 FRONT_END_FUNCTION(gtk_menu_get_type);
 FRONT_END_FUNCTION(g_type_check_instance_is_a);
@@ -634,7 +635,7 @@ void pidginUiLoad(PurplePlugin *plugin)
                  LOOK_UP(gtk_widget_modify_base) && LOOK_UP(gtk_widget_grab_focus) &&
                  LOOK_UP(g_signal_handler_disconnect) && LOOK_UP(gtk_text_buffer_get_text) && LOOK_UP(gtk_text_iter_get_offset) &&
                  LOOK_UP(g_object_get_data) && LOOK_UP(g_object_set_data_full) &&
-                 LOOK_UP(gtk_text_buffer_get_iter_at_offset);
+                 LOOK_UP(gtk_text_buffer_get_iter_at_offset) && LOOK_UP(gtk_text_iter_is_end);
     // Reactions are listed in their line's tooltip only with these
     if (g_pidginUi && (!LOOK_UP(gtk_text_buffer_get_tag_table) || !LOOK_UP(gtk_text_tag_table_lookup) ||
                        !LOOK_UP(gtk_text_buffer_create_tag) || !LOOK_UP(gtk_text_buffer_apply_tag)))
@@ -788,8 +789,8 @@ bool canRedrawConversation(PurpleConversation *conv)
     return getIMHtml(conv) != nullptr;
 }
 
-// A line at the end of the tab, its last character turning, and the marks around it and that
-// character
+// A line at the end of the tab, or at its top, its last character turning, and the marks around it
+// and that character
 static const char PROGRESS_KEY[]        = "tdlib-progress";
 static const char PROGRESS_START[]      = "tdlib-progress-start";
 static const char PROGRESS_SPINNER[]    = "tdlib-progress-spinner";
@@ -851,25 +852,39 @@ void appendTabLine(PurpleConversation *conv, const std::string &html)
     p_gtk_imhtml_insert_html_at_iter(imhtml, line.c_str(), GtkIMHtmlOptions(0), &where);
 }
 
-void startProgress(PurpleConversation *conv, const std::string &html)
+static bool isAtBottom(GtkIMHtml *imhtml);
+
+void startProgress(PurpleConversation *conv, const std::string &html, bool atTop)
 {
     GtkIMHtml *imhtml = getIMHtml(conv);
     if (!imhtml || purple_conversation_get_data(conv, PROGRESS_KEY))
         return;
     GtkTextBuffer *buffer = imhtml->text_buffer;
     GtkTextIter    where;
-    p_gtk_text_buffer_get_end_iter(buffer, &where);
+    bool           atEnd  = !atTop && isAtBottom(imhtml);
+    if (atTop)
+        p_gtk_text_buffer_get_iter_at_offset(buffer, &where, 0);
+    else
+        p_gtk_text_buffer_get_end_iter(buffer, &where);
     gint        offset = p_gtk_text_iter_get_offset(&where);
-    std::string line   = (offset ? "<br>" : "") + std::string("<font color=\"#777777\">") + html + " </font>";
-    p_gtk_imhtml_insert_html_at_iter(imhtml, line.c_str(), GtkIMHtmlOptions(0), &where);
+    std::string line   = std::string((offset && !atTop) ? "<br>" : "") + "<font color=\"#777777\">" + html + " </font>";
+    p_gtk_imhtml_insert_html_at_iter(imhtml, line.c_str(), GTK_IMHTML_NO_SCROLL, &where);
     // What is written at either end meanwhile stays outside: the start, set once the line is in, as
-    // its right gravity would have it go past; the end, with the spinner's frame left before it
+    // its right gravity would have it go past; the end, with the spinner's frame left before it, and
+    // at the top, the line break after it
+    gint lineEnd = p_gtk_text_iter_get_offset(&where);
     p_gtk_text_buffer_get_iter_at_offset(buffer, &where, offset);
     p_gtk_text_buffer_create_mark(buffer, PROGRESS_START, &where, FALSE);
-    p_gtk_text_buffer_get_end_iter(buffer, &where);
+    p_gtk_text_buffer_get_iter_at_offset(buffer, &where, lineEnd);
     p_gtk_text_buffer_create_mark(buffer, PROGRESS_SPINNER, &where, TRUE);
     GtkTextMark *end = p_gtk_text_buffer_create_mark(buffer, PROGRESS_END, &where, TRUE);
     insertAtMark(imhtml, end, getSpinnerFrame(0));
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &where, end);
+    if (atTop && !p_gtk_text_iter_is_end(&where))
+        p_gtk_imhtml_insert_html_at_iter(imhtml, "<br>", GTK_IMHTML_NO_SCROLL, &where);
+    // Where it is looked for: at the end, if the tab was scrolled there
+    if (atEnd)
+        p_gtk_text_view_scroll_to_mark(reinterpret_cast<GtkTextView *>(imhtml), end, 0.0, FALSE, 0.0, 0.0);
 
     Progress *progress = new Progress;
     progress->conv  = conv;
@@ -895,11 +910,37 @@ void stopProgress(PurpleConversation *conv)
         GtkTextIter from, to;
         p_gtk_text_buffer_get_iter_at_mark(buffer, &from, start);
         p_gtk_text_buffer_get_iter_at_mark(buffer, &to, end);
+        // At the top, with the line break after it
+        if (!p_gtk_text_iter_get_offset(&from) && (p_gtk_text_iter_get_char(&to) == '\n'))
+            p_gtk_text_iter_forward_char(&to);
         p_gtk_imhtml_delete(imhtml, &from, &to);
     }
     for (const char *name: {PROGRESS_START, PROGRESS_SPINNER, PROGRESS_END})
         if (GtkTextMark *mark = getProgressMark(buffer, name))
             p_gtk_text_buffer_delete_mark(buffer, mark);
+}
+
+namespace {
+struct AfterDrawing {
+    std::function<void()> then;
+};
+}
+
+static gboolean drawn(gpointer data)
+{
+    AfterDrawing *after = static_cast<AfterDrawing *>(data);
+    after->then();
+    delete after;
+    return G_SOURCE_REMOVE;
+}
+
+void runAfterDrawing(std::function<void()> then)
+{
+    // Of lower priority than GTK's laying out and drawing of what changed
+    if (g_pidginUi)
+        g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, drawn, new AfterDrawing{std::move(then)}, NULL);
+    else
+        then();
 }
 
 void updateProgress(PurpleConversation *conv, const std::string &html)
@@ -4013,8 +4054,13 @@ void appendTabLine(PurpleConversation *conv, const std::string &html)
 {
 }
 
-void startProgress(PurpleConversation *conv, const std::string &html)
+void startProgress(PurpleConversation *conv, const std::string &html, bool atTop)
 {
+}
+
+void runAfterDrawing(std::function<void()> then)
+{
+    then();
 }
 
 void stopProgress(PurpleConversation *conv)

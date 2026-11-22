@@ -110,12 +110,15 @@ void appendTabLine(PurpleConversation *conv, const std::string &html);
 
 // Whether Pidgin shows the conversation, so that it can be emptied and filled anew
 bool canRedrawConversation(PurpleConversation *conv);
-// A line at the end of the tab saying what is under way, with a turning character after it, until
-// stopped; in Pidgin only
-void startProgress(PurpleConversation *conv, const std::string &html);
+// A line at the end of the tab, or at its top, saying what is under way, with a turning character
+// after it, until stopped; in Pidgin only
+void startProgress(PurpleConversation *conv, const std::string &html, bool atTop = false);
 void stopProgress(PurpleConversation *conv);
 // What the line says, the turning character after it as it was
 void updateProgress(PurpleConversation *conv, const std::string &html);
+// Once GTK has drawn what was changed, as before writing much into a tab, which nothing is drawn
+// during: a line saying it is under way shows meanwhile. At once without Pidgin.
+void runAfterDrawing(std::function<void()> then);
 
 // Whether the message's text is in the conversation's tab, to be written over
 bool canReplaceMessage(PurpleConversation *conv, MessageId messageId);
