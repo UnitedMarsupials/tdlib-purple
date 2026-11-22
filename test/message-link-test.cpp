@@ -646,6 +646,38 @@ TEST_F(MessageLinkTest, ReportMessage)
                                              PURPLE_MESSAGE_SYSTEM, 0));
 }
 
+TEST_F(MessageLinkTest, ReportSender)
+{
+    loginWithOneContact();
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    // The chat it was reported from, for the test the same; a group's, as a rule
+    const ChatId chat = ChatId::fromString(std::to_string(chatIds[0]).c_str());
+    const UserId user = UserId::fromString(std::to_string(userIds[0]).c_str());
+
+    // Through our private chat with them, which Telegram may take no report about
+    client->reportSender(chat, user);
+    tgl.verifyRequest(createPrivateChat(userIds[0], false));
+    tgl.reply(std::move(standardPrivateChat(0)->chat_));
+    prpl.verifyEvents(NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+                      ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                                             "Telegram takes no report about " + userFirstNames[0] + " " +
+                                             userLastNames[0] + " from here.",
+                                             PURPLE_MESSAGE_NO_LOG, 0));
+
+    client->reportSender(chat, user);
+    tgl.verifyRequest(createPrivateChat(userIds[0], false));
+    {
+        object_ptr<updateNewChat> update = standardPrivateChat(0);
+        update->chat_->can_be_reported_ = true;
+        tgl.reply(std::move(update->chat_));
+    }
+    tgl.verifyRequest(reportChat(chatIds[0], "", {}, ""));
+    tgl.reply(make_object<reportChatResultOk>());
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                                             "Reported to Telegram's moderators.", PURPLE_MESSAGE_SYSTEM, 0));
+}
+
 TEST(JumpLink, Parse)
 {
     std::string accountName;

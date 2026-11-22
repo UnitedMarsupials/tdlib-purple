@@ -228,6 +228,18 @@ Escape. Do it again, and send the edit this time.
 * Escape leaves the message as it was; either way, the text typed before comes back into the
   input field.
 
+### M5. Reporting a sender
+
+Right-click a member's message in a group, then one in a private chat and a channel's post.
+
+* In the group, the menu has "Report" and the member's name, besides "Report the message…";
+  in the private chat and the channel it does not, as the chat's own "Report…" is that.
+
+Choose it only for someone who deserves it: it does report them. Then:
+
+* Telegram's reasons are asked for, as for a message, and how it went is told in the group,
+  without a private chat with them opened; or that Telegram takes no report about them.
+
 ## History
 
 ### H1. Opening a chat
