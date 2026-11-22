@@ -307,6 +307,9 @@ While it stops short, right-click a message in it, and then its tab's title.
 * Both menus have "Go to the latest message", which fills the tab anew with
   the newest messages; neither has it once the tab ends at the newest, nor in
   another account's tab.
+* Filled anew, the tab has no lines of reactions at its top, of messages no
+  longer in it, as their counts change; and a link to a message no longer in
+  it fills it anew from that message.
 
 Open it again as at first, then type a message into it and send it; and once
 more, sending it while later messages are being fetched, as the wheel is

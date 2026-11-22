@@ -258,7 +258,6 @@ enum class MarkKind {
     Reactions // the end of the line of reactions after the message, if it has one
 };
 
-static const char MESSAGE_MARK_PREFIX[] = "tdlib-message-";
 static const char START_MARK_PREFIX[]   = "tdlib-message-start-";
 
 static std::string getMarkName(MessageId messageId, MarkKind kind)
@@ -579,10 +578,31 @@ static char *drawingBuddy(PurpleBuddy *buddy)
 
 static guint g_connectSource = 0;
 
-// Emptied, as by /clear: what comes is shown again
+static const char MESSAGE_MARK_PREFIX[] = "tdlib-message-";
+
+// Emptied, as by /clear or to be filled anew: what comes is shown again. The marks of the messages
+// that were in it go too, which GTK would keep, all at its start, for reaction lines to be written
+// at and messages to be taken to be there still.
 static void historyCleared(PurpleConversation *conv)
 {
     setTabEnd(conv, MessageId());
+    GtkTextBuffer *buffer = getTextBuffer(conv);
+    if (!buffer || !p_gtk_text_iter_get_marks || !p_gtk_text_mark_get_name)
+        return;
+    std::vector<GtkTextMark *> gone;
+    GtkTextIter                iter;
+    p_gtk_text_buffer_get_iter_at_offset(buffer, &iter, 0);
+    do {
+        GSList *marks = p_gtk_text_iter_get_marks(&iter);
+        for (GSList *item = marks; item; item = item->next) {
+            const char *name = p_gtk_text_mark_get_name(static_cast<GtkTextMark *>(item->data));
+            if (name && g_str_has_prefix(name, MESSAGE_MARK_PREFIX))
+                gone.push_back(static_cast<GtkTextMark *>(item->data));
+        }
+        g_slist_free(marks);
+    } while (p_gtk_text_iter_forward_char(&iter));
+    for (GtkTextMark *mark: gone)
+        p_gtk_text_buffer_delete_mark(buffer, mark);
 }
 
 // Disconnected by libpurple when the plugin is unloaded
