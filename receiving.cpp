@@ -3294,9 +3294,10 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
     PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
     stopProgress(conv);
     unsigned windowLines = conv ? getWindowLines(conv) : 0;
-    // The earliest of them only, the rest shown later, if there are too many to write at once
+    // The earliest of them only, the rest shown later, if there are too many to write at once: also
+    // where Pidgin keeps all lines, as long as a tab's can be counted, as it can then stop short
     bool stopsShort = redraw.latest.valid();
-    if (windowLines && (redraw.messages.size() > WINDOW_MESSAGES)) {
+    if (conv && countTabLines(conv) && (redraw.messages.size() > WINDOW_MESSAGES)) {
         redraw.messages.erase(redraw.messages.begin(), redraw.messages.end() - WINDOW_MESSAGES);
         stopsShort = true;
     }
