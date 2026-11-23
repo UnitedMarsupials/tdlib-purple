@@ -1736,11 +1736,11 @@ TEST_F(GroupChatTest, ReportMember)
     setRequestAnswers({{{"reason", "0"}}});
     {
         std::vector<object_ptr<reportOption>> options;
-        options.push_back(make_object<reportOption>("spam", "Spam"));
-        tgl.reply(make_object<reportChatResultOptionRequired>("Why?", std::move(options)));
+        options.push_back(makeReportOption("spam", "Spam"));
+        tgl.reply(makeReportOptionRequired("Why?", std::move(options)));
     }
     tgl.verifyRequest(reportChat(chatIds[0], "spam", {}, ""));
-    tgl.reply(make_object<reportChatResultTextRequired>("spam2", true));
+    tgl.reply(makeReportTextRequired("spam2", true));
     prpl.verifyEvents(RequestInputEvent(NULL, account, NULL, NULL));
     prpl.inputEnter("Sells things");
     tgl.verifyRequest(reportChat(chatIds[0], "spam2", {}, "Sells things"));
