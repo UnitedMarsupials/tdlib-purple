@@ -8,6 +8,7 @@
 #include <td/telegram/Client.h>
 #include <purple.h>
 #include <map>
+#include <set>
 
 enum class BasicGroupMembership: uint8_t {
     Invalid,
@@ -174,6 +175,7 @@ public:
     // That encrypting the database anew rewrites it, which takes as long as it is big
     std::string getDatabaseRewriteWarning();
 private:
+    bool requestBuddyChat(PurpleConversation *conv);
     using TdObjectPtr   = td::td_api::object_ptr<td::td_api::Object>;
     using ResponseCb    = void (PurpleTdClient::*)(uint64_t requestId, TdObjectPtr object);
 
@@ -311,6 +313,8 @@ private:
     void                 *m_rekeyNotice = nullptr;
     bool                  m_rekeying    = false;
     std::vector<UserId>   m_usersForNewPrivateChats;
+    // Of buddies whose tabs are opened, though TDLib did not tell of them
+    std::set<UserId>      m_buddyChatsRequested;
     // At first login every contact needs a private chat materialized. Doing this strictly
     // serially (one createPrivateChat per server round-trip) is very slow for large contact
     // lists. Keep a window of concurrent requests in flight instead, which cuts N*RTT down to
