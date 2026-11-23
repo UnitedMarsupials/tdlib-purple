@@ -132,6 +132,9 @@ void showMessageReactions(PurpleConversation *conv, MessageId messageId, const s
 using ReactionTipHandler = bool (*)(PurpleConversation *conv, MessageId messageId, const std::string &key,
                                     std::string &tip);
 void setReactionTipHandler(ReactionTipHandler handler);
+// A reaction on a message's line clicked, by the key its tooltip is asked for by
+using ReactionClickHandler = void (*)(PurpleConversation *conv, MessageId messageId, const std::string &key);
+void setReactionClickHandler(ReactionClickHandler handler);
 // Asks again for the tooltip shown, if any, as what it said has changed
 void refreshReactionTip(PurpleConversation *conv);
 
@@ -245,10 +248,10 @@ using DraggedFileHandler = void (*)(PurpleConversation *conv, MessageId messageI
                                     DraggedFileFound found);
 void setDraggedFileHandler(DraggedFileHandler handler);
 
-// A dialog choosing one of the labels, which what is typed into its field narrows down: the index
-// of the one chosen is told, nothing if the dialog is given up. False if there is no such dialog,
-// without Pidgin, for a libpurple one to be used instead.
+// A dialog choosing labels, which what is typed into its field narrows down: the indices of those
+// ticked are told, or of the one picked if none is, nothing if the dialog is given up. False if
+// there is no such dialog, without Pidgin, for a libpurple one to be used instead.
 bool chooseFromList(const std::string &title, const std::string &prompt, const std::vector<std::string> &labels,
-                    std::function<void(int index)> chosen);
+                    std::function<void(const std::vector<int> &indices)> chosen);
 
 #endif

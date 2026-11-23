@@ -63,6 +63,36 @@ option, "Send a file as a picture, video or voice message when it is one",
 makes it go as what its content is instead, as a pasted one does, for
 front-ends whose only way of sending a file is a file transfer.
 
+### Encrypting the local database
+
+TDLib keeps the account's messages, chats and contacts, and its login, in a
+database under `~/.purple/tdlib/<phone number>/`, encrypted with a key built
+into TDLib, which opens it for anyone who has the files. "Encrypt the local database
+with the password", in the account's settings, encrypts it with the account's
+password: the one of the account's settings, which is not Telegram's two-step
+verification password. Pidgin keeps that only if told to remember it, in
+`accounts.xml` unless a keyring plugin takes it over; otherwise it asks for it
+every time the account connects. Without the password the database cannot be
+opened, and forgotten, it is lost: the account has to sign in again, with a
+code, and what Telegram does not keep, such as secret chats, is gone.
+
+A database encrypted already is opened with the password. One that is not, as
+the option is turned on, is encrypted once the password is typed again, to
+confirm it; turned off, the database goes back to TDLib's built-in key once its password is
+typed.
+"Change the database password...", among the account's actions, encrypts it
+anew with a new password, typed twice, which becomes the account's. Each of
+these rewrites the whole database, which takes as long as it is big: minutes,
+or hours for gigabytes on slow disks. The account does nothing else meanwhile,
+and the program is not to be quit, nor the computer turned off, until it says
+it is done.
+
+The password is made into the key with PBKDF2-HMAC-SHA256, 600,000 iterations,
+salted by the account, as TDLib takes the key it is given for a strong one.
+TDLib encrypts the record of the login itself, but leaves the messages to
+SQLCipher: built with plain SQLite instead, it ignores the key, and the plugin
+then warns that the messages stay in the clear.
+
 ### Telegram links
 
 A Telegram link, such as `tg://resolve?domain=channel&post=12`, which a web

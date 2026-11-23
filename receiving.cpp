@@ -774,15 +774,11 @@ static std::string quoteMessage(const td::td_api::message *message, TdAccountDat
 }
 
 // The name a private chat's conversation goes by
+// By id, as any user's buddy goes; the buddy, which shows it by the user's name, added if they are
+// not a contact
 static std::string getPrivateChatPurpleName(TdAccountData &account, const td::td_api::user &user)
 {
-    std::string userName = getPurpleBuddyName(user);
-
-    // If there is no buddy in the buddy list, libpurple won't be able to translate buddy name
-    // to alias, so use display name instead of idXXXXXXXXX
-    if (!purple_find_buddy(account.purpleAccount, userName.c_str()))
-        userName = account.getDisplayName(user);
-    return userName;
+    return addTransientBuddy(account, user);
 }
 
 // The chat's conversation, if it is open; none is opened
@@ -790,8 +786,7 @@ PurpleConversation *findMessageConversation(TdAccountData &account, const td::td
 {
     const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
     if (privateUser)
-        return purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM,
-                                                     getPrivateChatPurpleName(account, *privateUser).c_str(),
+        return purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, getPurpleBuddyName(*privateUser).c_str(),
                                                      account.purpleAccount);
     SecretChatId secretChatId = getSecretChatId(chat);
     if (secretChatId.valid())
@@ -1505,7 +1500,7 @@ struct ReactionCount {
 };
 }
 
-static std::string getReactionTypeKey(const td::td_api::ReactionType &type)
+std::string getReactionTypeKey(const td::td_api::ReactionType &type)
 {
     switch (type.get_id()) {
     case td::td_api::reactionTypeEmoji::ID:
@@ -3270,6 +3265,8 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
                           " or the first unread %" G_GINT64_FORMAT ": %zu messages\n", redraw.chatId.value(),
                           redraw.earliest.value(), redraw.firstUnread.value(), redraw.messages.size());
         purple_conversation_clear_message_history(conv);
+        // Its first message is shown only if gone back to it again, below
+        g_historyComplete.erase(redraw.chatId.value());
         g_redrawnCounts[redraw.chatId.value()] = redraw.messages.size();
         std::vector<LoggedLine> lines = getLoggedLines(account, *chat, conv, redraw);
         // Newest first, as the messages, each going ahead of what is queued
@@ -3541,7 +3538,7 @@ void updateMessageReactions(TdAccountData &account, ChatId chatId, MessageId mes
     }
 }
 
-static td::td_api::object_ptr<td::td_api::ReactionType> makeReactionType(const std::string &typeKey)
+td::td_api::object_ptr<td::td_api::ReactionType> makeReactionType(const std::string &typeKey)
 {
     if ((typeKey.size() > 1) && (typeKey[0] == 'e'))
         return td::td_api::make_object<td::td_api::reactionTypeEmoji>(typeKey.substr(1));

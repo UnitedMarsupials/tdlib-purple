@@ -10,6 +10,7 @@
 #include "media-variants.h"
 #include "pidgin-ui.h"
 #include "receiving.h"
+#include <glib/gstdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <algorithm>
@@ -58,6 +59,8 @@ PurpleTdClient::~PurpleTdClient()
 
     showMessages(messages, m_data);
     endAuthInput();
+    // A login given up, as the account is disabled before it is done, leaves nothing to answer
+    removeAuthInputBuddy();
 }
 
 void PurpleTdClient::setLogLevel(int level)
@@ -371,6 +374,7 @@ void PurpleTdClient::processAuthorizationState(td::td_api::AuthorizationState &a
 
     case td::td_api::authorizationStateReady::ID:
         purple_debug_misc(config::pluginId, "Authorization state update: ready\n");
+        removeAuthInputBuddy();
         onLoggedIn();
         break;
     }
@@ -477,13 +481,172 @@ static void stuff(td::td_api::setTdlibParameters &parameters)
     parameters.api_hash_ = s.c_str()+i+1;
 }
 
+namespace {
+// As many iterations as OWASP asks of PBKDF2-HMAC-SHA256, under a second here; salted by the
+// account, so that the same password makes another key for another account
+enum { DATABASE_KEY_ITERATIONS = 600000 };
+
+class DatabaseKeyThread: public AccountThread {
+public:
+    DatabaseKeyThread(PurpleAccount *account, PurpleTdClient *client, PurpleTdClient::DatabaseKeyUse use,
+                      const std::string &password)
+    : AccountThread(account), m_client(client), m_use(use), m_password(password),
+      m_salt(std::string("tdlib-purple database ") + purple_account_get_username(account)) {}
+private:
+    PurpleTdClient                 *m_client;
+    PurpleTdClient::DatabaseKeyUse  m_use;
+    std::string                     m_password;
+    std::string                     m_salt;
+    std::string                     m_key;
+
+    void run() override
+    {
+        m_key = deriveKey(m_password, m_salt, DATABASE_KEY_ITERATIONS);
+    }
+    // Not for another connection of the account's, since begun
+    void callback(PurpleTdClient *tdClient) override
+    {
+        if (tdClient == m_client)
+            tdClient->databaseKeyDerived(m_use, m_password, m_key);
+        delete this;
+    }
+};
+
+struct DatabasePasswordRequest {
+    std::string                    accountName;
+    PurpleTdClient                *client;
+    PurpleTdClient::DatabaseKeyUse use;
+};
+
+PurpleTdClient *findRequestClient(const DatabasePasswordRequest &request)
+{
+    PurpleAccount  *account = purple_accounts_find(request.accountName.c_str(), config::pluginId);
+    PurpleTdClient *client  = account ? getTdClient(account) : nullptr;
+    return (client == request.client) ? client : nullptr;
+}
+
+// Pidgin's own dialog, its password remembered if the box is ticked
+void accountPasswordEntered(DatabasePasswordRequest *data, PurpleRequestFields *fields)
+{
+    std::unique_ptr<DatabasePasswordRequest> request(data);
+    PurpleTdClient *client   = findRequestClient(*request);
+    const char     *password = purple_request_fields_get_string(fields, "password");
+    if (!client)
+        return;
+    if (!password || !*password) {
+        client->databasePasswordCancelled(request->use);
+        return;
+    }
+    PurpleAccount *account = purple_accounts_find(request->accountName.c_str(), config::pluginId);
+    if (purple_request_fields_get_bool(fields, "remember"))
+        purple_account_set_remember_password(account, TRUE);
+    purple_account_set_password(account, password);
+    client->databasePasswordEntered(request->use, password);
+}
+
+void databasePasswordEntered(DatabasePasswordRequest *data, PurpleRequestFields *fields)
+{
+    std::unique_ptr<DatabasePasswordRequest> request(data);
+    PurpleTdClient *client   = findRequestClient(*request);
+    const char     *password = purple_request_fields_get_string(fields, "password");
+    if (client) {
+        if (password && *password)
+            client->databasePasswordEntered(request->use, password);
+        else
+            client->databasePasswordCancelled(request->use);
+    }
+}
+
+void databasePasswordCancelled(DatabasePasswordRequest *data, PurpleRequestFields *)
+{
+    std::unique_ptr<DatabasePasswordRequest> request(data);
+    PurpleTdClient *client = findRequestClient(*request);
+    if (client)
+        client->databasePasswordCancelled(request->use);
+}
+}
+
+// Unencrypted, unless the account's settings say to encrypt it, with the account's password,
+// which is asked for if Pidgin does not have it
 void PurpleTdClient::sendTdlibParameters()
 {
+    m_passwordKey.clear();
+    if (!purple_account_get_bool(m_account, AccountOptions::EncryptDatabase, AccountOptions::EncryptDatabaseDefault)) {
+        openDatabase(std::string(), DatabaseOpening::Plain);
+        return;
+    }
+    const char *password = purple_account_get_password(m_account);
+    if (password && *password)
+        databasePasswordEntered(DatabaseKeyUse::Open, password);
+    else {
+        purple_debug_misc(config::pluginId, "Asking for the password of the database\n");
+        purple_account_request_password(m_account, G_CALLBACK(accountPasswordEntered),
+                                        G_CALLBACK(::databasePasswordCancelled),
+                                        new DatabasePasswordRequest{purple_account_get_username(m_account), this,
+                                                                    DatabaseKeyUse::Open});
+    }
+}
+
+void PurpleTdClient::databasePasswordEntered(DatabaseKeyUse use, const std::string &password)
+{
+    (new DatabaseKeyThread(m_account, this, use, password))->startThread();
+}
+
+void PurpleTdClient::databaseKeyDerived(DatabaseKeyUse use, const std::string &password, const std::string &key)
+{
+    switch (use) {
+    case DatabaseKeyUse::Open:
+        m_passwordKey = key;
+        openDatabase(key, DatabaseOpening::Password);
+        break;
+    case DatabaseKeyUse::Confirm:
+        if (key == m_passwordKey)
+            setDatabaseKey(key, std::string(), true);
+        else
+            // TRANSLATOR: Error dialog, title
+            purple_notify_error(purple_account_get_connection(m_account), _("Database not encrypted with the password"),
+                                // TRANSLATOR: Error dialog, primary content
+                                _("The password typed again is not the account's"),
+                                // TRANSLATOR: Error dialog, secondary content
+                                _("The account's local database is left as it was until the account connects again."));
+        m_passwordKey.clear();
+        break;
+    case DatabaseKeyUse::Decrypt:
+        openDatabase(key, DatabaseOpening::Decrypt);
+        break;
+    case DatabaseKeyUse::Change:
+        setDatabaseKey(key, password, true);
+        break;
+    }
+}
+
+void PurpleTdClient::databasePasswordCancelled(DatabaseKeyUse use)
+{
+    switch (use) {
+    case DatabaseKeyUse::Open:
+    case DatabaseKeyUse::Decrypt:
+        purple_connection_error_reason(purple_account_get_connection(m_account),
+                                       PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED,
+                                       // TRANSLATOR: Connection error message
+                                       _("The local database cannot be opened without its password"));
+        break;
+    case DatabaseKeyUse::Confirm:
+        m_passwordKey.clear();
+        break;
+    case DatabaseKeyUse::Change:
+        break;
+    }
+}
+
+void PurpleTdClient::openDatabase(const std::string &key, DatabaseOpening opening)
+{
+    m_databaseOpening = opening;
     auto parameters = td::td_api::make_object<td::td_api::setTdlibParameters>();
     const char *username = purple_account_get_username(m_account);
     parameters->database_directory_ = getBaseDatabasePath() + G_DIR_SEPARATOR_S + username;
-    purple_debug_misc(config::pluginId, "Account %s using database directory %s\n",
-                      username, parameters->database_directory_.c_str());
+    purple_debug_misc(config::pluginId, "Account %s using database directory %s%s\n",
+                      username, parameters->database_directory_.c_str(), key.empty() ? "" : ", encrypted");
+    parameters->database_encryption_key_ = key;
     parameters->use_chat_info_database_ = true;
     parameters->use_message_database_ = true;
     parameters->use_secret_chats_ = (purple_account_get_bool(m_account, AccountOptions::EnableSecretChats,
@@ -497,10 +660,13 @@ void PurpleTdClient::sendTdlibParameters()
     parameters->system_version_ = "Unknown";
     parameters->application_version_ = "1.0";
     m_transceiver.sendQuery(std::move(parameters),
-                            &PurpleTdClient::authResponse);
+                            &PurpleTdClient::databaseOpenResponse);
 
     // enable_storage_optimizer is no longer a TDLib parameter but the use_storage_optimizer
     // option. TDLib queues it until the database is open.
+    if (m_storageOptimizerSet)
+        return;
+    m_storageOptimizerSet = true;
     bool useStorageOptimizer = (purple_account_get_bool(m_account, AccountOptions::KeepInlineDownloads,
                                                         AccountOptions::KeepInlineDownloadsDefault) == FALSE);
     auto value      = td::td_api::make_object<td::td_api::optionValueBoolean>();
@@ -509,6 +675,206 @@ void PurpleTdClient::sendTdlibParameters()
     option->name_   = "use_storage_optimizer";
     option->value_  = std::move(value);
     m_transceiver.sendQuery(std::move(option), nullptr);
+}
+
+// TDLib, told the wrong key, waits for the parameters again: tried, then, as it may have been
+// opened before. Only one typed twice is a database encrypted or its key changed with, never one
+// typed once, which a slip of a finger would lock the database with.
+void PurpleTdClient::databaseOpenResponse(uint64_t requestId, TdObjectPtr object)
+{
+    if (object && (object->get_id() == td::td_api::ok::ID)) {
+        purple_debug_misc(config::pluginId, "Database opened\n");
+        if (m_databaseOpening == DatabaseOpening::Password)
+            checkMessagesEncrypted();
+        if (m_databaseOpening == DatabaseOpening::PlainForPassword)
+            askDatabasePassword(DatabaseKeyUse::Confirm);
+        else if (m_databaseOpening == DatabaseOpening::Decrypt)
+            setDatabaseKey(std::string(), std::string(), false);
+        return;
+    }
+    if (!object || (object->get_id() != td::td_api::error::ID) ||
+        (static_cast<const td::td_api::error &>(*object).code_ != 401))
+    {
+        notifyAuthError(object);
+        return;
+    }
+    purple_debug_misc(config::pluginId, "Wrong database key\n");
+    switch (m_databaseOpening) {
+    case DatabaseOpening::Plain:
+        askDatabasePassword(DatabaseKeyUse::Decrypt);
+        break;
+    case DatabaseOpening::Password:
+        openDatabase(std::string(), DatabaseOpening::PlainForPassword);
+        break;
+    case DatabaseOpening::PlainForPassword:
+    case DatabaseOpening::Decrypt:
+        wrongDatabasePassword();
+        break;
+    }
+}
+
+// Not kept: asked for again at the next connection
+void PurpleTdClient::wrongDatabasePassword()
+{
+    m_passwordKey.clear();
+    if (m_databaseOpening == DatabaseOpening::PlainForPassword)
+        purple_account_set_password(m_account, NULL);
+    purple_connection_error_reason(purple_account_get_connection(m_account),
+                                   PURPLE_CONNECTION_ERROR_AUTHENTICATION_FAILED,
+                                   // TRANSLATOR: Connection error message
+                                   _("The password does not open the account's local database"));
+}
+
+void PurpleTdClient::askDatabasePassword(DatabaseKeyUse use)
+{
+    PurpleRequestFields     *fields = purple_request_fields_new();
+    PurpleRequestFieldGroup *group  = purple_request_field_group_new(NULL);
+    // TRANSLATOR: Database password dialog, label of the field
+    PurpleRequestField      *field  = purple_request_field_string_new("password", _("Password"), NULL, FALSE);
+    purple_request_field_string_set_masked(field, TRUE);
+    purple_request_field_set_required(field, TRUE);
+    purple_request_field_group_add_field(group, field);
+    purple_request_fields_add_group(fields, group);
+    std::string primary, secondary;
+    if (use == DatabaseKeyUse::Confirm) {
+        // TRANSLATOR: Database password dialog, primary content
+        primary   = _("Encrypt the local database?");
+        // TRANSLATOR: Database password dialog, secondary content
+        secondary = _("The account's local database is encrypted only with the key built into TDLib, which opens it for anyone who has its files. Type the account's password again to encrypt it with that.");
+    } else {
+        // TRANSLATOR: Database password dialog, primary content
+        primary   = _("The local database is encrypted");
+        // TRANSLATOR: Database password dialog, secondary content
+        secondary = _("Encryption with the password is off in the account's settings. Type the password the database is encrypted with, to go back to the key built into TDLib.");
+    }
+    secondary += "\n\n" + getDatabaseRewriteWarning();
+    // TRANSLATOR: Database password dialog, title
+    purple_request_fields(purple_account_get_connection(m_account), _("Database password"), primary.c_str(),
+                          secondary.c_str(), fields,
+                          // TRANSLATOR: Database password dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
+                          _("_OK"), G_CALLBACK(::databasePasswordEntered),
+                          // TRANSLATOR: Database password dialog, alternative is "_OK". The underscore marks accelerator keys, they must be different!
+                          _("_Cancel"), G_CALLBACK(::databasePasswordCancelled),
+                          m_account, NULL, NULL,
+                          new DatabasePasswordRequest{purple_account_get_username(m_account), this, use});
+}
+
+// TDLib encrypts the binlog itself, but leaves the messages' database to SQLCipher
+bool PurpleTdClient::checkMessagesEncrypted()
+{
+    std::string path = getBaseDatabasePath() + G_DIR_SEPARATOR_S + purple_account_get_username(m_account) +
+                       G_DIR_SEPARATOR_S + "db.sqlite";
+    if (!isPlainSqliteFile(path))
+        return true;
+    purple_debug_warning(config::pluginId, "%s is not encrypted: TDLib uses SQLite, not SQLCipher\n", path.c_str());
+    // TRANSLATOR: Warning dialog, title
+    purple_notify_warning(purple_account_get_connection(m_account), _("Database password"),
+                          // TRANSLATOR: Warning dialog, primary content
+                          _("The messages of the local database are not encrypted"),
+                          // TRANSLATOR: Warning dialog, secondary content
+                          _("TDLib is built here with plain SQLite rather than SQLCipher, which ignores the password: only the record of the login is encrypted. The messages, chats and contacts stay readable to whoever can read the account's files."));
+    return false;
+}
+
+// Its own files, not the downloaded ones under it, which are not encrypted
+std::string PurpleTdClient::getDatabaseRewriteWarning()
+{
+    std::string directory = getBaseDatabasePath() + G_DIR_SEPARATOR_S + purple_account_get_username(m_account);
+    guint64     size      = 0;
+    GDir       *dir       = g_dir_open(directory.c_str(), 0, NULL);
+    for (const char *name; dir && (name = g_dir_read_name(dir)); ) {
+        std::string path = directory + G_DIR_SEPARATOR_S + name;
+        GStatBuf    st;
+        if (!g_stat(path.c_str(), &st) && S_ISREG(st.st_mode))
+            size += st.st_size;
+    }
+    if (dir)
+        g_dir_close(dir);
+    char       *shown   = g_format_size(size);
+    // TRANSLATOR: Database password dialog, secondary content. Argument is a size, as "12.9 GB".
+    std::string warning = formatMessage(_("This rewrites all of the account's local database, {}, which takes a long time if it is big: minutes, or hours. Meanwhile the account does nothing else. Do not quit the program, nor turn the computer off, until told it is done."),
+                                        std::string(shown));
+    g_free(shown);
+    return warning;
+}
+
+// Told while the database is being rewritten already
+static void notifyRekeying(PurpleConnection *gc)
+{
+    // TRANSLATOR: Error dialog, title
+    purple_notify_error(gc, _("Database password"),
+                        // TRANSLATOR: Error dialog, primary content
+                        _("The local database is being encrypted anew already"),
+                        // TRANSLATOR: Error dialog, secondary content
+                        _("Try again once told it is done."));
+}
+
+// Re-encrypted, or decrypted, by TDLib; a password changed is the account's then. One at a time,
+// each with its notice up until it is done.
+void PurpleTdClient::setDatabaseKey(const std::string &key, const std::string &password, bool encrypted)
+{
+    PurpleConnection *gc = purple_account_get_connection(m_account);
+    if (m_rekeying) {
+        notifyRekeying(gc);
+        return;
+    }
+    m_rekeying = true;
+    purple_debug_misc(config::pluginId, "%s the database\n", encrypted ? "Encrypting" : "Decrypting");
+    // TRANSLATOR: Information dialog, title
+    m_rekeyNotice = purple_notify_message(gc, PURPLE_NOTIFY_MSG_INFO, _("Database password"),
+                                          encrypted ? _("Encrypting the local database...")
+                                                    // TRANSLATOR: Information dialog, primary content
+                                                    : _("Encrypting the local database with the key built into TDLib..."),
+                                          // TRANSLATOR: Information dialog, secondary content
+                                          _("Do not quit the program, nor turn the computer off, until told it is done."),
+                                          NULL, NULL);
+    auto request = td::td_api::make_object<td::td_api::setDatabaseEncryptionKey>();
+    request->new_encryption_key_ = key;
+    m_transceiver.sendQuery(std::move(request),
+        [this, password, encrypted](uint64_t, TdObjectPtr object) {
+            PurpleConnection *gc = purple_account_get_connection(m_account);
+            if (m_rekeyNotice)
+                purple_notify_close(PURPLE_NOTIFY_MESSAGE, m_rekeyNotice);
+            m_rekeyNotice = nullptr;
+            m_rekeying    = false;
+            if (!object || (object->get_id() != td::td_api::ok::ID)) {
+                // TRANSLATOR: Error dialog, title
+                purple_notify_error(gc, _("Database password"),
+                                    // TRANSLATOR: Error dialog, primary content
+                                    _("The local database's encryption could not be changed"),
+                                    getDisplayedError(object).c_str());
+                return;
+            }
+            if (!password.empty())
+                purple_account_set_password(m_account, password.c_str());
+            if (encrypted && !checkMessagesEncrypted())
+                return;
+            // TRANSLATOR: Information dialog, title
+            purple_notify_info(gc, _("Database password"),
+                               encrypted ? _("The local database is encrypted with the account's password")
+                                         // TRANSLATOR: Information dialog, primary content
+                                         : _("The local database is no longer encrypted with a password"),
+                               NULL);
+        });
+}
+
+void PurpleTdClient::changeDatabasePassword(const std::string &password)
+{
+    if (!purple_account_get_bool(m_account, AccountOptions::EncryptDatabase, AccountOptions::EncryptDatabaseDefault))
+        // TRANSLATOR: Error dialog, title
+        purple_notify_error(purple_account_get_connection(m_account), _("Database password"),
+                            // TRANSLATOR: Error dialog, primary content
+                            _("The local database is not encrypted with a password"),
+                            // TRANSLATOR: Error dialog, secondary content
+                            _("Encryption is turned on in the account's settings, and takes effect as it connects."));
+    else if (m_rekeying)
+        notifyRekeying(purple_account_get_connection(m_account));
+    else {
+        // Not to be confirmed any more: a dialog still asking for it would encrypt the database anew
+        // with the account's password from before
+        m_passwordKey.clear();
+        databasePasswordEntered(DatabaseKeyUse::Change, password);
+    }
 }
 
 void PurpleTdClient::sendPhoneNumber()
@@ -543,14 +909,26 @@ static std::string getAuthCodeDesc(const td::td_api::AuthenticationCodeType &cod
     }
 }
 
-// The buddy, not a Telegram user, who asks for login input when there are no request dialogs
-static const char AUTH_INPUT_BUDDY[] = "Telegram";
+// Login input is asked for, when there are no request dialogs, in a chat with a buddy named as a
+// user would be (see getPurpleBuddyName) for user id 0, which Telegram gives no one. Being an id, it
+// is matched exactly: a front-end may hand back a display name in another case, as webOS does, and
+// a display name may be anyone's. Being no one's, the chat holds nothing but the login, and can be
+// cleared of the values typed into it, a password among them, without losing anything else.
+static const char AUTH_INPUT_BUDDY[] = "id0";
+static const char AUTH_INPUT_ALIAS[] = "Telegram";
 
 // No request UI ops: prompt for the value through a "Telegram" IM conversation instead. The
 // user's reply is captured in sendMessage() (tgprpl_send_im).
 void PurpleTdClient::promptAuthInputViaChat(AuthInput type, const std::string &message)
 {
     m_authInputPending = type;
+    // The buddy is added, until logged in, so that the prompt is shown as from "Telegram" rather
+    // than from an id; never saved, so that it is gone with the program at the latest
+    if (!purple_find_buddy(m_account, AUTH_INPUT_BUDDY)) {
+        PurpleBuddy *buddy = purple_buddy_new(m_account, AUTH_INPUT_BUDDY, AUTH_INPUT_ALIAS);
+        purple_blist_node_set_flags(PURPLE_BLIST_NODE(buddy), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+        purple_blist_add_buddy(buddy, NULL, NULL, NULL);
+    }
     // The conversation is opened here, rather than by serv_got_im, so that its logging is off
     // before anything is written to it: the prompt, then the value typed, which libpurple would
     // log in plain text.
@@ -576,6 +954,15 @@ void PurpleTdClient::promptAuthInputViaChat(AuthInput type, const std::string &m
     PurpleConnection *gc = purple_account_get_connection(m_account);
     if (gc)
         serv_got_im(gc, AUTH_INPUT_BUDDY, prompt.c_str(), PURPLE_MESSAGE_RECV, time(NULL));
+}
+
+// Logged in, or disconnected, nothing more is asked for: the buddy the login input was asked for
+// by goes
+void PurpleTdClient::removeAuthInputBuddy()
+{
+    PurpleBuddy *buddy = purple_find_buddy(m_account, AUTH_INPUT_BUDDY);
+    if (buddy)
+        purple_blist_remove_buddy(buddy);
 }
 
 void PurpleTdClient::keepAuthInputUnlogged()
@@ -1586,14 +1973,30 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
 
 void PurpleTdClient::setMessageReaction(ChatId chatId, MessageId messageId, const std::string &emoji, bool chosen)
 {
-    td::td_api::object_ptr<td::td_api::Function>     request;
-    td::td_api::object_ptr<td::td_api::ReactionType> type = td::td_api::make_object<td::td_api::reactionTypeEmoji>(emoji);
-    if (chosen)
-        request = td::td_api::make_object<td::td_api::addMessageReaction>(chatId.value(), messageId.value(),
-                                                                          std::move(type), false, true);
-    else
-        request = td::td_api::make_object<td::td_api::removeMessageReaction>(chatId.value(), messageId.value(),
-                                                                             std::move(type));
+    auto type    = td::td_api::make_object<td::td_api::reactionTypeEmoji>();
+    type->emoji_ = emoji;
+    setMessageReaction(chatId, messageId, std::move(type), emoji, chosen);
+}
+
+void PurpleTdClient::setMessageReaction(ChatId chatId, MessageId messageId,
+                                        td::td_api::object_ptr<td::td_api::ReactionType> type,
+                                        const std::string &emoji, bool chosen)
+{
+    td::td_api::object_ptr<td::td_api::Function> request;
+    if (chosen) {
+        auto add = td::td_api::make_object<td::td_api::addMessageReaction>();
+        add->chat_id_                 = chatId.value();
+        add->message_id_              = messageId.value();
+        add->reaction_type_           = std::move(type);
+        add->update_recent_reactions_ = true;
+        request = std::move(add);
+    } else {
+        auto remove = td::td_api::make_object<td::td_api::removeMessageReaction>();
+        remove->chat_id_       = chatId.value();
+        remove->message_id_    = messageId.value();
+        remove->reaction_type_ = std::move(type);
+        request = std::move(remove);
+    }
     // What changes comes back as an update, as from any other client
     m_transceiver.sendQuery(std::move(request), [this, chatId, emoji](uint64_t, TdObjectPtr object) {
         reportReactionError(chatId, emoji, object);
@@ -2032,12 +2435,13 @@ void PurpleTdClient::askForwardMessage(ChatId chatId, MessageId messageId,
         labels.push_back(to.label);
     // TRANSLATOR: Title of the dialog asking where to forward a message to.
     if (chooseFromList(_("Forward the message"),
-                       // TRANSLATOR: Prompt of the dialog asking where to forward a message to; typing in its field searches the list.
-                       _("To whom, or to which chat?"), labels,
-                       [accountName, chatId, messageId, destinations](int index) {
+                       // TRANSLATOR: Prompt of the dialog asking where to forward a message to; typing in its field searches the list, and ticking several forwards it to each.
+                       _("To whom, or to which chats? Tick several to forward it to each."), labels,
+                       [accountName, chatId, messageId, destinations](const std::vector<int> &indices) {
                            PurpleTdClient *client = findConnected(accountName.c_str());
-                           if (client && (index >= 0) && (static_cast<size_t>(index) < destinations.size()))
-                               client->forwardMessage(chatId, messageId, destinations[index]);
+                           for (int index: indices)
+                               if (client && (index >= 0) && (static_cast<size_t>(index) < destinations.size()))
+                                   client->forwardMessage(chatId, messageId, destinations[index]);
                        }))
         return;
 
@@ -2046,6 +2450,7 @@ void PurpleTdClient::askForwardMessage(ChatId chatId, MessageId messageId,
     PurpleRequestFieldGroup *group  = purple_request_field_group_new(NULL);
     // TRANSLATOR: Label of the list of destinations, in the dialog asking where to forward a message to.
     PurpleRequestField      *field  = purple_request_field_list_new("to", _("To"));
+    purple_request_field_list_set_multi_select(field, TRUE);
     for (size_t i = 0; i < request->destinations.size(); i++)
         purple_request_field_list_add(field, request->destinations[i].label.c_str(),
                                       &request->destinations[i]);
@@ -2053,8 +2458,8 @@ void PurpleTdClient::askForwardMessage(ChatId chatId, MessageId messageId,
     purple_request_fields_add_group(fields, group);
     // TRANSLATOR: Title of the dialog asking where to forward a message to.
     purple_request_fields(NULL, _("Forward the message"),
-                          // TRANSLATOR: Prompt of the dialog asking where to forward a message to.
-                          _("To whom, or to which chat?"), NULL, fields,
+                          // TRANSLATOR: Prompt of the dialog asking where to forward a message to; several can be chosen, to forward it to each.
+                          _("To whom, or to which chats?"), NULL, fields,
                           // TRANSLATOR: Forward dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
                           _("_Forward"), G_CALLBACK(forwardDestinationChosen),
                           // TRANSLATOR: Forward dialog, alternative is "_Forward". The underscore marks accelerator keys, they must be different!
@@ -2070,11 +2475,13 @@ void PurpleTdClient::forwardDestinationChosen(void *data, PurpleRequestFields *f
     PurpleTdClient     *client   = findConnected(request->accountName.c_str());
     if (!client || !selected)
         return;
-    const char *label = static_cast<const char *>(selected->data);
-    const auto *to    = label ? static_cast<const ForwardDestination *>(purple_request_field_list_get_data(field, label))
-                              : nullptr;
-    if (to)
-        client->forwardMessage(request->chatId, request->messageId, *to);
+    for (; selected; selected = selected->next) {
+        const char *label = static_cast<const char *>(selected->data);
+        const auto *to    = label ? static_cast<const ForwardDestination *>(purple_request_field_list_get_data(field, label))
+                                  : nullptr;
+        if (to)
+            client->forwardMessage(request->chatId, request->messageId, *to);
+    }
 }
 
 void PurpleTdClient::forwardDestinationCancelled(void *data, PurpleRequestFields *)
@@ -2490,6 +2897,38 @@ bool PurpleTdClient::getReactionTip(PurpleConversation *conv, MessageId messageI
     return ::getReactionTip(m_data, conv, messageId, key, tip);
 }
 
+// Whether it is ours is asked of TDLib, as the line may not be up to date with it
+void PurpleTdClient::reactionClicked(PurpleConversation *conv, MessageId messageId, const std::string &key)
+{
+    const td::td_api::chat *chat = findConversationChat(m_data, conv);
+    if (!chat)
+        return;
+    ChatId chatId = getId(*chat);
+    if (makeReactionType(key)->get_id() == td::td_api::reactionTypePaid::ID) {
+        askPaidReaction(chatId, messageId);
+        return;
+    }
+    auto request = td::td_api::make_object<td::td_api::getMessage>();
+    request->chat_id_    = chatId.value();
+    request->message_id_ = messageId.value();
+    m_transceiver.sendQuery(std::move(request), [this, chatId, messageId, key](uint64_t, TdObjectPtr object) {
+        if (!object || (object->get_id() != td::td_api::message::ID))
+            return;
+        auto &message = static_cast<td::td_api::message &>(*object);
+        bool  chosen  = false;
+        if (message.interaction_info_ && message.interaction_info_->reactions_)
+            for (const auto &reaction: message.interaction_info_->reactions_->reactions_)
+                if (reaction && reaction->type_ && (getReactionTypeKey(*reaction->type_) == key))
+                    chosen = reaction->is_chosen_;
+        auto        type  = makeReactionType(key);
+        std::string shown = (type->get_id() == td::td_api::reactionTypeEmoji::ID)
+                            ? static_cast<const td::td_api::reactionTypeEmoji &>(*type).emoji_ : std::string();
+        purple_debug_misc(config::pluginId, "Reaction %s to message %" G_GINT64_FORMAT " clicked: %s\n", key.c_str(),
+                          messageId.value(), chosen ? "taking it back" : "giving it");
+        setMessageReaction(chatId, messageId, std::move(type), shown, !chosen);
+    });
+}
+
 void PurpleTdClient::markConversation(PurpleConversation *conv)
 {
     markConversationTitle(m_data, conv);
@@ -2591,6 +3030,17 @@ bool PurpleTdClient::fillConversation(PurpleConversation *conv)
     return fillChat(m_data, getId(*chat));
 }
 
+void PurpleTdClient::showFirstUnread(PurpleConversation *conv)
+{
+    // Not again later, if the chat is busy: being filled already, or its history fetched
+    const td::td_api::chat *chat = m_chatListReady ? findConversationChat(m_data, conv) : nullptr;
+    if (!chat || (chat->unread_count_ <= 0))
+        return;
+    purple_debug_misc(config::pluginId, "Chat %" G_GINT64_FORMAT " shown with %d unread: filling it anew\n",
+                      getId(*chat).value(), chat->unread_count_);
+    fillConversation(conv);
+}
+
 static bool isLeavingOf(const td::td_api::message &message, int64_t userId)
 {
     return userId && message.content_ &&
@@ -2674,7 +3124,7 @@ int PurpleTdClient::sendMessage(const char *buddyName, const char *message)
     // Auth-input fallback: while waiting for a login code, 2FA password or display name (asked
     // for through the "Telegram" chat because there is no request UI), take a message sent to that
     // chat as the value instead of sending it to anyone. Messages to anyone else go as usual.
-    if ((m_authInputPending != AuthInput::None) && !g_strcmp0(buddyName, AUTH_INPUT_BUDDY)) {
+    if ((m_authInputPending != AuthInput::None) && buddyName && !strcmp(buddyName, AUTH_INPUT_BUDDY)) {
         // OTR/other plugins may inject non-code messages; ignore those.
         if (message && g_str_has_prefix(message, "?OTR"))
             return -1;
@@ -3102,15 +3552,28 @@ void PurpleTdClient::addContact(const std::string &purpleName, const std::string
         return;
     }
 
+    // By id, as a group's member is named; by a display name typed in, as long as it is one person's
     std::vector<const td::td_api::user *> users;
-    m_data.getUsersByDisplayName(purpleName.c_str(), users);
+    if (isUserIdName(purpleName.c_str())) {
+        const td::td_api::user *user = m_data.getUser(purpleBuddyNameToUserId(purpleName.c_str()));
+        if (!user) {
+            // TRANSLATOR: Error dialog, secondary content, argument is a user's id (a number)
+            notifyFailedContactDeferred(formatMessage(_("No known user with id {}"), purpleName.substr(2)));
+            return;
+        }
+        users.push_back(user);
+    } else
+        m_data.getUsersByDisplayName(purpleName.c_str(), users);
     if (users.size() > 1) {
         notifyFailedContactDeferred(formatMessage("More than one user known with name '{}'", purpleName));
         return;
     }
 
     if (users.size() == 1)
-        addContactById(getId(*users[0]), "", purpleName, groupName);
+        // libpurple gives a buddy with no alias its name as one, an id here: the user's own name then
+        addContactById(getId(*users[0]), "", ((alias.empty() || (alias == purpleName)) ? makeBasicDisplayName(*users[0])
+                                                                                        : alias),
+                       groupName);
     else if (isPhoneNumber(purpleName.c_str())) {
 #if TDLIB_API_IMPORTED_CONTACT
         auto contact = td::td_api::make_object<td::td_api::importedContact>();
@@ -3236,11 +3699,8 @@ void PurpleTdClient::addContactCreatePrivateChatResponse(uint64_t requestId, td:
         if (user && !isChatInContactList(chat, user)) {
             // Normally, the user will become a contact and this won't happen. But it does happen
             // when adding BotFather, for example. Nothing will be added to buddy list, so open chat
-            // window just to make something happen.
-            // Since the user is not in buddy list, we have to use display name as libpurple name,
-            // otherwise conversation title will be idXXXXXXX
-            std::string displayName = m_data.getDisplayName(*user);
-            getImConversation(m_account, displayName.c_str());
+            // window just to make something happen, with a buddy until the program quits.
+            getImConversation(m_account, addTransientBuddy(m_data, *user).c_str());
         }
     } else {
         purple_debug_misc(config::pluginId, "Failed to create private chat to %s\n",
@@ -3321,9 +3781,9 @@ std::string PurpleTdClient::getChatMemberImName(const char *name)
     const td::td_api::user *user   = userId.valid() ? m_data.getUser(userId) : nullptr;
     if (!user)
         return std::string();
-    // As private chats' conversations are named: by the contact, or by the display name without one
-    std::string buddyName = getPurpleBuddyName(*user);
-    return purple_find_buddy(m_account, buddyName.c_str()) ? buddyName : m_data.getDisplayName(*user);
+    // As private chats' conversations are named: by id, the user's buddy, added if need be, showing
+    // their name
+    return addTransientBuddy(m_data, *user);
 }
 
 bool PurpleTdClient::joinChat(const char *chatName, bool lookUp)
@@ -3669,9 +4129,9 @@ void PurpleTdClient::createGroup(const char *name, int type,
         }
         for (const std::string &memberName: basicGroupMembers) {
             UserId userId = purpleBuddyNameToUserId(memberName.c_str());
-            if (userId.valid()) {
-                if (!m_data.getUser(userId)) {
-                    errorMessage = formatMessage(_("No known user with id {}"), userId);
+            if (isUserIdName(memberName.c_str())) {
+                if (!userId.valid() || !m_data.getUser(userId)) {
+                    errorMessage = formatMessage(_("No known user with id {}"), memberName.substr(2));
                 }
             } else {
                 std::vector<const td::td_api::user*> users;
@@ -3802,7 +4262,7 @@ void PurpleTdClient::kickUserFromChat(PurpleConversation *conv, const char *name
         return;
     }
 
-    std::vector<const td::td_api::user *> users = getUsersByPurpleName(name, m_data, "kick user");
+    std::vector<const td::td_api::user *> users = getUsersByPurpleName(name, m_data, "kick user", true);
     if (users.size() != 1) {
         // TRANSLATOR: In-chat error message, appears after a colon (':')
         const char *reason = users.empty() ? _("User not found") :
@@ -3877,7 +4337,7 @@ void PurpleTdClient::addUserToChat(int purpleChatId, const char *name)
         return;
     }
 
-    std::vector<const td::td_api::user *> users = getUsersByPurpleName(name, m_data, "kick user");
+    std::vector<const td::td_api::user *> users = getUsersByPurpleName(name, m_data, "invite user", true);
     if (users.size() != 1) {
         // TRANSLATOR: In-chat error message, appears after a colon (':')
         const char *reason = users.empty() ? _("User not found") :

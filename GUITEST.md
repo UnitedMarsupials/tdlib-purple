@@ -84,6 +84,22 @@ Quit Pidgin, have someone send several messages to a private chat and a group, s
 
 * All of them are shown, in order, not only the latest.
 
+### S5. Encrypting the local database
+
+On a copy of the profile, or with an account whose database can be lost, turn on "Encrypt the
+local database with the password" in the account's settings, with a password not remembered, and
+connect.
+
+* Pidgin asks for the password; then the plugin asks for it again, warning how long rewriting the
+  database takes, and a notice not to quit stays up until it says the database is encrypted.
+* The debug log names the database directory as encrypted ("using database directory ..., encrypted").
+* Connecting again asks for the password, and a wrong one is refused, the account staying
+  disconnected; the right one connects.
+* "Change the database password..." with two different passwords asks again; with the same one,
+  the database is encrypted anew and the new password opens it next time.
+* Turning the option off asks for the password at the next connection, and goes back to TDLib's
+  built-in key.
+
 ## Reading and the tabs shown
 
 ### T1. Read as seen
@@ -115,6 +131,13 @@ Right-click a text message, pick a reaction from the menu.
 
 * The reaction appears under the message, in Pidgin and the phone app.
 * Log: `Reaction <emoji> to message <id> picked`, then `addMessageReaction`.
+
+Click a reaction someone else gave, on the line under a message; then click it again.
+
+* The first click gives it as ours too, in bold, its count one more; the second takes it back.
+* Log: `Reaction e<emoji> to message <id> clicked: giving it`, then `taking it back`.
+* Pressing on a reaction and dragging off it before letting go does nothing; clicking the paid
+  one (⭐) asks how many stars, as the menu does.
 
 ### R2. Reaction to a picture
 
@@ -184,6 +207,12 @@ picking each in the dialog by typing part of its name.
 
 * It arrives at both, as a forward where the destination is Telegram.
 
+Forward one again, ticking two destinations: type part of one's name, tick it, type part of the
+other's, tick that too, and press OK.
+
+* The first one stays ticked while the list shows only the second.
+* It arrives at both; with none ticked, Enter forwards it to the one picked, as before.
+
 ### M3. Files of a message
 
 On a photo: "Copy the picture", paste into another program; "Save Image...", check the name it
@@ -207,11 +236,23 @@ Open a chat with unread messages.
 
 * It is scrolled to the first unread, with read ones before it.
 
+Leave a chat's tab open, but not the one shown in its window, while more
+than a screenful of messages comes to it. Then switch to it.
+
+* It is filled anew and scrolled to the first unread, as it was when opened,
+  not left at its end.
+* A tab with nothing unread is left as it was, scrolled where it was.
+
 ### H2. Going back
 
 Scroll to the top of a conversation, or turn the mouse wheel up there.
 
 * Fifty more messages are added before the earliest, which stays where it was.
+
+In a chat short enough, go back to its first message. Then have the tab filled
+anew from its first unread, as in H1, and go back again.
+
+* The earlier messages come back, up to the first one again.
 
 ### H3. Links to messages
 
@@ -311,3 +352,20 @@ Receive a video with a cover, and one without.
 Add someone to the test group, have them leave, pin a message.
 
 * Each is told in words: "X added Y", "X left", "X pinned a message".
+
+### G2. A member who is not a contact
+
+In the test group, open a private conversation with a member who is not in the buddy list, from
+the menu of their name in the member list, and send them a message (or have them write first).
+
+* The conversation's tab shows their name; it goes by `id<their id>`, as the debug log shows.
+* They are in the buddy list, in "Telegram: not in contacts", until Pidgin quits; `blist.xml`
+  does not keep them.
+* Their messages are marked read as they are seen, as a contact's are.
+* Removing them from "Telegram: not in contacts" only takes them out of the list: the chat with
+  them is still there, on the phone too.
+
+With another member who is not a contact, written to in the same way:
+
+* "Add Buddy..." from the menu of their name adds them as a contact, under their name, and the
+  same tab stays open.

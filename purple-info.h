@@ -67,6 +67,9 @@ namespace AccountOptions {
     constexpr gboolean    SendFilesByContentDefault  = FALSE;
     constexpr const char *ReadReceipts               = "read-receipts";
     constexpr gboolean    ReadReceiptsDefault        = TRUE;
+    // With the account's password, which Pidgin keeps only if told to remember it
+    constexpr const char *EncryptDatabase            = "encrypt-database";
+    constexpr gboolean    EncryptDatabaseDefault     = FALSE;
 };
 
 namespace BuddyOptions {

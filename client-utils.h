@@ -22,8 +22,14 @@ PurpleBlistNode    *findChatBlistNode(TdAccountData &account, const td::td_api::
 // entry in the contact list, if it has one and that was chosen, otherwise as the account has it
 bool                keepsDeletedMessages(PurpleAccount *account, PurpleBlistNode *node);
 void                setKeepsDeletedMessages(PurpleBlistNode *node, bool keep);
+// The user a name is of: an id, as the plugin names users, our own number, a phone number or a
+// @username; a display name too, if asked for, where a person types it
+// A user's buddy, as a conversation with them needs, if they are not a contact: for as long as the
+// program runs, never saved. Its name, which the conversation goes by, as any user's.
+std::string         addTransientBuddy(TdAccountData &account, const td::td_api::user &user);
+bool                isTransientBuddy(PurpleBuddy *buddy);
 std::vector<const td::td_api::user *> getUsersByPurpleName(const char *buddyName, TdAccountData &account,
-                                                           const char *action);
+                                                           const char *action, bool byDisplayName = false);
 PurpleConversation *getImConversation(PurpleAccount *account, const char *username);
 PurpleConvChat *    getChatConversation(TdAccountData &account, const td::td_api::chat &chat,
                                         int chatPurpleId);
@@ -166,5 +172,12 @@ protected:
 // A function of the front-end's, or of a library it has loaded and the plugin does not link; null
 // where there is none such. GModule looks in every module loaded, on Windows as elsewhere.
 void *findFrontEndSymbol(const char *name);
+
+// PBKDF2-HMAC-SHA256 (RFC 8018), 32 bytes of it. TDLib takes the database's key as a strong one
+// already, deriving its own from it with only two iterations: a password is made into one first.
+std::string deriveKey(const std::string &password, const std::string &salt, unsigned iterations);
+// Whether the file is an SQLite database in the clear: TDLib built with plain SQLite rather than
+// SQLCipher ignores the key given for it. An encrypted one starts with random bytes instead.
+bool isPlainSqliteFile(const std::string &path);
 
 #endif

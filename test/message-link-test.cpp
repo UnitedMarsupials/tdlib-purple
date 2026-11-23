@@ -875,6 +875,33 @@ TEST_F(MessageLinkTest, ForwardChosenInDialog)
     );
 }
 
+TEST_F(MessageLinkTest, ForwardChosenToSeveral)
+{
+    loginWithOneContact();
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    const ChatId    chat    = ChatId::fromString(std::to_string(chatIds[0]).c_str());
+    const MessageId message = MessageId::fromString("1");
+    auto destination = [this](int64_t chatId, const std::string &label) {
+        PurpleTdClient::ForwardDestination to;
+        to.accountName = "+" + selfPhoneNumber;
+        to.protocolId  = config::pluginId;
+        to.isChat      = true;
+        to.name        = "chat" + std::to_string(chatId);
+        to.label       = label;
+        return to;
+    };
+
+    // Each chosen is forwarded to, in turn; not the one left out, which need not be known
+    setRequestListChoices({0, 2});
+    client->askForwardMessage(chat, message, {destination(chatIds[1], "First"), destination(2000, "Second"),
+                                              destination(chatIds[0], "Third")});
+    tgl.verifyRequests({
+        makeForwardMessages(chatIds[1], chatIds[0], messageId),
+        makeForwardMessages(chatIds[0], chatIds[0], messageId)
+    });
+}
+
 TEST_F(MessageLinkTest, ForwardToAnotherAccount)
 {
     loginWithOneContact();
