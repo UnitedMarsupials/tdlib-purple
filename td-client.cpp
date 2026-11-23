@@ -59,6 +59,8 @@ PurpleTdClient::~PurpleTdClient()
 
     showMessages(messages, m_data);
     endAuthInput();
+    // A login given up, as the account is disabled before it is done, leaves nothing to answer
+    removeAuthInputBuddy();
 }
 
 void PurpleTdClient::setLogLevel(int level)
@@ -372,6 +374,7 @@ void PurpleTdClient::processAuthorizationState(td::td_api::AuthorizationState &a
 
     case td::td_api::authorizationStateReady::ID:
         purple_debug_misc(config::pluginId, "Authorization state update: ready\n");
+        removeAuthInputBuddy();
         onLoggedIn();
         break;
     }
@@ -906,14 +909,26 @@ static std::string getAuthCodeDesc(const td::td_api::AuthenticationCodeType &cod
     }
 }
 
-// The buddy, not a Telegram user, who asks for login input when there are no request dialogs
-static const char AUTH_INPUT_BUDDY[] = "Telegram";
+// Login input is asked for, when there are no request dialogs, in a chat with a buddy named as a
+// user would be (see getPurpleBuddyName) for user id 0, which Telegram gives no one. Being an id, it
+// is matched exactly: a front-end may hand back a display name in another case, as webOS does, and
+// a display name may be anyone's. Being no one's, the chat holds nothing but the login, and can be
+// cleared of the values typed into it, a password among them, without losing anything else.
+static const char AUTH_INPUT_BUDDY[] = "id0";
+static const char AUTH_INPUT_ALIAS[] = "Telegram";
 
 // No request UI ops: prompt for the value through a "Telegram" IM conversation instead. The
 // user's reply is captured in sendMessage() (tgprpl_send_im).
 void PurpleTdClient::promptAuthInputViaChat(AuthInput type, const std::string &message)
 {
     m_authInputPending = type;
+    // The buddy is added, until logged in, so that the prompt is shown as from "Telegram" rather
+    // than from an id; never saved, so that it is gone with the program at the latest
+    if (!purple_find_buddy(m_account, AUTH_INPUT_BUDDY)) {
+        PurpleBuddy *buddy = purple_buddy_new(m_account, AUTH_INPUT_BUDDY, AUTH_INPUT_ALIAS);
+        purple_blist_node_set_flags(PURPLE_BLIST_NODE(buddy), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+        purple_blist_add_buddy(buddy, NULL, NULL, NULL);
+    }
     // The conversation is opened here, rather than by serv_got_im, so that its logging is off
     // before anything is written to it: the prompt, then the value typed, which libpurple would
     // log in plain text.
@@ -939,6 +954,15 @@ void PurpleTdClient::promptAuthInputViaChat(AuthInput type, const std::string &m
     PurpleConnection *gc = purple_account_get_connection(m_account);
     if (gc)
         serv_got_im(gc, AUTH_INPUT_BUDDY, prompt.c_str(), PURPLE_MESSAGE_RECV, time(NULL));
+}
+
+// Logged in, or disconnected, nothing more is asked for: the buddy the login input was asked for
+// by goes
+void PurpleTdClient::removeAuthInputBuddy()
+{
+    PurpleBuddy *buddy = purple_find_buddy(m_account, AUTH_INPUT_BUDDY);
+    if (buddy)
+        purple_blist_remove_buddy(buddy);
 }
 
 void PurpleTdClient::keepAuthInputUnlogged()
@@ -3100,7 +3124,7 @@ int PurpleTdClient::sendMessage(const char *buddyName, const char *message)
     // Auth-input fallback: while waiting for a login code, 2FA password or display name (asked
     // for through the "Telegram" chat because there is no request UI), take a message sent to that
     // chat as the value instead of sending it to anyone. Messages to anyone else go as usual.
-    if ((m_authInputPending != AuthInput::None) && !g_strcmp0(buddyName, AUTH_INPUT_BUDDY)) {
+    if ((m_authInputPending != AuthInput::None) && buddyName && !strcmp(buddyName, AUTH_INPUT_BUDDY)) {
         // OTR/other plugins may inject non-code messages; ignore those.
         if (message && g_str_has_prefix(message, "?OTR"))
             return -1;

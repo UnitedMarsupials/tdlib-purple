@@ -792,11 +792,8 @@ gboolean purple_debug_is_verbose(void)
 
 PurpleBuddy *purple_find_buddy(PurpleAccount *account, const char *name)
 {
-    // purple_blist_find_chat returns NULL if account is not connected, so just in case, assume
-    // purple_find_buddy will do likewise
-    if (!purple_account_is_connected(account))
-        return NULL;
-
+    // Unlike purple_blist_find_chat, libpurple's purple_find_buddy finds a buddy whether the
+    // account is connected or not
     auto pAccount = std::find_if(g_accounts.begin(), g_accounts.end(),
                                  [account](const AccountInfo &info) { return (info.account == account); });
     EXPECT_FALSE(pAccount == g_accounts.end()) << "Looking for buddy with unknown account";
