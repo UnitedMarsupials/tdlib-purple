@@ -1984,6 +1984,18 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
         }
         items.push_back(std::move(item));
     }
+    // Where the tab stops short of the chat's newest
+    if (conv && getTabEnd(conv).valid()) {
+        MenuItem item;
+        // TRANSLATOR: Item of a message's menu, and of the menu of a window's tabs, where the conversation does not show its newest messages.
+        item.label  = _("Go to the latest message");
+        item.action = [accountName, chatId]() {
+            PurpleTdClient *client = findConnected(accountName.c_str());
+            if (client)
+                ::showNewestMessages(client->m_data, chatId);
+        };
+        items.push_back(std::move(item));
+    }
     fillOpenMenu(openMenu, items);
 }
 
@@ -2907,6 +2919,18 @@ void PurpleTdClient::showEarlierMessages(PurpleConversation *conv, double fillin
     ::showEarlierMessages(m_data, conv, filling);
 }
 
+void PurpleTdClient::showLaterMessages(PurpleConversation *conv)
+{
+    ::showLaterMessages(m_data, conv);
+}
+
+void PurpleTdClient::showNewestMessages(PurpleConversation *conv)
+{
+    const td::td_api::chat *chat = findConversationChat(m_data, conv);
+    if (chat)
+        ::showNewestMessages(m_data, getId(*chat));
+}
+
 bool PurpleTdClient::getReactionTip(PurpleConversation *conv, MessageId messageId, const std::string &key,
                                     std::string &tip)
 {
@@ -3192,6 +3216,8 @@ int PurpleTdClient::sendMessage(const char *buddyName, const char *message)
     }
 
     if (chat) {
+        // Into a tab that ends where its chat does, not after a gap
+        ::showNewestMessages(m_data, getId(*chat));
         int ret = transmitMessage(getId(*chat), message, m_transceiver, m_data, &PurpleTdClient::sendMessageResponse);
         if (ret < 0)
             return ret;
@@ -3850,6 +3876,8 @@ int PurpleTdClient::sendGroupMessage(int purpleChatId, const char *message)
         purple_debug_misc(config::pluginId, "purple id %d (chat %s) is not a group we a member of\n",
                              purpleChatId, chat->title_.c_str());
     else {
+        // Into a tab that ends where its chat does, not after a gap
+        ::showNewestMessages(m_data, getId(*chat));
         int ret = transmitMessage(getId(*chat), message, m_transceiver, m_data, &PurpleTdClient::sendMessageResponse);
         if (ret < 0)
             return ret;
@@ -4549,6 +4577,8 @@ void PurpleTdClient::sendMessageCreatePrivateChatResponse(uint64_t requestId, td
         std::string errorMessage;
 
         if (chat) {
+            // Into a tab that ends where its chat does, not after a gap
+            ::showNewestMessages(m_data, getId(*chat));
             int ret = transmitMessage(getId(*chat), request->message.c_str(), m_transceiver, m_data,
                                       &PurpleTdClient::sendMessageResponse);
             // Messages copied from libpurple

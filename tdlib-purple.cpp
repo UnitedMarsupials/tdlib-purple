@@ -1360,6 +1360,22 @@ static void topReached(PurpleConversation *conv, double filling)
         tdClient->showEarlierMessages(conv, filling);
 }
 
+// Scrolled to the end of a tab that stops short of its chat's newest message
+static void bottomReached(PurpleConversation *conv)
+{
+    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    if (tdClient)
+        tdClient->showLaterMessages(conv);
+}
+
+// The newest messages asked for, from the menu of the tabs, in a tab that stops short of them
+static void latestAsked(PurpleConversation *conv)
+{
+    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    if (tdClient)
+        tdClient->showNewestMessages(conv);
+}
+
 // A tab shown or no longer shown, in Pidgin
 static void conversationShown(PurpleConversation *conv, bool shown)
 {
@@ -1447,6 +1463,8 @@ static void registerMessageLinks()
     setPlaceholderHandler(placeholderClicked);
     setBuddyMarkHandler(buddyMarked, UNREAD_REACTIONS_MARK);
     setTopReachedHandler(topReached);
+    setBottomReachedHandler(bottomReached);
+    setLatestAskedHandler(latestAsked, _("Go to the latest message"));
     setReactionTipHandler(reactionTipAsked);
     setReactionClickHandler(reactionClicked);
     setShownHandler(conversationShown);
@@ -1467,6 +1485,8 @@ static void unregisterMessageLinks()
     setDraggedFileHandler(nullptr);
     setBuddyMarkHandler(nullptr, nullptr);
     setTopReachedHandler(nullptr);
+    setBottomReachedHandler(nullptr);
+    setLatestAskedHandler(nullptr, "");
     setReactionTipHandler(nullptr);
     setReactionClickHandler(nullptr);
     setShownHandler(nullptr);
