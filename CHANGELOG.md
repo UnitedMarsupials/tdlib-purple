@@ -11,6 +11,7 @@
 
 ### Fixes
 
+- **In Pidgin, a buddy's tab is filled, and the buddy can be reported, even if they are neither a contact nor in the chat list, as one blocked whose chat was deleted.** TDLib did not tell of such a buddy at login, so the tab stayed empty with nothing said, and the buddy's menu had no "Report…". The chat is now asked of TDLib as the tab opens; if Telegram does not know them any more, the tab says so.
 - **In Pidgin, the menu of an edited message's text has the message's items, also after reactions to it were taken back.** The new text went in after the end of the line of reactions, at the old text's end, which was then taken for the message's own.
 - **In Pidgin, a link to a message deleted since, struck out as it comes back from the conversation's log, scrolls to it**, rather than saying it is not shown. And the menu of a link to a message, in a quote or a notice, has the message's items, or says that it has been deleted, rather than nothing.
 - **In Pidgin, the menu of a file's link, such as a video's under its cover, has the message's own items too, as its text's and its picture's menus do**, rather than "Copy the file" alone. As in those, the menu's own item, the link's "Copy the file", is on top, and the message's follow after a separator, in the same order everywhere, without a second "Copy the file" of the same file. A picture's "Copy the picture" is now "Copy the image", as Pidgin's own "Save Image..." names it.

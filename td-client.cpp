@@ -3071,10 +3071,46 @@ bool PurpleTdClient::fillConversation(PurpleConversation *conv)
 {
     // Not known yet, or a group chat's tab kept from before not joined again yet, just after login
     const td::td_api::chat *chat = findConversationChat(m_data, conv);
+    if (!chat && m_chatListReady && (purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_IM))
+        return requestBuddyChat(conv);
     if (!chat || ((purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_CHAT) &&
                   purple_conv_chat_has_left(purple_conversation_get_chat_data(conv))))
         return false;
     return fillChat(m_data, getId(*chat));
+}
+
+// A buddy neither among the contacts nor in the chat list, such as one blocked and the chat deleted,
+// is not told of at login; TDLib may still know them, and make the chat again
+bool PurpleTdClient::requestBuddyChat(PurpleConversation *conv)
+{
+    UserId userId = purpleBuddyNameToUserId(purple_conversation_get_name(conv));
+    if (!userId.valid())
+        return false;
+    if (m_buddyChatsRequested.count(userId))
+        return true;
+    m_buddyChatsRequested.insert(userId);
+    purpleDebug("Requesting private chat for buddy {} opened", userId.value());
+    std::string convName = purple_conversation_get_name(conv);
+    auto request = td::td_api::make_object<td::td_api::createPrivateChat>();
+    request->user_id_ = userId.value();
+    request->force_   = false;
+    m_transceiver.sendQuery(std::move(request), [this, userId, convName](uint64_t, TdObjectPtr object) {
+        m_buddyChatsRequested.erase(userId);
+        PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, convName.c_str(),
+                                                                         m_account);
+        if (object && (object->get_id() == td::td_api::chat::ID)) {
+            m_data.addChat(td::move_tl_object_as<td::td_api::chat>(object));
+            if (conv)
+                fillConversation(conv);
+        } else if (conv) {
+            std::string message = formatMessage(_("Telegram has no chat with this user: {}"),
+                                                escapeForDisplay(getDisplayedError(object)));
+            purple_conversation_write(conv, "", message.c_str(),
+                                      static_cast<PurpleMessageFlags>(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG),
+                                      time(NULL));
+        }
+    });
+    return true;
 }
 
 void PurpleTdClient::showFirstUnread(PurpleConversation *conv)

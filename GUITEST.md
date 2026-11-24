@@ -269,6 +269,13 @@ than a screenful of messages comes to it. Then switch to it.
   not left at its end.
 * A tab with nothing unread is left as it was, scrolled where it was.
 
+Open, from the buddy list, a buddy who is not a contact and whose chat is not
+in the chat list, such as one blocked and the chat deleted.
+
+* The tab is filled with whatever history Telegram still has, and the buddy's
+  "Report…" is in its menu where Telegram takes a report about them.
+* Where Telegram does not know them, the tab says so, rather than staying empty.
+
 ### H2. Going back
 
 Scroll to the top of a conversation, or turn the mouse wheel up there.
