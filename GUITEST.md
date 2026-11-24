@@ -191,15 +191,16 @@ shows.
 
 ### M1. Edit and delete
 
-Edit a message of ours from its menu, then delete it.
+Give a message of ours a reaction and take it back, then edit it from its menu, and right-click
+its edited text.
 
-* The edit is written over the message in Pidgin and the other members see it; the deletion takes
-  it out, and the notice names us, as having deleted our own message: in English, "deleted their
-  message".
+* The edit is written over the message in Pidgin and the other members see it.
+* The menu of its edited text has the message's items, as on its sender's name.
 
-Right-click the edited message's text, after giving it a reaction and taking it back.
+Then delete it.
 
-* The menu has the message's items, as on its sender's name.
+* The deletion takes it out, and the notice names us, as having deleted our own message: in
+  English, "deleted their message".
 
 Since: an edit forgot that the message was ours, so that deleting it named us as its sender like
 anyone else's; and the text of an edited message whose reactions had been taken back got no
@@ -289,7 +290,8 @@ Click the time in a reply's quote, and in the notice of an edit or a reaction.
 Right-click such a link.
 
 * The menu has the linked message's items, as its own menu has them, with no separator above
-  them; or, for one deleted, "No actions available".
+  them; or, for one deleted, "The message has been deleted." A link in a quote of a message
+  from another chat has no items of a message of this one.
 
 ### H4. Our deleted messages, again
 

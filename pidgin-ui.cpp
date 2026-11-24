@@ -2795,6 +2795,11 @@ static void addMessageMenu(PurpleConversation *conv, GtkWidget *menu, MessageId 
         fillOpenMenu(openMenu, {});
 }
 
+PurpleConversation *getTabConversation(GtkIMHtml *imhtml)
+{
+    return imhtml ? findTabConversation(imhtml) : nullptr;
+}
+
 bool addLinkMessageMenu(GtkIMHtml *imhtml, GtkWidget *menu, MessageId messageId, bool fileGiven)
 {
     PurpleConversation *conv = (imhtml && menu && g_messagePopupHandler) ? findTabConversation(imhtml) : nullptr;
@@ -4368,6 +4373,11 @@ void addLinkMenuItems(PidginWidget *menu, const std::vector<MenuItem> &items)
 bool addLinkMessageMenu(PidginIMHtml *imhtml, PidginWidget *menu, MessageId messageId, bool fileGiven)
 {
     return false;
+}
+
+PurpleConversation *getTabConversation(PidginIMHtml *imhtml)
+{
+    return nullptr;
 }
 
 bool copyFileToClipboard(const std::string &path, bool picture)

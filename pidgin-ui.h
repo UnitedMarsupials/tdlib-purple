@@ -269,6 +269,8 @@ void addLinkMenuItems(PidginWidget *menu, const std::vector<MenuItem> &items);
 // And, after a separator, those of the message, in a tab, that the link is in, as its own menu has them,
 // but for copying its file if the link's own item does; false if none can be
 bool addLinkMessageMenu(PidginIMHtml *imhtml, PidginWidget *menu, MessageId messageId, bool fileGiven);
+// The conversation whose tab shows the text, if any
+PurpleConversation *getTabConversation(PidginIMHtml *imhtml);
 
 // The file goes on the clipboard: its URI, for a file manager to paste a copy, or a conversation to
 // attach it; its path, as text; and, if it is a picture, the picture itself, for a program that

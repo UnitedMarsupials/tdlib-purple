@@ -1317,6 +1317,15 @@ static gboolean jumpLinkClicked(PidginIMHtml *imhtml, PidginIMHtmlLink *link)
     return TRUE;
 }
 
+// A link in a tab names the tab's chat, or that of a message quoted from another
+static bool linksTabChat(PidginIMHtml *imhtml, const std::string &accountName, ChatId chatId)
+{
+    PurpleConversation *conv    = getTabConversation(imhtml);
+    PurpleAccount      *account = conv ? purple_conversation_get_account(conv) : nullptr;
+    PurpleTdClient     *client  = account ? getTdClient(account) : nullptr;
+    return client && (accountName == purple_account_get_username(account)) && client->isConversationOf(conv, chatId);
+}
+
 // Called whenever the link to a message's file is right-clicked: its own item on top, then the
 // message's, as on its picture, but for a second "Copy the file" of the same file
 static gboolean messageLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *link, PidginWidget *linkMenu)
@@ -1335,7 +1344,8 @@ static gboolean messageLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *l
             client->openMessageFile(chatId, messageId, variant, PurpleTdClient::FileUse::Copy);
     };
     addLinkMenuItems(linkMenu, {item});
-    addLinkMessageMenu(imhtml, linkMenu, messageId, variant.empty());
+    if (linksTabChat(imhtml, accountName, chatId))
+        addLinkMessageMenu(imhtml, linkMenu, messageId, variant.empty());
     return TRUE;
 }
 
@@ -1347,7 +1357,7 @@ static gboolean jumpLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *link
     std::string accountName;
     ChatId      chatId;
     MessageId   messageId;
-    if (url && parseJumpLink(url, accountName, chatId, messageId))
+    if (url && parseJumpLink(url, accountName, chatId, messageId) && linksTabChat(imhtml, accountName, chatId))
         addLinkMessageMenu(imhtml, linkMenu, messageId, false);
     return TRUE;
 }

@@ -1673,6 +1673,12 @@ bool PurpleTdClient::showMessagePopup(PurpleConversation *conv, MessageId messag
     return true;
 }
 
+bool PurpleTdClient::isConversationOf(PurpleConversation *conv, ChatId chatId)
+{
+    const td::td_api::chat *chat = findConversationChat(m_data, conv);
+    return chat && (getId(*chat) == chatId);
+}
+
 void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId, OpenMenuRef openMenu)
 {
     // The message for the reactions it has, then what may be done to it, then the reactions it
