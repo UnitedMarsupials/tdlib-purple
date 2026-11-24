@@ -906,7 +906,8 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
 void logSentMessage(TdAccountData &account, ChatId chatId, MessageId oldId, MessageId newId)
 {
     UnloggedSent sent;
-    if (!account.extractUnloggedSent(chatId, oldId, sent))
+    // Nor of a chat deleted since it was sent
+    if (!account.extractUnloggedSent(chatId, oldId, sent) || account.isChatDeleted(chatId))
         return;
     std::string             marked = sent.text + makeLogMarker(newId, sent.timestamp);
     PurpleMessageFlags      flags  = (PurpleMessageFlags)sent.flags;
