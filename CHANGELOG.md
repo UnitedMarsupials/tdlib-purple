@@ -27,6 +27,7 @@
 ### Translations
 
 - **Czech, German, Polish, Albanian and Ukrainian are complete again**, with the strings 0.9.6 added: forwarding, copying a message's file or picture, a group's news, and who deleted a message.
+- **The same languages have the strings added since: the local database's password, forwarding to several chats at once, the buddy-list group of those not in the contacts, and reporting a group's member.** Some had been matched by msgmerge to older strings they resembled, and said, for instance, "New password" for "Database password" or "Enable secret chats" for encrypting the database.
 
 ## 0.9.6 (2026-11-14)
 
