@@ -33,6 +33,7 @@ SecretChatId purpleBuddyNameToSecretChatId(const char *s);
 bool        isPrivateChat(const td::td_api::chat &chat);
 UserId      getUserIdByPrivateChat(const td::td_api::chat &chat);
 bool        isChatInContactList(const td::td_api::chat &chat, const td::td_api::user *privateChatUser);
+bool        canReportAsSpam(const td::td_api::chat &chat);
 BasicGroupId getBasicGroupId(const td::td_api::chat &chat);
 SupergroupId getSupergroupId(const td::td_api::chat &chat);
 SecretChatId getSecretChatId(const td::td_api::chat &chat);

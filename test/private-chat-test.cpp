@@ -312,6 +312,15 @@ void PrivateChatTest::contactedByStranger(object_ptr<ChatActionBar> &&actionBar)
     EXPECT_TRUE(purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
     tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
 
+    // The offer is what Telegram takes a report about a person by: with nothing chosen
+    GList *actions = pluginInfo().blist_node_menu(&buddy->node);
+    nodeMenuAction(&buddy->node, actions, "Report…");
+    g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
+    tgl.verifyRequest(reportChat(chatIds[0], "", {}, ""));
+    tgl.reply(make_object<reportChatResultOk>());
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                                             "Reported to Telegram's moderators.", PURPLE_MESSAGE_SYSTEM, 0));
+
     // We dismiss the offer: the same buddy is a lasting one, keeping the conversation's tab
     auto actionBarUpdate = make_object<updateChatActionBar>();
     actionBarUpdate->chat_id_ = chatIds[0];

@@ -254,6 +254,13 @@ Choose it only for someone who deserves it: it does report them. Then:
 * Telegram's reasons are asked for, as for a message, and how it went is told in the group,
   without a private chat with them opened; or that Telegram takes no report about them.
 
+When a stranger writes first, as spammers do, right-click their message, and their buddy, under
+"Telegram: not in contacts".
+
+* The message's menu has "Report" and their name; the buddy's, "Report…".
+* Chosen, it asks nothing: the tab says "Reported to Telegram's moderators.", and the buddy
+  leaves "Telegram: not in contacts", as the offer is gone.
+
 ### M6. A message's link
 
 Right-click a post in a public channel, and a message in a private chat or group.
