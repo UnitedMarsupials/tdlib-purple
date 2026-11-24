@@ -128,12 +128,16 @@ bool canReplaceMessage(PurpleConversation *conv, MessageId messageId);
 
 // The line under a message that lists its reactions, replacing what it said before; none if
 // empty. In Pidgin's tab only, where the message is. Each is HTML, and a key that its tooltip is
-// asked for by, if any.
+// asked for by, if any; it may begin a line of its own.
 struct ShownReaction {
     std::string html;
     std::string key;
+    bool        newLine = false;
 };
 void showMessageReactions(PurpleConversation *conv, MessageId messageId, const std::vector<ShownReaction> &reactions);
+// Likewise the lines of the message's buttons, between it and its reactions. Their keys go to the
+// same handlers.
+void showMessageButtons(PurpleConversation *conv, MessageId messageId, const std::vector<ShownReaction> &buttons);
 // Asked for the tooltip of a message's reaction under the pointer, plain text; false if none
 using ReactionTipHandler = bool (*)(PurpleConversation *conv, MessageId messageId, const std::string &key,
                                     std::string &tip);

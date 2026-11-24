@@ -2264,3 +2264,12 @@ msgstr "Zmień hasło bazy danych..."
 
 #~ msgid "Days of messages to show on opening a conversation, in Pidgin"
 #~ msgstr "Dni wiadomości do pokazania po otwarciu rozmowy w Pidginie"
+
+msgid "Cannot open the chat"
+msgstr "Nie można otworzyć czatu"
+
+msgid "The bot did not answer"
+msgstr "Bot nie odpowiedział"
+
+msgid "\"{}\" works only in Telegram's own apps."
+msgstr "\"{}\" działa tylko we własnych aplikacjach Telegrama."

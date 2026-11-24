@@ -2240,3 +2240,12 @@ msgstr "Změnit heslo databáze..."
 
 #~ msgid "Days of messages to show on opening a conversation, in Pidgin"
 #~ msgstr "Dny zpráv k zobrazení při otevření konverzace v Pidginu"
+
+msgid "Cannot open the chat"
+msgstr "Chat nelze otevřít"
+
+msgid "The bot did not answer"
+msgstr "Bot neodpověděl"
+
+msgid "\"{}\" works only in Telegram's own apps."
+msgstr "\"{}\" funguje jen ve vlastních aplikacích Telegramu."

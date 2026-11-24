@@ -121,6 +121,12 @@ void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessag
 void updateMessageReactions(TdAccountData &account, ChatId chatId, MessageId messageId,
                             const td::td_api::messageInteractionInfo *info);
 void updateUnreadReactions(TdAccountData &account, td::td_api::updateMessageUnreadReactions &update);
+// A message's buttons, under it, by keys that go to the reactions' handlers: whether the key is a
+// button's, and where it is among the message's
+bool isButtonKey(const std::string &key);
+bool parseButtonKey(const std::string &key, size_t &row, size_t &column, std::string &url);
+void updateMessageButtons(TdAccountData &account, ChatId chatId, MessageId messageId,
+                          const td::td_api::ReplyMarkup *markup);
 
 // A chat with reactions to our messages not seen yet is marked, as the phone app marks it: its
 // conversation's title, and its contact in the buddy list, begin with a heart

@@ -160,6 +160,11 @@ ChatId getChatId(const td::td_api::updateMessageInteractionInfo &update)
     return ChatId(update.chat_id_);
 }
 
+ChatId getChatId(const td::td_api::updateMessageEdited &update)
+{
+    return ChatId(update.chat_id_);
+}
+
 ChatId getChatId(const td::td_api::updateMessageUnreadReactions &update)
 {
     return ChatId(update.chat_id_);
@@ -230,6 +235,11 @@ MessageId getMessageId(const td::td_api::updateDeleteMessages &update, unsigned 
 }
 
 MessageId getMessageId(const td::td_api::updateMessageInteractionInfo &update)
+{
+    return MessageId(update.message_id_);
+}
+
+MessageId getMessageId(const td::td_api::updateMessageEdited &update)
 {
     return MessageId(update.message_id_);
 }

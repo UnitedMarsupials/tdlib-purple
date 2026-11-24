@@ -224,6 +224,14 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         break;
     }
 
+    case td::td_api::updateMessageEdited::ID: {
+        // Its buttons, as a bot changes them; a change of its text comes as updateMessageContent
+        auto &editedUpdate = static_cast<const td::td_api::updateMessageEdited &>(update);
+        updateMessageButtons(m_data, getChatId(editedUpdate), getMessageId(editedUpdate),
+                             editedUpdate.reply_markup_.get());
+        break;
+    }
+
     case td::td_api::updateMessageUnreadReactions::ID: {
         auto &reactionsUpdate = static_cast<td::td_api::updateMessageUnreadReactions &>(update);
         purple_debug_misc(config::pluginId, "Incoming update: %zu unread reactions to message %" G_GINT64_FORMAT "\n",
@@ -2991,7 +2999,110 @@ void PurpleTdClient::showNewestMessages(PurpleConversation *conv)
 bool PurpleTdClient::getReactionTip(PurpleConversation *conv, MessageId messageId, const std::string &key,
                                     std::string &tip)
 {
+    size_t      row, column;
+    std::string url;
+    // A link's address, shown before it is opened
+    if (parseButtonKey(key, row, column, url)) {
+        tip = url;
+        return !tip.empty();
+    }
     return ::getReactionTip(m_data, conv, messageId, key, tip);
+}
+
+// The button as the message has it now, which the line under it may not be up to date with
+void PurpleTdClient::buttonClicked(ChatId chatId, MessageId messageId, const std::string &key)
+{
+    size_t      row, column;
+    std::string url;
+    if (!parseButtonKey(key, row, column, url))
+        return;
+    auto request = td::td_api::make_object<td::td_api::getMessage>();
+    request->chat_id_    = chatId.value();
+    request->message_id_ = messageId.value();
+    m_transceiver.sendQuery(std::move(request), [this, chatId, messageId, row, column](uint64_t, TdObjectPtr object) {
+        const td::td_api::message *message = (object && (object->get_id() == td::td_api::message::ID))
+                                             ? static_cast<const td::td_api::message *>(object.get()) : nullptr;
+        const td::td_api::ReplyMarkup *markup = message ? message->reply_markup_.get() : nullptr;
+        const auto *keyboard = (markup && (markup->get_id() == td::td_api::replyMarkupInlineKeyboard::ID))
+                               ? static_cast<const td::td_api::replyMarkupInlineKeyboard *>(markup) : nullptr;
+        if (keyboard && (row < keyboard->rows_.size()) && (column < keyboard->rows_[row].size()) &&
+            keyboard->rows_[row][column] && keyboard->rows_[row][column]->type_)
+            pressButton(chatId, messageId, *keyboard->rows_[row][column]);
+        else
+            purple_debug_misc(config::pluginId, "Button %zu,%zu of message %" G_GINT64_FORMAT " is gone\n", row, column,
+                              messageId.value());
+    });
+}
+
+void PurpleTdClient::showButtonNotice(ChatId chatId, const std::string &notice)
+{
+    const td::td_api::chat *chat = m_data.getChat(chatId);
+    if (chat && !notice.empty())
+        showChatNotification(m_data, *chat, escapeForDisplay(notice).c_str(), PURPLE_MESSAGE_NO_LOG);
+}
+
+void PurpleTdClient::pressButton(ChatId chatId, MessageId messageId, const td::td_api::inlineKeyboardButton &button)
+{
+    PurpleConnection *gc = purple_account_get_connection(m_account);
+    switch (button.type_->get_id()) {
+    case td::td_api::inlineKeyboardButtonTypeUrl::ID:
+        purple_notify_uri(gc, static_cast<const td::td_api::inlineKeyboardButtonTypeUrl &>(*button.type_).url_.c_str());
+        break;
+    case td::td_api::inlineKeyboardButtonTypeLoginUrl::ID:
+        // Without logging in to the site, which only Telegram's apps do
+        purple_notify_uri(gc, static_cast<const td::td_api::inlineKeyboardButtonTypeLoginUrl &>(*button.type_).url_.c_str());
+        break;
+    case td::td_api::inlineKeyboardButtonTypeCopyText::ID:
+        if (!copyTextToClipboard(static_cast<const td::td_api::inlineKeyboardButtonTypeCopyText &>(*button.type_).text_))
+            purple_debug_warning(config::pluginId, "No clipboard to copy the button's text to\n");
+        break;
+    case td::td_api::inlineKeyboardButtonTypeUser::ID: {
+        // Their chat, opened
+        auto request = td::td_api::make_object<td::td_api::createPrivateChat>();
+        request->user_id_ = static_cast<const td::td_api::inlineKeyboardButtonTypeUser &>(*button.type_).user_id_;
+        request->force_   = false;
+        m_transceiver.sendQuery(std::move(request), [this, chatId](uint64_t, TdObjectPtr object) {
+            const td::td_api::chat *chat = (object && (object->get_id() == td::td_api::chat::ID))
+                ? m_data.getChat(getId(static_cast<const td::td_api::chat &>(*object))) : nullptr;
+            if (chat)
+                showLinkedMessage(m_data, *chat, MessageId());
+            else
+                // TRANSLATOR: In-chat error message, after a message's button was clicked; the reason follows.
+                reportMenuError(chatId, _("Cannot open the chat"), object);
+        });
+        break;
+    }
+    case td::td_api::inlineKeyboardButtonTypeCallback::ID: {
+        // The bot answers, if at all, with a few words, to be shown in the tab or in a dialog, or a
+        // link to open
+        auto request = td::td_api::make_object<td::td_api::getCallbackQueryAnswer>();
+        request->chat_id_    = chatId.value();
+        request->message_id_ = messageId.value();
+        request->payload_    = td::td_api::make_object<td::td_api::callbackQueryPayloadData>(
+            static_cast<const td::td_api::inlineKeyboardButtonTypeCallback &>(*button.type_).data_);
+        m_transceiver.sendQuery(std::move(request), [this, chatId](uint64_t, TdObjectPtr object) {
+            if (!object || (object->get_id() != td::td_api::callbackQueryAnswer::ID)) {
+                // TRANSLATOR: In-chat error message, after a message's button was clicked; the reason follows.
+                reportMenuError(chatId, _("The bot did not answer"), object);
+                return;
+            }
+            const auto       &answer = static_cast<const td::td_api::callbackQueryAnswer &>(*object);
+            PurpleConnection *gc     = purple_account_get_connection(m_account);
+            if (!answer.url_.empty())
+                purple_notify_uri(gc, answer.url_.c_str());
+            if (answer.show_alert_ && !answer.text_.empty())
+                purple_notify_info(gc, config::pluginName, answer.text_.c_str(), NULL);
+            else
+                showButtonNotice(chatId, answer.text_);
+        });
+        break;
+    }
+    default:
+        // Payments, games, web apps, a password asked for, or inline queries
+        // TRANSLATOR: In-chat notification, not logged, after a message's button was clicked. Argument is the button's text.
+        showButtonNotice(chatId, formatMessage(_("\"{}\" works only in Telegram's own apps."), button.text_));
+        break;
+    }
 }
 
 // Whether it is ours is asked of TDLib, as the line may not be up to date with it
@@ -3001,6 +3112,10 @@ void PurpleTdClient::reactionClicked(PurpleConversation *conv, MessageId message
     if (!chat)
         return;
     ChatId chatId = getId(*chat);
+    if (isButtonKey(key)) {
+        buttonClicked(chatId, messageId, key);
+        return;
+    }
     if (makeReactionType(key)->get_id() == td::td_api::reactionTypePaid::ID) {
         askPaidReaction(chatId, messageId);
         return;

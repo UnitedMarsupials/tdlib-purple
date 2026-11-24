@@ -2215,3 +2215,12 @@ msgstr "Змінити пароль бази даних..."
 
 #~ msgid "Days of messages to show on opening a conversation, in Pidgin"
 #~ msgstr "Скільки днів повідомлень показувати, відкриваючи розмову в Pidgin"
+
+msgid "Cannot open the chat"
+msgstr "Не вдається відкрити чат"
+
+msgid "The bot did not answer"
+msgstr "Бот не відповів"
+
+msgid "\"{}\" works only in Telegram's own apps."
+msgstr "\"{}\" працює лише в застосунках самого Telegram."

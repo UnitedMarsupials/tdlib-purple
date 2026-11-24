@@ -2253,3 +2253,12 @@ msgstr "Ndryshoni fjalëkalimin e bazës së të dhënave..."
 
 #~ msgid "Days of messages to show on opening a conversation, in Pidgin"
 #~ msgstr "Ditë mesazhesh për t'u shfaqur kur hapet një bisedë, në Pidgin"
+
+msgid "Cannot open the chat"
+msgstr "Biseda s’mund të hapet"
+
+msgid "The bot did not answer"
+msgstr "Roboti nuk u përgjigj"
+
+msgid "\"{}\" works only in Telegram's own apps."
+msgstr "\"{}\" punon vetëm në aplikacionet e vetë Telegram-it."

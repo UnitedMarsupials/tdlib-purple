@@ -59,6 +59,7 @@ public:
     // A reaction on a message's line clicked: ours taken back, or given if not; the paid one asked
     // for, as from the message's menu
     void reactionClicked(PurpleConversation *conv, MessageId messageId, const std::string &key);
+    void buttonClicked(ChatId chatId, MessageId messageId, const std::string &key);
     bool hasUnreadReactions(PurpleBuddy *buddy);
 
     void addContact(const std::string &purpleName, const std::string &alias, const std::string &groupName);
@@ -385,6 +386,8 @@ private:
     void sendPaidReaction(ChatId chatId, MessageId messageId, int64_t starCount);
     void reportMenuError(ChatId chatId, const std::string &failure, const TdObjectPtr &object);
     void reportMenuError(ChatId chatId, const std::string &notice);
+    void pressButton(ChatId chatId, MessageId messageId, const td::td_api::inlineKeyboardButton &button);
+    void showButtonNotice(ChatId chatId, const std::string &notice);
     void reportReactionError(ChatId chatId, const std::string &emoji, const TdObjectPtr &object);
     static void paidReactionEntered(void *data, const char *starCount);
     static void paidReactionCancelled(void *data);

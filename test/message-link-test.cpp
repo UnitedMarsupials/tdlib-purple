@@ -591,6 +591,68 @@ TEST_F(MessageLinkTest, MessageMenu)
                                              PURPLE_MESSAGE_ERROR, 0));
 }
 
+// A bot's button, clicked, as the message has it now: the bot's answer told in the conversation, a
+// link opened, one only Telegram's apps can follow said so
+TEST_F(MessageLinkTest, MessageButtons)
+{
+    loginWithOneContact();
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    const ChatId    chat    = ChatId::fromString(std::to_string(chatIds[0]).c_str());
+    const MessageId message = MessageId::fromString(std::to_string(messageId).c_str());
+    auto makeButtonsMessage = [this]() {
+        auto result = makeMessage(messageId, userIds[0], chatIds[0], false, 1, makeTextMessage("Choose"));
+        auto keyboard = make_object<replyMarkupInlineKeyboard>();
+        keyboard->rows_.resize(2);
+        keyboard->rows_[0].push_back(make_object<inlineKeyboardButton>());
+        keyboard->rows_[0][0]->text_ = "Yes";
+        keyboard->rows_[0][0]->type_ = make_object<inlineKeyboardButtonTypeCallback>("yes");
+        keyboard->rows_[0].push_back(make_object<inlineKeyboardButton>());
+        keyboard->rows_[0][1]->text_ = "Site";
+        keyboard->rows_[0][1]->type_ = make_object<inlineKeyboardButtonTypeUrl>("https://example.com/");
+        keyboard->rows_[1].push_back(make_object<inlineKeyboardButton>());
+        keyboard->rows_[1][0]->text_ = "Pay";
+        keyboard->rows_[1][0]->type_ = make_object<inlineKeyboardButtonTypeBuy>();
+        result->reply_markup_ = std::move(keyboard);
+        return result;
+    };
+
+    client->buttonClicked(chat, message, "button 0 0");
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(makeButtonsMessage());
+    tgl.verifyRequest(getCallbackQueryAnswer(chatIds[0], messageId, make_object<callbackQueryPayloadData>("yes")));
+    tgl.reply(make_object<callbackQueryAnswer>("Done <now>", false, ""));
+    prpl.verifyEvents(NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+                      ConversationWriteEvent(purpleUserName(0), purpleUserName(0), "Done &lt;now&gt;",
+                                             PURPLE_MESSAGE_NO_LOG, 0));
+
+    client->buttonClicked(chat, message, "button 0 1 https://example.com/");
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(makeButtonsMessage());
+    prpl.verifyEvents(NotifyUriEvent("https://example.com/"));
+
+    client->buttonClicked(chat, message, "button 1 0");
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(makeButtonsMessage());
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                                             "\"Pay\" works only in Telegram's own apps.",
+                                             PURPLE_MESSAGE_NO_LOG, 0));
+
+    // Gone since the line was drawn: nothing done
+    client->buttonClicked(chat, message, "button 2 0");
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(makeButtonsMessage());
+    tgl.verifyNoRequests();
+    prpl.verifyNoEvents();
+
+    // The bot changing them, which there is no Pidgin to show
+    auto edited = make_object<updateMessageEdited>();
+    edited->chat_id_    = chatIds[0];
+    edited->message_id_ = messageId;
+    tgl.update(std::move(edited));
+    prpl.verifyNoEvents();
+}
+
 TEST_F(MessageLinkTest, CopyMessageLink)
 {
     loginWithOneContact();

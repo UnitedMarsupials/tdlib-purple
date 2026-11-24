@@ -1599,6 +1599,100 @@ private:
     std::vector<ReactionCount> m_counts;
 };
 
+// A button's key: its row and column, and the address of a link, which its tooltip shows
+static const char BUTTON_KEY_PREFIX[] = "button ";
+
+bool isButtonKey(const std::string &key)
+{
+    return key.compare(0, strlen(BUTTON_KEY_PREFIX), BUTTON_KEY_PREFIX) == 0;
+}
+
+bool parseButtonKey(const std::string &key, size_t &row, size_t &column, std::string &url)
+{
+    if (!isButtonKey(key))
+        return false;
+    const char *rest = key.c_str() + strlen(BUTTON_KEY_PREFIX);
+    char       *end;
+    row = strtoul(rest, &end, 10);
+    if ((end == rest) || (*end != ' '))
+        return false;
+    rest   = end + 1;
+    column = strtoul(rest, &end, 10);
+    if ((end == rest) || (*end && (*end != ' ')))
+        return false;
+    url = *end ? end + 1 : "";
+    return true;
+}
+
+// Each row on a line of its own, each button in brackets, coloured as its style is; a link's marked
+// with an arrow
+static std::vector<ShownReaction> formatButtons(const td::td_api::ReplyMarkup *markup)
+{
+    std::vector<ShownReaction> lines;
+    if (!markup || (markup->get_id() != td::td_api::replyMarkupInlineKeyboard::ID))
+        return lines;
+    const auto &keyboard = static_cast<const td::td_api::replyMarkupInlineKeyboard &>(*markup);
+    for (size_t row = 0; row < keyboard.rows_.size(); row++)
+        for (size_t column = 0; column < keyboard.rows_[row].size(); column++) {
+            const td::td_api::inlineKeyboardButton *button = keyboard.rows_[row][column].get();
+            if (!button || !button->type_)
+                continue;
+            std::string url;
+            if (button->type_->get_id() == td::td_api::inlineKeyboardButtonTypeUrl::ID)
+                url = static_cast<const td::td_api::inlineKeyboardButtonTypeUrl &>(*button->type_).url_;
+            else if (button->type_->get_id() == td::td_api::inlineKeyboardButtonTypeLoginUrl::ID)
+                url = static_cast<const td::td_api::inlineKeyboardButtonTypeLoginUrl &>(*button->type_).url_;
+            const char *color = "#3465a4";
+#if TDLIB_API_BUTTON_STYLE
+            if (button->style_) {
+                if (button->style_->get_id() == td::td_api::buttonStyleDanger::ID)
+                    color = "#cc0000";
+                else if (button->style_->get_id() == td::td_api::buttonStyleSuccess::ID)
+                    color = "#4e9a06";
+            }
+#endif
+            std::string html = formatMessage("<font color=\"{}\">[&nbsp;{}{}&nbsp;]</font>",
+                                             {std::string(color), escapeForDisplay(button->text_),
+                                              std::string(url.empty() ? "" : "&nbsp;\xe2\x86\x97")});
+            ShownReaction item;
+            item.html    = std::move(html);
+            item.key     = BUTTON_KEY_PREFIX + std::to_string(row) + ' ' + std::to_string(column) +
+                           (url.empty() ? std::string() : ' ' + url);
+            item.newLine = (column == 0);
+            lines.push_back(std::move(item));
+        }
+    return lines;
+}
+
+// Shows the message's buttons under it once it has been written, before its reactions
+class ButtonsLine {
+public:
+    ButtonsLine(TdAccountData &account, const td::td_api::chat &chat, MessageId messageId,
+                const td::td_api::ReplyMarkup *markup)
+    : m_account(account), m_chat(chat), m_messageId(messageId), m_buttons(formatButtons(markup)) {}
+    ~ButtonsLine()
+    {
+        PurpleConversation *conv = (pidginUiFound() && !m_buttons.empty())
+                                   ? findMessageConversation(m_account, m_chat) : nullptr;
+        if (conv)
+            showMessageButtons(conv, m_messageId, m_buttons);
+    }
+private:
+    TdAccountData             &m_account;
+    const td::td_api::chat    &m_chat;
+    MessageId                  m_messageId;
+    std::vector<ShownReaction> m_buttons;
+};
+
+void updateMessageButtons(TdAccountData &account, ChatId chatId, MessageId messageId,
+                          const td::td_api::ReplyMarkup *markup)
+{
+    const td::td_api::chat *chat = account.getChat(chatId);
+    PurpleConversation     *conv = (chat && pidginUiFound()) ? findMessageConversation(account, *chat) : nullptr;
+    if (conv && findMessageMarks(conv, messageId).start)
+        showMessageButtons(conv, messageId, formatButtons(markup));
+}
+
 // A member named in a group event, as markup. TDLib tells of every user it names, ourselves too,
 // before the message that names them.
 static std::string getMemberName(TdAccountData &account, int64_t userId)
@@ -1734,8 +1828,9 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
     //     }
     // }
 
-    // Under the message, once all of it is written
+    // Under the message, once all of it is written: its buttons, then its reactions
     ReactionsLine reactionsLine(account, chat, messageInfo.id, message.interaction_info_.get());
+    ButtonsLine   buttonsLine(account, chat, messageInfo.id, message.reply_markup_.get());
     // All its parts, notices included, are the message, and its menu goes before the first. An edit
     // goes over the earlier version, saying it was edited.
     std::string editNote;

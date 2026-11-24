@@ -258,7 +258,8 @@ enum class MarkKind {
     Start,
     Body,
     End,
-    Reactions // the end of the line of reactions after the message, if it has one
+    Buttons,  // the end of the lines of its buttons after the message, if it has them
+    Reactions // the end of the line of reactions after them, if it has one
 };
 
 static const char START_MARK_PREFIX[]   = "tdlib-message-start-";
@@ -267,7 +268,8 @@ static std::string getMarkName(MessageId messageId, MarkKind kind)
 {
     const char *prefix = (kind == MarkKind::Start) ? START_MARK_PREFIX :
                          (kind == MarkKind::Body)  ? "tdlib-message-body-" :
-                         (kind == MarkKind::End)   ? "tdlib-message-end-" : "tdlib-message-reactions-";
+                         (kind == MarkKind::End)   ? "tdlib-message-end-" :
+                         (kind == MarkKind::Buttons) ? "tdlib-message-buttons-" : "tdlib-message-reactions-";
     return prefix + std::to_string(messageId.value());
 }
 
@@ -471,7 +473,7 @@ static gboolean displayingMessage(PurpleAccount *account, const char *who, char 
         GtkTextMark *start = p_gtk_text_buffer_get_mark(buffer, getMarkName(id, MarkKind::Start).c_str());
         if (g_messageBeingWritten->anew) {
             // What went with an earlier showing goes with this one instead
-            for (MarkKind kind: {MarkKind::Body, MarkKind::Reactions}) {
+            for (MarkKind kind: {MarkKind::Body, MarkKind::Buttons, MarkKind::Reactions}) {
                 GtkTextMark *mark = p_gtk_text_buffer_get_mark(buffer, getMarkName(id, kind).c_str());
                 if (mark)
                     p_gtk_text_buffer_delete_mark(buffer, mark);
@@ -773,14 +775,27 @@ static GtkTextTag *getReactionTag(GtkTextBuffer *buffer, const std::string &key)
     return tag ? tag : p_gtk_text_buffer_create_tag(buffer, name.c_str(), NULL);
 }
 
-void showMessageReactions(PurpleConversation *conv, MessageId messageId, const std::vector<ShownReaction> &reactions)
+// The buttons go right after the message, the reactions after them; each from the end of what is
+// before it, to its own mark
+static void showMessageArea(PurpleConversation *conv, MessageId messageId, MarkKind kind,
+                            const std::vector<ShownReaction> &reactions)
 {
     GtkIMHtml     *imhtml  = getIMHtml(conv);
     GtkTextBuffer *buffer  = imhtml ? imhtml->text_buffer : nullptr;
     GtkTextMark   *endMark = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::End).c_str()) : nullptr;
     if (!endMark)
         return;
-    std::string  name = getMarkName(messageId, MarkKind::Reactions);
+    GtkTextMark *buttonsMark = (kind == MarkKind::Reactions)
+                               ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Buttons).c_str())
+                               : nullptr;
+    if (buttonsMark) {
+        GtkTextIter textEnd, buttonsEnd;
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &textEnd, endMark);
+        p_gtk_text_buffer_get_iter_at_mark(buffer, &buttonsEnd, buttonsMark);
+        if (p_gtk_text_iter_compare(&textEnd, &buttonsEnd) < 0)
+            endMark = buttonsMark;
+    }
+    std::string  name = getMarkName(messageId, kind);
     GtkTextIter  end, areaEnd;
     GtkTextMark *areaEndMark = p_gtk_text_buffer_get_mark(buffer, name.c_str());
     p_gtk_text_buffer_get_iter_at_mark(buffer, &end, endMark);
@@ -799,7 +814,7 @@ void showMessageReactions(PurpleConversation *conv, MessageId messageId, const s
     bool tagged = p_gtk_text_buffer_get_tag_table && p_gtk_text_tag_table_lookup && p_gtk_text_buffer_create_tag &&
                   p_gtk_text_buffer_apply_tag;
     for (size_t i = 0; i < reactions.size(); i++) {
-        std::string html = (i ? "&nbsp;&nbsp;&nbsp;" : "<br>");
+        std::string html = (i && !reactions[i].newLine) ? "&nbsp;&nbsp;&nbsp;" : "<br>";
         p_gtk_imhtml_insert_html_at_iter(imhtml, ("<font size=\"2\">" + html + "</font>").c_str(),
                                          GTK_IMHTML_NO_SCROLL, &end);
         p_gtk_text_buffer_get_iter_at_mark(buffer, &end, after);
@@ -818,6 +833,16 @@ void showMessageReactions(PurpleConversation *conv, MessageId messageId, const s
     p_gtk_text_buffer_get_iter_at_mark(buffer, &areaEnd, after);
     p_gtk_text_buffer_create_mark(buffer, name.c_str(), &areaEnd, TRUE);
     p_gtk_text_buffer_delete_mark(buffer, after);
+}
+
+void showMessageReactions(PurpleConversation *conv, MessageId messageId, const std::vector<ShownReaction> &reactions)
+{
+    showMessageArea(conv, messageId, MarkKind::Reactions, reactions);
+}
+
+void showMessageButtons(PurpleConversation *conv, MessageId messageId, const std::vector<ShownReaction> &buttons)
+{
+    showMessageArea(conv, messageId, MarkKind::Buttons, buttons);
 }
 
 bool canRedrawConversation(PurpleConversation *conv)
@@ -1967,21 +1992,23 @@ void removeMessage(PurpleConversation *conv, MessageId messageId)
     GtkTextMark   *start  = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Start).c_str()) : nullptr;
     if (!start || !getBody(buffer, messageId, body, end))
         return;
-    GtkTextIter  from, to;
-    GtkTextMark *reactionsEnd = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Reactions).c_str());
+    GtkTextIter from, to;
     p_gtk_text_buffer_get_iter_at_mark(buffer, &from, start);
     to = end;
-    if (reactionsEnd) {
-        GtkTextIter areaEnd;
-        p_gtk_text_buffer_get_iter_at_mark(buffer, &areaEnd, reactionsEnd);
-        if (p_gtk_text_iter_compare(&to, &areaEnd) < 0)
-            to = areaEnd;
+    for (MarkKind kind: {MarkKind::Buttons, MarkKind::Reactions}) {
+        GtkTextMark *areaMark = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, kind).c_str());
+        GtkTextIter  areaEnd;
+        if (areaMark) {
+            p_gtk_text_buffer_get_iter_at_mark(buffer, &areaEnd, areaMark);
+            if (p_gtk_text_iter_compare(&to, &areaEnd) < 0)
+                to = areaEnd;
+        }
     }
     // With the line break before it, which Pidgin put there for it
     if (p_gtk_text_iter_backward_char(&from) && (p_gtk_text_iter_get_char(&from) != '\n'))
         p_gtk_text_iter_forward_char(&from);
     p_gtk_imhtml_delete(imhtml, &from, &to);
-    for (MarkKind kind: {MarkKind::Start, MarkKind::Body, MarkKind::End, MarkKind::Reactions}) {
+    for (MarkKind kind: {MarkKind::Start, MarkKind::Body, MarkKind::End, MarkKind::Buttons, MarkKind::Reactions}) {
         GtkTextMark *mark = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, kind).c_str());
         if (mark)
             p_gtk_text_buffer_delete_mark(buffer, mark);
@@ -2307,10 +2334,10 @@ static MessageId findMessageAt(GtkTextBuffer *buffer, const GtkTextIter &where)
         g_slist_free(marks);
         if (!messageId.valid())
             continue;
-        // Its text or its reactions, whichever ends later: an edit's text goes in after the end of
-        // reactions taken back, which is where the text ended
+        // Its text, its buttons or its reactions, whichever ends later: an edit's text goes in after
+        // the end of reactions taken back, which is where the text ended
         bool before = false;
-        for (MarkKind kind: {MarkKind::Reactions, MarkKind::End}) {
+        for (MarkKind kind: {MarkKind::Reactions, MarkKind::Buttons, MarkKind::End}) {
             GtkTextMark *end = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, kind).c_str());
             GtkTextIter  endIter;
             if (end) {
@@ -4214,6 +4241,10 @@ MessageMarkScope::~MessageMarkScope()
 }
 
 void showMessageReactions(PurpleConversation *conv, MessageId messageId, const std::vector<ShownReaction> &reactions)
+{
+}
+
+void showMessageButtons(PurpleConversation *conv, MessageId messageId, const std::vector<ShownReaction> &buttons)
 {
 }
 

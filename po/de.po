@@ -2279,3 +2279,12 @@ msgstr "Datenbank-Passwort ändern..."
 #~ msgstr ""
 #~ "Tage an Nachrichten, die beim Öffnen einer Unterhaltung in Pidgin gezeigt "
 #~ "werden"
+
+msgid "Cannot open the chat"
+msgstr "Der Chat kann nicht geöffnet werden"
+
+msgid "The bot did not answer"
+msgstr "Der Bot hat nicht geantwortet"
+
+msgid "\"{}\" works only in Telegram's own apps."
+msgstr "\"{}\" funktioniert nur in den Apps von Telegram selbst."

@@ -262,6 +262,18 @@ Right-click a post in a public channel, and a message in a private chat or group
 * Picked, it puts the post's https://t.me/ link on the clipboard, as text: pasted into a web
   browser, it opens the post.
 
+### M7. A message's buttons
+
+Find a bot's or a channel's message with buttons, such as a post with links under it, or a bot's
+answer with choices, and reactions too, if one has both.
+
+* Each row of buttons is a line under the message, before the line of reactions; a link's button
+  has an arrow, and its tooltip is its address. A warning's is red.
+* A link's button clicked opens the address in the web browser; a bot's, the bot's answer is told
+  in the tab, or the message is changed by it, its buttons too, the reactions staying under them.
+* Right-clicking the buttons' lines gives the message's menu.
+* A reaction given meanwhile, or taken back, leaves the buttons as they were.
+
 ## History
 
 ### H1. Opening a chat
