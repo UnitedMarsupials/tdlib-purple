@@ -1647,5 +1647,30 @@ object_ptr<inputMessageVoiceNote> makeInputMessageVoiceNote(object_ptr<InputFile
     return result;
 }
 
+object_ptr<reportOption> makeReportOption(std::string const &id_, std::string const &text_)
+{
+    auto result = make_object<reportOption>();
+    result->id_   = id_;
+    result->text_ = text_;
+    return result;
+}
+
+object_ptr<reportChatResultOptionRequired> makeReportOptionRequired(std::string const &title_,
+                                                                     std::vector<object_ptr<reportOption>> &&options_)
+{
+    auto result = make_object<reportChatResultOptionRequired>();
+    result->title_   = title_;
+    result->options_ = std::move(options_);
+    return result;
+}
+
+object_ptr<reportChatResultTextRequired> makeReportTextRequired(std::string const &option_id_, bool is_optional_)
+{
+    auto result = make_object<reportChatResultTextRequired>();
+    result->option_id_   = option_id_;
+    result->is_optional_ = is_optional_;
+    return result;
+}
+
 }
 }

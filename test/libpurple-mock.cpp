@@ -1867,9 +1867,11 @@ void purple_request_field_choice_add(PurpleRequestField *field, const char *labe
 {
 }
 
+// As answered, by its index
 int purple_request_fields_get_choice(const PurpleRequestFields *fields, const char *id)
 {
-    return -1;
+    auto it = g_requestAnswer ? g_requestAnswer->find(id) : decltype(g_requestAnswer->end())();
+    return (g_requestAnswer && (it != g_requestAnswer->end())) ? atoi(it->second.c_str()) : -1;
 }
 
 // The list only, telling no server

@@ -187,6 +187,10 @@ object_ptr<inputMessageDocument> makeInputMessageDocument(object_ptr<InputFile> 
 object_ptr<inputMessageVideo> makeInputMessageVideo(object_ptr<InputFile> &&video_, object_ptr<formattedText> &&caption_);
 object_ptr<inputMessageVoiceNote> makeInputMessageVoiceNote(object_ptr<InputFile> &&voiceNote_, int32_t duration_,
                                                             object_ptr<formattedText> &&caption_);
+object_ptr<reportOption> makeReportOption(std::string const &id_, std::string const &text_);
+object_ptr<reportChatResultOptionRequired> makeReportOptionRequired(std::string const &title_,
+                                                                     std::vector<object_ptr<reportOption>> &&options_);
+object_ptr<reportChatResultTextRequired> makeReportTextRequired(std::string const &option_id_, bool is_optional_);
 }
 }
 
