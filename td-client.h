@@ -141,6 +141,7 @@ public:
     };
     // Asks where to forward the message, out of what the buddy list offers, and forwards it there
     void askForwardMessage(ChatId chatId, MessageId messageId);
+    void copyMessageLink(ChatId chatId, MessageId messageId);
     // Asks which of these, the buddy list's, to forward the message to
     void askForwardMessage(ChatId chatId, MessageId messageId, std::vector<ForwardDestination> destinations);
     // Through Telegram, if the destination is this account's; otherwise through the destination's
@@ -382,6 +383,7 @@ private:
         bool                       canDeleteForAll  = false;
         bool                       canReport        = false;
         bool                       canForward       = false;
+        bool                       canGetLink       = false; // a public one, of a public chat
         UserId                     sender;           // someone else who sent it
         bool                       senderBlocked    = false;
         SentMedia                  media;

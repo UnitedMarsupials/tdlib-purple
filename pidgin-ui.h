@@ -237,6 +237,8 @@ void addLinkMenuItems(PidginWidget *menu, const std::vector<MenuItem> &items);
 // attach it; its path, as text; and, if it is a picture, the picture itself, for a program that
 // takes one. False if there is no clipboard, without Pidgin.
 bool copyFileToClipboard(const std::string &path, bool picture);
+// The text goes on the clipboard, as text; false where there is none to be had
+bool copyTextToClipboard(const std::string &text);
 
 // A file dragged out of a tab, in Pidgin, to another program or another conversation: that of a link
 // to a message's file, or the file of the message whose picture it is. Told where the file is once it

@@ -1933,3 +1933,9 @@ msgstr "Zwei-Faktor-Authentifizierung einstellen..."
 #~ msgstr ""
 #~ "Tage an Nachrichten, die beim Öffnen einer Unterhaltung in Pidgin gezeigt "
 #~ "werden"
+
+msgid "Copy the message's link"
+msgstr "Link zur Nachricht kopieren"
+
+msgid "Cannot copy the message's link"
+msgstr "Der Link zur Nachricht kann nicht kopiert werden"

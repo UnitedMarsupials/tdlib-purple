@@ -676,6 +676,15 @@ static void compare(const getMessageProperties &actual, const getMessageProperti
     COMPARE(message_id_);
 }
 
+static void compare(const getMessageLink &actual, const getMessageLink &expected)
+{
+    COMPARE(chat_id_);
+    COMPARE(message_id_);
+    COMPARE(media_timestamp_);
+    COMPARE(for_album_);
+    COMPARE(in_message_thread_);
+}
+
 static void compare(const editMessageText &actual, const editMessageText &expected,
                     std::vector<std::string> &m_inputPhotoPaths)
 {
@@ -819,6 +828,7 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(addMessageReaction)
         C(removeMessageReaction)
         C(getMessageProperties)
+        C(getMessageLink)
         C(editMessageCaption)
         C(deleteMessages)
         C(forwardMessages)
@@ -1669,6 +1679,14 @@ object_ptr<reportChatResultTextRequired> makeReportTextRequired(std::string cons
     auto result = make_object<reportChatResultTextRequired>();
     result->option_id_   = option_id_;
     result->is_optional_ = is_optional_;
+    return result;
+}
+
+object_ptr<getMessageLink> makeGetMessageLink(std::int64_t chat_id_, std::int64_t message_id_)
+{
+    auto result = make_object<getMessageLink>();
+    result->chat_id_    = chat_id_;
+    result->message_id_ = message_id_;
     return result;
 }
 

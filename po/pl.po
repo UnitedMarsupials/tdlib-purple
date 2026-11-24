@@ -1924,3 +1924,9 @@ msgstr "Konfiguracja uwierzytelnienia dwuskładnikowego"
 
 #~ msgid "Days of messages to show on opening a conversation, in Pidgin"
 #~ msgstr "Dni wiadomości do pokazania po otwarciu rozmowy w Pidginie"
+
+msgid "Copy the message's link"
+msgstr "Kopiuj odnośnik do wiadomości"
+
+msgid "Cannot copy the message's link"
+msgstr "Nie można skopiować odnośnika do wiadomości"

@@ -240,6 +240,14 @@ Choose it only for someone who deserves it: it does report them. Then:
 * Telegram's reasons are asked for, as for a message, and how it went is told in the group,
   without a private chat with them opened; or that Telegram takes no report about them.
 
+### M6. A message's link
+
+Right-click a post in a public channel, and a message in a private chat or group.
+
+* The post's menu has "Copy the message's link"; the others' do not.
+* Picked, it puts the post's https://t.me/ link on the clipboard, as text: pasted into a web
+  browser, it opens the post.
+
 ## History
 
 ### H1. Opening a chat

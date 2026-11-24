@@ -1911,3 +1911,9 @@ msgstr "Formësoni mirëfilltësim dyfaktorësh…"
 
 #~ msgid "Days of messages to show on opening a conversation, in Pidgin"
 #~ msgstr "Ditë mesazhesh për t'u shfaqur kur hapet një bisedë, në Pidgin"
+
+msgid "Copy the message's link"
+msgstr "Kopjo lidhjen e mesazhit"
+
+msgid "Cannot copy the message's link"
+msgstr "Lidhja e mesazhit s’mund të kopjohet"

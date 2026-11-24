@@ -1909,3 +1909,9 @@ msgstr "Nastavit dvou úrovňovou autorizaci..."
 
 #~ msgid "Days of messages to show on opening a conversation, in Pidgin"
 #~ msgstr "Dny zpráv k zobrazení při otevření konverzace v Pidginu"
+
+msgid "Copy the message's link"
+msgstr "Kopírovat odkaz na zprávu"
+
+msgid "Cannot copy the message's link"
+msgstr "Odkaz na zprávu nelze zkopírovat"

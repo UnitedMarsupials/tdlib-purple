@@ -1878,3 +1878,9 @@ msgstr "Налаштувати двофакторну автентифікаці
 
 #~ msgid "Days of messages to show on opening a conversation, in Pidgin"
 #~ msgstr "Скільки днів повідомлень показувати, відкриваючи розмову в Pidgin"
+
+msgid "Copy the message's link"
+msgstr "Скопіювати посилання на повідомлення"
+
+msgid "Cannot copy the message's link"
+msgstr "Не вдається скопіювати посилання на повідомлення"

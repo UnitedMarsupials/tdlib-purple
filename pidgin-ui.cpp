@@ -179,6 +179,7 @@ FRONT_END_FUNCTION(gtk_tooltip_set_text);
 FRONT_END_FUNCTION(gtk_clipboard_get);
 FRONT_END_FUNCTION(gtk_clipboard_set_with_data);
 FRONT_END_FUNCTION(gtk_clipboard_set_can_store);
+FRONT_END_FUNCTION(gtk_clipboard_set_text);
 FRONT_END_FUNCTION(gtk_target_list_new);
 FRONT_END_FUNCTION(gtk_target_list_add);
 FRONT_END_FUNCTION(gtk_target_list_add_uri_targets);
@@ -2108,6 +2109,17 @@ bool copyFileToClipboard(const std::string &path, bool picture)
     return copied;
 }
 
+bool copyTextToClipboard(const std::string &text)
+{
+    if (!LOOK_UP(gtk_clipboard_get) || !LOOK_UP(gtk_clipboard_set_text))
+        return false;
+    GtkClipboard *clipboard = p_gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
+    p_gtk_clipboard_set_text(clipboard, text.c_str(), -1);
+    if (LOOK_UP(gtk_clipboard_set_can_store))
+        p_gtk_clipboard_set_can_store(clipboard, nullptr, 0);
+    return true;
+}
+
 // The message whose text, header or reactions are there, if any: the nearest start of a message
 // before it, if that message has not ended before it
 static MessageId findMessageAt(GtkTextBuffer *buffer, const GtkTextIter &where)
@@ -3771,6 +3783,11 @@ void addLinkMenuItems(PidginWidget *menu, const std::vector<MenuItem> &items)
 }
 
 bool copyFileToClipboard(const std::string &path, bool picture)
+{
+    return false;
+}
+
+bool copyTextToClipboard(const std::string &text)
 {
     return false;
 }
