@@ -496,6 +496,9 @@ Open a public channel not joined, from a link to it, and quit Pidgin; start it a
   whose conversation was logged, and any person written with who is not a contact, under
   "Telegram: not in contacts".
 * Opened, the channel's tab fills with its messages, as from the link, and nothing is sent to it.
+* For a group of ours with another member, "Delete group" asks "For everyone" or "For me only";
+  the latter leaves it, and the other member still has it. (Make one for this, with the other
+  test account.)
 * "Delete group" from its menu, the dialog saying what goes: its tab closes and its entry goes,
   with no error; its directory under `~/.purple/logs/telegram/` is gone, and after the next start
   it is not in the buddy list.

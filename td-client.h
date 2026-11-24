@@ -85,7 +85,9 @@ public:
     bool isLatestLink(unsigned serial);
     void createGroup(const char *name, int type, const std::vector<std::string> &basicGroupMembers);
     BasicGroupMembership getBasicGroupMembership(const char *purpleChatName);
-    void leaveGroup(const std::string &purpleChatName, bool deleteSupergroup);
+    void leaveGroup(const std::string &purpleChatName, bool deleteSupergroup, bool forOthers = true);
+    // Whether the chat can be deleted for all its members, and has others than us to ask about
+    bool canDeleteForOthers(const char *purpleChatName);
     int  sendGroupMessage(int purpleChatId, const char *message);
     void setGroupDescription(int purpleChatId, const char *description);
     void kickUserFromChat(PurpleConversation *conv, const char *name);

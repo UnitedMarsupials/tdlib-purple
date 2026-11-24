@@ -311,15 +311,16 @@ TEST_F(SupergroupTest, DeleteSupergroup_Fail)
     ASSERT_NE(nullptr, chat);
     GList *actions = pluginInfo().blist_node_menu(&chat->node);
 
+    // With others in it: for everyone, or only for us, is asked
     nodeMenuAction(&chat->node, actions, "Delete group");
-    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
-    prpl.requestedAction("_No");
+    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 3));
+    prpl.requestedAction("_Cancel");
     tgl.verifyNoRequests();
     prpl.verifyNoEvents();
 
     nodeMenuAction(&chat->node, actions, "Delete group");
-    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
-    prpl.requestedAction("_Yes");
+    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 3));
+    prpl.requestedAction("For _everyone");
     {
         auto files = make_object<optimizeStorage>();
         files->chat_ids_ = {groupChatId};
@@ -331,6 +332,39 @@ TEST_F(SupergroupTest, DeleteSupergroup_Fail)
     }
     prpl.verifyEvents(RemoveChatEvent(groupChatPurpleName, ""));
     tgl.reply(make_object<error>(100, "error"));
+
+    g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
+}
+
+TEST_F(SupergroupTest, DeleteOwnSupergroupForSelf)
+{
+    loginWithSupergroup();
+    {
+        auto chat = makeChat(groupChatId, make_object<chatTypeSupergroup>(groupId, false), groupChatTitle,
+                             nullptr, 0, 0, 0);
+        chat->can_be_deleted_for_all_users_ = true;
+        tgl.update(make_object<updateNewChat>(std::move(chat)));
+        tgl.update(makeUpdateChatListMain(groupChatId));
+    }
+    prpl.discardEvents();
+    PurpleChat *chat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
+    ASSERT_NE(nullptr, chat);
+    GList *actions = pluginInfo().blist_node_menu(&chat->node);
+
+    // Kept for the others: we leave it, with nothing of it kept here
+    nodeMenuAction(&chat->node, actions, "Delete group");
+    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 3));
+    prpl.requestedAction("For _me only");
+    {
+        auto files = make_object<optimizeStorage>();
+        files->chat_ids_ = {groupChatId};
+        tgl.verifyRequests({
+            make_object<deleteChatHistory>(groupChatId, true, false),
+            std::move(files),
+            make_object<leaveChat>(groupChatId)
+        });
+    }
+    prpl.verifyEvents(RemoveChatEvent(groupChatPurpleName, ""));
 
     g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
 }

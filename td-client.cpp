@@ -4403,19 +4403,34 @@ BasicGroupMembership PurpleTdClient::getBasicGroupMembership(const char *purpleC
     return BasicGroupMembership::Invalid;
 }
 
-void PurpleTdClient::leaveGroup(const std::string &purpleChatName, bool deleteSupergroup)
+bool PurpleTdClient::canDeleteForOthers(const char *purpleChatName)
+{
+    ChatId                        chatId     = getTdlibChatId(purpleChatName);
+    const td::td_api::chat       *chat       = chatId.valid() ? m_data.getChat(chatId) : nullptr;
+    if (!chat || !chat->can_be_deleted_for_all_users_)
+        return false;
+    BasicGroupId                  basicId    = getBasicGroupId(*chat);
+    SupergroupId                  superId    = getSupergroupId(*chat);
+    const td::td_api::basicGroup *basicGroup = basicId.valid() ? m_data.getBasicGroup(basicId) : nullptr;
+    const td::td_api::supergroup *supergroup = superId.valid() ? m_data.getSupergroup(superId) : nullptr;
+    int32_t                       members    = basicGroup ? basicGroup->member_count_ :
+                                               supergroup ? supergroup->member_count_ : 0;
+    return members > 1;
+}
+
+void PurpleTdClient::leaveGroup(const std::string &purpleChatName, bool deleteSupergroup, bool forOthers)
 {
     ChatId                  chatId = getTdlibChatId(purpleChatName.c_str());
     const td::td_api::chat *chat   = chatId.valid() ? m_data.getChat(chatId) : nullptr;
     if (!chat) return;
 
-    SupergroupId supergroupId = getSupergroupId(*chat);
-    bool         member       = m_data.isGroupChatWithMembership(*chat);
-    bool         forAll       = supergroupId.valid() && member && chat->can_be_deleted_for_all_users_;
+    bool member = m_data.isGroupChatWithMembership(*chat);
+    bool forAll = member && chat->can_be_deleted_for_all_users_ && forOthers;
     if (deleteSupergroup) {
         deleteLocalChat(chatId);
         wipeChatTraces(m_account, chatId, purpleChatName, PURPLE_CONV_TYPE_CHAT);
-        // One not joined, or that only its owner could delete, is left as it is on Telegram
+        // One not joined is left as it is on Telegram; one someone else owns, or kept for the others,
+        // is left
         if (!member)
             return;
         if (!forAll) {

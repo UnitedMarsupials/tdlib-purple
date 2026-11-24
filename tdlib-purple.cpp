@@ -116,6 +116,16 @@ static void deleteGroupConfirm(RequestData *data, int action)
         tdClient->leaveGroup(request->stringData, true);
 }
 
+// Ours, with others in it: kept for them, we having left it
+static void deleteGroupForSelf(RequestData *data, int action)
+{
+    std::unique_ptr<RequestData> request(data);
+    PurpleTdClient *tdClient = getTdClient(request->account);
+
+    if (tdClient)
+        tdClient->leaveGroup(request->stringData, true, false);
+}
+
 static void leaveGroupConfirm(RequestData *data, int action)
 {
     std::unique_ptr<RequestData> request(data);
@@ -176,15 +186,33 @@ static void deleteGroup(PurpleBlistNode *node, gpointer data)
         const char  *chatName = getChatName(purple_chat_get_components(chat));
         RequestData *request  = new RequestData(account);
         request->stringData = chatName ? chatName : "";
+        if (chatName && tdClient->canDeleteForOthers(chatName)) {
+            // TRANSLATOR: Group deletion dialog, title, for a group or channel of ours with other members
+            purple_request_action(purple_account_get_connection(account), _("Deleting group"),
+                                  // TRANSLATOR: Group deletion dialog, primary content
+                                  _("Delete the group for all its members, or only for yourself?"),
+                                  // TRANSLATOR: Group deletion dialog, secondary content
+                                  _("Either way, its messages, as you see them on Telegram, and its files and "
+                                    "Pidgin's log of it on this computer, are deleted. Only for yourself, you leave "
+                                    "it, and the others keep it."),
+                                  2, account, NULL, NULL, request, 3,
+                                  // TRANSLATOR: Group deletion dialog, button. The underscore marks accelerator keys, they must be different!
+                                  _("For _everyone"), deleteGroupConfirm,
+                                  // TRANSLATOR: Group deletion dialog, button. The underscore marks accelerator keys, they must be different!
+                                  _("For _me only"), deleteGroupForSelf,
+                                  // TRANSLATOR: Group deletion dialog, button. The underscore marks accelerator keys, they must be different!
+                                  _("_Cancel"), cancelRequest);
+            return;
+        }
         // Deleted for all only by its owner; left otherwise, or, not joined, only taken away here
         // TRANSLATOR: Group deletion confirmation dialog, title
         purple_request_action(purple_account_get_connection(account), _("Deleting group"),
                               // TRANSLATOR: Group deletion confirmation dialog, content
                               _("Delete the group?"),
                               // TRANSLATOR: Group deletion confirmation dialog, secondary content
-                              _("Its messages and files kept on this computer, by Telegram and in Pidgin's log, are "
-                                "deleted too. A group or channel someone else owns is left, or, not joined, only "
-                                "taken out of the buddy list."),
+                              _("Its messages, as you see them on Telegram, and its files and Pidgin's log of it on "
+                                "this computer, are deleted too. A group or channel someone else owns is left, or, "
+                                "not joined, only taken out of the buddy list."),
                               0, account, NULL, NULL, request, 2,
                               // TRANSLATOR: Group deletion dialog, alternative is "_No"
                               _("_Yes"), deleteGroupConfirm,
