@@ -121,6 +121,8 @@ public:
     void showMessageMenu(ChatId chatId, MessageId messageId, OpenMenuRef openMenu);
     // False if the conversation's chat is not known
     bool showMessagePopup(PurpleConversation *conv, MessageId messageId, const OpenMenuRef &openMenu);
+    // Whether the conversation is the chat's, as a link in it may name another
+    bool isConversationOf(PurpleConversation *conv, ChatId chatId);
     void setMessageReaction(ChatId chatId, MessageId messageId, const std::string &emoji, bool chosen);
     void setMessageReaction(ChatId chatId, MessageId messageId, td::td_api::object_ptr<td::td_api::ReactionType> type,
                             const std::string &emoji, bool chosen);

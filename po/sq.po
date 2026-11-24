@@ -14,8 +14,8 @@ msgstr ""
 "Project-Id-Version: tdlib-purple\n"
 "Report-Msgid-Bugs-To: https://github.com/UnitedMarsupials/tdlib-purple/"
 "issues/new \n"
-"POT-Creation-Date: 2026-11-23 23:18-0500\n"
-"PO-Revision-Date: 2026-11-23 20:12-0500\n"
+"POT-Creation-Date: 2026-11-24 00:08-0500\n"
+"PO-Revision-Date: 2026-11-16 19:00-0500\n"
 "Last-Translator: Claude Opus 5.5 (effort medium), 2026\n"
 "Language-Team: Albanian (https://www.transifex.com/tdlib-purple-developers/"
 "teams/110016/sq/)\n"
@@ -77,9 +77,9 @@ msgstr "{} dëshiron të nisë një thirrje me ju."
 #. TRANSLATOR: 2FA settings, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
 #. TRANSLATOR: Database password dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
 #: ../call.cpp:220 ../td-client.cpp:755 ../td-client.cpp:1022
-#: ../td-client.cpp:1090 ../td-client.cpp:1125 ../td-client.cpp:2076
-#: ../td-client.cpp:2202 ../td-client.cpp:4433 ../tdlib-purple.cpp:743
-#: ../tdlib-purple.cpp:1837 ../tdlib-purple.cpp:1932
+#: ../td-client.cpp:1090 ../td-client.cpp:1125 ../td-client.cpp:2077
+#: ../td-client.cpp:2203 ../td-client.cpp:4434 ../tdlib-purple.cpp:743
+#: ../tdlib-purple.cpp:1846 ../tdlib-purple.cpp:1941
 msgid "_OK"
 msgstr "_OK"
 
@@ -100,11 +100,11 @@ msgstr "_OK"
 #. TRANSLATOR: 2FA settings, alternative is "_OK". The underscore marks accelerator keys, they must be different!
 #. TRANSLATOR: Database password dialog, alternative is "_OK". The underscore marks accelerator keys, they must be different!
 #: ../call.cpp:222 ../td-client.cpp:757 ../td-client.cpp:1024
-#: ../td-client.cpp:1092 ../td-client.cpp:1127 ../td-client.cpp:2078
-#: ../td-client.cpp:2204 ../td-client.cpp:2494 ../td-client.cpp:2710
-#: ../td-client.cpp:4435 ../td-client.cpp:4762 ../td-client.cpp:4893
-#: ../td-client.cpp:4914 ../tdlib-purple.cpp:745 ../tdlib-purple.cpp:1839
-#: ../tdlib-purple.cpp:1934
+#: ../td-client.cpp:1092 ../td-client.cpp:1127 ../td-client.cpp:2079
+#: ../td-client.cpp:2205 ../td-client.cpp:2495 ../td-client.cpp:2711
+#: ../td-client.cpp:4436 ../td-client.cpp:4763 ../td-client.cpp:4894
+#: ../td-client.cpp:4915 ../tdlib-purple.cpp:745 ../tdlib-purple.cpp:1848
+#: ../tdlib-purple.cpp:1943
 msgid "_Cancel"
 msgstr "_Anuloje"
 
@@ -205,7 +205,7 @@ msgstr "Mesazhi nuk u dërgua: {0} nuk gjendet më te {1}."
 
 #. TRANSLATOR: In-chat error message, argument will be text.
 #. TRANSLATOR: In-chat error message, argument will be a user-sent message
-#: ../client-utils.cpp:1971 ../td-client.cpp:3255
+#: ../client-utils.cpp:1971 ../td-client.cpp:3256
 #, c++-format
 msgid "Failed to send message: {}"
 msgstr "S’u arrit të dërgohet mesazh: {}"
@@ -247,6 +247,11 @@ msgstr "shenimVideo"
 #, c++-format
 msgid "{:02}:{:02}:{:02}"
 msgstr "{:02}:{:02}:{:02}"
+
+#. TRANSLATOR: Disabled item of a menu that has nothing in it.
+#: ../pidgin-ui.cpp:2151
+msgid "No actions available"
+msgstr "S’ka veprime të mundshme"
 
 #. TRANSLATOR: Info item *and* dialog item.
 #: ../purple-info.cpp:23
@@ -401,7 +406,7 @@ msgstr ""
 "&gt; {1}"
 
 #. TRANSLATOR: In-chat notification of forward. Argument will be a username. Please preserve the HTML.
-#: ../receiving.cpp:855 ../td-client.cpp:2654
+#: ../receiving.cpp:855 ../td-client.cpp:2655
 #, c++-format
 msgid "<b>Forwarded from {}:</b>"
 msgstr "<b>Përcjellë nga {}:</b>"
@@ -452,7 +457,7 @@ msgid "_No"
 msgstr "_Jo"
 
 #. TRANSLATOR: In-chat notification, appears after a colon (':'). Argument is a file *type*, not a filename.
-#: ../receiving.cpp:1246 ../td-client.cpp:2770
+#: ../receiving.cpp:1246 ../td-client.cpp:2771
 #, c++-format
 msgid "Downloading {}"
 msgstr "Po shkarkohet {}"
@@ -671,41 +676,41 @@ msgid "Failed to fetch earlier messages: {}"
 msgstr "S’u arrit të sillen mesazhe të mëparshëm: {}"
 
 #. TRANSLATOR: At the end or the top of a conversation window while it is being filled, followed by a turning character. Argument is a number.
-#: ../receiving.cpp:3401 ../receiving.cpp:3607
+#: ../receiving.cpp:3402 ../receiving.cpp:3608
 #, c++-format
 msgid "Showing {} messages"
 msgstr "Po shfaqen mesazhet: {}"
 
 #. TRANSLATOR: At the top of a conversation window while earlier messages are fetched, followed by a turning character. Argument is a number.
-#: ../receiving.cpp:3416
+#: ../receiving.cpp:3417
 #, c++-format
 msgid "Fetching earlier messages from Telegram: {}"
 msgstr "Po merren mesazhet e mëparshme nga Telegram: {}"
 
 #. TRANSLATOR: At the end of a conversation window while it is being filled, followed by a turning character. Argument is a number.
-#: ../receiving.cpp:3418
+#: ../receiving.cpp:3419
 #, c++-format
 msgid "Fetching messages from Telegram: {}"
 msgstr "Po merren mesazhet nga Telegram: {}"
 
 #. Where it is looked for: at the top, going back from there
 #. TRANSLATOR: At the top of a conversation window while earlier messages are fetched, followed by a turning character.
-#: ../receiving.cpp:3468
+#: ../receiving.cpp:3469
 msgid "Fetching earlier messages from Telegram"
 msgstr "Po merren mesazhet e mëparshme nga Telegram"
 
 #. TRANSLATOR: At the end of a conversation window while it is being filled, followed by a turning character.
-#: ../receiving.cpp:3470
+#: ../receiving.cpp:3471
 msgid "Fetching messages from Telegram"
 msgstr "Po merren mesazhet nga Telegram"
 
 #. TRANSLATOR: At the end of a conversation window while later messages are fetched, followed by a turning character.
-#: ../receiving.cpp:3627
+#: ../receiving.cpp:3628
 msgid "Fetching later messages from Telegram"
 msgstr "Po merren mesazhet e mëvonshme nga Telegram"
 
 #. TRANSLATOR: Under the names of those who gave a reaction, in its tooltip, when not all are known. Argument is a number.
-#: ../receiving.cpp:3765
+#: ../receiving.cpp:3766
 #, c++-format
 msgid "and {} more"
 msgstr "dhe {} të tjerë"
@@ -816,7 +821,7 @@ msgstr ""
 #. TRANSLATOR: Database password dialog, title
 #: ../td-client.cpp:752 ../td-client.cpp:771 ../td-client.cpp:805
 #: ../td-client.cpp:824 ../td-client.cpp:842 ../td-client.cpp:853
-#: ../td-client.cpp:865 ../tdlib-purple.cpp:1930
+#: ../td-client.cpp:865 ../tdlib-purple.cpp:1939
 msgid "Database password"
 msgstr "Fjalëkalim baze të dhënash"
 
@@ -1058,96 +1063,96 @@ msgstr "Shfaq redaktimin e fundit"
 
 #. TRANSLATOR: Item of a message's menu: the picture goes on the clipboard, as a file and as a picture, downloaded first, if need be.
 #: ../td-client.cpp:1879
-msgid "Copy the picture"
+msgid "Copy the image"
 msgstr "Kopjoje figurën"
 
 #. TRANSLATOR: Item of a message's menu, and of a file's link: the file goes on the clipboard, for a file manager to paste, downloaded first, if need be.
-#: ../td-client.cpp:1881 ../tdlib-purple.cpp:1330
+#: ../td-client.cpp:1881 ../tdlib-purple.cpp:1331
 msgid "Copy the file"
 msgstr "Kopjoje skedarin"
 
 #. TRANSLATOR: Item of a message's menu, while the message is being edited in the input field.
-#: ../td-client.cpp:1892
+#: ../td-client.cpp:1893
 msgid "Cancel editing"
 msgstr "Anulo ndryshimin"
 
 #. TRANSLATOR: Item of a message's menu; it opens a dialog.
-#: ../td-client.cpp:1902
+#: ../td-client.cpp:1903
 msgid "Edit…"
 msgstr "Ndrysho…"
 
 #. TRANSLATOR: Item of a message's menu; it asks for confirmation.
-#: ../td-client.cpp:1915
+#: ../td-client.cpp:1916
 msgid "Delete for everyone…"
 msgstr "Fshije për të gjithë…"
 
 #. TRANSLATOR: Item of a message's menu; it asks for confirmation.
-#: ../td-client.cpp:1917
+#: ../td-client.cpp:1918
 msgid "Delete for me…"
 msgstr "Fshije për mua…"
 
 #. TRANSLATOR: Item of a message's menu; it asks where to, in a dialog.
-#: ../td-client.cpp:1928
+#: ../td-client.cpp:1929
 msgid "Forward…"
 msgstr "Përcille…"
 
 #. TRANSLATOR: Item of a message's menu; it asks why, in a dialog or more.
-#: ../td-client.cpp:1939
+#: ../td-client.cpp:1940
 msgid "Report the message…"
 msgstr "Raporto mesazhin…"
 
 #. TRANSLATOR: Item of a message's menu in a group; it asks why, in a dialog or more. Argument is the name of the message's sender.
-#: ../td-client.cpp:1955
+#: ../td-client.cpp:1956
 #, c++-format
 msgid "Report {}…"
 msgstr "Raporto {}…"
 
 #. TRANSLATOR: Item of a message's menu. Argument is the name of the message's sender.
-#: ../td-client.cpp:1969
+#: ../td-client.cpp:1970
 #, c++-format
 msgid "Unblock {}"
 msgstr "Zhblloko {}"
 
 #. TRANSLATOR: Item of a message's menu; it asks for confirmation. Argument is the name of the message's sender.
-#: ../td-client.cpp:1978
+#: ../td-client.cpp:1979
 #, c++-format
 msgid "Block {}…"
 msgstr "Blloko {}…"
 
 #. TRANSLATOR: Item of a message's menu, and of the menu of a window's tabs, where the conversation does not show its newest messages.
-#: ../td-client.cpp:1991 ../tdlib-purple.cpp:1467
+#: ../td-client.cpp:1992 ../tdlib-purple.cpp:1476
 msgid "Go to the latest message"
 msgstr "Shko te mesazhi më i fundit"
 
 #. TRANSLATOR: In-chat error, after a reaction was picked from a message's menu; followed by the reaction.
-#: ../td-client.cpp:2039
+#: ../td-client.cpp:2040
 msgid "Cannot change the reaction"
 msgstr "Reagimi nuk mund të ndryshohet"
 
 #. TRANSLATOR: Paid reaction dialog, title
-#: ../td-client.cpp:2066
+#: ../td-client.cpp:2067
 msgid "Paid reaction"
 msgstr "Reagim me pagesë"
 
 #. TRANSLATOR: Paid reaction dialog, primary content
-#: ../td-client.cpp:2068
+#: ../td-client.cpp:2069
 msgid "How many Telegram Stars to spend on this message?"
 msgstr "Sa Telegram Stars të shpenzohen për këtë mesazh?"
 
 #. TRANSLATOR: Paid reaction dialog, secondary content
-#: ../td-client.cpp:2070
+#: ../td-client.cpp:2071
 msgid "They are spent at once, and cannot be taken back."
 msgstr "Shpenzohen menjëherë dhe nuk mund të kthehen."
 
 #. TRANSLATOR: In-chat error, when the paid reaction dialog got something other than a number of stars.
-#: ../td-client.cpp:2096
+#: ../td-client.cpp:2097
 #, c++-format
 msgid "Not a number of Telegram Stars: {}"
 msgstr "Nuk është numër Telegram Stars: {}"
 
 #. There with its formatting, in Pidgin's markup, as what is sent from there
 #. TRANSLATOR: In-chat notification, not logged, until the edit ends. Argument is the time (or date and time) the message was sent at, as the conversation window shows it. "/cancel" must remain verbatim!
-#: ../td-client.cpp:2168
+#: ../td-client.cpp:2169
 #, c++-format
 msgid ""
 "Editing the message from {}: send it to save the change; Esc or /cancel "
@@ -1157,45 +1162,45 @@ msgstr ""
 "cancel e lë siç ishte."
 
 #. TRANSLATOR: Message editing dialog, title
-#: ../td-client.cpp:2191
+#: ../td-client.cpp:2192
 msgid "Edit message"
 msgstr "Ndrysho mesazhin"
 
 #. TRANSLATOR: Message editing dialog, primary content
-#: ../td-client.cpp:2193
+#: ../td-client.cpp:2194
 msgid "New caption of the message"
 msgstr "Përshkrimi i ri i mesazhit"
 
 #. TRANSLATOR: Message editing dialog, primary content
-#: ../td-client.cpp:2195
+#: ../td-client.cpp:2196
 msgid "New text of the message"
 msgstr "Teksti i ri i mesazhit"
 
 #. TRANSLATOR: In-chat notification, not logged, once editing a message was given up.
 #. TRANSLATOR: In-chat notification, not logged, after a message being edited was sent unchanged.
 #. TRANSLATOR: In-chat notification, not logged, after the /cancel command.
-#: ../td-client.cpp:2225 ../tdlib-purple.cpp:543 ../tdlib-purple.cpp:1011
+#: ../td-client.cpp:2226 ../tdlib-purple.cpp:543 ../tdlib-purple.cpp:1011
 msgid "The message is left as it was."
 msgstr "Mesazhi mbetet siç ishte."
 
 #. TRANSLATOR: In-chat error, after a message was edited from its menu; followed by the reason.
-#: ../td-client.cpp:2247 ../td-client.cpp:2317 ../td-client.cpp:2346
+#: ../td-client.cpp:2248 ../td-client.cpp:2318 ../td-client.cpp:2347
 msgid "Cannot edit the message"
 msgstr "Mesazhi nuk mund të ndryshohet"
 
 #. TRANSLATOR: In-chat notification, after an edit Telegram does not allow was sent. The argument is why.
-#: ../td-client.cpp:2254
+#: ../td-client.cpp:2255
 #, c++-format
 msgid "The message is left as it was: {}"
 msgstr "Mesazhi mbetet siç ishte: {}"
 
 #. TRANSLATOR: In-chat notification, after "The message is left as it was:", when a placeholder of something pasted was put into a message of text being edited.
-#: ../td-client.cpp:2272
+#: ../td-client.cpp:2273
 msgid "Telegram adds no picture, video or file to a message of text."
 msgstr "Telegram nuk shton foto, video apo skedar te një mesazh teksti."
 
 #. TRANSLATOR: In-chat notification, after "The message is left as it was:", when the placeholder of a message's picture, video or file was taken out as it was edited.
-#: ../td-client.cpp:2277
+#: ../td-client.cpp:2278
 msgid ""
 "Telegram takes no picture, video or file out of a message; it can be "
 "replaced, or the message deleted."
@@ -1204,7 +1209,7 @@ msgstr ""
 "zëvendësohet, ose mesazhi të fshihet."
 
 #. TRANSLATOR: In-chat notification, after "The message is left as it was:", when placeholders of more than one thing were put into a message with a picture, video or file being edited.
-#: ../td-client.cpp:2282
+#: ../td-client.cpp:2283
 msgid ""
 "A message holds one picture, video or file, which can be replaced, but no "
 "more."
@@ -1213,275 +1218,275 @@ msgstr ""
 "më shumë."
 
 #. TRANSLATOR: In-chat notification, after "The message is left as it was:". The arguments are a pasted file's placeholder, such as [report.pdf#3], and where the file was.
-#: ../td-client.cpp:2329
+#: ../td-client.cpp:2330
 #, c++-format
 msgid "{0} is gone from {1}."
 msgstr "{0} nuk gjendet më te {1}."
 
 #. TRANSLATOR: A destination a message may be forwarded to. Arguments: the buddy's or chat's name, and the account's.
-#: ../td-client.cpp:2362
+#: ../td-client.cpp:2363
 #, c++-format
 msgid "{} ({})"
 msgstr "{} ({})"
 
 #. TRANSLATOR: A destination a message may be forwarded to, whose name alone would be the same as another's. Arguments: its name as offered, then what tells it apart.
-#: ../td-client.cpp:2412 ../td-client.cpp:2427
+#: ../td-client.cpp:2413 ../td-client.cpp:2428
 #, c++-format
 msgid "{} [{}]"
 msgstr "{} [{}]"
 
 #. TRANSLATOR: In-chat error message, when the buddy list offers nowhere to forward a message to.
-#: ../td-client.cpp:2455
+#: ../td-client.cpp:2456
 msgid "Nowhere to forward the message to: the buddy list is empty."
 msgstr "S’ka ku të përcillet mesazhi: lista e shokëve është e zbrazët."
 
 #. TRANSLATOR: Title of the dialog asking where to forward a message to.
-#: ../td-client.cpp:2465 ../td-client.cpp:2488
+#: ../td-client.cpp:2466 ../td-client.cpp:2489
 msgid "Forward the message"
 msgstr "Përcille mesazhin"
 
 #. TRANSLATOR: Prompt of the dialog asking where to forward a message to; typing in its field searches the list, and ticking several forwards it to each.
-#: ../td-client.cpp:2467
+#: ../td-client.cpp:2468
 msgid "To whom, or to which chats? Tick several to forward it to each."
 msgstr ""
 "Kujt, apo në cilat biseda? U vini shenjë disave, që të përcillet te secila."
 
 #. TRANSLATOR: Label of the list of destinations, in the dialog asking where to forward a message to.
-#: ../td-client.cpp:2480
+#: ../td-client.cpp:2481
 msgid "To"
 msgstr "Për"
 
 #. TRANSLATOR: Prompt of the dialog asking where to forward a message to; several can be chosen, to forward it to each.
-#: ../td-client.cpp:2490
+#: ../td-client.cpp:2491
 msgid "To whom, or to which chats?"
 msgstr "Kujt, apo në cilat biseda?"
 
 #. TRANSLATOR: Forward dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
-#: ../td-client.cpp:2492
+#: ../td-client.cpp:2493
 msgid "_Forward"
 msgstr "_Përcille"
 
 #. TRANSLATOR: In-chat error message. Arguments: where the message was to go, and what went wrong.
-#: ../td-client.cpp:2525
+#: ../td-client.cpp:2526
 #, c++-format
 msgid "The message was not forwarded to {}: {}"
 msgstr "Mesazhi s’u përcoll te {}: {}"
 
 #. TRANSLATOR: In-chat error message, the reason a message was not forwarded.
-#: ../td-client.cpp:2553
+#: ../td-client.cpp:2554
 msgid "no such user"
 msgstr "s’ka përdorues të tillë"
 
 #. TRANSLATOR: In-chat error message, the reason a message was not forwarded.
-#: ../td-client.cpp:2577
+#: ../td-client.cpp:2578
 msgid "no such chat"
 msgstr "s’ka bisedë të tillë"
 
 #. TRANSLATOR: In-chat error message, the reason a message was not forwarded.
-#: ../td-client.cpp:2592
+#: ../td-client.cpp:2593
 msgid "Telegram did not forward it"
 msgstr "Telegram-i s’e përcolli"
 
 #. TRANSLATOR: In-chat error message, the reason a message was not forwarded to another account's buddy or chat.
-#: ../td-client.cpp:2618 ../td-client.cpp:2675
+#: ../td-client.cpp:2619 ../td-client.cpp:2676
 msgid "the account is not connected"
 msgstr "llogaria s’është e lidhur"
 
 #. TRANSLATOR: In-chat error message, the reason a message was not forwarded to another account's chat.
-#: ../td-client.cpp:2627
+#: ../td-client.cpp:2628
 msgid "the chat is no longer open"
 msgstr "biseda s’është më e hapur"
 
 #. TRANSLATOR: In-chat error message, the reason a message, such as a location or a poll, was not forwarded to another account's buddy or chat.
-#: ../td-client.cpp:2650
+#: ../td-client.cpp:2651
 msgid "it has neither text nor a file"
 msgstr "s’ka as tekst, as skedar"
 
 #. TRANSLATOR: In-chat error message. Argument: where the message was forwarded to.
-#: ../td-client.cpp:2667
+#: ../td-client.cpp:2668
 #, c++-format
 msgid ""
 "The file of the message was not forwarded to {}: files cannot be sent there."
 msgstr "Skedari i mesazhit s’u përcoll te {}: atje s’mund të dërgohen skedarë."
 
 #. TRANSLATOR: Message deletion dialog, title
-#: ../td-client.cpp:2695
+#: ../td-client.cpp:2696
 msgid "Delete message"
 msgstr "Fshi mesazhin"
 
 #. TRANSLATOR: Message deletion dialog, primary content
-#: ../td-client.cpp:2697
+#: ../td-client.cpp:2698
 msgid "Delete the message for everyone in the chat?"
 msgstr "Të fshihet mesazhi për të gjithë në bisedë?"
 
 #. TRANSLATOR: Message deletion dialog, primary content
-#: ../td-client.cpp:2699
+#: ../td-client.cpp:2700
 msgid "Delete the message for yourself only?"
 msgstr "Të fshihet mesazhi vetëm për ju?"
 
 #. TRANSLATOR: Message deletion dialog, secondary content
-#: ../td-client.cpp:2701
+#: ../td-client.cpp:2702
 msgid "This cannot be undone."
 msgstr "Kjo nuk mund të zhbëhet."
 
 #. TRANSLATOR: Message deletion dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
-#: ../td-client.cpp:2708
+#: ../td-client.cpp:2709
 msgid "_Delete"
 msgstr "_Fshije"
 
 #. TRANSLATOR: In-chat error, after a message was deleted from its menu; followed by the reason.
-#: ../td-client.cpp:2732
+#: ../td-client.cpp:2733
 msgid "Cannot delete the message"
 msgstr "Mesazhi nuk mund të fshihet"
 
 #. Unlikely error message not worth translating
 #. TRANSLATOR: In-chat error message, the reason in "Could not open {0}: {1}".
-#: ../td-client.cpp:2758
+#: ../td-client.cpp:2759
 msgid "no file in the message"
 msgstr "mesazhi s’ka kartelë"
 
 #. TRANSLATOR: In-chat error message, the reason in "Could not copy {0}: {1}".
-#: ../td-client.cpp:2803
+#: ../td-client.cpp:2804
 msgid "there is no clipboard to put it on"
 msgstr "s’ka të papastër ku të vihet"
 
 #. TRANSLATOR: In-chat error message, after "Copy the file" was picked, or the file was dragged out of the conversation. Arguments are a file *type* or name, and the reason.
-#: ../td-client.cpp:2828
+#: ../td-client.cpp:2829
 #, c++-format
 msgid "Could not copy {0}: {1}"
 msgstr "S’u kopjua dot {0}: {1}"
 
 #. TRANSLATOR: In-chat error message. Arguments are a file *type* or name, and the reason.
-#: ../td-client.cpp:2830
+#: ../td-client.cpp:2831
 #, c++-format
 msgid "Could not open {0}: {1}"
 msgstr "S’u hap dot {0}: {1}"
 
-#: ../td-client.cpp:2831
+#: ../td-client.cpp:2832
 msgid "the file"
 msgstr "kartela"
 
 #. TRANSLATOR: In-chat error message, arguments will be a file name and a proper reason
-#: ../td-client.cpp:2902
+#: ../td-client.cpp:2903
 #, c++-format
 msgid "Could not read sticker file {0}: {1}"
 msgstr "S’u lexua dot kartelë ngjitësi {0}: {1}"
 
 #. TRANSLATOR: Error dialog, content
-#: ../td-client.cpp:3571
+#: ../td-client.cpp:3572
 #, c++-format
 msgid "Failed to add contact: {}"
 msgstr "S’u arrit të shtohej kontakt: {}"
 
 #. TRANSLATOR: Error dialog, title
-#: ../td-client.cpp:3573
+#: ../td-client.cpp:3574
 msgid "Failed to add contact"
 msgstr "S’u arrit të shtohej kontakt"
 
 #. TRANSLATOR: Error dialog, secondary content, argument is a user's id (a number)
-#: ../td-client.cpp:3603 ../td-client.cpp:4035
+#: ../td-client.cpp:3604 ../td-client.cpp:4036
 #, c++-format
 msgid "No known user with id {}"
 msgstr "S’ka përdorues të njohur me ID-në {}"
 
 #. TRANSLATOR: Buddy-window error message, title (no content), argument will be a phone number.
-#: ../td-client.cpp:3712
+#: ../td-client.cpp:3713
 #, c++-format
 msgid "No user found with phone number '{}'"
 msgstr "S’u gjet përdorues me numër telefoni '{}'"
 
 #. TRANSLATOR: Error dialog, content
-#: ../td-client.cpp:3931
+#: ../td-client.cpp:3932
 #, c++-format
 msgid "Failed to join chat: {}"
 msgstr "S’u arrit të hyhej në fjalosje: {}"
 
 #. TRANSLATOR: Error dialog, title
 #. TRANSLATOR: Join error dialog, title
-#: ../td-client.cpp:3933 ../td-client.cpp:3961 ../td-client.cpp:3981
-#: ../td-client.cpp:4006 ../td-client.cpp:4013 ../tdlib-purple.cpp:774
+#: ../td-client.cpp:3934 ../td-client.cpp:3962 ../td-client.cpp:3982
+#: ../td-client.cpp:4007 ../td-client.cpp:4014 ../tdlib-purple.cpp:774
 #: ../tdlib-purple.cpp:793
 msgid "Failed to join chat"
 msgstr "S’u arrit të hyhej në fjalosje"
 
 #. TRANSLATOR: Error dialog, content
-#: ../td-client.cpp:3963
+#: ../td-client.cpp:3964
 msgid "You are no longer a member of this group or channel"
 msgstr "S’jeni më anëtar i këtij grupi apo kanali"
 
 #. TRANSLATOR: Error dialog, content
-#: ../td-client.cpp:3983
+#: ../td-client.cpp:3984
 msgid "Telegram does not know this group or channel"
 msgstr "Telegram-i s’e njeh këtë grup apo kanal"
 
 #. TRANSLATOR: Error dialog, content
-#: ../td-client.cpp:4008
+#: ../td-client.cpp:4009
 msgid "The name belongs to a user, not a group"
 msgstr "Emri i përket një përdoruesi, jo një grupi"
 
 #. TRANSLATOR: Error dialog, content, argument is a reason (text)
-#: ../td-client.cpp:4011
+#: ../td-client.cpp:4012
 #, c++-format
 msgid "Could not find group: {}"
 msgstr "S’u gjet dot grup: {}"
 
 #. TRANSLATOR: Error dialog, secondary content
-#: ../td-client.cpp:4029
+#: ../td-client.cpp:4030
 msgid "Cannot create basic group without additional members"
 msgstr "S’mund të krijohet grup elementar pa anëtarë shtesë"
 
 #. TRANSLATOR: Error dialog, secondary content, argument is a username
-#: ../td-client.cpp:4044
+#: ../td-client.cpp:4045
 #, c++-format
 msgid "No known user by the name '{}'"
 msgstr "S’ka përdorues të njohur me emrin '{}'"
 
 #. TRANSLATOR: Error dialog, title
-#: ../td-client.cpp:4058
+#: ../td-client.cpp:4059
 msgid "Failed to create group"
 msgstr "S’u arrit të krijohej grup"
 
 #. TRANSLATOR: Error dialog, primary content
-#: ../td-client.cpp:4060
+#: ../td-client.cpp:4061
 msgid "Invalid group members"
 msgstr "Anëtarë të pavlefshëm grupi"
 
 #. TRANSLATOR: Error dialog, title
-#: ../td-client.cpp:4123
+#: ../td-client.cpp:4124
 msgid "Failed to delete group or channel"
 msgstr "S’u arrit të fshihej grup ose kanal"
 
 #. TRANSLATOR: Error dialog, title
-#: ../td-client.cpp:4150
+#: ../td-client.cpp:4151
 msgid "Failed to set group description"
 msgstr "S’u arrit të caktohej përshkrim grupi"
 
 #. TRANSLATOR: In-chat error message, appears after a colon (':')
 #. TRANSLATOR: Buddy infobox, error
-#: ../td-client.cpp:4169 ../td-client.cpp:4244 ../tdlib-purple.cpp:576
+#: ../td-client.cpp:4170 ../td-client.cpp:4245 ../tdlib-purple.cpp:576
 msgid "User not found"
 msgstr "S’u gjet përdoruesi"
 
 #. TRANSLATOR: In-chat error message, argument is a reason (text)
-#: ../td-client.cpp:4173 ../td-client.cpp:4210
+#: ../td-client.cpp:4174 ../td-client.cpp:4211
 #, c++-format
 msgid "Cannot kick user: {}"
 msgstr "S’mund të përzihet përdoruesi: {}"
 
 #. TRANSLATOR: In-chat error message, argument is a reason (text)
-#: ../td-client.cpp:4214 ../td-client.cpp:4248
+#: ../td-client.cpp:4215 ../td-client.cpp:4249
 #, c++-format
 msgid "Cannot add user to group: {}"
 msgstr "S’mund të shtohet përdorues te grupi: {}"
 
 #. TRANSLATOR: In-chat error message, argument is a reason (text)
-#: ../td-client.cpp:4218
+#: ../td-client.cpp:4219
 #, c++-format
 msgid "Cannot generate invite link: {}"
 msgstr "S’mund të prodhohet lidhje ftese: {}"
 
 #. TRANSLATOR: In-chat error message, after "Show invite link" was chosen for a chat that has none
-#: ../td-client.cpp:4312
+#: ../td-client.cpp:4313
 msgid ""
 "This chat has no public link or invite link, and only its administrators can "
 "create one"
@@ -1491,12 +1496,12 @@ msgstr ""
 
 #. "description" is hard-coded in bitlbee as possible field for chat topic
 #. TRANSLATOR: Groupchat infobox key
-#: ../td-client.cpp:4332
+#: ../td-client.cpp:4333
 msgid "Description"
 msgstr "Përshkrim"
 
 #. TRANSLATOR: 2FA setup confirmation dialog, secondary content, argument is an e-mail description (address and code length)
-#: ../td-client.cpp:4422
+#: ../td-client.cpp:4423
 #, c++-format
 msgid ""
 "Password will be changed after new e-mail is confirmed\n"
@@ -1509,150 +1514,150 @@ msgstr ""
 #. TRANSLATOR: 2FA success notification, title
 #. TRANSLATOR: 2FA failure notification, title
 #. TRANSLATOR: 2FA settings, title
-#: ../td-client.cpp:4425 ../td-client.cpp:4445 ../td-client.cpp:4471
-#: ../td-client.cpp:4494 ../td-client.cpp:4498 ../tdlib-purple.cpp:1835
+#: ../td-client.cpp:4426 ../td-client.cpp:4446 ../td-client.cpp:4472
+#: ../td-client.cpp:4495 ../td-client.cpp:4499 ../tdlib-purple.cpp:1844
 msgid "Two-factor authentication"
 msgstr "Mirëfilltësim dyfaktorësh"
 
 #. TRANSLATOR: 2FA setup confirmation dialog, primary content
-#: ../td-client.cpp:4427
+#: ../td-client.cpp:4428
 msgid "Enter verification code received in the e-mail"
 msgstr "Jepni kod verifikimi të marrë te email-i"
 
 #. TRANSLATOR: 2FA success notification, primary content
-#: ../td-client.cpp:4447
+#: ../td-client.cpp:4448
 msgid "Password set"
 msgstr "Fjalëkalimi u caktua"
 
 #. TRANSLATOR: 2FA success notification, primary content
-#: ../td-client.cpp:4449
+#: ../td-client.cpp:4450
 msgid "Password cleared"
 msgstr "Fjalëkalimi u spastrua"
 
 #. TRANSLATOR: 2FA success notification, secondary content
-#: ../td-client.cpp:4451
+#: ../td-client.cpp:4452
 msgid "Recovery e-mail is configured"
 msgstr "Email-i i rikthimeve është formësuar"
 
 #. TRANSLATOR: 2FA success notification, secondary content
-#: ../td-client.cpp:4453
+#: ../td-client.cpp:4454
 msgid "No recovery e-mail configured"
 msgstr "S’është formësuar email rikthimesh"
 
 #. TRANSLATOR: 2FA setup confirmation dialog, e-mail description
-#: ../td-client.cpp:4462
+#: ../td-client.cpp:4463
 #, c++-format
 msgid "Code sent to {0} (length: {1})"
 msgstr "Kod i dërguar për {0} (gjatësi: {1})"
 
 #. TRANSLATOR: 2FA failure notification, primary content
-#: ../td-client.cpp:4473
+#: ../td-client.cpp:4474
 msgid "Failed to set password"
 msgstr "S’u arrit të caktohet fjalëkalim"
 
 #. TRANSLATOR: 2FA failure notification, content
-#: ../td-client.cpp:4500
+#: ../td-client.cpp:4501
 msgid "Looks like the code was wrong"
 msgstr "Duket sikur kodi të qe gabim"
 
 #. TRANSLATOR: In-chat error message
-#: ../td-client.cpp:4587
+#: ../td-client.cpp:4588
 msgid "Unable to send message: The message is too large."
 msgstr "S’arrihet të dërgohet mesazh: Mesazhi është shumë i madh."
 
 #. TRANSLATOR: In-chat error message
-#: ../td-client.cpp:4590
+#: ../td-client.cpp:4591
 msgid "Unable to send message."
 msgstr "S’arrihet të dërgohet mesazh."
 
 #. TRANSLATOR: In-chat(?) error message, argument is an error description (text)
-#: ../td-client.cpp:4594
+#: ../td-client.cpp:4595
 #, c++-format
 msgid "Failed to open chat: {}"
 msgstr "S’u arrit të hapej fjalosje: {}"
 
 #. TRANSLATOR: Failure notification, title
-#: ../td-client.cpp:4685
+#: ../td-client.cpp:4686
 msgid "Failed to create secret chat"
 msgstr "S’u arrit të krijohet fjalosje e fshehtë"
 
 #. TRANSLATOR: Error dialog, primary content. Argument is a user's name.
-#: ../td-client.cpp:4712
+#: ../td-client.cpp:4713
 #, c++-format
 msgid "Cannot block {}"
 msgstr "{} nuk mund të bllokohet"
 
 #. TRANSLATOR: Error dialog, primary content. Argument is a user's name.
-#: ../td-client.cpp:4714
+#: ../td-client.cpp:4715
 #, c++-format
 msgid "Cannot unblock {}"
 msgstr "{} nuk mund të zhbllokohet"
 
 #. TRANSLATOR: Block dialog, primary content. Argument is a user's name.
-#: ../td-client.cpp:4749
+#: ../td-client.cpp:4750
 #, c++-format
 msgid "Block {}?"
 msgstr "Të bllokohet {}?"
 
 #. TRANSLATOR: Block dialog, title
-#: ../td-client.cpp:4751
+#: ../td-client.cpp:4752
 msgid "Block user"
 msgstr "Blloko përdoruesin"
 
 #. TRANSLATOR: Block dialog, secondary content
-#: ../td-client.cpp:4753
+#: ../td-client.cpp:4754
 msgid "They will not be able to write to you or call you."
 msgstr "Nuk do të mund t'ju shkruajë apo t'ju telefonojë."
 
 #. TRANSLATOR: Block dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
-#: ../td-client.cpp:4760
+#: ../td-client.cpp:4761
 msgid "_Block"
 msgstr "_Blloko"
 
 #. TRANSLATOR: In-chat error, after a message's sender was to be reported; followed by the reason.
 #. TRANSLATOR: In-chat error, after a report; followed by the reason.
-#: ../td-client.cpp:4803 ../td-client.cpp:4928
+#: ../td-client.cpp:4804 ../td-client.cpp:4929
 msgid "Cannot send the report"
 msgstr "Raporti nuk mund të dërgohet"
 
 #. TRANSLATOR: In-chat notification, not logged, after a message's sender was to be reported. Argument is their name.
-#: ../td-client.cpp:4812
+#: ../td-client.cpp:4813
 #, c++-format
 msgid "Telegram takes no report about {} from here."
 msgstr "Telegram-i s’pranon që këtu raportim për {}."
 
 #. TRANSLATOR: In-chat notification, after a report was sent.
-#: ../td-client.cpp:4874
+#: ../td-client.cpp:4875
 msgid "Reported to Telegram's moderators."
 msgstr "U raportua te moderatorët e Telegram-it."
 
 #. TRANSLATOR: Report dialog, title
-#: ../td-client.cpp:4889 ../td-client.cpp:4901
+#: ../td-client.cpp:4890 ../td-client.cpp:4902
 msgid "Report"
 msgstr "Raporto"
 
 #. TRANSLATOR: Report dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
-#: ../td-client.cpp:4891
+#: ../td-client.cpp:4892
 msgid "_Next"
 msgstr "_Vazhdo"
 
 #. TRANSLATOR: Report dialog, primary content
-#: ../td-client.cpp:4903
+#: ../td-client.cpp:4904
 msgid "Tell Telegram's moderators more"
 msgstr "Tregojuni moderatorëve të Telegram-it më shumë"
 
 #. TRANSLATOR: Report dialog, secondary content, when the details may be left out.
-#: ../td-client.cpp:4906
+#: ../td-client.cpp:4907
 msgid "This may be left empty."
 msgstr "Mund të lihet bosh."
 
 #. TRANSLATOR: Report dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
-#: ../td-client.cpp:4912
+#: ../td-client.cpp:4913
 msgid "_Report"
 msgstr "_Raporto"
 
 #. TRANSLATOR: In-chat notification, not logged, after a chat was reported as a whole.
-#: ../td-client.cpp:4922
+#: ../td-client.cpp:4923
 msgid ""
 "Telegram wants messages to go with this report: report one from its menu "
 "instead, by right-clicking it."
@@ -1899,24 +1904,24 @@ msgid "It is no longer in this conversation's window."
 msgstr "Nuk ndodhet më në dritaren e kësaj bisede."
 
 #. TRANSLATOR: Command description, the initial "kick <user>" must remain verbatim!
-#: ../tdlib-purple.cpp:1528
+#: ../tdlib-purple.cpp:1537
 msgid "kick <user>: Kick a user from the room using name or internal id"
 msgstr ""
 "kick <përdorues>: Përzini nga dhoma një përdorues duke përdorur emrin ose ID "
 "të brendshme"
 
 #. TRANSLATOR: Command description, the initial "hangup" must remain verbatim!
-#: ../tdlib-purple.cpp:1534
+#: ../tdlib-purple.cpp:1543
 msgid "hangup: Terminate any active call (with any user)"
 msgstr "hangup: Përfundoni çfarëdo thirrjeje aktive (me cilindo përdorues)"
 
 #. TRANSLATOR: Command description, the initial "cancel" must remain verbatim!
-#: ../tdlib-purple.cpp:1540
+#: ../tdlib-purple.cpp:1549
 msgid "cancel: Leave the message being edited as it was"
 msgstr "cancel: Lëre mesazhin që po ndryshohet siç ishte"
 
 #. TRANSLATOR: Command description, the initial "paste" must remain verbatim!
-#: ../tdlib-purple.cpp:1546
+#: ../tdlib-purple.cpp:1555
 msgid ""
 "paste: Attach the files copied to the clipboard, or its picture, to the "
 "message being written"
@@ -1925,7 +1930,7 @@ msgstr ""
 "e fragmenteve, ose foton e saj"
 
 #. TRANSLATOR: Tdlib crash dialog, secondary content. Argument is a filesystem path. Please keep the space after it!
-#: ../tdlib-purple.cpp:1566
+#: ../tdlib-purple.cpp:1575
 #, c++-format
 msgid ""
 "The error may be caused by corrupt account data. If this is the case, it "
@@ -1937,78 +1942,78 @@ msgstr ""
 "kërkohet të hyni në llogari sërish."
 
 #. TRANSLATOR: Tdlib crash dialog, title
-#: ../tdlib-purple.cpp:1576
+#: ../tdlib-purple.cpp:1585
 msgid "Fatal error encountered in telegram plugin"
 msgstr "U has gabim fatal te shtojca Telegram"
 
 #. TRANSLATOR: Account settings, value for file downloads (hyperlink link file:///tmp/asdf)
-#: ../tdlib-purple.cpp:1693 ../tdlib-purple.cpp:1698
+#: ../tdlib-purple.cpp:1702 ../tdlib-purple.cpp:1707
 msgid "Inline (hyperlinks in chat)"
 msgstr "Brendazi (tejlidhje brenda fjalosjesh)"
 
 #. TRANSLATOR: Account settings, value for file downloads (file transfer dialog)
-#: ../tdlib-purple.cpp:1695 ../tdlib-purple.cpp:1697
+#: ../tdlib-purple.cpp:1704 ../tdlib-purple.cpp:1706
 msgid "Standard file transfers"
 msgstr "Shpërngulje standarde kartelash"
 
 #. TRANSLATOR: Account settings, key (choice)
-#: ../tdlib-purple.cpp:1702
+#: ../tdlib-purple.cpp:1711
 msgid "File downloads"
 msgstr "Shkarkime kartelash"
 
 #. TRANSLATOR: Account settings, key (choice)
-#: ../tdlib-purple.cpp:1707
+#: ../tdlib-purple.cpp:1716
 msgid "Inline auto-download size limit, MB (0 for unlimited)"
 msgstr "Kufi madhësie vetëshkarkimi të brendshëm, MB (0 për të pakufizuar)"
 
 #. TRANSLATOR: Account settings, value for "Prefetch videos"; "the auto-download limit" is the option "Inline auto-download size limit".
-#: ../tdlib-purple.cpp:1716
+#: ../tdlib-purple.cpp:1725
 msgid "Highest resolution within the auto-download limit (if one is set)"
 msgstr ""
 "Qartësia më e lartë brenda kufirit të vetëshkarkimit (nëse është caktuar)"
 
 #. TRANSLATOR: Account settings, value for "Prefetch videos": the highest resolution, or nothing if that is above the auto-download limit.
-#: ../tdlib-purple.cpp:1719
+#: ../tdlib-purple.cpp:1728
 msgid "Highest resolution only"
 msgstr "Vetëm qartësia më e lartë"
 
 #. TRANSLATOR: Account settings, value for "Prefetch videos"
-#: ../tdlib-purple.cpp:1721
+#: ../tdlib-purple.cpp:1730
 msgid "Smallest file"
 msgstr "Kartela më e vogël"
 
 #. TRANSLATOR: Account settings, value for "Prefetch videos"
-#: ../tdlib-purple.cpp:1723
+#: ../tdlib-purple.cpp:1732
 msgid "Don't prefetch"
 msgstr "Mos i shkarko paraprakisht"
 
 #. TRANSLATOR: Account settings, key (choice). Videos are downloaded beforehand, so that they play as soon as clicked.
-#: ../tdlib-purple.cpp:1725
+#: ../tdlib-purple.cpp:1734
 msgid "Prefetch videos"
 msgstr "Shkarko paraprakisht videot"
 
 #. TRANSLATOR: Account settings, value for large file downloads
-#: ../tdlib-purple.cpp:1732
+#: ../tdlib-purple.cpp:1741
 msgid "Ask"
 msgstr "Pyet"
 
 #. TRANSLATOR: Account settings, value for large file downloads
-#: ../tdlib-purple.cpp:1734
+#: ../tdlib-purple.cpp:1743
 msgid "Discard"
 msgstr "Hidhe Tej"
 
 #. TRANSLATOR: Account settings, check box label
-#: ../tdlib-purple.cpp:1737
+#: ../tdlib-purple.cpp:1746
 msgid "Do not clean up inline downloads"
 msgstr "Mos spastro shkarkime brendazi"
 
 #. TRANSLATOR: Account settings, key (choice)
-#: ../tdlib-purple.cpp:1743
+#: ../tdlib-purple.cpp:1752
 msgid "Bigger inline file downloads"
 msgstr "Shkarkime më të mëdha kartelash brendazi"
 
 #. TRANSLATOR: Account settings, key (boolean). The password is the one of the account's settings, not Telegram's two-step verification password.
-#: ../tdlib-purple.cpp:1747
+#: ../tdlib-purple.cpp:1756
 msgid ""
 "Encrypt the local database with the password (takes effect at reconnect)"
 msgstr ""
@@ -2016,84 +2021,84 @@ msgstr ""
 "rilidhjes)"
 
 #. TRANSLATOR: Account settings, key (boolean)
-#: ../tdlib-purple.cpp:1752
+#: ../tdlib-purple.cpp:1761
 msgid "Enable secret chats (takes effect at reconnect)"
 msgstr "Aktivizo fjalosje të fshehta (hyn në fuqi pas rilidhjes)"
 
 #. TRANSLATOR: Account settings, key (boolean)
-#: ../tdlib-purple.cpp:1759
+#: ../tdlib-purple.cpp:1768
 msgid "Show animated stickers"
 msgstr "Shfaq ngjitës të animuar"
 
 #. TRANSLATOR: Account settings, key (boolean)
-#: ../tdlib-purple.cpp:1765
+#: ../tdlib-purple.cpp:1774
 msgid "Show self-destructing messages anyway"
 msgstr "Shfaq sido qoftë mesazhe të vetëasgjësueshëm"
 
 #. TRANSLATOR: Account settings, key (boolean)
-#: ../tdlib-purple.cpp:1770
+#: ../tdlib-purple.cpp:1779
 msgid "Strike out deleted messages in Pidgin, rather than remove them"
 msgstr "Vija mbi mesazhet e fshira në Pidgin, në vend që t'i hiqni"
 
 #. TRANSLATOR: Account settings, key (boolean)
-#: ../tdlib-purple.cpp:1775
+#: ../tdlib-purple.cpp:1784
 msgid "Show messages from channels and groups you have not joined"
 msgstr "Shfaq mesazhe nga kanale dhe grupe ku s’jeni bërë pjesë"
 
 #. TRANSLATOR: Account settings, key (boolean). Of a file sent by file transfer ("Send File..."): told by its content, as a pasted one is; otherwise it goes as a file.
-#: ../tdlib-purple.cpp:1781
+#: ../tdlib-purple.cpp:1790
 msgid "Send a file as a picture, video or voice message when it is one"
 msgstr "Dërgoje një skedar si foto, video apo mesazh zanor, kur është i tillë"
 
 #. TRANSLATOR: Account settings, key (boolean). Custom emoji are pictures of their own, each standing for an ordinary emoji.
-#: ../tdlib-purple.cpp:1787
+#: ../tdlib-purple.cpp:1796
 msgid "Show custom emoji in reactions as ordinary emoji"
 msgstr "Shfaqi emoji-t vetjake te reagimet si emoji të zakonshme"
 
 #. TRANSLATOR: 2FA settings, key
-#: ../tdlib-purple.cpp:1808
+#: ../tdlib-purple.cpp:1817
 msgid "Current password"
 msgstr "Fjalëkalimi i tanishëm"
 
 #. TRANSLATOR: 2FA settings, key
 #. TRANSLATOR: Database password dialog, key
-#: ../tdlib-purple.cpp:1813 ../tdlib-purple.cpp:1914
+#: ../tdlib-purple.cpp:1822 ../tdlib-purple.cpp:1923
 msgid "New password"
 msgstr "Fjalëkalim i ri"
 
 #. TRANSLATOR: 2FA settings, key
-#: ../tdlib-purple.cpp:1818
+#: ../tdlib-purple.cpp:1827
 msgid "Repeat password"
 msgstr "Përsëritni fjalëkalimin"
 
 #. TRANSLATOR: 2FA settings, key
-#: ../tdlib-purple.cpp:1823
+#: ../tdlib-purple.cpp:1832
 msgid "Password hint"
 msgstr "Ndihmëz fjalëkalimi"
 
 #. TRANSLATOR: 2FA settings, key
-#: ../tdlib-purple.cpp:1827
+#: ../tdlib-purple.cpp:1836
 msgid "Recovery e-mail"
 msgstr "Email rimarrjesh"
 
 #. TRANSLATOR: 2FA settings, primary content (after mistype)
 #. TRANSLATOR: Database password dialog, primary content (after mistype)
-#: ../tdlib-purple.cpp:1848 ../tdlib-purple.cpp:1890
+#: ../tdlib-purple.cpp:1857 ../tdlib-purple.cpp:1899
 msgid "Please enter same password twice"
 msgstr "Ju lutemi, jepeni fjalëkalimin dy herë"
 
 #. TRANSLATOR: 2FA settings, primary content
-#: ../tdlib-purple.cpp:1879
+#: ../tdlib-purple.cpp:1888
 msgid "Enter new password and recovery e-mail address"
 msgstr "Jepni fjalëkalim të ri dhe adresë email rimarrjesh"
 
 #. TRANSLATOR: Database password dialog, key
-#: ../tdlib-purple.cpp:1918
+#: ../tdlib-purple.cpp:1927
 msgid "Confirm password"
 msgstr "Ripohoni fjalëkalimin"
 
 #. TRANSLATOR: Database password dialog, secondary content
-#: ../tdlib-purple.cpp:1926
+#: ../tdlib-purple.cpp:1935
 msgid ""
 "The local database is encrypted with the new password, which becomes the "
 "account's."
@@ -2102,19 +2107,25 @@ msgstr ""
 "bëhet fjalëkalimi i llogarisë."
 
 #. TRANSLATOR: Database password dialog, primary content
-#: ../tdlib-purple.cpp:1941
+#: ../tdlib-purple.cpp:1950
 msgid "Change the local database's password"
 msgstr "Ndryshoni fjalëkalimin e bazës vendore të të dhënave"
 
 #. TRANSLATOR: 2FA settings, title
-#: ../tdlib-purple.cpp:1950
+#: ../tdlib-purple.cpp:1959
 msgid "Configure two-factor authentication..."
 msgstr "Formësoni mirëfilltësim dyfaktorësh…"
 
 #. TRANSLATOR: Account action, opening the dialog of the database's password
-#: ../tdlib-purple.cpp:1954
+#: ../tdlib-purple.cpp:1963
 msgid "Change the database password..."
 msgstr "Ndryshoni fjalëkalimin e bazës së të dhënave..."
+
+#~ msgid "To whom, or to which chat?"
+#~ msgstr "Kujt, apo në cilën bisedë?"
+
+#~ msgid "Copy the picture"
+#~ msgstr "Kopjoje figurën"
 
 #, c++-format
 #~ msgid "{0} stops sharing the live location from {1}:"

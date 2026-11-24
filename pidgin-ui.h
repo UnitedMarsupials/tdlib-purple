@@ -105,8 +105,9 @@ void setPastedHandler(PastedHandler handler);
 // is given, such as of a message edited there, become thumbnails too.
 void pasteIntoEntryLater(PurpleConversation *conv, const std::vector<PastedPlaceholder> &placeholders);
 
-// Writes the HTML into the tab as a line of its own, at its end, not logged
-void appendTabLine(PurpleConversation *conv, const std::string &html);
+// Writes the HTML into the tab as a line of its own, at its end, not logged; a link to the message
+// it is, if any, scrolls to it
+void appendTabLine(PurpleConversation *conv, const std::string &html, MessageId messageId = MessageId());
 
 // Whether Pidgin shows the conversation, so that it can be emptied and filled anew
 bool canRedrawConversation(PurpleConversation *conv);
@@ -233,6 +234,7 @@ struct MenuItem {
     unsigned               columns   = 0;
     std::function<void()>  action;
     std::vector<MenuItem>  submenu;
+    bool                   copiesFile = false; // the message's, which a link to it has on top already
 };
 
 // The menu GTK opens on a tab's text, right-clicked within a message: a placeholder at its end
@@ -264,6 +266,11 @@ void setPlaceholderHandler(PlaceholderHandler handler);
 void fillOpenMenu(const OpenMenuRef &menu, const std::vector<MenuItem> &items);
 // The items go into the menu Pidgin opens on a link, after its own, if any
 void addLinkMenuItems(PidginWidget *menu, const std::vector<MenuItem> &items);
+// And, after a separator, those of the message, in a tab, that the link is in, as its own menu has them,
+// but for copying its file if the link's own item does; false if none can be
+bool addLinkMessageMenu(PidginIMHtml *imhtml, PidginWidget *menu, MessageId messageId, bool fileGiven);
+// The conversation whose tab shows the text, if any
+PurpleConversation *getTabConversation(PidginIMHtml *imhtml);
 
 // The file goes on the clipboard: its URI, for a file manager to paste a copy, or a conversation to
 // attach it; its path, as text; and, if it is a picture, the picture itself, for a program that

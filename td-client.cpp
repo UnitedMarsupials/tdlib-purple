@@ -1673,6 +1673,12 @@ bool PurpleTdClient::showMessagePopup(PurpleConversation *conv, MessageId messag
     return true;
 }
 
+bool PurpleTdClient::isConversationOf(PurpleConversation *conv, ChatId chatId)
+{
+    const td::td_api::chat *chat = findConversationChat(m_data, conv);
+    return chat && (getId(*chat) == chatId);
+}
+
 void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId, OpenMenuRef openMenu)
 {
     // The message for the reactions it has, then what may be done to it, then the reactions it
@@ -1876,9 +1882,10 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
         MenuItem item;
         item.label  = menu.picture ?
                       // TRANSLATOR: Item of a message's menu: the picture goes on the clipboard, as a file and as a picture, downloaded first, if need be.
-                      _("Copy the picture") :
+                      _("Copy the image") :
                       // TRANSLATOR: Item of a message's menu, and of a file's link: the file goes on the clipboard, for a file manager to paste, downloaded first, if need be.
                       _("Copy the file");
+        item.copiesFile = !menu.picture;
         item.action = [accountName, chatId, messageId]() {
             PurpleTdClient *client = findConnected(accountName.c_str());
             if (client)

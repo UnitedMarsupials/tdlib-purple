@@ -191,14 +191,20 @@ shows.
 
 ### M1. Edit and delete
 
-Edit a message of ours from its menu, then delete it.
+Give a message of ours a reaction and take it back, then edit it from its menu, and right-click
+its edited text.
 
-* The edit is written over the message in Pidgin and the other members see it; the deletion takes
-  it out, and the notice names us, as having deleted our own message: in English, "deleted their
-  message".
+* The edit is written over the message in Pidgin and the other members see it.
+* The menu of its edited text has the message's items, as on its sender's name.
+
+Then delete it.
+
+* The deletion takes it out, and the notice names us, as having deleted our own message: in
+  English, "deleted their message".
 
 Since: an edit forgot that the message was ours, so that deleting it named us as its sender like
-anyone else's.
+anyone else's; and the text of an edited message whose reactions had been taken back got no
+items of its own in its menu.
 
 ### M2. Forward
 
@@ -215,10 +221,18 @@ other's, tick that too, and press OK.
 
 ### M3. Files of a message
 
-On a photo: "Copy the picture", paste into another program; "Save Image...", check the name it
+On a photo: "Copy the image", paste into another program; "Save Image...", check the name it
 suggests. Drag a file's link out of the conversation into a file manager.
 
 * Each gives the message's own file, under its own name.
+
+Right-click a video's link, under its cover, and a link to another size of a
+video or picture, where it has one.
+
+* The link's own "Copy the file" is on top, then a separator, then the
+  message's items in the order its text's menu and its picture's have them:
+  reactions, "Forward…", "Report the message…" and the rest, with no second
+  "Copy the file" of the same file. A photo's keeps its "Copy the image".
 
 ### M4. Giving up an edit
 
@@ -271,6 +285,13 @@ anew from its first unread, as in H1, and go back again.
 Click the time in a reply's quote, and in the notice of an edit or a reaction.
 
 * The conversation scrolls to that message.
+* So it does to a message deleted since, struck out as it comes back from the log, as in H4.
+
+Right-click such a link.
+
+* The menu has the linked message's items, as its own menu has them, with no separator above
+  them; or, for one deleted, "The message has been deleted." A link in a quote of a message
+  from another chat has no items of a message of this one.
 
 ### H4. Our deleted messages, again
 
