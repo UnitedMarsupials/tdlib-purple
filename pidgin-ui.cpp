@@ -2147,7 +2147,7 @@ void fillOpenMenu(const OpenMenuRef &menu, const std::vector<MenuItem> &items)
         p_gtk_widget_destroy(menu->separator);
     // Nothing else in it either: said so, rather than left empty, as Pidgin would have
     else if (shown.empty()) {
-        // TRANSLATOR: Disabled item of a menu that has nothing in it, such as that of a link to a message no longer there.
+        // TRANSLATOR: Disabled item of a menu that has nothing in it, such as that of a link to a message whose chat is not known.
         GtkWidget *none = p_gtk_menu_item_new_with_label(_("No actions available"));
         p_gtk_widget_set_sensitive(none, FALSE);
         p_gtk_menu_shell_append(reinterpret_cast<GtkMenuShell *>(menu->menu), none);
