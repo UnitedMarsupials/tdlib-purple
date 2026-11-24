@@ -3225,7 +3225,7 @@ static bool isShownAsNotice(const td::td_api::message &message)
 static std::vector<LoggedLine> getLoggedLines(TdAccountData &account, const td::td_api::chat &chat,
                                               PurpleConversation *conv,
                                               const std::vector<td::td_api::object_ptr<td::td_api::message>> &messages,
-                                              bool stopsShort)
+                                              bool stopsShort, MessageId after = MessageId())
 {
     enum { SAME_TIME = 10 };
     std::vector<LoggedLine> lines;
@@ -3255,7 +3255,9 @@ static std::vector<LoggedLine> getLoggedLines(TdAccountData &account, const td::
                                            purple_conversation_get_name(conv), since))
     {
         bool keep;
-        if ((line.when > until) || (line.messageId.valid() && (line.messageId.value() > untilId)))
+        // Nor what the tab shows already, before them, which may have been sent in the same second
+        if ((line.when > until) || (line.messageId.valid() && (line.messageId.value() > untilId)) ||
+            (line.messageId.valid() && after.valid() && (line.messageId.value() <= after.value())))
             keep = false;
         else if (line.messageId.valid()) {
             keep = !ids.count(line.messageId.value()) && keepDeleted;
@@ -3562,7 +3564,7 @@ static void showFetchedLater(TdAccountData &account, ChatId chatId, MessageId en
                           reached ? ", up to the newest" : "");
         setTabEnd(conv, reached ? MessageId() : getId(*later.front()));
         keepViewLater(conv);
-        std::vector<LoggedLine> lines = getLoggedLines(account, *chat, conv, later, !reached);
+        std::vector<LoggedLine> lines = getLoggedLines(account, *chat, conv, later, !reached, end);
         auto line = lines.rbegin();
         auto queueLinesSince = [&](time_t since) {
             for (; (line != lines.rend()) && (line->when >= since); ++line)
