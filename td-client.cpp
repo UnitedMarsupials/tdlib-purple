@@ -3030,6 +3030,13 @@ void PurpleTdClient::reactionClicked(PurpleConversation *conv, MessageId message
 void PurpleTdClient::markConversation(PurpleConversation *conv)
 {
     markConversationTitle(m_data, conv);
+    // A chat deleted, opened again, by the user or a link, is shown as any other; a private chat
+    // goes by its user's id
+    const char *name   = purple_conversation_get_name(conv);
+    ChatId      chatId = (purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_CHAT) ? getTdlibChatId(name) :
+                         purpleBuddyNameToUserId(name).valid() ? ChatId::fromString(name + strlen("id")) : ChatId();
+    if (chatId.valid())
+        m_data.setChatDeleted(chatId, false);
 }
 
 void PurpleTdClient::conversationShown(PurpleConversation *conv, bool shown)
@@ -3867,8 +3874,7 @@ void PurpleTdClient::renameContact(const char *buddyName, const char *newAlias)
 // them for the others
 void PurpleTdClient::deleteLocalChat(ChatId chatId)
 {
-    // Not told of as each is deleted, which would open its tab again, and log it
-    m_data.forgetShownMessages(chatId);
+    m_data.setChatDeleted(chatId, true);
     auto history = td::td_api::make_object<td::td_api::deleteChatHistory>();
     history->chat_id_               = chatId.value();
     history->remove_from_chat_list_ = true;

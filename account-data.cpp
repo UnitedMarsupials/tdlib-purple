@@ -1144,15 +1144,19 @@ void TdAccountData::removeShownMessage(ChatId chatId, MessageId messageId)
     m_shownMessages.erase(ShownMessageKey(chatId, messageId));
 }
 
-// All of the chat's, as it is deleted: TDLib's news of its messages deleted then is no news
-void TdAccountData::forgetShownMessages(ChatId chatId)
+// TDLib's news of what becomes of it as it is deleted, as of its messages deleted, would open its
+// tab again, and be logged
+void TdAccountData::setChatDeleted(ChatId chatId, bool deleted)
 {
-    auto it = m_shownMessages.lower_bound(ShownMessageKey(chatId, MessageId::invalid));
-    while ((it != m_shownMessages.end()) && (it->first.first == chatId))
-        it = m_shownMessages.erase(it);
-    auto sent = m_sentMessageIds.lower_bound(ShownMessageKey(chatId, MessageId::invalid));
-    while ((sent != m_sentMessageIds.end()) && (sent->first.first == chatId))
-        sent = m_sentMessageIds.erase(sent);
+    if (deleted)
+        m_deletedChats.insert(chatId);
+    else
+        m_deletedChats.erase(chatId);
+}
+
+bool TdAccountData::isChatDeleted(ChatId chatId) const
+{
+    return m_deletedChats.count(chatId) != 0;
 }
 
 MessageId TdAccountData::getSentMessageId(ChatId chatId, MessageId messageId) const
