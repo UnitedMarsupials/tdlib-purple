@@ -480,8 +480,9 @@ the menu of their name in the member list, and send them a message (or have them
 * They are in the buddy list, in "Telegram: not in contacts", until Pidgin quits; `blist.xml`
   does not keep them.
 * Their messages are marked read as they are seen, as a contact's are.
-* Removing them from "Telegram: not in contacts" only takes them out of the list: the chat with
-  them is still there, on the phone too.
+* Removing them from "Telegram: not in contacts" takes them out of the list and deletes the chat
+  for us: its messages, on the phone too, and its files and log here. The chat stays on Telegram
+  for them, and the next start does not bring them back.
 
 With another member who is not a contact, written to in the same way:
 

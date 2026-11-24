@@ -881,8 +881,15 @@ TEST_F(SupergroupTest, LoggedUnjoinedChannel)
     ASSERT_EQ(0, g_mkdir_with_parents(logDir, 0700));
     gchar *logFile = g_build_filename(logDir, "2026-11-24.120000-0500EST.html", NULL);
     ASSERT_TRUE(g_file_set_contents(logFile, "<html></html>", -1, NULL));
+    // An older version's, named by a title that begins like the chat's name: not the chat's
+    gchar *titledDir = g_build_filename(purple_user_dir(), "logs", "telegram", ("+" + selfPhoneNumber).c_str(),
+                                        (groupChatPurpleName + "-notes.chat").c_str(), NULL);
+    ASSERT_EQ(0, g_mkdir_with_parents(titledDir, 0700));
     login();
     tgl.verifyRequest(getChat(groupChatId));
+    tgl.verifyNoRequests();
+    rmdir(titledDir);
+    g_free(titledDir);
     tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusLeft>(), 2)));
     tgl.update(make_object<updateNewChat>(makeChat(
         groupChatId, make_object<chatTypeSupergroup>(groupId, true), groupChatTitle,

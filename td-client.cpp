@@ -4071,11 +4071,14 @@ void PurpleTdClient::showLoggedChats()
         if (g_str_has_suffix(entry, ".chat")) {
             name.erase(name.size() - strlen(".chat"));
             chatId = getTdlibChatId(name.c_str());
-            if (!chatId.valid() || purple_blist_find_chat(m_account, name.c_str()))
+            // As the plugin names a conversation, not a title that begins like such a name
+            if (!chatId.valid() || (name != "chat" + std::to_string(chatId.value())) ||
+                purple_blist_find_chat(m_account, name.c_str()))
                 continue;
         } else {
             // A private chat has its user's id
-            if (!purpleBuddyNameToUserId(entry).valid() || purple_find_buddy(m_account, entry))
+            UserId userId = purpleBuddyNameToUserId(entry);
+            if (!userId.valid() || (name != getPurpleBuddyName(userId)) || purple_find_buddy(m_account, entry))
                 continue;
             chatId = ChatId::fromString(entry + strlen("id"));
         }
@@ -4099,7 +4102,9 @@ void PurpleTdClient::loggedChatLookedUp(ChatId chatId, TdObjectPtr object)
                           chatId.value(), getDisplayedError(object).c_str());
         return;
     }
-    // Told of by now, it may have its entry already
+    // Told of by now, it may have its entry already, or have been deleted meanwhile
+    if (m_data.isChatDeleted(chatId))
+        return;
     const td::td_api::user *user = m_data.getUserByPrivateChat(*chat);
     if (user) {
         if (!isDeletedUser(*user) && !purple_find_buddy(m_account, getPurpleBuddyName(*user).c_str()))
@@ -4442,16 +4447,23 @@ void PurpleTdClient::leaveGroup(const std::string &purpleChatName, bool deleteSu
         if (!member)
             return;
         if (!forAll) {
-            m_transceiver.sendQuery(td::td_api::make_object<td::td_api::leaveChat>(chatId.value()), nullptr);
+            auto leave = td::td_api::make_object<td::td_api::leaveChat>();
+            leave->chat_id_ = chatId.value();
+            m_transceiver.sendQuery(std::move(leave), nullptr);
             return;
         }
     }
     if (deleteSupergroup && forAll) {
-        m_transceiver.sendQuery(td::td_api::make_object<td::td_api::deleteChat>(chatId.value()),
+        auto deletion = td::td_api::make_object<td::td_api::deleteChat>();
+        deletion->chat_id_ = chatId.value();
+        m_transceiver.sendQuery(std::move(deletion),
                                 &PurpleTdClient::deleteSupergroupResponse);
-    } else
+    } else {
         // Only left: what we saw of it stays, as deleting it would not
-        m_transceiver.sendQuery(td::td_api::make_object<td::td_api::leaveChat>(chatId.value()), nullptr);
+        auto leave = td::td_api::make_object<td::td_api::leaveChat>();
+        leave->chat_id_ = chatId.value();
+        m_transceiver.sendQuery(std::move(leave), nullptr);
+    }
 }
 
 void PurpleTdClient::deleteSupergroupResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object)
