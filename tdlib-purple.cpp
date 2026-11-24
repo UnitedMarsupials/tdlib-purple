@@ -1317,8 +1317,8 @@ static gboolean jumpLinkClicked(PidginIMHtml *imhtml, PidginIMHtmlLink *link)
     return TRUE;
 }
 
-// Called whenever the link to a message's file is right-clicked: the message's own items follow,
-// as on its picture, their "Copy the file" doing for the link's but to another of its sizes
+// Called whenever the link to a message's file is right-clicked: its own item on top, then the
+// message's, as on its picture, but for a second "Copy the file" of the same file
 static gboolean messageLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *link, PidginWidget *linkMenu)
 {
     const char *url = g_linkGetUrl(link);
@@ -1326,8 +1326,6 @@ static gboolean messageLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *l
     ChatId      chatId;
     MessageId   messageId;
     if (!url || !parseMessageLink(url, accountName, chatId, messageId, variant))
-        return TRUE;
-    if (addLinkMessageMenu(imhtml, linkMenu, messageId) && variant.empty())
         return TRUE;
     MenuItem item;
     item.label  = _("Copy the file");
@@ -1337,6 +1335,7 @@ static gboolean messageLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *l
             client->openMessageFile(chatId, messageId, variant, PurpleTdClient::FileUse::Copy);
     };
     addLinkMenuItems(linkMenu, {item});
+    addLinkMessageMenu(imhtml, linkMenu, messageId, variant.empty());
     return TRUE;
 }
 

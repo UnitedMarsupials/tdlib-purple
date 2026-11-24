@@ -215,7 +215,7 @@ other's, tick that too, and press OK.
 
 ### M3. Files of a message
 
-On a photo: "Copy the picture", paste into another program; "Save Image...", check the name it
+On a photo: "Copy the image", paste into another program; "Save Image...", check the name it
 suggests. Drag a file's link out of the conversation into a file manager.
 
 * Each gives the message's own file, under its own name.
@@ -223,10 +223,10 @@ suggests. Drag a file's link out of the conversation into a file manager.
 Right-click a video's link, under its cover, and a link to another size of a
 video or picture, where it has one.
 
-* The menu has the message's items, as its text's does: reactions, "Forward…",
-  "Report the message…" and the rest, with one "Copy the file", of the
-  message's file; the link to another size has its own "Copy the file" too,
-  after them.
+* The link's own "Copy the file" is on top, then a separator, then the
+  message's items in the order its text's menu and its picture's have them:
+  reactions, "Forward…", "Report the message…" and the rest, with no second
+  "Copy the file" of the same file. A photo's keeps its "Copy the image".
 
 ### M4. Giving up an edit
 

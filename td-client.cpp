@@ -1876,9 +1876,10 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
         MenuItem item;
         item.label  = menu.picture ?
                       // TRANSLATOR: Item of a message's menu: the picture goes on the clipboard, as a file and as a picture, downloaded first, if need be.
-                      _("Copy the picture") :
+                      _("Copy the image") :
                       // TRANSLATOR: Item of a message's menu, and of a file's link: the file goes on the clipboard, for a file manager to paste, downloaded first, if need be.
                       _("Copy the file");
+        item.copiesFile = !menu.picture;
         item.action = [accountName, chatId, messageId]() {
             PurpleTdClient *client = findConnected(accountName.c_str());
             if (client)

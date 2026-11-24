@@ -854,7 +854,7 @@ msgstr "Shfaq redaktimin e fundit"
 
 #. TRANSLATOR: Item of a message's menu: the picture goes on the clipboard, as a file and as a picture, downloaded first, if need be.
 #: ../td-client.cpp:1486
-msgid "Copy the picture"
+msgid "Copy the image"
 msgstr "Kopjoje figurën"
 
 #. TRANSLATOR: Item of a message's menu, and of a file's link: the file goes on the clipboard, for a file manager to paste, downloaded first, if need be.

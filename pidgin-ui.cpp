@@ -1957,6 +1957,7 @@ struct OpenMenu {
     GtkWidget *separator   = nullptr;
     GtkWidget *placeholder = nullptr;
     gulong     destroyHandler = 0;
+    bool       fileGiven      = false; // by the menu's own item, on top
     ~OpenMenu()
     {
         if (menu)
@@ -1991,10 +1992,14 @@ void fillOpenMenu(const OpenMenuRef &menu, const std::vector<MenuItem> &items)
         return;
     p_gtk_widget_destroy(menu->placeholder);
     menu->placeholder = nullptr;
-    if (items.empty())
+    std::vector<MenuItem> shown;
+    for (const MenuItem &item: items)
+        if (!(menu->fileGiven && item.copiesFile))
+            shown.push_back(item);
+    if (shown.empty())
         p_gtk_widget_destroy(menu->separator);
     else {
-        addMenuItems(menu->menu, items, 0);
+        addMenuItems(menu->menu, shown, 0);
         p_gtk_widget_show_all(menu->menu);
     }
     menu->separator = nullptr;
@@ -2573,7 +2578,7 @@ static void addPlaceholderMenu(PurpleConversation *conv, GtkWidget *entry, GtkWi
     p_gtk_widget_show_all(menu);
 }
 
-static void addMessageMenu(PurpleConversation *conv, GtkWidget *menu, MessageId messageId);
+static void addMessageMenu(PurpleConversation *conv, GtkWidget *menu, MessageId messageId, bool fileGiven = false);
 
 // GTK builds the menu of a tab's text anew each time, before emitting "populate-popup" for others to
 // add to it. The message is the one under the pointer, also when the menu is opened from the
@@ -2609,10 +2614,11 @@ static gboolean populatingPopup(GSignalInvocationHint *, guint paramCount, const
 }
 
 // The message's items go at the end of the menu: a placeholder waits for them
-static void addMessageMenu(PurpleConversation *conv, GtkWidget *menu, MessageId messageId)
+static void addMessageMenu(PurpleConversation *conv, GtkWidget *menu, MessageId messageId, bool fileGiven)
 {
     OpenMenuRef openMenu = std::make_shared<OpenMenu>();
     openMenu->menu        = menu;
+    openMenu->fileGiven   = fileGiven;
     openMenu->separator   = p_gtk_separator_menu_item_new();
     openMenu->placeholder = p_gtk_menu_item_new_with_label("\xe2\x80\xa6");
     p_gtk_widget_set_sensitive(openMenu->placeholder, FALSE);
@@ -2628,12 +2634,12 @@ static void addMessageMenu(PurpleConversation *conv, GtkWidget *menu, MessageId 
         fillOpenMenu(openMenu, {});
 }
 
-bool addLinkMessageMenu(GtkIMHtml *imhtml, GtkWidget *menu, MessageId messageId)
+bool addLinkMessageMenu(GtkIMHtml *imhtml, GtkWidget *menu, MessageId messageId, bool fileGiven)
 {
     PurpleConversation *conv = (imhtml && menu && g_messagePopupHandler) ? findTabConversation(imhtml) : nullptr;
     if (!conv)
         return false;
-    addMessageMenu(conv, menu, messageId);
+    addMessageMenu(conv, menu, messageId, fileGiven);
     return true;
 }
 
@@ -3779,7 +3785,7 @@ void addLinkMenuItems(PidginWidget *menu, const std::vector<MenuItem> &items)
 {
 }
 
-bool addLinkMessageMenu(PidginIMHtml *imhtml, PidginWidget *menu, MessageId messageId)
+bool addLinkMessageMenu(PidginIMHtml *imhtml, PidginWidget *menu, MessageId messageId, bool fileGiven)
 {
     return false;
 }
