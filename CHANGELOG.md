@@ -13,6 +13,7 @@
 
 ### Fixes
 
+- **"Delete group" deletes a supergroup or channel again.** TDLib was asked to delete the chat by the supergroup's id rather than the chat's, a remnant of the request it replaced.
 - **In Pidgin, a buddy's tab is filled, and the buddy can be reported, even if they are neither a contact nor in the chat list, as one blocked whose chat was deleted.** TDLib did not tell of such a buddy at login, so the tab stayed empty with nothing said, and the buddy's menu had no "Report…". The chat is now asked of TDLib as the tab opens; if Telegram does not know them any more, the tab says so.
 - **In Pidgin, the menu of an edited message's text has the message's items, also after reactions to it were taken back.** The new text went in after the end of the line of reactions, at the old text's end, which was then taken for the message's own.
 - **In Pidgin, a link to a message deleted since, struck out as it comes back from the conversation's log, scrolls to it**, rather than saying it is not shown. And the menu of a link to a message, in a quote or a notice, has the message's items, or says that it has been deleted, rather than nothing.
