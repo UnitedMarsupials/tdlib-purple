@@ -2200,3 +2200,6 @@ msgstr "Link zur Nachricht kopieren"
 
 msgid "Cannot copy the message's link"
 msgstr "Der Link zur Nachricht kann nicht kopiert werden"
+
+msgid "Cannot copy the message's link: only the chat's members could open it"
+msgstr "Der Link zur Nachricht kann nicht kopiert werden: Nur Mitglieder des Chats könnten ihn öffnen"

@@ -618,6 +618,19 @@ TEST_F(MessageLinkTest, CopyMessageLink)
                       ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
                                              "Cannot copy the message's link: code 400 (MESSAGE_ID_INVALID)",
                                              PURPLE_MESSAGE_ERROR, 0));
+
+    // So is a link that only members could open, as the chat stopped being public
+    client->copyMessageLink(chat, message);
+    tgl.verifyRequest(*makeGetMessageLink(chatIds[0], messageId));
+    {
+        auto link     = make_object<messageLink>();
+        link->link_      = "https://t.me/c/1/1";
+        link->is_public_ = false;
+        tgl.reply(std::move(link));
+    }
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                                             "Cannot copy the message's link: only the chat's members could open it",
+                                             PURPLE_MESSAGE_ERROR, 0));
 }
 
 TEST_F(MessageLinkTest, BlockUser)

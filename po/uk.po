@@ -2140,3 +2140,6 @@ msgstr "Скопіювати посилання на повідомлення"
 
 msgid "Cannot copy the message's link"
 msgstr "Не вдається скопіювати посилання на повідомлення"
+
+msgid "Cannot copy the message's link: only the chat's members could open it"
+msgstr "Не вдається скопіювати посилання на повідомлення: відкрити його могли б лише учасники чату"

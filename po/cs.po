@@ -2166,3 +2166,6 @@ msgstr "Kopírovat odkaz na zprávu"
 
 msgid "Cannot copy the message's link"
 msgstr "Odkaz na zprávu nelze zkopírovat"
+
+msgid "Cannot copy the message's link: only the chat's members could open it"
+msgstr "Odkaz na zprávu nelze zkopírovat: otevřít by jej mohli jen členové chatu"

@@ -365,6 +365,7 @@ private:
     void showFileError(ChatId chatId, FileUse use, const std::string &description, const std::string &reason);
     void sendPaidReaction(ChatId chatId, MessageId messageId, int64_t starCount);
     void reportMenuError(ChatId chatId, const std::string &failure, const TdObjectPtr &object);
+    void reportMenuError(ChatId chatId, const std::string &notice);
     void reportReactionError(ChatId chatId, const std::string &emoji, const TdObjectPtr &object);
     static void paidReactionEntered(void *data, const char *starCount);
     static void paidReactionCancelled(void *data);

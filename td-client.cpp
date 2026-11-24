@@ -2072,7 +2072,14 @@ void PurpleTdClient::copyMessageLink(ChatId chatId, MessageId messageId)
             reportMenuError(chatId, _("Cannot copy the message's link"), object);
             return;
         }
-        const std::string &link = static_cast<const td::td_api::messageLink &>(*object).link_;
+        const auto &messageLink = static_cast<const td::td_api::messageLink &>(*object);
+        // The chat may have stopped being public since the menu was shown
+        if (!messageLink.is_public_) {
+            // TRANSLATOR: In-chat error message, after "Copy the message's link" was picked.
+            reportMenuError(chatId, _("Cannot copy the message's link: only the chat's members could open it"));
+            return;
+        }
+        const std::string &link = messageLink.link_;
         purple_debug_misc(config::pluginId, "Copying the link %s\n", link.c_str());
         if (!copyTextToClipboard(link))
             purple_debug_warning(config::pluginId, "No clipboard to copy the link to\n");
@@ -2081,8 +2088,12 @@ void PurpleTdClient::copyMessageLink(ChatId chatId, MessageId messageId)
 
 void PurpleTdClient::reportMenuError(ChatId chatId, const std::string &failure, const TdObjectPtr &object)
 {
-    std::string             notice = failure + ": " + getDisplayedError(object);
-    const td::td_api::chat *chat   = m_data.getChat(chatId);
+    reportMenuError(chatId, failure + ": " + getDisplayedError(object));
+}
+
+void PurpleTdClient::reportMenuError(ChatId chatId, const std::string &notice)
+{
+    const td::td_api::chat *chat = m_data.getChat(chatId);
     if (chat)
         showChatNotification(m_data, *chat, notice.c_str(), PURPLE_MESSAGE_ERROR);
     else
