@@ -220,6 +220,14 @@ suggests. Drag a file's link out of the conversation into a file manager.
 
 * Each gives the message's own file, under its own name.
 
+Right-click a video's link, under its cover, and a link to another size of a
+video or picture, where it has one.
+
+* The menu has the message's items, as its text's does: reactions, "Forward…",
+  "Report the message…" and the rest, with one "Copy the file", of the
+  message's file; the link to another size has its own "Copy the file" too,
+  after them.
+
 ### M4. Giving up an edit
 
 Type a message without sending it, then start editing one of ours from its menu, and press

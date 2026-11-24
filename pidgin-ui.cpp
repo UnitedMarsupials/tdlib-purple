@@ -2628,6 +2628,15 @@ static void addMessageMenu(PurpleConversation *conv, GtkWidget *menu, MessageId 
         fillOpenMenu(openMenu, {});
 }
 
+bool addLinkMessageMenu(GtkIMHtml *imhtml, GtkWidget *menu, MessageId messageId)
+{
+    PurpleConversation *conv = (imhtml && menu && g_messagePopupHandler) ? findTabConversation(imhtml) : nullptr;
+    if (!conv)
+        return false;
+    addMessageMenu(conv, menu, messageId);
+    return true;
+}
+
 // A picture's menu, Pidgin's own with its "Save Image...", is built by the picture's event box when
 // the right button is let go over it, with no signal to add to it: the message under the pointer is
 // noted then, for its items to go into the menu shown next, before the main loop is idle again
@@ -3768,6 +3777,11 @@ void setPlaceholderHandler(PlaceholderHandler handler)
 
 void addLinkMenuItems(PidginWidget *menu, const std::vector<MenuItem> &items)
 {
+}
+
+bool addLinkMessageMenu(PidginIMHtml *imhtml, PidginWidget *menu, MessageId messageId)
+{
+    return false;
 }
 
 bool copyFileToClipboard(const std::string &path, bool picture)

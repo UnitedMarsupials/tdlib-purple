@@ -232,6 +232,8 @@ void setPlaceholderHandler(PlaceholderHandler handler);
 void fillOpenMenu(const OpenMenuRef &menu, const std::vector<MenuItem> &items);
 // The items go into the menu Pidgin opens on a link, after its own, if any
 void addLinkMenuItems(PidginWidget *menu, const std::vector<MenuItem> &items);
+// And those of the message, in a tab, that the link is in, as its own menu has them; false if none can be
+bool addLinkMessageMenu(PidginIMHtml *imhtml, PidginWidget *menu, MessageId messageId);
 
 // The file goes on the clipboard: its URI, for a file manager to paste a copy, or a conversation to
 // attach it; its path, as text; and, if it is a picture, the picture itself, for a program that
