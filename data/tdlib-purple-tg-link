@@ -28,7 +28,7 @@ error=$(gdbus call --session --dest im.pidgin.purple.PurpleService \
 summary="Telegram link not followed"
 if ! gdbus call --session --dest org.freedesktop.Notifications \
     --object-path /org/freedesktop/Notifications \
-    --method org.freedesktop.Notifications.Notify \
+    --method org.freedesktop.Notifications.Notify -- \
     tdlib-purple 0 dialog-error "$summary" "$1: $error" '[]' '{}' -1 \
     >/dev/null 2>&1 &&
     ! xmessage -center "$summary: $1" "$error" 2>/dev/null; then

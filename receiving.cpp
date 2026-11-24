@@ -3435,6 +3435,7 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
     } else
         purple_debug_warning(config::pluginId, "Cannot fetch chat %" G_GINT64_FORMAT " to redraw it: %s\n",
                              redraw->chatId.value(), getDisplayedError(response).c_str());
+    bool fetched = response && (response->get_id() == td::td_api::messages::ID);
     // Left as it is
     stopRedrawProgress(account, redraw->chatId);
     std::vector<IncomingMessage> readyMessages;
@@ -3447,11 +3448,17 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
         const td::td_api::chat *chat  = account.getChat(redraw->chatId);
         PurpleConversation     *conv  = chat ? findMessageConversation(account, *chat) : nullptr;
         bool                    empty = conv && !findFirstMessage(conv).valid();
-        // TRANSLATOR: Information dialog, primary content, after a link to a message was followed.
-        purple_notify_info(purple_account_get_connection(account.purpleAccount), config::pluginName,
-                           _("The message is further back than the conversation holds"),
-                           // TRANSLATOR: Information dialog, secondary content.
-                           empty ? _("It shows the latest messages instead, from the first unread one.") : NULL);
+        if (!fetched) {
+            // Not known to be too far back: why it could not be fetched
+            std::string reason = getDisplayedError(response);
+            purple_notify_error(purple_account_get_connection(account.purpleAccount), config::pluginName,
+                                _("Cannot follow the link"), reason.c_str());
+        } else
+            // TRANSLATOR: Information dialog, primary content, after a link to a message was followed.
+            purple_notify_info(purple_account_get_connection(account.purpleAccount), config::pluginName,
+                               _("The message is further back than the conversation holds"),
+                               // TRANSLATOR: Information dialog, secondary content.
+                               empty ? _("It shows the latest messages instead, from the first unread one.") : NULL);
         if (empty)
             startRedraw(account, redraw->chatId, MessageId::invalid, true, EARLIER_BATCH);
     }
