@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: tdlib-purple\n"
 "Report-Msgid-Bugs-To: https://github.com/UnitedMarsupials/tdlib-purple/issues/new \n"
-"POT-Creation-Date: 2026-11-24 12:46-0500\n"
+"POT-Creation-Date: 2026-11-24 13:39-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -71,8 +71,8 @@ msgstr ""
 #. TRANSLATOR: Database password dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
 #: ../call.cpp:220 ../td-client.cpp:755 ../td-client.cpp:1022
 #: ../td-client.cpp:1090 ../td-client.cpp:1125 ../td-client.cpp:2134
-#: ../td-client.cpp:2260 ../td-client.cpp:4729 ../tdlib-purple.cpp:744
-#: ../tdlib-purple.cpp:1915 ../tdlib-purple.cpp:2010
+#: ../td-client.cpp:2260 ../td-client.cpp:4736 ../tdlib-purple.cpp:744
+#: ../tdlib-purple.cpp:1940 ../tdlib-purple.cpp:2035
 msgid "_OK"
 msgstr ""
 
@@ -95,9 +95,9 @@ msgstr ""
 #: ../call.cpp:222 ../td-client.cpp:757 ../td-client.cpp:1024
 #: ../td-client.cpp:1092 ../td-client.cpp:1127 ../td-client.cpp:2136
 #: ../td-client.cpp:2262 ../td-client.cpp:2552 ../td-client.cpp:2768
-#: ../td-client.cpp:4731 ../td-client.cpp:5058 ../td-client.cpp:5189
-#: ../td-client.cpp:5210 ../tdlib-purple.cpp:746 ../tdlib-purple.cpp:1917
-#: ../tdlib-purple.cpp:2012
+#: ../td-client.cpp:4738 ../td-client.cpp:5065 ../td-client.cpp:5196
+#: ../td-client.cpp:5217 ../tdlib-purple.cpp:746 ../tdlib-purple.cpp:1942
+#: ../tdlib-purple.cpp:2037
 msgid "_Cancel"
 msgstr ""
 
@@ -181,24 +181,24 @@ msgid "This account has been restored."
 msgstr ""
 
 #. TRANSLATOR: Buddy-list group, holding users written with though not contacts. It lasts until the program quits.
-#: ../client-utils.cpp:532
+#: ../client-utils.cpp:534
 msgid "Telegram: not in contacts"
 msgstr ""
 
 #. TRANSLATOR: The "sender" of a message that was posted to a channel. Will be used like a username.
-#: ../client-utils.cpp:839 ../receiving.cpp:681
+#: ../client-utils.cpp:841 ../receiving.cpp:681
 msgid "Channel post"
 msgstr ""
 
 #. TRANSLATOR: In-chat error message. The arguments are a pasted file's placeholder, such as [report.pdf#3], and where the file was.
-#: ../client-utils.cpp:1621
+#: ../client-utils.cpp:1623
 #, c++-format
 msgid "The message is not sent: {0} is gone from {1}."
 msgstr ""
 
 #. TRANSLATOR: In-chat error message, argument will be text.
 #. TRANSLATOR: In-chat error message, argument will be a user-sent message
-#: ../client-utils.cpp:1993 ../td-client.cpp:3349
+#: ../client-utils.cpp:1995 ../td-client.cpp:3349
 #, c++-format
 msgid "Failed to send message: {}"
 msgstr ""
@@ -816,7 +816,7 @@ msgstr ""
 #. TRANSLATOR: Database password dialog, title
 #: ../td-client.cpp:752 ../td-client.cpp:771 ../td-client.cpp:805
 #: ../td-client.cpp:824 ../td-client.cpp:842 ../td-client.cpp:853
-#: ../td-client.cpp:865 ../tdlib-purple.cpp:2008
+#: ../td-client.cpp:865 ../tdlib-purple.cpp:2033
 msgid "Database password"
 msgstr ""
 
@@ -1469,41 +1469,41 @@ msgid "Invalid group members"
 msgstr ""
 
 #. TRANSLATOR: Error dialog, title
-#: ../td-client.cpp:4419
+#: ../td-client.cpp:4426
 msgid "Failed to delete group or channel"
 msgstr ""
 
 #. TRANSLATOR: Error dialog, title
-#: ../td-client.cpp:4446
+#: ../td-client.cpp:4453
 msgid "Failed to set group description"
 msgstr ""
 
 #. TRANSLATOR: In-chat error message, appears after a colon (':')
 #. TRANSLATOR: Buddy infobox, error
-#: ../td-client.cpp:4465 ../td-client.cpp:4540 ../tdlib-purple.cpp:577
+#: ../td-client.cpp:4472 ../td-client.cpp:4547 ../tdlib-purple.cpp:577
 msgid "User not found"
 msgstr ""
 
 #. TRANSLATOR: In-chat error message, argument is a reason (text)
-#: ../td-client.cpp:4469 ../td-client.cpp:4506
+#: ../td-client.cpp:4476 ../td-client.cpp:4513
 #, c++-format
 msgid "Cannot kick user: {}"
 msgstr ""
 
 #. TRANSLATOR: In-chat error message, argument is a reason (text)
-#: ../td-client.cpp:4510 ../td-client.cpp:4544
+#: ../td-client.cpp:4517 ../td-client.cpp:4551
 #, c++-format
 msgid "Cannot add user to group: {}"
 msgstr ""
 
 #. TRANSLATOR: In-chat error message, argument is a reason (text)
-#: ../td-client.cpp:4514
+#: ../td-client.cpp:4521
 #, c++-format
 msgid "Cannot generate invite link: {}"
 msgstr ""
 
 #. TRANSLATOR: In-chat error message, after "Show invite link" was chosen for a chat that has none
-#: ../td-client.cpp:4608
+#: ../td-client.cpp:4615
 msgid ""
 "This chat has no public link or invite link, and only its administrators can "
 "create one"
@@ -1511,12 +1511,12 @@ msgstr ""
 
 #. "description" is hard-coded in bitlbee as possible field for chat topic
 #. TRANSLATOR: Groupchat infobox key
-#: ../td-client.cpp:4628
+#: ../td-client.cpp:4635
 msgid "Description"
 msgstr ""
 
 #. TRANSLATOR: 2FA setup confirmation dialog, secondary content, argument is an e-mail description (address and code length)
-#: ../td-client.cpp:4718
+#: ../td-client.cpp:4725
 #, c++-format
 msgid ""
 "Password will be changed after new e-mail is confirmed\n"
@@ -1527,150 +1527,150 @@ msgstr ""
 #. TRANSLATOR: 2FA success notification, title
 #. TRANSLATOR: 2FA failure notification, title
 #. TRANSLATOR: 2FA settings, title
-#: ../td-client.cpp:4721 ../td-client.cpp:4741 ../td-client.cpp:4767
-#: ../td-client.cpp:4790 ../td-client.cpp:4794 ../tdlib-purple.cpp:1913
+#: ../td-client.cpp:4728 ../td-client.cpp:4748 ../td-client.cpp:4774
+#: ../td-client.cpp:4797 ../td-client.cpp:4801 ../tdlib-purple.cpp:1938
 msgid "Two-factor authentication"
 msgstr ""
 
 #. TRANSLATOR: 2FA setup confirmation dialog, primary content
-#: ../td-client.cpp:4723
+#: ../td-client.cpp:4730
 msgid "Enter verification code received in the e-mail"
 msgstr ""
 
 #. TRANSLATOR: 2FA success notification, primary content
-#: ../td-client.cpp:4743
+#: ../td-client.cpp:4750
 msgid "Password set"
 msgstr ""
 
 #. TRANSLATOR: 2FA success notification, primary content
-#: ../td-client.cpp:4745
+#: ../td-client.cpp:4752
 msgid "Password cleared"
 msgstr ""
 
 #. TRANSLATOR: 2FA success notification, secondary content
-#: ../td-client.cpp:4747
+#: ../td-client.cpp:4754
 msgid "Recovery e-mail is configured"
 msgstr ""
 
 #. TRANSLATOR: 2FA success notification, secondary content
-#: ../td-client.cpp:4749
+#: ../td-client.cpp:4756
 msgid "No recovery e-mail configured"
 msgstr ""
 
 #. TRANSLATOR: 2FA setup confirmation dialog, e-mail description
-#: ../td-client.cpp:4758
+#: ../td-client.cpp:4765
 #, c++-format
 msgid "Code sent to {0} (length: {1})"
 msgstr ""
 
 #. TRANSLATOR: 2FA failure notification, primary content
-#: ../td-client.cpp:4769
+#: ../td-client.cpp:4776
 msgid "Failed to set password"
 msgstr ""
 
 #. TRANSLATOR: 2FA failure notification, content
-#: ../td-client.cpp:4796
+#: ../td-client.cpp:4803
 msgid "Looks like the code was wrong"
 msgstr ""
 
 #. TRANSLATOR: In-chat error message
-#: ../td-client.cpp:4883
+#: ../td-client.cpp:4890
 msgid "Unable to send message: The message is too large."
 msgstr ""
 
 #. TRANSLATOR: In-chat error message
-#: ../td-client.cpp:4886
+#: ../td-client.cpp:4893
 msgid "Unable to send message."
 msgstr ""
 
 #. TRANSLATOR: In-chat(?) error message, argument is an error description (text)
-#: ../td-client.cpp:4890
+#: ../td-client.cpp:4897
 #, c++-format
 msgid "Failed to open chat: {}"
 msgstr ""
 
 #. TRANSLATOR: Failure notification, title
-#: ../td-client.cpp:4981
+#: ../td-client.cpp:4988
 msgid "Failed to create secret chat"
 msgstr ""
 
 #. TRANSLATOR: Error dialog, primary content. Argument is a user's name.
-#: ../td-client.cpp:5008
+#: ../td-client.cpp:5015
 #, c++-format
 msgid "Cannot block {}"
 msgstr ""
 
 #. TRANSLATOR: Error dialog, primary content. Argument is a user's name.
-#: ../td-client.cpp:5010
+#: ../td-client.cpp:5017
 #, c++-format
 msgid "Cannot unblock {}"
 msgstr ""
 
 #. TRANSLATOR: Block dialog, primary content. Argument is a user's name.
-#: ../td-client.cpp:5045
+#: ../td-client.cpp:5052
 #, c++-format
 msgid "Block {}?"
 msgstr ""
 
 #. TRANSLATOR: Block dialog, title
-#: ../td-client.cpp:5047
+#: ../td-client.cpp:5054
 msgid "Block user"
 msgstr ""
 
 #. TRANSLATOR: Block dialog, secondary content
-#: ../td-client.cpp:5049
+#: ../td-client.cpp:5056
 msgid "They will not be able to write to you or call you."
 msgstr ""
 
 #. TRANSLATOR: Block dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
-#: ../td-client.cpp:5056
+#: ../td-client.cpp:5063
 msgid "_Block"
 msgstr ""
 
 #. TRANSLATOR: In-chat error, after a message's sender was to be reported; followed by the reason.
 #. TRANSLATOR: In-chat error, after a report; followed by the reason.
-#: ../td-client.cpp:5099 ../td-client.cpp:5224
+#: ../td-client.cpp:5106 ../td-client.cpp:5231
 msgid "Cannot send the report"
 msgstr ""
 
 #. TRANSLATOR: In-chat notification, not logged, after a message's sender was to be reported. Argument is their name.
-#: ../td-client.cpp:5108
+#: ../td-client.cpp:5115
 #, c++-format
 msgid "Telegram takes no report about {} from here."
 msgstr ""
 
 #. TRANSLATOR: In-chat notification, after a report was sent.
-#: ../td-client.cpp:5170
+#: ../td-client.cpp:5177
 msgid "Reported to Telegram's moderators."
 msgstr ""
 
 #. TRANSLATOR: Report dialog, title
-#: ../td-client.cpp:5185 ../td-client.cpp:5197
+#: ../td-client.cpp:5192 ../td-client.cpp:5204
 msgid "Report"
 msgstr ""
 
 #. TRANSLATOR: Report dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
-#: ../td-client.cpp:5187
+#: ../td-client.cpp:5194
 msgid "_Next"
 msgstr ""
 
 #. TRANSLATOR: Report dialog, primary content
-#: ../td-client.cpp:5199
+#: ../td-client.cpp:5206
 msgid "Tell Telegram's moderators more"
 msgstr ""
 
 #. TRANSLATOR: Report dialog, secondary content, when the details may be left out.
-#: ../td-client.cpp:5202
+#: ../td-client.cpp:5209
 msgid "This may be left empty."
 msgstr ""
 
 #. TRANSLATOR: Report dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
-#: ../td-client.cpp:5208
+#: ../td-client.cpp:5215
 msgid "_Report"
 msgstr ""
 
 #. TRANSLATOR: In-chat notification, not logged, after a chat was reported as a whole.
-#: ../td-client.cpp:5218
+#: ../td-client.cpp:5225
 msgid ""
 "Telegram wants messages to go with this report: report one from its menu "
 "instead, by right-clicking it."
@@ -1921,29 +1921,29 @@ msgid "The Telegram account {} is not connected."
 msgstr ""
 
 #. TRANSLATOR: Command description, the initial "kick <user>" must remain verbatim!
-#: ../tdlib-purple.cpp:1606
+#: ../tdlib-purple.cpp:1631
 msgid "kick <user>: Kick a user from the room using name or internal id"
 msgstr ""
 
 #. TRANSLATOR: Command description, the initial "hangup" must remain verbatim!
-#: ../tdlib-purple.cpp:1612
+#: ../tdlib-purple.cpp:1637
 msgid "hangup: Terminate any active call (with any user)"
 msgstr ""
 
 #. TRANSLATOR: Command description, the initial "cancel" must remain verbatim!
-#: ../tdlib-purple.cpp:1618
+#: ../tdlib-purple.cpp:1643
 msgid "cancel: Leave the message being edited as it was"
 msgstr ""
 
 #. TRANSLATOR: Command description, the initial "paste" must remain verbatim!
-#: ../tdlib-purple.cpp:1624
+#: ../tdlib-purple.cpp:1649
 msgid ""
 "paste: Attach the files copied to the clipboard, or its picture, to the "
 "message being written"
 msgstr ""
 
 #. TRANSLATOR: Tdlib crash dialog, secondary content. Argument is a filesystem path. Please keep the space after it!
-#: ../tdlib-purple.cpp:1644
+#: ../tdlib-purple.cpp:1669
 #, c++-format
 msgid ""
 "The error may be caused by corrupt account data. If this is the case, it "
@@ -1952,176 +1952,176 @@ msgid ""
 msgstr ""
 
 #. TRANSLATOR: Tdlib crash dialog, title
-#: ../tdlib-purple.cpp:1654
+#: ../tdlib-purple.cpp:1679
 msgid "Fatal error encountered in telegram plugin"
 msgstr ""
 
 #. TRANSLATOR: Account settings, value for file downloads (hyperlink link file:///tmp/asdf)
-#: ../tdlib-purple.cpp:1771 ../tdlib-purple.cpp:1776
+#: ../tdlib-purple.cpp:1796 ../tdlib-purple.cpp:1801
 msgid "Inline (hyperlinks in chat)"
 msgstr ""
 
 #. TRANSLATOR: Account settings, value for file downloads (file transfer dialog)
-#: ../tdlib-purple.cpp:1773 ../tdlib-purple.cpp:1775
+#: ../tdlib-purple.cpp:1798 ../tdlib-purple.cpp:1800
 msgid "Standard file transfers"
 msgstr ""
 
 #. TRANSLATOR: Account settings, key (choice)
-#: ../tdlib-purple.cpp:1780
+#: ../tdlib-purple.cpp:1805
 msgid "File downloads"
 msgstr ""
 
 #. TRANSLATOR: Account settings, key (choice)
-#: ../tdlib-purple.cpp:1785
+#: ../tdlib-purple.cpp:1810
 msgid "Inline auto-download size limit, MB (0 for unlimited)"
 msgstr ""
 
 #. TRANSLATOR: Account settings, value for "Prefetch videos"; "the auto-download limit" is the option "Inline auto-download size limit".
-#: ../tdlib-purple.cpp:1794
+#: ../tdlib-purple.cpp:1819
 msgid "Highest resolution within the auto-download limit (if one is set)"
 msgstr ""
 
 #. TRANSLATOR: Account settings, value for "Prefetch videos": the highest resolution, or nothing if that is above the auto-download limit.
-#: ../tdlib-purple.cpp:1797
+#: ../tdlib-purple.cpp:1822
 msgid "Highest resolution only"
 msgstr ""
 
 #. TRANSLATOR: Account settings, value for "Prefetch videos"
-#: ../tdlib-purple.cpp:1799
+#: ../tdlib-purple.cpp:1824
 msgid "Smallest file"
 msgstr ""
 
 #. TRANSLATOR: Account settings, value for "Prefetch videos"
-#: ../tdlib-purple.cpp:1801
+#: ../tdlib-purple.cpp:1826
 msgid "Don't prefetch"
 msgstr ""
 
 #. TRANSLATOR: Account settings, key (choice). Videos are downloaded beforehand, so that they play as soon as clicked.
-#: ../tdlib-purple.cpp:1803
+#: ../tdlib-purple.cpp:1828
 msgid "Prefetch videos"
 msgstr ""
 
 #. TRANSLATOR: Account settings, value for large file downloads
-#: ../tdlib-purple.cpp:1810
+#: ../tdlib-purple.cpp:1835
 msgid "Ask"
 msgstr ""
 
 #. TRANSLATOR: Account settings, value for large file downloads
-#: ../tdlib-purple.cpp:1812
+#: ../tdlib-purple.cpp:1837
 msgid "Discard"
 msgstr ""
 
 #. TRANSLATOR: Account settings, check box label
-#: ../tdlib-purple.cpp:1815
+#: ../tdlib-purple.cpp:1840
 msgid "Do not clean up inline downloads"
 msgstr ""
 
 #. TRANSLATOR: Account settings, key (choice)
-#: ../tdlib-purple.cpp:1821
+#: ../tdlib-purple.cpp:1846
 msgid "Bigger inline file downloads"
 msgstr ""
 
 #. TRANSLATOR: Account settings, key (boolean). The password is the one of the account's settings, not Telegram's two-step verification password.
-#: ../tdlib-purple.cpp:1825
+#: ../tdlib-purple.cpp:1850
 msgid ""
 "Encrypt the local database with the password (takes effect at reconnect)"
 msgstr ""
 
 #. TRANSLATOR: Account settings, key (boolean)
-#: ../tdlib-purple.cpp:1830
+#: ../tdlib-purple.cpp:1855
 msgid "Enable secret chats (takes effect at reconnect)"
 msgstr ""
 
 #. TRANSLATOR: Account settings, key (boolean)
-#: ../tdlib-purple.cpp:1837
+#: ../tdlib-purple.cpp:1862
 msgid "Show animated stickers"
 msgstr ""
 
 #. TRANSLATOR: Account settings, key (boolean)
-#: ../tdlib-purple.cpp:1843
+#: ../tdlib-purple.cpp:1868
 msgid "Show self-destructing messages anyway"
 msgstr ""
 
 #. TRANSLATOR: Account settings, key (boolean)
-#: ../tdlib-purple.cpp:1848
+#: ../tdlib-purple.cpp:1873
 msgid "Strike out deleted messages in Pidgin, rather than remove them"
 msgstr ""
 
 #. TRANSLATOR: Account settings, key (boolean)
-#: ../tdlib-purple.cpp:1853
+#: ../tdlib-purple.cpp:1878
 msgid "Show messages from channels and groups you have not joined"
 msgstr ""
 
 #. TRANSLATOR: Account settings, key (boolean). Of a file sent by file transfer ("Send File..."): told by its content, as a pasted one is; otherwise it goes as a file.
-#: ../tdlib-purple.cpp:1859
+#: ../tdlib-purple.cpp:1884
 msgid "Send a file as a picture, video or voice message when it is one"
 msgstr ""
 
 #. TRANSLATOR: Account settings, key (boolean). Custom emoji are pictures of their own, each standing for an ordinary emoji.
-#: ../tdlib-purple.cpp:1865
+#: ../tdlib-purple.cpp:1890
 msgid "Show custom emoji in reactions as ordinary emoji"
 msgstr ""
 
 #. TRANSLATOR: 2FA settings, key
-#: ../tdlib-purple.cpp:1886
+#: ../tdlib-purple.cpp:1911
 msgid "Current password"
 msgstr ""
 
 #. TRANSLATOR: 2FA settings, key
 #. TRANSLATOR: Database password dialog, key
-#: ../tdlib-purple.cpp:1891 ../tdlib-purple.cpp:1992
+#: ../tdlib-purple.cpp:1916 ../tdlib-purple.cpp:2017
 msgid "New password"
 msgstr ""
 
 #. TRANSLATOR: 2FA settings, key
-#: ../tdlib-purple.cpp:1896
+#: ../tdlib-purple.cpp:1921
 msgid "Repeat password"
 msgstr ""
 
 #. TRANSLATOR: 2FA settings, key
-#: ../tdlib-purple.cpp:1901
+#: ../tdlib-purple.cpp:1926
 msgid "Password hint"
 msgstr ""
 
 #. TRANSLATOR: 2FA settings, key
-#: ../tdlib-purple.cpp:1905
+#: ../tdlib-purple.cpp:1930
 msgid "Recovery e-mail"
 msgstr ""
 
 #. TRANSLATOR: 2FA settings, primary content (after mistype)
 #. TRANSLATOR: Database password dialog, primary content (after mistype)
-#: ../tdlib-purple.cpp:1926 ../tdlib-purple.cpp:1968
+#: ../tdlib-purple.cpp:1951 ../tdlib-purple.cpp:1993
 msgid "Please enter same password twice"
 msgstr ""
 
 #. TRANSLATOR: 2FA settings, primary content
-#: ../tdlib-purple.cpp:1957
+#: ../tdlib-purple.cpp:1982
 msgid "Enter new password and recovery e-mail address"
 msgstr ""
 
 #. TRANSLATOR: Database password dialog, key
-#: ../tdlib-purple.cpp:1996
+#: ../tdlib-purple.cpp:2021
 msgid "Confirm password"
 msgstr ""
 
 #. TRANSLATOR: Database password dialog, secondary content
-#: ../tdlib-purple.cpp:2004
+#: ../tdlib-purple.cpp:2029
 msgid ""
 "The local database is encrypted with the new password, which becomes the "
 "account's."
 msgstr ""
 
 #. TRANSLATOR: Database password dialog, primary content
-#: ../tdlib-purple.cpp:2019
+#: ../tdlib-purple.cpp:2044
 msgid "Change the local database's password"
 msgstr ""
 
 #. TRANSLATOR: 2FA settings, title
-#: ../tdlib-purple.cpp:2028
+#: ../tdlib-purple.cpp:2053
 msgid "Configure two-factor authentication..."
 msgstr ""
 
 #. TRANSLATOR: Account action, opening the dialog of the database's password
-#: ../tdlib-purple.cpp:2032
+#: ../tdlib-purple.cpp:2057
 msgid "Change the database password..."
 msgstr ""

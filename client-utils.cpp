@@ -528,6 +528,8 @@ std::string addTransientBuddy(TdAccountData &account, const td::td_api::user &us
     std::string buddyName = getPurpleBuddyName(user);
     if (purple_find_buddy(account.purpleAccount, buddyName.c_str()))
         return buddyName;
+    // Shown again, it is no longer forgotten
+    setChatForgotten(account.purpleAccount, ChatId::fromString(std::to_string(getId(user).value()).c_str()), false);
     // TRANSLATOR: Buddy-list group, holding users written with though not contacts. It lasts until the program quits.
     const char  *groupName = _("Telegram: not in contacts");
     PurpleGroup *group     = purple_find_group(groupName);

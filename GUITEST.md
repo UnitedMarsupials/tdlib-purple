@@ -496,4 +496,5 @@ Open a public channel not joined, from a link to it, and quit Pidgin; start it a
   whose conversation was logged, and any person written with who is not a contact, under
   "Telegram: not in contacts".
 * Opened, the channel's tab fills with its messages, as from the link, and nothing is sent to it.
-* "Delete group" from its menu: after the next start, it is not there, though its log stays.
+* "Delete group" from its menu: the entry goes, with no error, and after the next start it is not
+  there, though its log stays. So for another one removed with Pidgin's "Remove".

@@ -318,6 +318,7 @@ void purple_blist_remove_buddy(PurpleBuddy *buddy)
     pAccount->buddies.erase(it);
 
     EVENT(RemoveBuddyEvent, buddy->account, buddy->name);
+    emitNodeRemoved(&buddy->node);
     removeNode(buddy->node);
     purple_buddy_destroy(buddy);
 }
@@ -364,6 +365,7 @@ void purple_blist_remove_chat(PurpleChat *chat)
 
     const char *inviteLink = (const char *)g_hash_table_lookup(chat->components, (char *)"link");
     EVENT(RemoveChatEvent, getChatName(chat), inviteLink ? inviteLink : "");
+    emitNodeRemoved(&chat->node);
 
     free(chat->alias);
     g_hash_table_destroy(chat->components);
@@ -2213,6 +2215,11 @@ PurpleCore *purple_get_core()
     return NULL;
 }
 
+void *purple_blist_get_handle()
+{
+    return NULL;
+}
+
 PurpleConversationUiOps *purple_conversation_get_ui_ops(const PurpleConversation *conv)
 {
     return conv->ui_ops;
@@ -2250,6 +2257,13 @@ void purple_signal_disconnect(void *instance, const char *signal,
                                               return (handler.signal == signal) && (handler.func == func);
                                           }),
                            g_signalHandlers.end());
+}
+
+void emitNodeRemoved(PurpleBlistNode *node)
+{
+    for (const SignalHandler &handler: g_signalHandlers)
+        if (handler.signal == "blist-node-removed")
+            reinterpret_cast<void (*)(PurpleBlistNode *, void *)>(handler.func)(node, handler.data);
 }
 
 void emitSignal(const char *signal)

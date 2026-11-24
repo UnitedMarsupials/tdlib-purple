@@ -1589,6 +1589,29 @@ static gboolean tgprpl_unload (PurplePlugin *plugin)
     return TRUE;
 }
 
+// An entry for a run only, of a chat not joined or a stranger, removed by the user, as from its
+// menu or with its group: its log no longer brings it back
+static void blistNodeRemoved(PurpleBlistNode *node, void *)
+{
+    if (!(purple_blist_node_get_flags(node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE))
+        return;
+    if (PURPLE_BLIST_NODE_IS_CHAT(node)) {
+        PurpleChat    *chat    = PURPLE_CHAT(node);
+        PurpleAccount *account = purple_chat_get_account(chat);
+        ChatId         chatId  = getTdlibChatId(getChatName(purple_chat_get_components(chat)));
+        if (account && !strcmp(purple_account_get_protocol_id(account), config::pluginId) && chatId.valid())
+            setChatForgotten(account, chatId, true);
+    } else if (PURPLE_BLIST_NODE_IS_BUDDY(node)) {
+        PurpleBuddy   *buddy   = PURPLE_BUDDY(node);
+        PurpleAccount *account = purple_buddy_get_account(buddy);
+        const char    *name    = purple_buddy_get_name(buddy);
+        // A private chat has its user's id
+        if (account && !strcmp(purple_account_get_protocol_id(account), config::pluginId) &&
+            purpleBuddyNameToUserId(name).valid())
+            setChatForgotten(account, ChatId::fromString(name + strlen("id")), true);
+    }
+}
+
 static gboolean tgprpl_load (PurplePlugin *plugin)
 {
     if (!checkTdlibVersion())
@@ -1598,6 +1621,8 @@ static gboolean tgprpl_load (PurplePlugin *plugin)
     // Disconnected as the plugin is unloaded
     purple_signal_connect(purple_get_core(), "quitting", plugin, PURPLE_CALLBACK(quitting), NULL);
     purple_signal_connect(purple_get_core(), "uri-handler", plugin, PURPLE_CALLBACK(uriHandler), NULL);
+    purple_signal_connect(purple_blist_get_handle(), "blist-node-removed", plugin, PURPLE_CALLBACK(blistNodeRemoved),
+                          NULL);
 
     purple_cmd_register("kick", "s", PURPLE_CMD_P_PLUGIN,
                         (PurpleCmdFlag)(PURPLE_CMD_FLAG_CHAT | PURPLE_CMD_FLAG_PRPL_ONLY),

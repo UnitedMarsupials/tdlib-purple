@@ -847,18 +847,36 @@ TEST_F(SupergroupTest, LoggedUnjoinedChannel)
     GHashTable *components = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup(groupChatPurpleName.c_str()));
     pluginInfo().join_chat(connection, components);
-    g_hash_table_destroy(components);
     prpl.verifyEvents(ServGotJoinedChatEvent(connection, 1, groupChatPurpleName, groupChatTitle),
                       PresentConversationEvent(groupChatPurpleName));
 
-    // Deleted from its menu, it is forgotten: not looked up at the next login
+    // Removed by the user, as from Pidgin's menu, it is forgotten: not looked up at the next login
+    const std::string forgotten = "forgotten-chat" + std::to_string(groupChatId);
+    purple_blist_remove_chat(purpleChat);
+    prpl.verifyEvents(RemoveChatEvent(groupChatPurpleName, ""));
+    EXPECT_TRUE(purple_account_get_bool(account, forgotten.c_str(), FALSE));
+
+    // Shown again, it is not; its tab closed and opened anew
+    purple_conversation_destroy(purple_find_conversation_with_account(PURPLE_CONV_TYPE_CHAT,
+                                                                      groupChatPurpleName.c_str(), account));
+    prpl.discardEvents();
+    pluginInfo().join_chat(connection, components);
+    g_hash_table_destroy(components);
+    purpleChat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
+    ASSERT_NE(nullptr, purpleChat);
+    prpl.discardEvents();
+    EXPECT_FALSE(purple_account_get_bool(account, forgotten.c_str(), FALSE));
+
+    // Deleted from its menu, not joined, it cannot be deleted from Telegram: only its entry goes,
+    // forgotten
     GList *actions = pluginInfo().blist_node_menu(&purpleChat->node);
     nodeMenuAction(&purpleChat->node, actions, "Delete group");
     g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
     prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
     prpl.requestedAction("_Yes");
-    tgl.verifyRequest(deleteChat(groupChatId));
-    EXPECT_TRUE(purple_account_get_bool(account, ("forgotten-chat" + std::to_string(groupChatId)).c_str(), FALSE));
+    tgl.verifyNoRequests();
+    prpl.verifyEvents(RemoveChatEvent(groupChatPurpleName, ""));
+    EXPECT_TRUE(purple_account_get_bool(account, forgotten.c_str(), FALSE));
     rmdir(logDir);
     g_free(logDir);
 }

@@ -4393,9 +4393,16 @@ void PurpleTdClient::leaveGroup(const std::string &purpleChatName, bool deleteSu
     const td::td_api::chat *chat   = chatId.valid() ? m_data.getChat(chatId) : nullptr;
     if (!chat) return;
 
-    // Deleted, it stays out of the buddy list, logged or not
+    // Deleted, it stays out of the buddy list, logged or not; one not joined is only that, as only
+    // its owner could delete it
     if (deleteSupergroup)
         setChatForgotten(m_account, chatId, true);
+    if (deleteSupergroup && !m_data.isGroupChatWithMembership(*chat)) {
+        PurpleChat *purpleChat = purple_blist_find_chat(m_account, purpleChatName.c_str());
+        if (purpleChat)
+            purple_blist_remove_chat(purpleChat);
+        return;
+    }
     SupergroupId supergroupId = getSupergroupId(*chat);
     if (deleteSupergroup && supergroupId.valid()) {
         m_transceiver.sendQuery(td::td_api::make_object<td::td_api::deleteChat>(chatId.value()),
