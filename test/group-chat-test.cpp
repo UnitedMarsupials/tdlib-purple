@@ -747,10 +747,8 @@ TEST_F(GroupChatTest, LeaveBasicGroup)
     nodeMenuAction(&chat->node, actions, "Leave group");
     prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
     prpl.requestedAction("_Yes");
-    tgl.verifyRequests({
-        make_object<leaveChat>(groupChatId),
-        make_object<deleteChatHistory>(groupChatId, true, false)
-    });
+    // Only left, nothing of it deleted
+    tgl.verifyRequest(leaveChat(groupChatId));
 
     g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
 }

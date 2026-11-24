@@ -4441,14 +4441,9 @@ void PurpleTdClient::leaveGroup(const std::string &purpleChatName, bool deleteSu
     if (deleteSupergroup && forAll) {
         m_transceiver.sendQuery(td::td_api::make_object<td::td_api::deleteChat>(chatId.value()),
                                 &PurpleTdClient::deleteSupergroupResponse);
-    } else {
+    } else
+        // Only left: what we saw of it stays, as deleting it would not
         m_transceiver.sendQuery(td::td_api::make_object<td::td_api::leaveChat>(chatId.value()), nullptr);
-        auto deleteChatRequest = td::td_api::make_object<td::td_api::deleteChatHistory>();
-        deleteChatRequest->chat_id_ = chatId.value();
-        deleteChatRequest->remove_from_chat_list_ = true;
-        deleteChatRequest->revoke_ = false;
-        m_transceiver.sendQuery(std::move(deleteChatRequest), nullptr);
-    }
 }
 
 void PurpleTdClient::deleteSupergroupResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object)
