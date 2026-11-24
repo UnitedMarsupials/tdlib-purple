@@ -3867,6 +3867,8 @@ void PurpleTdClient::renameContact(const char *buddyName, const char *newAlias)
 // them for the others
 void PurpleTdClient::deleteLocalChat(ChatId chatId)
 {
+    // Not told of as each is deleted, which would open its tab again, and log it
+    m_data.forgetShownMessages(chatId);
     auto history = td::td_api::make_object<td::td_api::deleteChatHistory>();
     history->chat_id_               = chatId.value();
     history->remove_from_chat_list_ = true;

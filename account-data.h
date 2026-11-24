@@ -540,6 +540,7 @@ public:
     void                       addShownMessage(ChatId chatId, MessageId messageId, ShownMessage &&message);
     ShownMessage *             findShownMessage(ChatId chatId, MessageId messageId);
     void                       removeShownMessage(ChatId chatId, MessageId messageId);
+    void                       forgetShownMessages(ChatId chatId);
     void                       renameShownMessage(ChatId chatId, MessageId oldId, MessageId newId);
     // The id a message sent goes by once it is, where it went by another while being sent, as the
     // links in its showing do

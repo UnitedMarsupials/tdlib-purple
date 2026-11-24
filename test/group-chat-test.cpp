@@ -679,6 +679,11 @@ TEST_F(GroupChatTest, DeleteBasicGroup_Creator)
     tgl.update(make_object<updateBasicGroup>(make_object<basicGroup>(
         groupId, 2, makeChatMemberStatusCreator("", false, true), true, 0
     )));
+    constexpr int64_t shownId = 10001;
+    tgl.update(make_object<updateNewMessage>(makeMessage(shownId, userIds[0], groupChatId, false, 12345,
+                                                         makeTextMessage("Hello"))));
+    prpl.discardEvents();
+    tgl.verifyRequest(viewMessages(groupChatId, {shownId}, nullptr, true));
     PurpleChat *chat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
     ASSERT_NE(nullptr, chat);
     GList *actions = pluginInfo().blist_node_menu(&chat->node);
@@ -702,6 +707,9 @@ TEST_F(GroupChatTest, DeleteBasicGroup_Creator)
         });
     }
     prpl.verifyEvents(RemoveChatEvent(groupChatPurpleName, ""));
+    // TDLib's news of the messages deleted then opens no tab to tell of them, which would be logged
+    tgl.update(makeUpdateDeleteMessages(groupChatId, shownId, true, false));
+    prpl.verifyNoEvents();
 
     g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
 }
