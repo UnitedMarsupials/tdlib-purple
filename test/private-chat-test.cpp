@@ -265,7 +265,7 @@ TEST_F(PrivateChatTest, ContactedByNew)
     )));
 }
 
-// Either offer to report the chat as spam keeps a stranger out of the buddy list
+// Either offer to report the chat as spam keeps a stranger out of the lasting buddy list
 void PrivateChatTest::contactedByStranger(object_ptr<ChatActionBar> &&actionBar)
 {
     login();
@@ -281,7 +281,7 @@ void PrivateChatTest::contactedByStranger(object_ptr<ChatActionBar> &&actionBar)
         make_object<userStatusOffline>()
     )));
 
-    // A stranger messages us: Telegram offers to report the chat as spam, so no buddy yet
+    // A stranger messages us: Telegram offers to report the chat as spam, so no lasting buddy
     object_ptr<updateNewChat> chatUpdate = standardPrivateChat(0);
     auto position = make_object<chatPosition>();
     position->list_  = make_object<chatListMain>();
@@ -289,7 +289,11 @@ void PrivateChatTest::contactedByStranger(object_ptr<ChatActionBar> &&actionBar)
     chatUpdate->chat_->positions_.push_back(std::move(position));
     chatUpdate->chat_->action_bar_ = std::move(actionBar);
     tgl.update(std::move(chatUpdate));
-    prpl.verifyNoEvents();
+    // The conversation goes by their id, a buddy until the program quits showing their name
+    PurpleGroup *transient = purple_find_group("Telegram: not in contacts");
+    ASSERT_NE(nullptr, transient);
+    EXPECT_TRUE(purple_blist_node_get_flags(PURPLE_BLIST_NODE(transient)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+    prpl.verifyEvents(AddBuddyEvent(purpleUserName(0), displayName, account, nullptr, transient, nullptr));
 
     tgl.update(make_object<updateNewMessage>(makeMessage(
         messageId,
@@ -299,14 +303,7 @@ void PrivateChatTest::contactedByStranger(object_ptr<ChatActionBar> &&actionBar)
         date,
         makeTextMessage("text")
     )));
-    // The conversation goes by their id, a buddy until the program quits showing their name
-    PurpleGroup *transient = purple_find_group("Telegram: not in contacts");
-    ASSERT_NE(nullptr, transient);
-    EXPECT_TRUE(purple_blist_node_get_flags(PURPLE_BLIST_NODE(transient)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
-    prpl.verifyEvents(
-        AddBuddyEvent(purpleUserName(0), displayName, account, nullptr, transient, nullptr),
-        ServGotImEvent(connection, purpleUserName(0), "text", PURPLE_MESSAGE_RECV, date)
-    );
+    prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0), "text", PURPLE_MESSAGE_RECV, date));
     PurpleBuddy *buddy = purple_find_buddy(account, purpleUserName(0).c_str());
     ASSERT_NE(nullptr, buddy);
     EXPECT_TRUE(purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);

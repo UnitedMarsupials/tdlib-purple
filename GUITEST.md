@@ -260,6 +260,8 @@ When a stranger writes first, as spammers do, right-click their message, and the
 * The message's menu has "Report" and their name; the buddy's, "Report…".
 * Chosen, it asks nothing: the tab says "Reported to Telegram's moderators.", and the buddy
   leaves "Telegram: not in contacts", as the offer is gone.
+* Before reporting, restart Pidgin: the buddy is under "Telegram: not in contacts" again, and
+  opens their chat with its history.
 
 ### M6. A message's link
 

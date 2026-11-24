@@ -3565,7 +3565,11 @@ void PurpleTdClient::updateUserInfo(const td::td_api::user &user, const td::td_a
             if (isChatInContactList(*privateChat, &user)) {
                 downloadProfilePhoto(user);
                 updatePrivateChat(m_data, privateChat, user);
-            } else
+            } else if (!privateChat->positions_.empty())
+                // A stranger's, kept from it while it offers to report them: reachable all the same,
+                // after a restart too, as when they write
+                addTransientBuddy(m_data, user);
+            else
                 removePrivateChat(m_data, *privateChat);
         }
     }
