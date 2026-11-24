@@ -1972,9 +1972,13 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
         };
         items.push_back(std::move(item));
     }
-    // In a group, its member, by themselves; in a private chat, the chat, where Telegram takes it
+    // In a group, its member, by themselves; in a private chat, the chat, where Telegram takes it.
+    // Not a channel's author, whose post a signature may name: the phone app offers no such report.
     const td::td_api::chat *reportedIn = m_data.getChat(chatId);
-    if (menu.sender.valid() && reportedIn &&
+    bool                    channel    = reportedIn && reportedIn->type_ &&
+                                         (reportedIn->type_->get_id() == td::td_api::chatTypeSupergroup::ID) &&
+                                         static_cast<const td::td_api::chatTypeSupergroup &>(*reportedIn->type_).is_channel_;
+    if (menu.sender.valid() && reportedIn && !channel &&
         (getBasicGroupId(*reportedIn).valid() || getSupergroupId(*reportedIn).valid()))
     {
         MenuItem item;
