@@ -3044,8 +3044,10 @@ bool PurpleTdClient::requestBuddyChat(PurpleConversation *conv)
     m_buddyChatsRequested.insert(userId);
     purpleDebug("Requesting private chat for buddy {} opened", userId.value());
     std::string convName = purple_conversation_get_name(conv);
-    m_transceiver.sendQuery(td::td_api::make_object<td::td_api::createPrivateChat>(userId.value(), false),
-                            [this, userId, convName](uint64_t, TdObjectPtr object) {
+    auto request = td::td_api::make_object<td::td_api::createPrivateChat>();
+    request->user_id_ = userId.value();
+    request->force_   = false;
+    m_transceiver.sendQuery(std::move(request), [this, userId, convName](uint64_t, TdObjectPtr object) {
         m_buddyChatsRequested.erase(userId);
         PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, convName.c_str(),
                                                                          m_account);
@@ -3055,7 +3057,7 @@ bool PurpleTdClient::requestBuddyChat(PurpleConversation *conv)
                 fillConversation(conv);
         } else if (conv) {
             std::string message = formatMessage(_("Telegram has no chat with this user: {}"),
-                                                getDisplayedError(object));
+                                                escapeForDisplay(getDisplayedError(object)));
             purple_conversation_write(conv, "", message.c_str(),
                                       static_cast<PurpleMessageFlags>(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG),
                                       time(NULL));

@@ -2161,11 +2161,12 @@ TEST_F(PrivateChatTest, OpenUnknownBuddy)
     tgl.verifyRequest(createPrivateChat(userIds[0], false));
     tgl.verifyNoRequests();
 
+    // TDLib tells of the user and the chat, then answers with the chat, which fills the tab: in Pidgin
     tgl.update(standardUpdateUser(0));
     tgl.update(standardPrivateChat(0));
-    // Open in Pidgin: TDLib is told so, for the chat's updates
-    tgl.verifyRequest(openChat(chatIds[0]));
     tgl.reply(std::move(standardPrivateChat(0)->chat_));
+    // Open in Pidgin: TDLib is told so, for the chat's updates; and the chat is not asked for again
+    tgl.verifyRequest(openChat(chatIds[0]));
     tgl.verifyNoRequests();
     prpl.discardEvents();
     ASSERT_TRUE(client->fillConversation(conv));
@@ -2182,8 +2183,8 @@ TEST_F(PrivateChatTest, OpenBuddyUnknownToTelegram)
     prpl.verifyEvents(NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)));
     ASSERT_TRUE(client->fillConversation(conv));
     tgl.verifyRequest(createPrivateChat(userIds[0], false));
-    tgl.reply(make_object<error>(400, "USER_NOT_FOUND"));
+    tgl.reply(makeError(400, "USER_NOT_FOUND <x>"));
     prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), "",
-                                             "Telegram has no chat with this user: code 400 (USER_NOT_FOUND)",
+                                             "Telegram has no chat with this user: code 400 (USER_NOT_FOUND &lt;x&gt;)",
                                              (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), 0));
 }
