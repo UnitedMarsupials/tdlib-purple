@@ -1911,3 +1911,34 @@ msgstr "Formësoni mirëfilltësim dyfaktorësh…"
 
 #~ msgid "Days of messages to show on opening a conversation, in Pidgin"
 #~ msgstr "Ditë mesazhesh për t'u shfaqur kur hapet një bisedë, në Pidgin"
+
+msgid "Cannot follow the link"
+msgstr "Lidhja s’mund të ndiqet"
+
+msgid "It shows the latest messages instead, from the first unread one."
+msgstr "Në vend të kësaj shfaqen mesazhet më të reja, nga i pari i palexuar."
+
+msgid "No Telegram account is connected."
+msgstr "S’ka llogari Telegram të lidhur."
+
+msgid "Only links to chats and to their messages can be followed here."
+msgstr "Këtu mund të ndiqen vetëm lidhje te bisedat dhe mesazhet e tyre."
+
+#, c++-format
+msgid "The Telegram account {} is not connected."
+msgstr "Llogaria Telegram {} s’është e lidhur."
+
+msgid "The chat cannot be shown in a conversation."
+msgstr "Biseda s’mund të shfaqet në një bashkëbisedim."
+
+msgid "The chat of the message is not accessible."
+msgstr "Biseda e mesazhit s’është e përdorshme."
+
+msgid "The chat's messages were still being fetched. Try the link again later."
+msgstr "Mesazhet e bisedës po merreshin ende. Riprovoni lidhjen më vonë."
+
+msgid "The message is further back than the conversation holds"
+msgstr "Mesazhi është më i hershëm se ç’mban bashkëbisedimi"
+
+msgid "The message is not found: it may have been deleted."
+msgstr "Mesazhi s’u gjet: mund të jetë fshirë."

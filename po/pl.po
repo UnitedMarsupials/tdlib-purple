@@ -1924,3 +1924,34 @@ msgstr "Konfiguracja uwierzytelnienia dwuskładnikowego"
 
 #~ msgid "Days of messages to show on opening a conversation, in Pidgin"
 #~ msgstr "Dni wiadomości do pokazania po otwarciu rozmowy w Pidginie"
+
+msgid "Cannot follow the link"
+msgstr "Nie można otworzyć odnośnika"
+
+msgid "It shows the latest messages instead, from the first unread one."
+msgstr "Zamiast tego wyświetlane są najnowsze wiadomości, od pierwszej nieprzeczytanej."
+
+msgid "No Telegram account is connected."
+msgstr "Żadne konto Telegrama nie jest połączone."
+
+msgid "Only links to chats and to their messages can be followed here."
+msgstr "Tutaj można otwierać tylko odnośniki do czatów i ich wiadomości."
+
+#, c++-format
+msgid "The Telegram account {} is not connected."
+msgstr "Konto Telegrama {} nie jest połączone."
+
+msgid "The chat cannot be shown in a conversation."
+msgstr "Tego czatu nie można wyświetlić w rozmowie."
+
+msgid "The chat of the message is not accessible."
+msgstr "Czat tej wiadomości jest niedostępny."
+
+msgid "The chat's messages were still being fetched. Try the link again later."
+msgstr "Wiadomości czatu były jeszcze pobierane. Proszę spróbować odnośnika później."
+
+msgid "The message is further back than the conversation holds"
+msgstr "Wiadomość jest starsza, niż mieści rozmowa"
+
+msgid "The message is not found: it may have been deleted."
+msgstr "Nie znaleziono wiadomości: być może została usunięta."

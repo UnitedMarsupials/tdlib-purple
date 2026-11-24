@@ -1933,3 +1933,34 @@ msgstr "Zwei-Faktor-Authentifizierung einstellen..."
 #~ msgstr ""
 #~ "Tage an Nachrichten, die beim Öffnen einer Unterhaltung in Pidgin gezeigt "
 #~ "werden"
+
+msgid "Cannot follow the link"
+msgstr "Der Link kann nicht geöffnet werden"
+
+msgid "It shows the latest messages instead, from the first unread one."
+msgstr "Stattdessen werden die neuesten Nachrichten angezeigt, ab der ersten ungelesenen."
+
+msgid "No Telegram account is connected."
+msgstr "Kein Telegram-Konto ist verbunden."
+
+msgid "Only links to chats and to their messages can be followed here."
+msgstr "Hier können nur Links zu Chats und ihren Nachrichten geöffnet werden."
+
+#, c++-format
+msgid "The Telegram account {} is not connected."
+msgstr "Das Telegram-Konto {} ist nicht verbunden."
+
+msgid "The chat cannot be shown in a conversation."
+msgstr "Der Chat kann nicht in einer Unterhaltung angezeigt werden."
+
+msgid "The chat of the message is not accessible."
+msgstr "Der Chat der Nachricht ist nicht zugänglich."
+
+msgid "The chat's messages were still being fetched. Try the link again later."
+msgstr "Die Nachrichten des Chats wurden noch abgerufen. Versuche den Link später erneut."
+
+msgid "The message is further back than the conversation holds"
+msgstr "Die Nachricht liegt weiter zurück, als die Unterhaltung fasst"
+
+msgid "The message is not found: it may have been deleted."
+msgstr "Die Nachricht wurde nicht gefunden: Vielleicht wurde sie gelöscht."

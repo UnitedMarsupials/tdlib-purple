@@ -1909,3 +1909,34 @@ msgstr "Nastavit dvou úrovňovou autorizaci..."
 
 #~ msgid "Days of messages to show on opening a conversation, in Pidgin"
 #~ msgstr "Dny zpráv k zobrazení při otevření konverzace v Pidginu"
+
+msgid "Cannot follow the link"
+msgstr "Odkaz nelze otevřít"
+
+msgid "It shows the latest messages instead, from the first unread one."
+msgstr "Místo toho se zobrazí nejnovější zprávy, od první nepřečtené."
+
+msgid "No Telegram account is connected."
+msgstr "Není připojen žádný účet Telegramu."
+
+msgid "Only links to chats and to their messages can be followed here."
+msgstr "Zde lze otevírat jen odkazy na chaty a jejich zprávy."
+
+#, c++-format
+msgid "The Telegram account {} is not connected."
+msgstr "Účet Telegramu {} není připojen."
+
+msgid "The chat cannot be shown in a conversation."
+msgstr "Tento chat nelze zobrazit v rozhovoru."
+
+msgid "The chat of the message is not accessible."
+msgstr "Chat této zprávy není dostupný."
+
+msgid "The chat's messages were still being fetched. Try the link again later."
+msgstr "Zprávy chatu se ještě načítají. Zkuste odkaz později."
+
+msgid "The message is further back than the conversation holds"
+msgstr "Zpráva je starší, než rozhovor pojme"
+
+msgid "The message is not found: it may have been deleted."
+msgstr "Zpráva nebyla nalezena: možná byla smazána."

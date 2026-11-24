@@ -1878,3 +1878,34 @@ msgstr "Налаштувати двофакторну автентифікаці
 
 #~ msgid "Days of messages to show on opening a conversation, in Pidgin"
 #~ msgstr "Скільки днів повідомлень показувати, відкриваючи розмову в Pidgin"
+
+msgid "Cannot follow the link"
+msgstr "Посилання не вдається відкрити"
+
+msgid "It shows the latest messages instead, from the first unread one."
+msgstr "Натомість показано найновіші повідомлення, від першого непрочитаного."
+
+msgid "No Telegram account is connected."
+msgstr "Жоден обліковий запис Telegram не під’єднано."
+
+msgid "Only links to chats and to their messages can be followed here."
+msgstr "Тут можна відкривати лише посилання на чати та їхні повідомлення."
+
+#, c++-format
+msgid "The Telegram account {} is not connected."
+msgstr "Обліковий запис Telegram {} не під’єднано."
+
+msgid "The chat cannot be shown in a conversation."
+msgstr "Цей чат не можна показати в розмові."
+
+msgid "The chat of the message is not accessible."
+msgstr "Чат цього повідомлення недоступний."
+
+msgid "The chat's messages were still being fetched. Try the link again later."
+msgstr "Повідомлення чату ще отримуються. Спробуйте посилання пізніше."
+
+msgid "The message is further back than the conversation holds"
+msgstr "Повідомлення давніше, ніж вміщує розмова"
+
+msgid "The message is not found: it may have been deleted."
+msgstr "Повідомлення не знайдено: можливо, його видалено."
