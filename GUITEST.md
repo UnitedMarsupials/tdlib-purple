@@ -290,6 +290,76 @@ Send a message, delete it, then close the chat's tab and open it again, or quit 
 Since: ours were logged before Telegram gave them their lasting ids, so the log could not tell
 which they were, and they came back as if never deleted.
 
+### H5. A tab short of the newest
+
+Open a chat, a channel best, with more than 200 messages unread and at least
+50 read before them. Watch the line at the end while its messages are fetched.
+
+* The line counts the messages fetched so far, then says how many are being
+  shown, and stays until they are.
+* The tab is scrolled to the first unread, with read ones before it, and holds
+  at most 200 messages; the debug log says it is "short of the newest".
+* It took seconds, not minutes.
+
+Scroll up to its top, as in H2.
+
+* A line at the top says earlier messages are being fetched, then shown.
+* Fifty earlier messages come, and the tab still ends where it did, not at
+  the newest.
+
+Scroll down to its end, or turn the mouse wheel down there.
+
+* A line at the end says later messages are being fetched, then shown.
+* Fifty more messages are added after the last, and what was in view stays
+  there; earlier ones are taken from the top, so that the tab keeps to half of
+  Pidgin's "scrollback_lines".
+* Going on to the end, the newest messages come, and the debug log says "up
+  to the newest".
+
+Follow a link to one of a channel's first posts, as in H3, so that the tab
+starts at the channel's first message. Scroll down for a batch or two, while
+that message is still at the top, and then up to the top, past it. Then do it
+again with "scrollback_lines" set to 0, in `prefs.xml` or with `purple-send
+PurplePrefsSetInt string:/pidgin/conversations/scrollback_lines int32:0`.
+
+* Nothing earlier is fetched, and the tab keeps what it had, rather than
+  being filled anew with the 200 messages from the first; the debug log has no
+  "Showing messages before".
+* With "scrollback_lines" at 0 the first 200 are still written at once and
+  the later ones fifty at a time, and nothing is taken from the top.
+
+With "scrollback_lines" as it was, scroll down until batches take the first
+message from the top, then up to the top again.
+
+* Earlier messages are fetched again, back to the first.
+
+Close the tab and open it again as at first, so that it stops short of the
+newest again; then have a message come to the chat.
+
+* It is not shown at the end, after the gap, but it is logged, and the tab
+  turns red if not looked at.
+
+While it stops short, right-click a message in it, and then its tab's title.
+
+* Both menus have "Go to the latest message", which fills the tab anew with
+  the newest messages; neither has it once the tab ends at the newest, nor in
+  another account's tab.
+* Filled anew, the tab has no lines of reactions at its top, of messages no
+  longer in it, as their counts change; and a link to a message no longer in
+  it fills it anew from that message.
+
+Open it again as at first, then type a message into it and send it; and once
+more, sending it while later messages are being fetched, as the wheel is
+turned down at the end.
+
+* The tab is filled anew with the newest messages, and the one sent comes
+  after them, either way.
+
+Since: the tab was filled with every message from the first unread to the
+newest, which Pidgin took longer to write the more it held, and then trimmed,
+by the line, from the top: a fill of 2938 channel posts took fifteen minutes,
+and the first unread was trimmed away.
+
 ## Files and pictures
 
 ### F1. Pasting
