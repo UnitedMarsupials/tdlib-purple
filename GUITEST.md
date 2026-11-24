@@ -487,3 +487,13 @@ With another member who is not a contact, written to in the same way:
 
 * "Add Buddy..." from the menu of their name adds them as a contact, under their name, and the
   same tab stays open.
+
+### G3. Chats known from the log
+
+Open a public channel not joined, from a link to it, and quit Pidgin; start it again.
+
+* The channel is under "Telegram: not joined" again, as is any group left or channel unsubscribed
+  whose conversation was logged, and any person written with who is not a contact, under
+  "Telegram: not in contacts".
+* Opened, the channel's tab fills with its messages, as from the link, and nothing is sent to it.
+* "Delete group" from its menu: after the next start, it is not there, though its log stays.

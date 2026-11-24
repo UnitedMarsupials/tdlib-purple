@@ -246,6 +246,8 @@ private:
     // List of chats is requested after connection is ready, and when response is received,
     // then we report to libpurple that we are connected
     void       onChatListReady();
+    void       showLoggedChats();
+    void       loggedChatLookedUp(ChatId chatId, TdObjectPtr object);
     void       checkBuddiesDeleted();
     void       checkBuddyDeletedResponse(TdObjectPtr object);
     // Login sequence end

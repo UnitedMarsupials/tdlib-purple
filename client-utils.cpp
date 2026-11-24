@@ -294,8 +294,10 @@ PurpleConversation *getImConversation(PurpleAccount *account, const char *userna
 // the tab, and failing that, from the conversation's name, chat-<id>. A group we are not a member of
 // has no entry, so it gets one for as long as the program runs, in a group of its own; neither is
 // saved. Joining the group makes it a lasting one (see updateGroupChat).
-static void addTransientChat(TdAccountData &account, const td::td_api::chat &chat)
+void addTransientChat(TdAccountData &account, const td::td_api::chat &chat)
 {
+    // Shown again, it is no longer forgotten
+    setChatForgotten(account.purpleAccount, getId(chat), false);
     // TRANSLATOR: Buddy-list group, holding channels and groups shown in a conversation though not joined. It lasts until the program quits.
     const char  *groupName = _("Telegram: not joined");
     PurpleGroup *group     = purple_find_group(groupName);
@@ -739,6 +741,26 @@ bool isInviteLinkActive(const td::td_api::chatInviteLink &linkInfo)
 static std::string lastMessageSetting(ChatId chatId)
 {
     return "last-message-chat" + std::to_string(chatId.value());
+}
+
+// Of a chat deleted from its menu: its log no longer brings it back to the buddy list
+static std::string forgottenSetting(ChatId chatId)
+{
+    return "forgotten-chat" + std::to_string(chatId.value());
+}
+
+bool isChatForgotten(PurpleAccount *purpleAccount, ChatId chatId)
+{
+    return purple_account_get_bool(purpleAccount, forgottenSetting(chatId).c_str(), FALSE);
+}
+
+void setChatForgotten(PurpleAccount *purpleAccount, ChatId chatId, bool forgotten)
+{
+    std::string setting = forgottenSetting(chatId);
+    if (forgotten)
+        purple_account_set_bool(purpleAccount, setting.c_str(), TRUE);
+    else if (isChatForgotten(purpleAccount, chatId))
+        purple_account_remove_setting(purpleAccount, setting.c_str());
 }
 
 void removeGroupChat(PurpleAccount *purpleAccount, const td::td_api::chat &chat)

@@ -823,6 +823,46 @@ TEST_F(SupergroupTest, ForeignChannel)
     tgl.verifyNoRequests();
 }
 
+// A channel not joined, with messages in Pidgin's log, has its entry for this run, unless deleted
+TEST_F(SupergroupTest, LoggedUnjoinedChannel)
+{
+    gchar *logDir = g_build_filename(purple_user_dir(), "logs", "telegram", ("+" + selfPhoneNumber).c_str(),
+                                     (groupChatPurpleName + ".chat").c_str(), NULL);
+    ASSERT_EQ(0, g_mkdir_with_parents(logDir, 0700));
+    login();
+    tgl.verifyRequest(getChat(groupChatId));
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusLeft>(), 2)));
+    tgl.update(make_object<updateNewChat>(makeChat(
+        groupChatId, make_object<chatTypeSupergroup>(groupId, true), groupChatTitle,
+        nullptr, 0, 0, 0
+    )));
+    prpl.verifyNoEvents();
+    tgl.reply(makeChat(groupChatId, make_object<chatTypeSupergroup>(groupId, true), groupChatTitle, nullptr, 0, 0, 0));
+    prpl.verifyEvents(AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), NULL));
+    PurpleChat *purpleChat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
+    ASSERT_NE(nullptr, purpleChat);
+    ASSERT_TRUE(purple_blist_node_get_flags(&purpleChat->node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+
+    // Opened from it, the channel is shown, to be read
+    GHashTable *components = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
+    g_hash_table_insert(components, (char *)"id", g_strdup(groupChatPurpleName.c_str()));
+    pluginInfo().join_chat(connection, components);
+    g_hash_table_destroy(components);
+    prpl.verifyEvents(ServGotJoinedChatEvent(connection, 1, groupChatPurpleName, groupChatTitle),
+                      PresentConversationEvent(groupChatPurpleName));
+
+    // Deleted from its menu, it is forgotten: not looked up at the next login
+    GList *actions = pluginInfo().blist_node_menu(&purpleChat->node);
+    nodeMenuAction(&purpleChat->node, actions, "Delete group");
+    g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
+    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
+    prpl.requestedAction("_Yes");
+    tgl.verifyRequest(deleteChat(groupChatId));
+    EXPECT_TRUE(purple_account_get_bool(account, ("forgotten-chat" + std::to_string(groupChatId)).c_str(), FALSE));
+    rmdir(logDir);
+    g_free(logDir);
+}
+
 TEST_F(SupergroupTest, UnjoinedChannelShownOnRequest)
 {
     constexpr int32_t date         = 12345;

@@ -1478,6 +1478,7 @@ void PurpleTdClient::onChatListReady()
 
     purple_blist_add_account(m_account);
     refreshOpenChats();
+    showLoggedChats();
 }
 
 void PurpleTdClient::refreshOpenChats()
@@ -3947,10 +3948,10 @@ bool PurpleTdClient::joinChat(const char *chatName, bool lookUp)
             lookUpChat(id, chatName);
         else if (!left)
             purple_debug_warning(config::pluginId, "No telegram chat found for purple name %s\n", chatName);
-    } else if (!m_data.isGroupChatWithMembership(*chat))
-        purple_debug_warning(config::pluginId, "Chat %s (%s) is not a group we a member of\n",
-                             chatName, chat->title_.c_str());
-    else if (purpleId) {
+    } else if (purpleId) {
+        // One not joined is shown all the same, as a link to it would, to be read
+        if (!m_data.isGroupChatWithMembership(*chat))
+            purple_debug_misc(config::pluginId, "Showing chat %s (%s), not joined\n", chatName, chat->title_.c_str());
         conv = getChatConversation(m_data, *chat, purpleId);
         if (conv)
             purple_conversation_present(purple_conv_chat_get_conversation(conv));
@@ -4026,6 +4027,62 @@ void PurpleTdClient::joinChatResponse(uint64_t requestId, td::td_api::object_ptr
         purple_notify_error(purple_account_get_connection(m_account), _("Failed to join chat"),
                             message.c_str(), NULL);
     }
+}
+
+// A chat with messages in Pidgin's log can be opened from the buddy list, though not joined, or with
+// someone not a contact, which is not otherwise in it: by an entry until the program quits, as for
+// one opened. The log's directories go by the conversations' names, chat<id> and id<user>; those
+// of older versions, by titles, cannot be told by chat.
+void PurpleTdClient::showLoggedChats()
+{
+    gchar      *logDir     = purple_log_get_log_dir(PURPLE_LOG_IM, "id0", m_account);
+    gchar      *accountDir = logDir ? g_path_get_dirname(logDir) : nullptr;
+    GDir       *dir        = accountDir ? g_dir_open(accountDir, 0, NULL) : nullptr;
+    const char *entry;
+    while (dir && (entry = g_dir_read_name(dir))) {
+        ChatId      chatId;
+        std::string name = entry;
+        if (g_str_has_suffix(entry, ".chat")) {
+            name.erase(name.size() - strlen(".chat"));
+            chatId = getTdlibChatId(name.c_str());
+            if (!chatId.valid() || purple_blist_find_chat(m_account, name.c_str()))
+                continue;
+        } else {
+            // A private chat has its user's id
+            if (!purpleBuddyNameToUserId(entry).valid() || purple_find_buddy(m_account, entry))
+                continue;
+            chatId = ChatId::fromString(entry + strlen("id"));
+        }
+        if (isChatForgotten(m_account, chatId))
+            continue;
+        auto request = td::td_api::make_object<td::td_api::getChat>();
+        request->chat_id_ = chatId.value();
+        m_transceiver.sendQuery(std::move(request), [this, chatId](uint64_t, TdObjectPtr object) {
+            loggedChatLookedUp(chatId, std::move(object));
+        });
+    }
+    if (dir)
+        g_dir_close(dir);
+    g_free(accountDir);
+    g_free(logDir);
+}
+
+void PurpleTdClient::loggedChatLookedUp(ChatId chatId, TdObjectPtr object)
+{
+    const td::td_api::chat *chat = m_data.getChat(chatId);
+    if (!object || (object->get_id() != td::td_api::chat::ID) || !chat) {
+        purple_debug_misc(config::pluginId, "Logged chat %" G_GINT64_FORMAT " not known to TDLib: %s\n",
+                          chatId.value(), getDisplayedError(object).c_str());
+        return;
+    }
+    // Told of by now, it may have its entry already
+    const td::td_api::user *user = m_data.getUserByPrivateChat(*chat);
+    if (user) {
+        if (!isDeletedUser(*user) && !purple_find_buddy(m_account, getPurpleBuddyName(*user).c_str()))
+            addTransientBuddy(m_data, *user);
+    } else if ((getBasicGroupId(*chat).valid() || getSupergroupId(*chat).valid()) &&
+               !purple_blist_find_chat(m_account, getPurpleChatName(*chat).c_str()))
+        addTransientChat(m_data, *chat);
 }
 
 void PurpleTdClient::lookUpChat(ChatId chatId, const std::string &chatName)
@@ -4336,6 +4393,9 @@ void PurpleTdClient::leaveGroup(const std::string &purpleChatName, bool deleteSu
     const td::td_api::chat *chat   = chatId.valid() ? m_data.getChat(chatId) : nullptr;
     if (!chat) return;
 
+    // Deleted, it stays out of the buddy list, logged or not
+    if (deleteSupergroup)
+        setChatForgotten(m_account, chatId, true);
     SupergroupId supergroupId = getSupergroupId(*chat);
     if (deleteSupergroup && supergroupId.valid()) {
         m_transceiver.sendQuery(td::td_api::make_object<td::td_api::deleteChat>(chatId.value()),
