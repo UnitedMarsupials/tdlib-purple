@@ -52,6 +52,8 @@ public:
     // closed meanwhile
     void setIdle(bool idle);
     void showEarlierMessages(PurpleConversation *conv, double filling = 0);
+    void showLaterMessages(PurpleConversation *conv);
+    void showNewestMessages(PurpleConversation *conv);
     bool getReactionTip(PurpleConversation *conv, MessageId messageId, const std::string &key, std::string &tip);
     // A reaction on a message's line clicked: ours taken back, or given if not; the paid one asked
     // for, as from the message's menu
@@ -165,9 +167,13 @@ public:
     // The private chat with the user, if there is one
     ChatId getPrivateChatId(UserId userId);
     // Reports the chat, or messages in it, to Telegram's moderators: the reason is asked for, in as
-    // many steps as Telegram has, and then details, if Telegram wants them
+    // many steps as Telegram has, and then details, if Telegram wants them. How it went is told in
+    // the chat reported from, if not that one.
     void reportChat(ChatId chatId, const std::vector<MessageId> &messageIds,
-                    const std::string &optionId = std::string(), const std::string &text = std::string());
+                    const std::string &optionId = std::string(), const std::string &text = std::string(),
+                    ChatId reportedFrom = ChatId());
+    // Reports a user, as the sender of a message in a group, by our private chat with them
+    void reportSender(ChatId groupChatId, UserId userId);
 
     // The client of an account by its name, if it is connected
     static PurpleTdClient *findConnected(const char *accountName);
@@ -401,7 +407,8 @@ private:
                                  const OpenMenuRef &openMenu);
     void noteUserBlocked(UserId userId, bool blocked);
     void askBlockUser(UserId userId);
-    void reportChatResponse(ChatId chatId, const std::vector<MessageId> &messageIds, TdObjectPtr object);
+    void reportChatResponse(ChatId chatId, const std::vector<MessageId> &messageIds, ChatId reportedFrom,
+                            TdObjectPtr object);
     void showMessageMenuResponse(ChatId chatId, MessageId messageId, const MessageMenu &menu,
                                  const OpenMenuRef &openMenu, TdObjectPtr object);
     void askDeleteMessage(ChatId chatId, MessageId messageId, bool forAll);

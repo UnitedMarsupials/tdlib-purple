@@ -305,6 +305,12 @@ void PendingMessageQueue::setChatReady(ChatId chatId, std::vector<IncomingMessag
     extractReadyMessages(pQueue, readyMessages);
 }
 
+bool PendingMessageQueue::hasWaitingMessages(ChatId chatId)
+{
+    auto pQueue = getChatQueue(chatId);
+    return (pQueue != m_queues.end()) && !pQueue->messages.empty();
+}
+
 bool PendingMessageQueue::isChatReady(ChatId chatId)
 {
     auto pQueue = getChatQueue(chatId);

@@ -1944,6 +1944,22 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
         };
         items.push_back(std::move(item));
     }
+    // In a group, its member, by themselves; in a private chat, that is the chat's "Report…"
+    const td::td_api::chat *reportedIn = m_data.getChat(chatId);
+    if (menu.sender.valid() && reportedIn &&
+        (getBasicGroupId(*reportedIn).valid() || getSupergroupId(*reportedIn).valid()))
+    {
+        MenuItem item;
+        UserId   userId = menu.sender;
+        // TRANSLATOR: Item of a message's menu in a group; it asks why, in a dialog or more. Argument is the name of the message's sender.
+        item.label  = formatMessage(_("Report {}…"), m_data.getDisplayName(userId));
+        item.action = [accountName, chatId, userId]() {
+            PurpleTdClient *client = findConnected(accountName.c_str());
+            if (client)
+                client->reportSender(chatId, userId);
+        };
+        items.push_back(std::move(item));
+    }
     if (menu.sender.valid()) {
         MenuItem    item;
         std::string name = m_data.getDisplayName(menu.sender);
@@ -1966,6 +1982,18 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
                     client->askBlockUser(userId);
             };
         }
+        items.push_back(std::move(item));
+    }
+    // Where the tab stops short of the chat's newest
+    if (conv && getTabEnd(conv).valid()) {
+        MenuItem item;
+        // TRANSLATOR: Item of a message's menu, and of the menu of a window's tabs, where the conversation does not show its newest messages.
+        item.label  = _("Go to the latest message");
+        item.action = [accountName, chatId]() {
+            PurpleTdClient *client = findConnected(accountName.c_str());
+            if (client)
+                ::showNewestMessages(client->m_data, chatId);
+        };
         items.push_back(std::move(item));
     }
     fillOpenMenu(openMenu, items);
@@ -2891,6 +2919,18 @@ void PurpleTdClient::showEarlierMessages(PurpleConversation *conv, double fillin
     ::showEarlierMessages(m_data, conv, filling);
 }
 
+void PurpleTdClient::showLaterMessages(PurpleConversation *conv)
+{
+    ::showLaterMessages(m_data, conv);
+}
+
+void PurpleTdClient::showNewestMessages(PurpleConversation *conv)
+{
+    const td::td_api::chat *chat = findConversationChat(m_data, conv);
+    if (chat)
+        ::showNewestMessages(m_data, getId(*chat));
+}
+
 bool PurpleTdClient::getReactionTip(PurpleConversation *conv, MessageId messageId, const std::string &key,
                                     std::string &tip)
 {
@@ -3176,6 +3216,8 @@ int PurpleTdClient::sendMessage(const char *buddyName, const char *message)
     }
 
     if (chat) {
+        // Into a tab that ends where its chat does, not after a gap
+        ::showNewestMessages(m_data, getId(*chat));
         int ret = transmitMessage(getId(*chat), message, m_transceiver, m_data, &PurpleTdClient::sendMessageResponse);
         if (ret < 0)
             return ret;
@@ -3834,6 +3876,8 @@ int PurpleTdClient::sendGroupMessage(int purpleChatId, const char *message)
         purple_debug_misc(config::pluginId, "purple id %d (chat %s) is not a group we a member of\n",
                              purpleChatId, chat->title_.c_str());
     else {
+        // Into a tab that ends where its chat does, not after a gap
+        ::showNewestMessages(m_data, getId(*chat));
         int ret = transmitMessage(getId(*chat), message, m_transceiver, m_data, &PurpleTdClient::sendMessageResponse);
         if (ret < 0)
             return ret;
@@ -4676,6 +4720,8 @@ void PurpleTdClient::sendMessageCreatePrivateChatResponse(uint64_t requestId, td
         std::string errorMessage;
 
         if (chat) {
+            // Into a tab that ends where its chat does, not after a gap
+            ::showNewestMessages(m_data, getId(*chat));
             int ret = transmitMessage(getId(*chat), request->message.c_str(), m_transceiver, m_data,
                                       &PurpleTdClient::sendMessageResponse);
             // Messages copied from libpurple
@@ -4872,7 +4918,7 @@ bool PurpleTdClient::canReportChat(ChatId chatId)
 }
 
 void PurpleTdClient::reportChat(ChatId chatId, const std::vector<MessageId> &messageIds, const std::string &optionId,
-                                const std::string &text)
+                                const std::string &text, ChatId reportedFrom)
 {
     purple_debug_misc(config::pluginId, "Reporting chat %" G_GINT64_FORMAT " with %zu messages%s\n", chatId.value(),
                       messageIds.size(), optionId.empty() ? "" : ", a reason chosen");
@@ -4882,8 +4928,36 @@ void PurpleTdClient::reportChat(ChatId chatId, const std::vector<MessageId> &mes
     request->text_      = text;
     for (MessageId messageId: messageIds)
         request->message_ids_.push_back(messageId.value());
-    m_transceiver.sendQuery(std::move(request), [this, chatId, messageIds](uint64_t, TdObjectPtr object) {
-        reportChatResponse(chatId, messageIds, std::move(object));
+    if (!reportedFrom.valid())
+        reportedFrom = chatId;
+    m_transceiver.sendQuery(std::move(request), [this, chatId, messageIds, reportedFrom](uint64_t, TdObjectPtr object) {
+        reportChatResponse(chatId, messageIds, reportedFrom, std::move(object));
+    });
+}
+
+void PurpleTdClient::reportSender(ChatId groupChatId, UserId userId)
+{
+    auto request = td::td_api::make_object<td::td_api::createPrivateChat>();
+    request->user_id_ = userId.value();
+    request->force_   = false;
+    m_transceiver.sendQuery(std::move(request), [this, groupChatId, userId](uint64_t, TdObjectPtr object) {
+        if (!object || (object->get_id() != td::td_api::chat::ID)) {
+            // TRANSLATOR: In-chat error, after a message's sender was to be reported; followed by the reason.
+            reportMenuError(groupChatId, _("Cannot send the report"), object);
+            return;
+        }
+        const auto             &chat  = static_cast<const td::td_api::chat &>(*object);
+        const td::td_api::chat *group = m_data.getChat(groupChatId);
+        if (!chat.can_be_reported_) {
+            std::string name = escapeForDisplay(m_data.getDisplayName(userId));
+            if (group)
+                // TRANSLATOR: In-chat notification, not logged, after a message's sender was to be reported. Argument is their name.
+                showChatNotification(m_data, *group, formatMessage(_("Telegram takes no report about {} from here."),
+                                                                   name).c_str(),
+                                     PURPLE_MESSAGE_NO_LOG);
+            return;
+        }
+        reportChat(getId(chat), {}, std::string(), std::string(), groupChatId);
     });
 }
 
@@ -4893,6 +4967,7 @@ struct ReportRequest {
     std::string              accountName;
     ChatId                   chatId;
     std::vector<MessageId>   messageIds;
+    ChatId                   reportedFrom;
     std::string              optionId;  // chosen already, when details are asked for
     std::vector<std::string> optionIds; // to choose from, in the order shown
 };
@@ -4903,7 +4978,8 @@ void reportReasonChosen(void *data, PurpleRequestFields *fields)
     int             choice = purple_request_fields_get_choice(fields, "reason");
     PurpleTdClient *client = PurpleTdClient::findConnected(request->accountName.c_str());
     if (client && (choice >= 0) && (size_t(choice) < request->optionIds.size()))
-        client->reportChat(request->chatId, request->messageIds, request->optionIds[choice]);
+        client->reportChat(request->chatId, request->messageIds, request->optionIds[choice], std::string(),
+                           request->reportedFrom);
 }
 
 void reportDetailsGiven(void *data, const char *text)
@@ -4911,7 +4987,8 @@ void reportDetailsGiven(void *data, const char *text)
     std::unique_ptr<ReportRequest> request(static_cast<ReportRequest *>(data));
     PurpleTdClient *client = PurpleTdClient::findConnected(request->accountName.c_str());
     if (client)
-        client->reportChat(request->chatId, request->messageIds, request->optionId, text ? text : "");
+        client->reportChat(request->chatId, request->messageIds, request->optionId, text ? text : "",
+                           request->reportedFrom);
 }
 
 void reportReasonCancelled(void *data, PurpleRequestFields *)
@@ -4925,10 +5002,13 @@ void reportDetailsCancelled(void *data, const char *)
 }
 }
 
-void PurpleTdClient::reportChatResponse(ChatId chatId, const std::vector<MessageId> &messageIds, TdObjectPtr object)
+void PurpleTdClient::reportChatResponse(ChatId chatId, const std::vector<MessageId> &messageIds, ChatId reportedFrom,
+                                        TdObjectPtr object)
 {
-    const td::td_api::chat *chat = m_data.getChat(chatId);
-    auto *request = new ReportRequest{purple_account_get_username(m_data.purpleAccount), chatId, messageIds};
+    // Told where it was reported from
+    const td::td_api::chat *chat = m_data.getChat(reportedFrom);
+    auto *request = new ReportRequest{purple_account_get_username(m_data.purpleAccount), chatId, messageIds,
+                                      reportedFrom};
     switch (object ? object->get_id() : td::td_api::error::ID) {
     case td::td_api::reportChatResultOk::ID:
         delete request;
@@ -4988,6 +5068,6 @@ void PurpleTdClient::reportChatResponse(ChatId chatId, const std::vector<Message
     default:
         delete request;
         // TRANSLATOR: In-chat error, after a report; followed by the reason.
-        reportMenuError(chatId, _("Cannot send the report"), object);
+        reportMenuError(reportedFrom, _("Cannot send the report"), object);
     }
 }

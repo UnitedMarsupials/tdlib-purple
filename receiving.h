@@ -107,6 +107,12 @@ bool fillChat(TdAccountData &account, ChatId chatId);
 // no tab, or be busy, its tab to be filled later
 enum class LinkedMessageShown { Shown, Busy, NoConversation };
 LinkedMessageShown showLinkedMessage(TdAccountData &account, const td::td_api::chat &chat, MessageId messageId);
+// Where the chat's tab stops short of its newest message, the messages after it, written at its end,
+// those at its top taken out as they would not fit
+void showLaterMessages(TdAccountData &account, PurpleConversation *conv);
+// Where the chat's tab stops short of its newest message, fills it anew with the latest ones, as
+// before anything is sent from it
+void showNewestMessages(TdAccountData &account, ChatId chatId);
 // The chat a conversation is of, if known
 const td::td_api::chat *findConversationChat(TdAccountData &account, PurpleConversation *conv);
 void updateMessageContent(TdAccountData &account, ChatId chatId, MessageId messageId,
