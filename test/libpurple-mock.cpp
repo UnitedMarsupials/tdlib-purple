@@ -234,6 +234,18 @@ PurpleAccount *purple_accounts_find(const char *name, const char *protocol)
     return NULL;
 }
 
+GList *purple_connections_get_all(void)
+{
+    // Libpurple's own, not to be freed: kept until asked again
+    static GList *connections = NULL;
+    g_list_free(connections);
+    connections = NULL;
+    for (const AccountInfo &account: g_accounts)
+        if (account.account->gc)
+            connections = g_list_append(connections, account.account->gc);
+    return connections;
+}
+
 void purple_blist_add_account(PurpleAccount *account)
 {
     EVENT(ShowAccountEvent, account);
@@ -2237,6 +2249,16 @@ void emitSignal(const char *signal)
     for (const SignalHandler &handler: g_signalHandlers)
         if (handler.signal == signal)
             reinterpret_cast<void (*)(void *)>(handler.func)(handler.data);
+}
+
+bool emitUriHandler(const char *proto, const char *cmd, GHashTable *params)
+{
+    using UriHandler = gboolean (*)(const char *, const char *, GHashTable *, void *);
+    for (const SignalHandler &handler: g_signalHandlers)
+        if ((handler.signal == "uri-handler") &&
+            reinterpret_cast<UriHandler>(handler.func)(proto, cmd, params, handler.data))
+            return true;
+    return false;
 }
 
 // As libpurple's, which Pidgin calls whenever it updates a tab

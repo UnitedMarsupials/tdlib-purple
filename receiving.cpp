@@ -3177,12 +3177,20 @@ struct Redraw {
     unsigned                                                beyond = 0; // found so far
     bool                                                    start  = false; // the chat's first message got
     unsigned                                                limit;
+    bool                                                    linked = false; // from a message a link led to
     // Newest first, as TDLib gives them
     std::vector<td::td_api::object_ptr<td::td_api::message>> messages;
 };
 }
 
 static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw, MessageId from);
+static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earliest, bool opening,
+                        unsigned extra = 0, bool filling = false, bool linked = false,
+                        bool newest = false, bool back = false);
+
+// Shown before the earliest message scrolled to, or before the first unread on opening a tab, at
+// least; a tab is filled with more if they still fit
+enum { EARLIER_BATCH = 50 };
 
 // Messages found too far back for their tab once, which they are no nearer to since
 static std::set<std::pair<int64_t, int64_t>> g_redrawTooFar;
@@ -3428,12 +3436,34 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
     } else
         purple_debug_warning(config::pluginId, "Cannot fetch chat %" G_GINT64_FORMAT " to redraw it: %s\n",
                              redraw->chatId.value(), getDisplayedError(response).c_str());
+    bool fetched = response && (response->get_id() == td::td_api::messages::ID);
+    // Taken before the messages that came meanwhile are shown, which would not fill it
+    const td::td_api::chat *chat  = redraw->linked ? account.getChat(redraw->chatId) : nullptr;
+    PurpleConversation     *conv  = chat ? findMessageConversation(account, *chat) : nullptr;
+    bool                    empty = conv && !findFirstMessage(conv).valid();
     // Left as it is
     stopRedrawProgress(account, redraw->chatId);
     std::vector<IncomingMessage> readyMessages;
     account.pendingMessages.setChatReady(redraw->chatId, readyMessages);
     showMessages(readyMessages, account);
     showPendingNewest(account, redraw->chatId);
+    // A tab ends at the latest message, and cannot reach so far back: one just opened for the link,
+    // still empty, is filled as it would be opened anyway; one showing messages is left as it is
+    if (redraw->linked) {
+        if (!fetched) {
+            // Not known to be too far back: why it could not be fetched
+            std::string reason = getDisplayedError(response);
+            purple_notify_error(purple_account_get_connection(account.purpleAccount), config::pluginName,
+                                _("Cannot follow the link"), reason.c_str());
+        } else
+            // TRANSLATOR: Information dialog, primary content, after a link to a message was followed.
+            purple_notify_info(purple_account_get_connection(account.purpleAccount), config::pluginName,
+                               _("The message is further back than the conversation holds"),
+                               // TRANSLATOR: Information dialog, secondary content.
+                               empty ? _("It shows the latest messages instead, from the first unread one.") : NULL);
+        if (empty)
+            startRedraw(account, redraw->chatId, MessageId::invalid, true, EARLIER_BATCH);
+    }
 }
 
 static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw, MessageId from)
@@ -3452,7 +3482,7 @@ static void redrawRequest(TdAccountData &account, std::shared_ptr<Redraw> redraw
 
 // False if the chat is busy
 static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earliest, bool opening,
-                        unsigned extra = 0, bool filling = false, bool newest = false, bool back = false)
+                        unsigned extra, bool filling, bool linked, bool newest, bool back)
 {
     const td::td_api::chat *chat = account.getChat(chatId);
     PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
@@ -3478,6 +3508,7 @@ static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earlies
     redraw->readUpTo = getLastReadMessageId(*chat);
     redraw->extra    = extra;
     redraw->filling  = filling;
+    redraw->linked   = linked;
     redraw->newest   = newest;
     redraw->found    = newest;
     redraw->back     = back;
@@ -3496,10 +3527,6 @@ void redrawChat(TdAccountData &account, ChatId chatId, MessageId earliest)
         startRedraw(account, chatId, earliest, false);
 }
 
-// Shown before the earliest message scrolled to, or before the first unread on opening a tab, at
-// least; a tab is filled with more if they still fit
-enum { EARLIER_BATCH = 50 };
-
 void showEarlierMessages(TdAccountData &account, PurpleConversation *conv, double filling)
 {
     const td::td_api::chat *chat     = findConversationChat(account, conv);
@@ -3517,12 +3544,56 @@ void showEarlierMessages(TdAccountData &account, PurpleConversation *conv, doubl
         extra        = unsigned(std::ceil(shown * std::max(filling - 1, 0.0))) + 1;
     }
     // Filling a tab that fits goes on at its end, which is what shows
-    startRedraw(account, getId(*chat), earliest, false, extra, filling > 0, false, !filling);
+    startRedraw(account, getId(*chat), earliest, false, extra, filling > 0, false, false, !filling);
+}
+
+// Chats whose tabs, being opened for a link to a message, are to be filled from that one; by
+// account, as every account has the same chat under the same id
+static std::map<std::pair<std::string, int64_t>, MessageId> g_linkedMessages;
+
+static std::pair<std::string, int64_t> getLinkedKey(TdAccountData &account, ChatId chatId)
+{
+    return {purple_account_get_username(account.purpleAccount), chatId.value()};
 }
 
 bool fillChat(TdAccountData &account, ChatId chatId)
 {
-    return startRedraw(account, chatId, MessageId::invalid, true, EARLIER_BATCH);
+    auto linked = g_linkedMessages.find(getLinkedKey(account, chatId));
+    if (linked == g_linkedMessages.end())
+        return startRedraw(account, chatId, MessageId::invalid, true, EARLIER_BATCH);
+    if (!startRedraw(account, chatId, linked->second, false, EARLIER_BATCH, false, true))
+        return false;
+    g_linkedMessages.erase(linked);
+    return true;
+}
+
+LinkedMessageShown showLinkedMessage(TdAccountData &account, const td::td_api::chat &chat, MessageId messageId)
+{
+    ChatId              chatId = getId(chat);
+    PurpleConversation *conv   = findMessageConversation(account, chat);
+    // A group chat's tab kept from an earlier connection is opened again, as if anew
+    bool open = conv && ((purple_conversation_get_type(conv) != PURPLE_CONV_TYPE_CHAT) ||
+                         !purple_conv_chat_has_left(purple_conversation_get_chat_data(conv)));
+    if (!open) {
+        // Filled as it is opened, from the message rather than the first unread
+        if (messageId.valid())
+            g_linkedMessages[getLinkedKey(account, chatId)] = messageId;
+        conv = getMessageConversation(account, chat);
+        if (!conv || !canRedrawConversation(conv))
+            g_linkedMessages.erase(getLinkedKey(account, chatId));
+        if (!conv)
+            return LinkedMessageShown::NoConversation;
+    } else if (messageId.valid()) {
+        // Filled meanwhile, for a link before, the tab would be scrolled away from the message
+        if (!account.pendingMessages.isChatReady(chatId))
+            return LinkedMessageShown::Busy;
+        if (findMessageMarks(conv, messageId).start)
+            scrollToMessageLater(conv, messageId);
+        else if (!startRedraw(account, chatId, messageId, false, EARLIER_BATCH, false, true))
+            return LinkedMessageShown::Busy;
+    }
+    presentConversation(conv);
+    return LinkedMessageShown::Shown;
 }
 
 // Chats, by account, whose tabs are to be filled with the newest messages once not busy
@@ -3535,7 +3606,7 @@ void showNewestMessages(TdAccountData &account, ChatId chatId)
     // Busy, as with later messages being fetched: once it is not, or what is sent meanwhile would be
     // past the end it comes to
     if (conv && getTabEnd(conv).valid() &&
-        !startRedraw(account, chatId, MessageId::invalid, false, EARLIER_BATCH, false, true))
+        !startRedraw(account, chatId, MessageId::invalid, false, EARLIER_BATCH, false, false, true))
         g_newestPending.insert({purple_account_get_username(account.purpleAccount), chatId.value()});
 }
 

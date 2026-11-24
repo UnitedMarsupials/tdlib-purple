@@ -93,6 +93,32 @@ TDLib encrypts the record of the login itself, but leaves the messages to
 SQLCipher: built with plain SQLite instead, it ignores the key, and the plugin
 then warns that the messages stay in the clear.
 
+### Telegram links
+
+A Telegram link, such as `tg://resolve?domain=channel&post=12`, which a web
+page's "View in Telegram" leads to, opens the post's chat, at that post, once
+handed to libpurple: TDLib, which knows every kind of Telegram link, tells
+what it leads to. Links to chats and to their messages are followed, those of
+channels and groups not joined too, which are then shown though not joined;
+any other kind, or one leading nowhere, is told in a dialog. The first
+Telegram account connected follows it, or the one an `account` parameter
+names, as in `tg://resolve?domain=channel&post=12&account=%2B15551234567`.
+
+Libpurple takes such links over D-Bus, in Pidgin, Finch or another program
+built with it, which `tdlib-purple-tg-link`, installed with the plugin, hands
+them over by:
+
+    tdlib-purple-tg-link 'tg://resolve?domain=channel&post=12'
+
+It needs only `gdbus`, which comes with GLib. What goes wrong, such as no
+libpurple program running, it tells as a desktop notification, or else with
+`xmessage`, or on stderr. A web browser starts it for `tg:` links once
+`tdlib-purple-tg-link.desktop`, installed with it, is made their handler:
+
+    xdg-mime default tdlib-purple-tg-link.desktop x-scheme-handler/tg
+
+Firefox asks the first time whether to open such a link with it.
+
 ## Debugging vs. privacy
 
 It's good to have debug log at hand whenever a glitch is observed, or to be able to reproduce the glitch with logging turned on. With pidgin, debug log can be turned on like this:

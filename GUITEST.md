@@ -336,7 +336,7 @@ Scroll down to its end, or turn the mouse wheel down there.
 * Going on to the end, the newest messages come, and the debug log says "up
   to the newest".
 
-Follow a link to one of a channel's first posts, as in H3, so that the tab
+Follow a link to one of a channel's first posts, as in H6, so that the tab
 starts at the channel's first message. Scroll down for a batch or two, while
 that message is still at the top, and then up to the top, past it. Then do it
 again with "scrollback_lines" set to 0, in `prefs.xml` or with `purple-send
@@ -379,6 +379,32 @@ Since: the tab was filled with every message from the first unread to the
 newest, which Pidgin took longer to write the more it held, and then trimmed,
 by the line, from the top: a fill of 2938 channel posts took fifteen minutes,
 and the first unread was trimmed away.
+
+### H6. Telegram links
+
+With Pidgin running, hand it a link to a post of a channel, joined or not,
+with `tdlib-purple-tg-link`, as README.md shows; then one to a message of an open chat that
+its tab still shows, and one that it no longer does.
+
+* The chat's conversation comes up, its tab chosen in its window even while another was, at
+  the post, filled from it.
+* The tab still showing the message is scrolled to it; the other one is filled
+  anew from the message.
+* A link to something else, such as `tg://settings`, or to a channel that does
+  not exist, gets a dialog saying it cannot be followed.
+* With Pidgin not running, `tdlib-purple-tg-link` says so, as a desktop
+  notification or with `xmessage`.
+* Made the handler of `tg:` links (`xdg-mime default
+  tdlib-purple-tg-link.desktop x-scheme-handler/tg`), a "View in Telegram"
+  link on a channel's page in Firefox opens the post in Pidgin.
+* A link to a post further back than Pidgin's "scrollback_lines" preference
+  holds gets a dialog saying so; a tab opened for it shows the latest messages,
+  from the first unread, and an open one is left as it was.
+* Two links followed one right after the other, the first to a chat whose tab
+  is just being opened, end up at the second.
+* So do two to an open tab, the first to a message it does not show, which
+  fills it anew, the second to one it shows: it ends at the second, not
+  scrolled back to the first once filled.
 
 ## Files and pictures
 

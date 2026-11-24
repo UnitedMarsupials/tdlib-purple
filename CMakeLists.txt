@@ -133,6 +133,9 @@ install(FILES data/telegram16.png DESTINATION "${PURPLE_DATA_DIR}/pixmaps/pidgin
 install(FILES data/telegram22.png DESTINATION "${PURPLE_DATA_DIR}/pixmaps/pidgin/protocols/22" RENAME telegram.png)
 install(FILES data/telegram48.png DESTINATION "${PURPLE_DATA_DIR}/pixmaps/pidgin/protocols/48" RENAME telegram.png)
 install(FILES data/tdlib-purple.metainfo.xml DESTINATION "${SHARE_INSTALL_PREFIX}/metainfo")
+# Hands tg: links to whichever libpurple program runs, so for any front-end
+install(PROGRAMS data/tdlib-purple-tg-link DESTINATION bin)
+install(FILES data/tdlib-purple-tg-link.desktop DESTINATION "${SHARE_INSTALL_PREFIX}/applications")
 
 add_subdirectory(test)
 

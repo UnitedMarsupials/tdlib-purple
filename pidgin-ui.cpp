@@ -213,6 +213,7 @@ FRONT_END_FUNCTION(gdk_pixbuf_scale_simple);
 FRONT_END_FUNCTION(gdk_pixbuf_get_width);
 FRONT_END_FUNCTION(gdk_pixbuf_get_height);
 FRONT_END_FUNCTION(pidgin_conv_window_get_active_conversation);
+FRONT_END_FUNCTION(pidgin_conv_window_switch_gtkconv);
 FRONT_END_FUNCTION(gdk_window_get_state);
 FRONT_END_FUNCTION(gtk_text_view_get_visible_rect);
 FRONT_END_FUNCTION(gtk_window_is_active);
@@ -821,6 +822,17 @@ void showMessageReactions(PurpleConversation *conv, MessageId messageId, const s
 bool canRedrawConversation(PurpleConversation *conv)
 {
     return getIMHtml(conv) != nullptr;
+}
+
+// Pidgin switches to the tab only if a key or a button caused it, which a link handed over D-Bus
+// did not: switched to here, then
+void presentConversation(PurpleConversation *conv)
+{
+    purple_conversation_present(conv);
+    PidginConversation *gtkconv = getIMHtml(conv) ? PIDGIN_CONVERSATION(conv) : nullptr;
+    if (gtkconv && gtkconv->win && (p_pidgin_conv_window_switch_gtkconv ||
+                                    LOOK_UP(pidgin_conv_window_switch_gtkconv)))
+        p_pidgin_conv_window_switch_gtkconv(gtkconv->win, gtkconv);
 }
 
 // A line at the end of the tab, or at its top, its last character turning, and the marks around it
@@ -4238,6 +4250,11 @@ bool isEntryEditing(PurpleConversation *conv, MessageId messageId)
 bool canRedrawConversation(PurpleConversation *conv)
 {
     return false;
+}
+
+void presentConversation(PurpleConversation *conv)
+{
+    purple_conversation_present(conv);
 }
 
 void appendTabLine(PurpleConversation *conv, const std::string &html, MessageId messageId)

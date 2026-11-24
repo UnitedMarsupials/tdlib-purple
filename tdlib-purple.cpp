@@ -10,6 +10,7 @@
 #include "clipboard.h"
 #include <purple.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <iostream>
@@ -1523,6 +1524,63 @@ static void quitting(void *)
     }
 }
 
+// The first of our accounts connected, if any
+static PurpleTdClient *findAnyConnected()
+{
+    for (GList *item = purple_connections_get_all(); item; item = item->next) {
+        PurpleConnection *gc      = static_cast<PurpleConnection *>(item->data);
+        PurpleAccount    *account = purple_connection_get_account(gc);
+        if (account && !strcmp(purple_account_get_protocol_id(account), config::pluginId) &&
+            PURPLE_CONNECTION_IS_CONNECTED(gc))
+            return static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    }
+    return nullptr;
+}
+
+// A tg: link handed to libpurple, as over D-Bus by a web browser's handler for them, which
+// libpurple has split into its command and parameters, the names of these in lower case and their
+// values as they came. It is put together again for TDLib, which knows every kind of Telegram link;
+// an "account" parameter, which Telegram's links do not have, names the account to follow it.
+static gboolean uriHandler(const char *proto, const char *cmd, GHashTable *params, void *)
+{
+    if (!proto || g_ascii_strcasecmp(proto, "tg") || !cmd)
+        return FALSE;
+    std::vector<std::string> pairs;
+    std::string              accountName;
+    if (params) {
+        GHashTableIter iter;
+        gpointer       key, value;
+        g_hash_table_iter_init(&iter, params);
+        while (g_hash_table_iter_next(&iter, &key, &value)) {
+            const char *name = static_cast<const char *>(key);
+            if (!strcmp(name, "account")) {
+                char *unescaped = value ? g_uri_unescape_string(static_cast<const char *>(value), NULL) : NULL;
+                accountName = unescaped ? unescaped : "";
+                g_free(unescaped);
+            } else
+                pairs.push_back(value ? std::string(name) + '=' + static_cast<const char *>(value) : name);
+        }
+    }
+    // In some order, the table having lost theirs
+    std::sort(pairs.begin(), pairs.end());
+    std::string link = std::string(proto) + ':' + cmd;
+    for (size_t i = 0; i < pairs.size(); i++)
+        link += (i ? '&' : '?') + pairs[i];
+
+    PurpleTdClient *client = accountName.empty() ? findAnyConnected()
+                                                 : PurpleTdClient::findConnected(accountName.c_str());
+    if (client)
+        client->openLink(link);
+    else
+        // TRANSLATOR: Error dialog, title, after a Telegram link was handed to Pidgin, as by a web browser.
+        purple_notify_error(NULL, _("Cannot follow the link"), link.c_str(),
+                            accountName.empty() ? _("No Telegram account is connected.")
+                                                // TRANSLATOR: Error dialog, secondary content. Argument is the account's name.
+                                                : formatMessage(_("The Telegram account {} is not connected."),
+                                                                accountName).c_str());
+    return TRUE;
+}
+
 static gboolean tgprpl_unload (PurplePlugin *plugin)
 {
     unregisterMessageLinks();
@@ -1539,6 +1597,7 @@ static gboolean tgprpl_load (PurplePlugin *plugin)
     registerMessageLinks();
     // Disconnected as the plugin is unloaded
     purple_signal_connect(purple_get_core(), "quitting", plugin, PURPLE_CALLBACK(quitting), NULL);
+    purple_signal_connect(purple_get_core(), "uri-handler", plugin, PURPLE_CALLBACK(uriHandler), NULL);
 
     purple_cmd_register("kick", "s", PURPLE_CMD_P_PLUGIN,
                         (PurpleCmdFlag)(PURPLE_CMD_FLAG_CHAT | PURPLE_CMD_FLAG_PRPL_ONLY),

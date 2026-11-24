@@ -1,0 +1,37 @@
+#!/bin/sh
+#
+# Hands a Telegram link, such as tg://resolve?domain=channel&post=12, to the
+# libpurple program running (Pidgin, Finch or another, built with D-Bus),
+# for tdlib-purple to follow; as a web browser starts it for tg: links.  What
+# went wrong is told as a desktop notification, or else with xmessage, or on
+# stderr.
+#
+
+case $#:$1 in
+1:-h|1:-help|1:--help)
+	echo "usage: ${0##*/} tg-link" >&2
+	exit 0
+	;;
+1:*)
+	;;
+*)
+	echo "usage: ${0##*/} tg-link" >&2
+	exit 64		# EX_USAGE
+	;;
+esac
+
+error=$(gdbus call --session --dest im.pidgin.purple.PurpleService \
+    --object-path /im/pidgin/purple/PurpleObject \
+    --method im.pidgin.purple.PurpleInterface.PurpleGotProtocolHandlerUri \
+    "$1" 2>&1 >/dev/null) && exit 0
+
+summary="Telegram link not followed"
+if ! gdbus call --session --dest org.freedesktop.Notifications \
+    --object-path /org/freedesktop/Notifications \
+    --method org.freedesktop.Notifications.Notify -- \
+    tdlib-purple 0 dialog-error "$summary" "$1: $error" '[]' '{}' -1 \
+    >/dev/null 2>&1 &&
+    ! xmessage -center "$summary: $1" "$error" 2>/dev/null; then
+	echo "$summary: $1: $error" >&2
+fi
+exit 69		# EX_UNAVAILABLE

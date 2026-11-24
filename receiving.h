@@ -100,8 +100,13 @@ bool getReactionTip(TdAccountData &account, PurpleConversation *conv, MessageId 
                     std::string &tip);
 // Fills the chat's tab anew, in Pidgin, with its messages from the first unread one, and some read
 // before it, as many as it can hold, scrolled to that one; false if the chat is busy, to be tried
-// again later
+// again later; or, if it was opened for a link to a message, from that one
 bool fillChat(TdAccountData &account, ChatId chatId);
+// Presents the chat's tab, opening it if need be, scrolled to the message, if one is given, or
+// filled anew from it if the tab does not show it, as far back as the tab holds; the chat may have
+// no tab, or be busy, its tab to be filled later
+enum class LinkedMessageShown { Shown, Busy, NoConversation };
+LinkedMessageShown showLinkedMessage(TdAccountData &account, const td::td_api::chat &chat, MessageId messageId);
 // Where the chat's tab stops short of its newest message, the messages after it, written at its end,
 // those at its top taken out as they would not fit
 void showLaterMessages(TdAccountData &account, PurpleConversation *conv);
