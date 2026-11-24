@@ -1285,15 +1285,28 @@ TEST_F(PrivateChatTest, DeleteContact)
     purple_blist_remove_buddy(buddy);
     prpl.discardEvents();
 
+    // Nothing of the chat stays here: TDLib's messages and files, Pidgin's log
+    gchar *logDir  = g_build_filename(purple_user_dir(), "logs", "telegram", ("+" + selfPhoneNumber).c_str(),
+                                      purpleUserName(0).c_str(), NULL);
+    gchar *logFile = g_build_filename(logDir, "2026-11-24.120000-0500EST.html", NULL);
+    ASSERT_EQ(0, g_mkdir_with_parents(logDir, 0700));
+    ASSERT_TRUE(g_file_set_contents(logFile, "<html></html>", -1, NULL));
     pluginInfo().remove_buddy(connection, dup, NULL);
     purple_buddy_destroy(dup);
-    //prpl.verifyEvents(RequestActionEvent(connection, account, purpleUserName(0).c_str(), NULL, 2));
-    //prpl.requestedAction("_Yes");
-
-    tgl.verifyRequests({
-        make_object<deleteChatHistory>(chatIds[0], true, false),
-        make_object<removeContacts>(std::vector<std::int64_t>(1, userIds[0]))
-    });
+    {
+        auto files = make_object<optimizeStorage>();
+        files->chat_ids_ = {chatIds[0]};
+        tgl.verifyRequests({
+            make_object<deleteChatHistory>(chatIds[0], true, false),
+            std::move(files),
+            make_object<removeContacts>(std::vector<std::int64_t>(1, userIds[0]))
+        });
+    }
+    EXPECT_FALSE(g_file_test(logDir, G_FILE_TEST_EXISTS));
+    remove(logFile);
+    rmdir(logDir);
+    g_free(logFile);
+    g_free(logDir);
 
     auto userUpdate1 = standardUpdateUser(0);
     userUpdate1->user_->is_contact_ = true;

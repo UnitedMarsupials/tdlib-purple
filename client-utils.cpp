@@ -742,21 +742,26 @@ static std::string lastMessageSetting(ChatId chatId)
     return "last-message-chat" + std::to_string(chatId.value());
 }
 
-// Of a chat deleted from its menu, nothing stays to tell of it: its tab, its entry, what is kept of
-// it among the account's settings, and Pidgin's log of it, with the pictures it holds
-void wipeChatTraces(PurpleAccount *purpleAccount, ChatId chatId, const std::string &chatName)
+// Of a chat deleted, nothing stays to tell of it: its tab, what is kept of it among the account's
+// settings, and Pidgin's log of it, with the pictures it holds. A group chat's entry goes too; a
+// buddy's is being removed by Pidgin.
+void wipeChatTraces(PurpleAccount *purpleAccount, ChatId chatId, const std::string &convName,
+                    PurpleConversationType type)
 {
-    PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_CHAT, chatName.c_str(),
-                                                                      purpleAccount);
+    PurpleConversation *conv = purple_find_conversation_with_account(type, convName.c_str(), purpleAccount);
     if (conv)
         purple_conversation_destroy(conv);
-    PurpleChat *purpleChat = purple_blist_find_chat(purpleAccount, chatName.c_str());
+    PurpleChat *purpleChat = (type == PURPLE_CONV_TYPE_CHAT) ? purple_blist_find_chat(purpleAccount, convName.c_str())
+                                                             : nullptr;
     if (purpleChat)
         purple_blist_remove_chat(purpleChat);
-    std::string setting = lastMessageSetting(chatId);
-    purple_account_remove_setting(purpleAccount, setting.c_str());
+    if (chatId.valid()) {
+        std::string setting = lastMessageSetting(chatId);
+        purple_account_remove_setting(purpleAccount, setting.c_str());
+    }
 
-    gchar      *logDir = purple_log_get_log_dir(PURPLE_LOG_CHAT, chatName.c_str(), purpleAccount);
+    gchar      *logDir = purple_log_get_log_dir((type == PURPLE_CONV_TYPE_CHAT) ? PURPLE_LOG_CHAT : PURPLE_LOG_IM,
+                                                convName.c_str(), purpleAccount);
     GDir       *dir    = logDir ? g_dir_open(logDir, 0, NULL) : nullptr;
     const char *entry;
     while (dir && (entry = g_dir_read_name(dir))) {

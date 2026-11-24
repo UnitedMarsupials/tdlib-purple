@@ -94,10 +94,15 @@ TEST_F(SecretChatTest, CreateSecretChat_Lifecycle)
                                         secretChatBuddyAlias.c_str());
     pluginInfo().remove_buddy(connection, dup, NULL);
     purple_buddy_destroy(dup);
-    tgl.verifyRequests({
-        make_object<deleteChatHistory>(secretChatChatId, true, false),
-        make_object<closeSecretChat>(secretChatId)
-    });
+    {
+        auto files = make_object<optimizeStorage>();
+        files->chat_ids_ = {secretChatChatId};
+        tgl.verifyRequests({
+            make_object<deleteChatHistory>(secretChatChatId, true, false),
+            std::move(files),
+            make_object<closeSecretChat>(secretChatId)
+        });
+    }
     tgl.update(make_object<updateSecretChat>(make_object<secretChat>(
         secretChatId, userIds[0], make_object<secretChatStateClosed>(), true, "whatever", 60
     )));

@@ -3863,7 +3863,28 @@ void PurpleTdClient::renameContact(const char *buddyName, const char *newAlias)
     m_transceiver.sendQuery(makeAddContact(userId, "", firstName, lastName), nullptr);
 }
 
-void PurpleTdClient::removeContactAndPrivateChat(const std::string &buddyName)
+// Its messages and files that TDLib keeps here, the chat taken out of the chat list; Telegram keeps
+// them for the others
+void PurpleTdClient::deleteLocalChat(ChatId chatId)
+{
+    auto history = td::td_api::make_object<td::td_api::deleteChatHistory>();
+    history->chat_id_               = chatId.value();
+    history->remove_from_chat_list_ = true;
+    history->revoke_                = false;
+    m_transceiver.sendQuery(std::move(history), nullptr);
+    auto files = td::td_api::make_object<td::td_api::optimizeStorage>();
+    files->size_           = 0;
+    files->ttl_            = 0;
+    files->count_          = 0;
+    files->immunity_delay_ = 0;
+    files->chat_ids_.push_back(chatId.value());
+    files->chat_limit_     = 1;
+    m_transceiver.sendQuery(std::move(files), nullptr);
+}
+
+// A buddy removed, a contact or not: nothing of the chat with them stays here, and a contact is one
+// no longer
+void PurpleTdClient::removeContactAndPrivateChat(const std::string &buddyName, bool contact)
 {
     const td::td_api::chat *chat         = nullptr;
     UserId                  userId       = purpleBuddyNameToUserId(buddyName.c_str());
@@ -3874,20 +3895,17 @@ void PurpleTdClient::removeContactAndPrivateChat(const std::string &buddyName)
     else if (secretChatId.valid())
         chat = m_data.getChatBySecretChat(secretChatId);
 
+    ChatId chatId;
     if (chat) {
-        ChatId chatId = getId(*chat);
-        chat = nullptr;
+        chatId = getId(*chat);
+        chat   = nullptr;
         // Prevent accidentally re-creating buddy if any updateChat* or updateUser arrives
         m_data.deleteChat(chatId);
-
-        auto deleteChat = td::td_api::make_object<td::td_api::deleteChatHistory>();
-        deleteChat->chat_id_ = chatId.value();
-        deleteChat->remove_from_chat_list_ = true;
-        deleteChat->revoke_ = false;
-        m_transceiver.sendQuery(std::move(deleteChat), nullptr);
+        deleteLocalChat(chatId);
     }
+    wipeChatTraces(m_account, chatId, buddyName, PURPLE_CONV_TYPE_IM);
 
-    if (userId.valid()) {
+    if (userId.valid() && contact) {
         auto removeContact = td::td_api::make_object<td::td_api::removeContacts>();
         removeContact->user_ids_.push_back(userId.value());
         m_transceiver.sendQuery(std::move(removeContact), nullptr);
@@ -4395,21 +4413,8 @@ void PurpleTdClient::leaveGroup(const std::string &purpleChatName, bool deleteSu
     bool         member       = m_data.isGroupChatWithMembership(*chat);
     bool         forAll       = supergroupId.valid() && member && chat->can_be_deleted_for_all_users_;
     if (deleteSupergroup) {
-        // Nothing of it is kept here: its messages and files TDLib has, and all the rest of it
-        auto history = td::td_api::make_object<td::td_api::deleteChatHistory>();
-        history->chat_id_               = chatId.value();
-        history->remove_from_chat_list_ = true;
-        history->revoke_                = false;
-        m_transceiver.sendQuery(std::move(history), nullptr);
-        auto files = td::td_api::make_object<td::td_api::optimizeStorage>();
-        files->size_           = 0;
-        files->ttl_            = 0;
-        files->count_          = 0;
-        files->immunity_delay_ = 0;
-        files->chat_ids_.push_back(chatId.value());
-        files->chat_limit_     = 1;
-        m_transceiver.sendQuery(std::move(files), nullptr);
-        wipeChatTraces(m_account, chatId, purpleChatName);
+        deleteLocalChat(chatId);
+        wipeChatTraces(m_account, chatId, purpleChatName, PURPLE_CONV_TYPE_CHAT);
         // One not joined, or that only its owner could delete, is left as it is on Telegram
         if (!member)
             return;

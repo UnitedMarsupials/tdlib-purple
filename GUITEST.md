@@ -499,3 +499,5 @@ Open a public channel not joined, from a link to it, and quit Pidgin; start it a
 * "Delete group" from its menu, the dialog saying what goes: its tab closes and its entry goes,
   with no error; its directory under `~/.purple/logs/telegram/` is gone, and after the next start
   it is not in the buddy list.
+* Likewise "Remove" on a buddy written with, under "Telegram: not in contacts": their log's
+  directory is gone, and after the next start they are not back.

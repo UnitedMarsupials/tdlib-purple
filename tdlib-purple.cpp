@@ -631,35 +631,14 @@ static void tgprpl_add_buddy (PurpleConnection *gc, PurpleBuddy *buddy, PurpleGr
     tdClient->addContact(phoneNumberStr, aliasStr, groupName ? groupName : "");
 }
 
-static void request_delete_contact_on_server_yes (RequestData *data, int action)
-{
-    std::unique_ptr<RequestData> request(data);
-    PurpleTdClient *tdClient = getTdClient(request->account);
-
-    if (tdClient)
-        tdClient->removeContactAndPrivateChat(request->stringData);
-}
-
+// Asked already, by Pidgin: a stranger's buddy too, with nothing of the chat with them kept here, and
+// with no contact to remove
 static void tgprpl_request_delete_contact (PurpleConnection *gc, PurpleBuddy *buddy, PurpleGroup *group)
 {
     g_return_if_fail(buddy);
-    // A buddy of one written with though no contact is only taken out of the list: there is no
-    // contact to remove, and the chat with them is theirs too
-    if (isTransientBuddy(buddy))
-        return;
-
-    RequestData *data = new RequestData(purple_connection_get_account(gc));
-    data->stringData = purple_buddy_get_name(buddy);
-
-    // TRANSLATOR: Buddy deletion confirmation, title
-//     purple_request_yes_no(gc, _("Remove contact"),
-//                           // TRANSLATOR: Buddy deletion confirmation, content
-//                           _("Remove from global contact list and delete chat history from the server?\n"),
-//                           NULL,
-//                           0, purple_connection_get_account(gc), purple_buddy_get_name(buddy),
-//                           NULL, data, request_delete_contact_on_server_yes,
-//                           cancelRequest);
-    request_delete_contact_on_server_yes(data, 0);
+    PurpleTdClient *tdClient = getTdClient(purple_connection_get_account(gc));
+    if (tdClient)
+        tdClient->removeContactAndPrivateChat(purple_buddy_get_name(buddy), !isTransientBuddy(buddy));
 }
 
 static std::array<const char *, 3> invitePrefixes {
