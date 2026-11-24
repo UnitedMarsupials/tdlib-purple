@@ -3175,6 +3175,7 @@ struct Redraw {
     MessageId                                               latest; // the tab's end, if it stops short
     bool                                                    found  = false; // the earliest, or one read
     unsigned                                                beyond = 0; // found so far
+    bool                                                    start  = false; // the chat's first message got
     unsigned                                                limit;
     // Newest first, as TDLib gives them
     std::vector<td::td_api::object_ptr<td::td_api::message>> messages;
@@ -3333,10 +3334,14 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
     // or the latest
     MessageId scrolledTo = (redraw.filling || redraw.newest) ? MessageId() :
                            redraw.opening ? redraw.firstUnread : redraw.earliest;
+    bool trimmedTop = false;
     if (conv && windowLines && scrolledTo.valid() && trimTab(conv, windowLines, false, scrolledTo))
         setTabEnd(conv, findLastMessage(conv));
     else if (conv && windowLines)
-        trimTab(conv, windowLines, true);
+        trimmedTop = trimTab(conv, windowLines, true);
+    // Its first message shown, scrolling up looks for none before it, nor refills the tab with less
+    if (redraw.start && !trimmedTop)
+        g_historyComplete.insert(redraw.chatId.value());
     // Shown again, the messages already read are no news, as Pidgin takes them to be
     if (conv && chat && !chat->unread_count_)
         clearUnseen(conv);
@@ -3379,6 +3384,8 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
                 break;
         }
         bool full = redraw->messages.size() >= redraw->limit;
+        if (!added)
+            redraw->start = true;
         // Filling it from a message, or from the first unread, and as many before as wanted, or as
         // there are; or as much as fits: either is enough
         bool enough = found && ((redraw->beyond >= redraw->extra) || !added || full);
@@ -3573,8 +3580,9 @@ static void showFetchedLater(TdAccountData &account, ChatId chatId, MessageId en
     showMessages(readyMessages, account);
     showPendingNewest(account, chatId);
     unsigned windowLines = conv ? getWindowLines(conv) : 0;
-    if (windowLines)
-        trimTab(conv, windowLines, true, end);
+    // Its first message taken away, it is to be gone back to again
+    if (windowLines && trimTab(conv, windowLines, true, end))
+        g_historyComplete.erase(chatId.value());
 }
 
 static void laterMessagesResponse(TdAccountData &account, ChatId chatId, MessageId end,

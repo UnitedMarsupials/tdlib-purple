@@ -296,6 +296,17 @@ Scroll down to its end, or turn the mouse wheel down there.
 * Going on to the end, the newest messages come, and the debug log says "up
   to the newest".
 
+Follow a link to one of a channel's first posts, as in H3, scroll down for a
+batch or two, and then up to its top, past its first message. Then do it again
+with "scrollback_lines" set to 0, in `prefs.xml` or with `purple-send
+PurplePrefsSetInt string:/pidgin/conversations/scrollback_lines int32:0`.
+
+* Nothing earlier is fetched, and the tab keeps what it had, rather than
+  being filled anew with the 200 messages from the first; the debug log has no
+  "Showing messages before".
+* With "scrollback_lines" at 0 the first 200 are still written at once and
+  the later ones fifty at a time, and nothing is taken from the top.
+
 Close the tab and open it again as at first, so that it stops short of the
 newest again; then have a message come to the chat.
 
