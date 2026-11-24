@@ -1679,6 +1679,15 @@ bool PurpleTdClient::isConversationOf(PurpleConversation *conv, ChatId chatId)
     return chat && (getId(*chat) == chatId);
 }
 
+// Its link anyone can open, as only a public group's or channel's are
+static bool isChatPublic(TdAccountData &account, ChatId chatId)
+{
+    const td::td_api::chat       *chat       = account.getChat(chatId);
+    SupergroupId                  groupId    = chat ? getSupergroupId(*chat) : SupergroupId::invalid;
+    const td::td_api::supergroup *supergroup = groupId.valid() ? account.getSupergroup(groupId) : nullptr;
+    return supergroup && supergroup->usernames_ && !supergroup->usernames_->active_usernames_.empty();
+}
+
 void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId, OpenMenuRef openMenu)
 {
     // The message for the reactions it has, then what may be done to it, then the reactions it
@@ -1731,6 +1740,7 @@ void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId, OpenMen
                 menu.canDeleteForAll  = properties.can_be_deleted_for_all_users_;
                 menu.canReport        = properties.can_report_chat_;
                 menu.canForward       = properties.can_be_forwarded_;
+                menu.canGetLink       = properties.can_get_link_ && isChatPublic(m_data, chatId);
             } else
                 purple_debug_warning(config::pluginId, "What may be done to message %" G_GINT64_FORMAT " unknown: %s\n",
                                      messageId.value(), getDisplayedError(object).c_str());
@@ -1940,6 +1950,17 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
         };
         items.push_back(std::move(item));
     }
+    if (menu.canGetLink) {
+        MenuItem item;
+        // TRANSLATOR: Item of a message's menu, in a public group or channel: its https://t.me/ link goes on the clipboard, as text.
+        item.label  = _("Copy the message's link");
+        item.action = [accountName, chatId, messageId]() {
+            PurpleTdClient *client = findConnected(accountName.c_str());
+            if (client)
+                client->copyMessageLink(chatId, messageId);
+        };
+        items.push_back(std::move(item));
+    }
     if (menu.canReport) {
         MenuItem item;
         // TRANSLATOR: Item of a message's menu; it asks why, in a dialog or more.
@@ -2047,10 +2068,39 @@ void PurpleTdClient::reportReactionError(ChatId chatId, const std::string &emoji
 }
 
 // In the conversation, where what failed was asked for
+void PurpleTdClient::copyMessageLink(ChatId chatId, MessageId messageId)
+{
+    auto request = td::td_api::make_object<td::td_api::getMessageLink>();
+    request->chat_id_    = chatId.value();
+    request->message_id_ = messageId.value();
+    m_transceiver.sendQuery(std::move(request), [this, chatId](uint64_t, TdObjectPtr object) {
+        if (!object || (object->get_id() != td::td_api::messageLink::ID)) {
+            // TRANSLATOR: In-chat error message, after "Copy the message's link" was picked; the reason follows.
+            reportMenuError(chatId, _("Cannot copy the message's link"), object);
+            return;
+        }
+        const auto &messageLink = static_cast<const td::td_api::messageLink &>(*object);
+        // The chat may have stopped being public since the menu was shown
+        if (!messageLink.is_public_) {
+            // TRANSLATOR: In-chat error message, after "Copy the message's link" was picked.
+            reportMenuError(chatId, _("Cannot copy the message's link: only the chat's members could open it"));
+            return;
+        }
+        const std::string &link = messageLink.link_;
+        purple_debug_misc(config::pluginId, "Copying the link %s\n", link.c_str());
+        if (!copyTextToClipboard(link))
+            purple_debug_warning(config::pluginId, "No clipboard to copy the link to\n");
+    });
+}
+
 void PurpleTdClient::reportMenuError(ChatId chatId, const std::string &failure, const TdObjectPtr &object)
 {
-    std::string             notice = failure + ": " + getDisplayedError(object);
-    const td::td_api::chat *chat   = m_data.getChat(chatId);
+    reportMenuError(chatId, failure + ": " + getDisplayedError(object));
+}
+
+void PurpleTdClient::reportMenuError(ChatId chatId, const std::string &notice)
+{
+    const td::td_api::chat *chat = m_data.getChat(chatId);
     if (chat)
         showChatNotification(m_data, *chat, notice.c_str(), PURPLE_MESSAGE_ERROR);
     else
