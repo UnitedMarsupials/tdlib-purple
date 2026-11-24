@@ -296,6 +296,7 @@ struct IncomingMessage {
     // with the pictures of the image store it shows, which it holds
     std::string      loggedHtml;
     std::vector<int> loggedImageIds;
+    MessageId        loggedId;           // the message the line is, if the log says
 };
 
 class PendingMessageQueue {

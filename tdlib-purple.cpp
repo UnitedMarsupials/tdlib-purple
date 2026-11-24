@@ -1339,9 +1339,16 @@ static gboolean messageLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *l
     return TRUE;
 }
 
-// Called whenever the link to a message is right-clicked; it adds nothing to the menu
+// Called whenever the link to a message is right-clicked: the message's items, as its own menu has
+// them, the link having none of its own
 static gboolean jumpLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *link, PidginWidget *linkMenu)
 {
+    const char *url = g_linkGetUrl(link);
+    std::string accountName;
+    ChatId      chatId;
+    MessageId   messageId;
+    if (url && parseJumpLink(url, accountName, chatId, messageId))
+        addLinkMessageMenu(imhtml, linkMenu, messageId, false);
     return TRUE;
 }
 

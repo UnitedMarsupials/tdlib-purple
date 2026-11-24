@@ -3,6 +3,7 @@
 #include <gio/gio.h>
 #include "client-utils.h"
 #include "config.h"
+#include "translate.h"
 #include <algorithm>
 #include <set>
 #include <string>
@@ -820,15 +821,36 @@ static gboolean turnSpinner(gpointer data)
     return G_SOURCE_CONTINUE;
 }
 
-void appendTabLine(PurpleConversation *conv, const std::string &html)
+// Around a line of the log that is a message, such as one deleted since: not taken for one shown,
+// with a menu and reactions, but found by a link to it
+static const char LOGGED_MARK_PREFIX[] = "tdlib-message-logged-";
+
+static std::string getLoggedMarkName(MessageId messageId, bool start)
+{
+    return LOGGED_MARK_PREFIX + std::string(start ? "start-" : "end-") + std::to_string(messageId.value());
+}
+
+void appendTabLine(PurpleConversation *conv, const std::string &html, MessageId messageId)
 {
     GtkIMHtml *imhtml = getIMHtml(conv);
     if (!imhtml)
         return;
-    GtkTextIter where;
-    p_gtk_text_buffer_get_end_iter(imhtml->text_buffer, &where);
-    std::string line = (p_gtk_text_iter_get_offset(&where) ? "<br>" : "") + html;
+    GtkTextBuffer *buffer = imhtml->text_buffer;
+    GtkTextIter    where;
+    p_gtk_text_buffer_get_end_iter(buffer, &where);
+    gint offset = p_gtk_text_iter_get_offset(&where);
+    std::string line = (offset ? "<br>" : "") + html;
     p_gtk_imhtml_insert_html_at_iter(imhtml, line.c_str(), GtkIMHtmlOptions(0), &where);
+    if (messageId.valid()) {
+        GtkTextIter start;
+        p_gtk_text_buffer_get_iter_at_offset(buffer, &start, offset);
+        // Past the line break, at the line's own start
+        if (offset)
+            p_gtk_text_iter_forward_char(&start);
+        p_gtk_text_buffer_get_end_iter(buffer, &where);
+        setMark(buffer, getLoggedMarkName(messageId, true), start);
+        setMark(buffer, getLoggedMarkName(messageId, false), where);
+    }
 }
 
 void startProgress(PurpleConversation *conv, const std::string &html)
@@ -1876,12 +1898,19 @@ bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId)
     GtkTextBuffer *buffer = (g_pidginUi && imhtml) ? imhtml->text_buffer : nullptr;
     GtkTextMark   *start  = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, true).c_str()) : nullptr;
     GtkTextMark   *end    = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, false).c_str()) : nullptr;
+    // Or its line from the log, unless trimmed away since, its marks left together
+    if (buffer && (!start || !end)) {
+        start = p_gtk_text_buffer_get_mark(buffer, getLoggedMarkName(messageId, true).c_str());
+        end   = p_gtk_text_buffer_get_mark(buffer, getLoggedMarkName(messageId, false).c_str());
+    }
     if (!start || !end)
         return false;
 
     GtkTextIter startIter, endIter;
     p_gtk_text_buffer_get_iter_at_mark(buffer, &startIter, start);
     p_gtk_text_buffer_get_iter_at_mark(buffer, &endIter, end);
+    if (p_gtk_text_iter_compare(&startIter, &endIter) >= 0)
+        return false;
     p_gtk_text_buffer_select_range(buffer, &startIter, &endIter);
     // The message's beginning a little below the top, so what came just before shows too
     p_gtk_text_view_scroll_to_mark(reinterpret_cast<GtkTextView *>(imhtml), start, 0.0, TRUE, 0.0, 0.1);
@@ -1996,9 +2025,16 @@ void fillOpenMenu(const OpenMenuRef &menu, const std::vector<MenuItem> &items)
     for (const MenuItem &item: items)
         if (!(menu->fileGiven && item.copiesFile))
             shown.push_back(item);
-    if (shown.empty())
+    if (shown.empty() && menu->separator)
         p_gtk_widget_destroy(menu->separator);
-    else {
+    // Nothing else in it either: said so, rather than left empty, as Pidgin would have
+    else if (shown.empty()) {
+        // TRANSLATOR: Disabled item of a menu that has nothing in it, such as that of a link to a message no longer there.
+        GtkWidget *none = p_gtk_menu_item_new_with_label(_("No actions available"));
+        p_gtk_widget_set_sensitive(none, FALSE);
+        p_gtk_menu_shell_append(reinterpret_cast<GtkMenuShell *>(menu->menu), none);
+        p_gtk_widget_show(none);
+    } else {
         addMenuItems(menu->menu, shown, 0);
         p_gtk_widget_show_all(menu->menu);
     }
@@ -2129,15 +2165,18 @@ static MessageId findMessageAt(GtkTextBuffer *buffer, const GtkTextIter &where)
         g_slist_free(marks);
         if (!messageId.valid())
             continue;
+        // Its text or its reactions, whichever ends later: an edit's text goes in after the end of
+        // reactions taken back, which is where the text ended
+        bool before = false;
         for (MarkKind kind: {MarkKind::Reactions, MarkKind::End}) {
             GtkTextMark *end = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, kind).c_str());
             GtkTextIter  endIter;
             if (end) {
                 p_gtk_text_buffer_get_iter_at_mark(buffer, &endIter, end);
-                return (p_gtk_text_iter_compare(&where, &endIter) < 0) ? messageId : MessageId();
+                before = before || (p_gtk_text_iter_compare(&where, &endIter) < 0);
             }
         }
-        return MessageId();
+        return before ? messageId : MessageId();
     } while (p_gtk_text_iter_backward_char(&iter));
     return MessageId();
 }
@@ -2619,10 +2658,14 @@ static void addMessageMenu(PurpleConversation *conv, GtkWidget *menu, MessageId 
     OpenMenuRef openMenu = std::make_shared<OpenMenu>();
     openMenu->menu        = menu;
     openMenu->fileGiven   = fileGiven;
-    openMenu->separator   = p_gtk_separator_menu_item_new();
+    // Apart from the menu's own items, if it has any
+    if (reinterpret_cast<GtkMenuShell *>(menu)->children)
+        openMenu->separator = p_gtk_separator_menu_item_new();
     openMenu->placeholder = p_gtk_menu_item_new_with_label("\xe2\x80\xa6");
     p_gtk_widget_set_sensitive(openMenu->placeholder, FALSE);
     for (GtkWidget *item: {openMenu->separator, openMenu->placeholder}) {
+        if (!item)
+            continue;
         p_gtk_menu_shell_append(reinterpret_cast<GtkMenuShell *>(menu), item);
         p_gtk_widget_show(item);
     }
@@ -3704,7 +3747,7 @@ bool canRedrawConversation(PurpleConversation *conv)
     return false;
 }
 
-void appendTabLine(PurpleConversation *conv, const std::string &html)
+void appendTabLine(PurpleConversation *conv, const std::string &html, MessageId messageId)
 {
 }
 

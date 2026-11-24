@@ -1924,3 +1924,7 @@ msgstr "Konfiguracja uwierzytelnienia dwuskładnikowego"
 
 #~ msgid "Days of messages to show on opening a conversation, in Pidgin"
 #~ msgstr "Dni wiadomości do pokazania po otwarciu rozmowy w Pidginie"
+
+#. TRANSLATOR: Disabled item of a menu that has nothing in it, such as that of a link to a message no longer there.
+msgid "No actions available"
+msgstr "Brak dostępnych działań"

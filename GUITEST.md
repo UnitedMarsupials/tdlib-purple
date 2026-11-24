@@ -197,8 +197,13 @@ Edit a message of ours from its menu, then delete it.
   it out, and the notice names us, as having deleted our own message: in English, "deleted their
   message".
 
+Right-click the edited message's text, after giving it a reaction and taking it back.
+
+* The menu has the message's items, as on its sender's name.
+
 Since: an edit forgot that the message was ours, so that deleting it named us as its sender like
-anyone else's.
+anyone else's; and the text of an edited message whose reactions had been taken back got no
+items of its own in its menu.
 
 ### M2. Forward
 
@@ -279,6 +284,12 @@ anew from its first unread, as in H1, and go back again.
 Click the time in a reply's quote, and in the notice of an edit or a reaction.
 
 * The conversation scrolls to that message.
+* So it does to a message deleted since, struck out as it comes back from the log, as in H4.
+
+Right-click such a link.
+
+* The menu has the linked message's items, as its own menu has them, with no separator above
+  them; or, for one deleted, "No actions available".
 
 ### H4. Our deleted messages, again
 

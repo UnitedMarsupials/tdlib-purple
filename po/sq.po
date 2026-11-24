@@ -1911,3 +1911,7 @@ msgstr "Formësoni mirëfilltësim dyfaktorësh…"
 
 #~ msgid "Days of messages to show on opening a conversation, in Pidgin"
 #~ msgstr "Ditë mesazhesh për t'u shfaqur kur hapet një bisedë, në Pidgin"
+
+#. TRANSLATOR: Disabled item of a menu that has nothing in it, such as that of a link to a message no longer there.
+msgid "No actions available"
+msgstr "S’ka veprime të mundshme"

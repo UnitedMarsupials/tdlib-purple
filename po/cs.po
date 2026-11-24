@@ -1909,3 +1909,7 @@ msgstr "Nastavit dvou úrovňovou autorizaci..."
 
 #~ msgid "Days of messages to show on opening a conversation, in Pidgin"
 #~ msgstr "Dny zpráv k zobrazení při otevření konverzace v Pidginu"
+
+#. TRANSLATOR: Disabled item of a menu that has nothing in it, such as that of a link to a message no longer there.
+msgid "No actions available"
+msgstr "Žádné dostupné akce"

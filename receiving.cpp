@@ -1678,7 +1678,7 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
     if (!fullMessage.message) return;
     td::td_api::message &message = *fullMessage.message;
     if (!fullMessage.loggedHtml.empty()) {
-        appendTabLine(findMessageConversation(account, chat), fullMessage.loggedHtml);
+        appendTabLine(findMessageConversation(account, chat), fullMessage.loggedHtml, fullMessage.loggedId);
         for (int id: fullMessage.loggedImageIds)
             purple_imgstore_unref_by_id(id);
         return;
@@ -3241,6 +3241,7 @@ static void queueLoggedLine(TdAccountData &account, ChatId chatId, LoggedLine &l
     item.message->date_    = line.when;
     item.loggedHtml        = std::move(line.html);
     item.loggedImageIds    = std::move(line.imageIds);
+    item.loggedId          = line.messageId;
     IncomingMessage left = account.pendingMessages.addReadyMessage(std::move(item), PendingMessageQueue::Prepend);
     for (int id: left.loggedImageIds)
         purple_imgstore_unref_by_id(id);

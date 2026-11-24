@@ -1933,3 +1933,7 @@ msgstr "Zwei-Faktor-Authentifizierung einstellen..."
 #~ msgstr ""
 #~ "Tage an Nachrichten, die beim Öffnen einer Unterhaltung in Pidgin gezeigt "
 #~ "werden"
+
+#. TRANSLATOR: Disabled item of a menu that has nothing in it, such as that of a link to a message no longer there.
+msgid "No actions available"
+msgstr "Keine Aktionen verfügbar"
