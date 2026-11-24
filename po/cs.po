@@ -249,7 +249,7 @@ msgstr "videoNote"
 msgid "{:02}:{:02}:{:02}"
 msgstr "{:02}:{:02}:{:02}"
 
-#. TRANSLATOR: Disabled item of a menu that has nothing in it, such as that of a link to a message whose chat is not known.
+#. TRANSLATOR: Disabled item of a menu that has nothing in it.
 #: ../pidgin-ui.cpp:2151
 msgid "No actions available"
 msgstr "Žádné dostupné akce"
