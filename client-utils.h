@@ -46,8 +46,7 @@ void                updateSupergroupChat(TdAccountData &account, SupergroupId gr
 bool                isInviteLinkActive(const td::td_api::chatInviteLink &linkInfo);
 void                removeGroupChat(PurpleAccount *purpleAccount, const td::td_api::chat &chat);
 void                addTransientChat(TdAccountData &account, const td::td_api::chat &chat);
-bool                isChatForgotten(PurpleAccount *purpleAccount, ChatId chatId);
-void                setChatForgotten(PurpleAccount *purpleAccount, ChatId chatId, bool forgotten);
+void                wipeChatTraces(PurpleAccount *purpleAccount, ChatId chatId, const std::string &chatName);
 void                removePrivateChat(TdAccountData &account, const td::td_api::chat &chat);
 void                saveChatLastMessage(TdAccountData &account, ChatId chatId, MessageId messageId);
 MessageId           getChatLastMessage(TdAccountData &account, ChatId chatId);

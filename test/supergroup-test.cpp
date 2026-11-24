@@ -298,6 +298,15 @@ TEST_F(SupergroupTest, ExistingSupergroupReceiveMessageAtLogin_WithMemberList_Op
 TEST_F(SupergroupTest, DeleteSupergroup_Fail)
 {
     loginWithSupergroup();
+    // Ours to delete for all
+    {
+        auto chat = makeChat(groupChatId, make_object<chatTypeSupergroup>(groupId, false), groupChatTitle,
+                             nullptr, 0, 0, 0);
+        chat->can_be_deleted_for_all_users_ = true;
+        tgl.update(make_object<updateNewChat>(std::move(chat)));
+        tgl.update(makeUpdateChatListMain(groupChatId));
+    }
+    prpl.discardEvents();
     PurpleChat *chat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
     ASSERT_NE(nullptr, chat);
     GList *actions = pluginInfo().blist_node_menu(&chat->node);
@@ -311,7 +320,16 @@ TEST_F(SupergroupTest, DeleteSupergroup_Fail)
     nodeMenuAction(&chat->node, actions, "Delete group");
     prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
     prpl.requestedAction("_Yes");
-    tgl.verifyRequest(deleteChat(groupChatId));
+    {
+        auto files = make_object<optimizeStorage>();
+        files->chat_ids_ = {groupChatId};
+        tgl.verifyRequests({
+            make_object<deleteChatHistory>(groupChatId, true, false),
+            std::move(files),
+            make_object<deleteChat>(groupChatId)
+        });
+    }
+    prpl.verifyEvents(RemoveChatEvent(groupChatPurpleName, ""));
     tgl.reply(make_object<error>(100, "error"));
 
     g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
@@ -829,6 +847,8 @@ TEST_F(SupergroupTest, LoggedUnjoinedChannel)
     gchar *logDir = g_build_filename(purple_user_dir(), "logs", "telegram", ("+" + selfPhoneNumber).c_str(),
                                      (groupChatPurpleName + ".chat").c_str(), NULL);
     ASSERT_EQ(0, g_mkdir_with_parents(logDir, 0700));
+    gchar *logFile = g_build_filename(logDir, "2026-11-24.120000-0500EST.html", NULL);
+    ASSERT_TRUE(g_file_set_contents(logFile, "<html></html>", -1, NULL));
     login();
     tgl.verifyRequest(getChat(groupChatId));
     tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusLeft>(), 2)));
@@ -847,37 +867,33 @@ TEST_F(SupergroupTest, LoggedUnjoinedChannel)
     GHashTable *components = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup(groupChatPurpleName.c_str()));
     pluginInfo().join_chat(connection, components);
+    g_hash_table_destroy(components);
     prpl.verifyEvents(ServGotJoinedChatEvent(connection, 1, groupChatPurpleName, groupChatTitle),
                       PresentConversationEvent(groupChatPurpleName));
 
-    // Removed by the user, as from Pidgin's menu, it is forgotten: not looked up at the next login
-    const std::string forgotten = "forgotten-chat" + std::to_string(groupChatId);
-    purple_blist_remove_chat(purpleChat);
-    prpl.verifyEvents(RemoveChatEvent(groupChatPurpleName, ""));
-    EXPECT_TRUE(purple_account_get_bool(account, forgotten.c_str(), FALSE));
-
-    // Shown again, it is not; its tab closed and opened anew
-    purple_conversation_destroy(purple_find_conversation_with_account(PURPLE_CONV_TYPE_CHAT,
-                                                                      groupChatPurpleName.c_str(), account));
-    prpl.discardEvents();
-    pluginInfo().join_chat(connection, components);
-    g_hash_table_destroy(components);
-    purpleChat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
-    ASSERT_NE(nullptr, purpleChat);
-    prpl.discardEvents();
-    EXPECT_FALSE(purple_account_get_bool(account, forgotten.c_str(), FALSE));
-
-    // Deleted from its menu, not joined, it cannot be deleted from Telegram: only its entry goes,
-    // forgotten
+    // Deleted from its menu, nothing of it stays here: TDLib's messages and files of it, its tab and
+    // entry, its log. Not joined, it is not deleted from Telegram.
     GList *actions = pluginInfo().blist_node_menu(&purpleChat->node);
     nodeMenuAction(&purpleChat->node, actions, "Delete group");
     g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
     prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
     prpl.requestedAction("_Yes");
-    tgl.verifyNoRequests();
+    {
+        auto files = make_object<optimizeStorage>();
+        files->chat_ids_ = {groupChatId};
+        tgl.verifyRequests({
+            make_object<deleteChatHistory>(groupChatId, true, false),
+            std::move(files)
+        });
+    }
     prpl.verifyEvents(RemoveChatEvent(groupChatPurpleName, ""));
-    EXPECT_TRUE(purple_account_get_bool(account, forgotten.c_str(), FALSE));
+    EXPECT_EQ(nullptr, purple_find_conversation_with_account(PURPLE_CONV_TYPE_CHAT, groupChatPurpleName.c_str(),
+                                                             account));
+    EXPECT_FALSE(g_file_test(logFile, G_FILE_TEST_EXISTS));
+    EXPECT_FALSE(g_file_test(logDir, G_FILE_TEST_EXISTS));
+    remove(logFile);
     rmdir(logDir);
+    g_free(logFile);
     g_free(logDir);
 }
 

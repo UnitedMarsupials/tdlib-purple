@@ -4053,8 +4053,6 @@ void PurpleTdClient::showLoggedChats()
                 continue;
             chatId = ChatId::fromString(entry + strlen("id"));
         }
-        if (isChatForgotten(m_account, chatId))
-            continue;
         auto request = td::td_api::make_object<td::td_api::getChat>();
         request->chat_id_ = chatId.value();
         m_transceiver.sendQuery(std::move(request), [this, chatId](uint64_t, TdObjectPtr object) {
@@ -4393,18 +4391,34 @@ void PurpleTdClient::leaveGroup(const std::string &purpleChatName, bool deleteSu
     const td::td_api::chat *chat   = chatId.valid() ? m_data.getChat(chatId) : nullptr;
     if (!chat) return;
 
-    // Deleted, it stays out of the buddy list, logged or not; one not joined is only that, as only
-    // its owner could delete it
-    if (deleteSupergroup)
-        setChatForgotten(m_account, chatId, true);
-    if (deleteSupergroup && !m_data.isGroupChatWithMembership(*chat)) {
-        PurpleChat *purpleChat = purple_blist_find_chat(m_account, purpleChatName.c_str());
-        if (purpleChat)
-            purple_blist_remove_chat(purpleChat);
-        return;
-    }
     SupergroupId supergroupId = getSupergroupId(*chat);
-    if (deleteSupergroup && supergroupId.valid()) {
+    bool         member       = m_data.isGroupChatWithMembership(*chat);
+    bool         forAll       = supergroupId.valid() && member && chat->can_be_deleted_for_all_users_;
+    if (deleteSupergroup) {
+        // Nothing of it is kept here: its messages and files TDLib has, and all the rest of it
+        auto history = td::td_api::make_object<td::td_api::deleteChatHistory>();
+        history->chat_id_               = chatId.value();
+        history->remove_from_chat_list_ = true;
+        history->revoke_                = false;
+        m_transceiver.sendQuery(std::move(history), nullptr);
+        auto files = td::td_api::make_object<td::td_api::optimizeStorage>();
+        files->size_           = 0;
+        files->ttl_            = 0;
+        files->count_          = 0;
+        files->immunity_delay_ = 0;
+        files->chat_ids_.push_back(chatId.value());
+        files->chat_limit_     = 1;
+        m_transceiver.sendQuery(std::move(files), nullptr);
+        wipeChatTraces(m_account, chatId, purpleChatName);
+        // One not joined, or that only its owner could delete, is left as it is on Telegram
+        if (!member)
+            return;
+        if (!forAll) {
+            m_transceiver.sendQuery(td::td_api::make_object<td::td_api::leaveChat>(chatId.value()), nullptr);
+            return;
+        }
+    }
+    if (deleteSupergroup && forAll) {
         m_transceiver.sendQuery(td::td_api::make_object<td::td_api::deleteChat>(chatId.value()),
                                 &PurpleTdClient::deleteSupergroupResponse);
     } else {

@@ -692,10 +692,16 @@ TEST_F(GroupChatTest, DeleteBasicGroup_Creator)
     nodeMenuAction(&chat->node, actions, "Delete group");
     prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
     prpl.requestedAction("_Yes");
-    tgl.verifyRequests({
-        make_object<leaveChat>(groupChatId),
-        make_object<deleteChatHistory>(groupChatId, true, false)
-    });
+    {
+        auto files = make_object<optimizeStorage>();
+        files->chat_ids_ = {groupChatId};
+        tgl.verifyRequests({
+            make_object<deleteChatHistory>(groupChatId, true, false),
+            std::move(files),
+            make_object<leaveChat>(groupChatId)
+        });
+    }
+    prpl.verifyEvents(RemoveChatEvent(groupChatPurpleName, ""));
 
     g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
 }
@@ -707,9 +713,20 @@ TEST_F(GroupChatTest, DeleteBasicGroup_NonCreator)
     ASSERT_NE(nullptr, chat);
     GList *actions = pluginInfo().blist_node_menu(&chat->node);
 
+    // Someone else's: left, and nothing of it kept here
     nodeMenuAction(&chat->node, actions, "Delete group");
-    prpl.verifyNoEvents();
-    tgl.verifyNoRequests();
+    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
+    prpl.requestedAction("_Yes");
+    {
+        auto files = make_object<optimizeStorage>();
+        files->chat_ids_ = {groupChatId};
+        tgl.verifyRequests({
+            make_object<deleteChatHistory>(groupChatId, true, false),
+            std::move(files),
+            make_object<leaveChat>(groupChatId)
+        });
+    }
+    prpl.verifyEvents(RemoveChatEvent(groupChatPurpleName, ""));
 
     g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
 }
