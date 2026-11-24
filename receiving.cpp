@@ -3436,6 +3436,10 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
         purple_debug_warning(config::pluginId, "Cannot fetch chat %" G_GINT64_FORMAT " to redraw it: %s\n",
                              redraw->chatId.value(), getDisplayedError(response).c_str());
     bool fetched = response && (response->get_id() == td::td_api::messages::ID);
+    // Taken before the messages that came meanwhile are shown, which would not fill it
+    const td::td_api::chat *chat  = redraw->linked ? account.getChat(redraw->chatId) : nullptr;
+    PurpleConversation     *conv  = chat ? findMessageConversation(account, *chat) : nullptr;
+    bool                    empty = conv && !findFirstMessage(conv).valid();
     // Left as it is
     stopRedrawProgress(account, redraw->chatId);
     std::vector<IncomingMessage> readyMessages;
@@ -3445,9 +3449,6 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
     // A tab ends at the latest message, and cannot reach so far back: one just opened for the link,
     // still empty, is filled as it would be opened anyway; one showing messages is left as it is
     if (redraw->linked) {
-        const td::td_api::chat *chat  = account.getChat(redraw->chatId);
-        PurpleConversation     *conv  = chat ? findMessageConversation(account, *chat) : nullptr;
-        bool                    empty = conv && !findFirstMessage(conv).valid();
         if (!fetched) {
             // Not known to be too far back: why it could not be fetched
             std::string reason = getDisplayedError(response);
