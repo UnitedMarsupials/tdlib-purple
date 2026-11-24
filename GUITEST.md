@@ -247,7 +247,8 @@ Escape. Do it again, and send the edit this time.
 Right-click a member's message in a group, then one in a private chat and a channel's post.
 
 * In the group, the menu has "Report" and the member's name, besides "Report the message…";
-  in the private chat and the channel it does not, as the chat's own "Report…" is that.
+  in the channel it does not, nor in a private chat with a contact, as Telegram takes no report
+  about them; a stranger's chat that offers to report them has it (below).
 
 Choose it only for someone who deserves it: it does report them. Then:
 
