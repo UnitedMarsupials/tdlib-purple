@@ -1734,6 +1734,18 @@ static std::string makeLink(const char *scheme, PurpleAccount *account, ChatId c
 
 // tdlib://<account>/<chat id>/<message id>: the message, rather than its file, which may not be
 // there yet, and whose path would not outlive TDLib's file cache
+bool isLinkSchemeAllowed(const std::string &url)
+{
+    gchar *scheme  = g_uri_parse_scheme(url.c_str());
+    bool   allowed = false;
+    if (scheme) {
+        for (const char *known: {"http", "https", "tg", "mailto", "tel"})
+            allowed = allowed || !g_ascii_strcasecmp(scheme, known);
+        g_free(scheme);
+    }
+    return allowed;
+}
+
 std::string makeMessageLink(PurpleAccount *account, ChatId chatId, MessageId messageId,
                             const std::string &variant)
 {

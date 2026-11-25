@@ -50,6 +50,7 @@ add_executable(tests EXCLUDE_FROM_ALL
     ../log-history.cpp
     ../clipboard.cpp
     ../thumbnail.cpp
+    ../rich-message.cpp
 )
 
 # C++17, not the plugin's C++14: GoogleTest requires it from 1.17 on.

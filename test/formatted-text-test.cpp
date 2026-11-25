@@ -30,6 +30,12 @@ TEST(FormattedText, Entities)
                           " <font color=\"#808080\" back=\"#808080\">secret</font>"),
               format("site ls secret", std::move(list)));
 
+    // A link to a file, or to a scheme of the plugin's own, is its text alone
+    list.clear();
+    list.push_back(makeTextEntity(0, 4, makeTextUrl("file:///etc/passwd")));
+    list.push_back(makeTextEntity(5, 4, makeTextUrl("tdlib://x/1/2")));
+    ASSERT_EQ(std::string("here link"), format("here link", std::move(list)));
+
     // A quote, each of its lines after a bar
     list.clear();
     list.push_back(makeTextEntity(5, 7, make_object<textEntityTypeBlockQuote>()));

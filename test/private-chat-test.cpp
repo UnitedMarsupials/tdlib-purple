@@ -2207,3 +2207,186 @@ TEST_F(PrivateChatTest, OpenBuddyUnknownToTelegram)
                                              "Telegram has no chat with this user: code 400 (USER_NOT_FOUND &lt;x&gt;)",
                                              (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), 0));
 }
+
+#if TDLIB_API_RICH_MESSAGE
+static object_ptr<RichText> plainText(const std::string &text)
+{
+    auto result = make_object<richTextPlain>();
+    result->text_ = text;
+    return std::move(result);
+}
+
+// A rich message, laid out as an instant view page is: its text and structure, its media as
+// placeholders with their captions
+TEST_F(PrivateChatTest, RichMessage)
+{
+    const int32_t date = 10001;
+    loginWithOneContact();
+
+    auto message = make_object<richMessage>();
+    {
+        auto heading = make_object<pageBlockSectionHeading>();
+        heading->text_ = plainText("Vase <Verona>");
+        heading->size_ = 1;
+        message->blocks_.push_back(std::move(heading));
+    }
+    {
+        auto bold = make_object<richTextBold>();
+        bold->text_ = plainText("800");
+        auto link = make_object<richTextUrl>();
+        link->text_ = plainText("shop");
+        link->url_  = "https://example.com/?a=1&b=2";
+        auto texts = make_object<richTexts>();
+        texts->texts_.push_back(std::move(bold));
+        texts->texts_.push_back(plainText(" UAH at the "));
+        texts->texts_.push_back(std::move(link));
+        auto paragraph = make_object<pageBlockParagraph>();
+        paragraph->text_ = std::move(texts);
+        message->blocks_.push_back(std::move(paragraph));
+    }
+    {
+        auto collage = make_object<pageBlockCollage>();
+        for (int i = 0; i < 2; i++)
+            collage->blocks_.push_back(make_object<pageBlockPhoto>());
+        collage->caption_ = make_object<pageBlockCaption>();
+        collage->caption_->text_ = plainText("Both sides");
+        message->blocks_.push_back(std::move(collage));
+    }
+    {
+        auto list = make_object<pageBlockList>();
+        for (bool checked: {true, false}) {
+            auto paragraph = make_object<pageBlockParagraph>();
+            paragraph->text_ = plainText(checked ? "glazed" : "signed");
+            auto item = make_object<pageBlockListItem>();
+            item->has_checkbox_ = true;
+            item->is_checked_   = checked;
+            item->blocks_.push_back(std::move(paragraph));
+            list->items_.push_back(std::move(item));
+        }
+        message->blocks_.push_back(std::move(list));
+    }
+    {
+        auto table = make_object<pageBlockTable>();
+        table->cells_.resize(2);
+        for (const char *text: {"Size", "Price"}) {
+            auto cell = make_object<pageBlockTableCell>();
+            cell->text_      = plainText(text);
+            cell->is_header_ = true;
+            table->cells_[0].push_back(std::move(cell));
+        }
+        for (const char *text: {"30 cm", "800"}) {
+            auto cell = make_object<pageBlockTableCell>();
+            cell->text_ = plainText(text);
+            table->cells_[1].push_back(std::move(cell));
+        }
+        message->blocks_.push_back(std::move(table));
+    }
+    {
+        // A link to a file is its text alone; a spoiler, hidden until selected
+        auto local = make_object<richTextUrl>();
+        local->text_ = plainText("here");
+        local->url_  = "file:///etc/passwd";
+        auto spoiler = make_object<richTextSpoiler>();
+        spoiler->text_ = plainText("secret");
+        auto texts = make_object<richTexts>();
+        texts->texts_.push_back(std::move(local));
+        texts->texts_.push_back(plainText(" "));
+        texts->texts_.push_back(std::move(spoiler));
+        auto paragraph = make_object<pageBlockParagraph>();
+        paragraph->text_ = std::move(texts);
+        message->blocks_.push_back(std::move(paragraph));
+    }
+    message->blocks_.push_back(make_object<pageBlockAnchor>());
+    auto content = make_object<messageRichMessage>();
+    content->message_ = std::move(message);
+
+    tgl.update(make_object<updateNewMessage>(makeMessage(1, userIds[0], chatIds[0], false, date, std::move(content))));
+    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
+    prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0),
+        "<b><font size=\"4\">Vase &lt;Verona&gt;</font></b><br>"
+        // The mock escapes only < and >, as the rest of the tests have it
+        "<b>800</b> UAH at the <a href=\"https://example.com/?a=1&b=2\">shop</a><br>"
+        "[photo] [photo] Both sides<br>"
+        "\xe2\x98\x91 glazed<br>"
+        "\xe2\x98\x90 signed<br>"
+        "<b>Size</b> | <b>Price</b><br>"
+        "30 cm | 800<br>"
+        "here <font color=\"#808080\" back=\"#808080\">secret</font>",
+        PURPLE_MESSAGE_RECV, date));
+}
+#endif
+
+#if TDLIB_API_RICH_MESSAGE
+// A rich message's pictures are fetched before it is shown, and shown in it where they are
+TEST_F(PrivateChatTest, RichMessagePictures)
+{
+    const int32_t date = 10001;
+    purple_account_set_string(account, "media-size-threshold", "0");
+    loginWithOneContact();
+
+    auto collage = make_object<pageBlockCollage>();
+    for (bool here: {true, false}) {
+        auto photoBlock = make_object<pageBlockPhoto>();
+        photoBlock->photo_ = make_object<photo>();
+        photoBlock->photo_->sizes_.push_back(makePhotoSize(::makeFile(here ? 101 : 102, 10000,
+                                                                       here ? TEST_SOURCE_DIR "/test.webp" : ""),
+                                                           640, 480));
+        collage->blocks_.push_back(std::move(photoBlock));
+    }
+    collage->caption_ = make_object<pageBlockCaption>();
+    collage->caption_->text_ = plainText("Both sides");
+    auto rich = make_object<richMessage>();
+    rich->blocks_.push_back(std::move(collage));
+    auto content = make_object<messageRichMessage>();
+    content->message_ = std::move(rich);
+
+    // The second fetched first, the message waiting for it
+    tgl.update(make_object<updateNewMessage>(makeMessage(1, userIds[0], chatIds[0], false, date, std::move(content))));
+    tgl.verifyRequest(downloadFile(102, 1, 0, 0, true));
+    prpl.verifyNoEvents();
+    tgl.reply(::makeFile(102, 10000, TEST_SOURCE_DIR "/test.webp"));
+    int second = getLastImgstoreId();
+    int first  = second - 1;
+    prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0),
+                                     "<img id=\"" + std::to_string(first) + "\"> <img id=\"" +
+                                     std::to_string(second) + "\"> Both sides",
+                                     (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES), date));
+    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
+}
+#endif
+
+#if TDLIB_API_RICH_MESSAGE
+// A picture not here before the message stopped waiting for it is shown once it is, the message
+// written again over itself, unlogged, not said to be edited
+TEST_F(PrivateChatTest, RichMessagePictureLate)
+{
+    const int32_t date = 10001;
+    purple_account_set_string(account, "media-size-threshold", "0");
+    loginWithOneContact();
+    auto makeRich = [this](bool downloaded) {
+        auto photoBlock = make_object<pageBlockPhoto>();
+        photoBlock->photo_ = make_object<photo>();
+        photoBlock->photo_->sizes_.push_back(makePhotoSize(::makeFile(102, 10000,
+                                                                       downloaded ? TEST_SOURCE_DIR "/test.webp" : ""),
+                                                           640, 480));
+        auto rich = make_object<richMessage>();
+        rich->blocks_.push_back(std::move(photoBlock));
+        auto content = make_object<messageRichMessage>();
+        content->message_ = std::move(rich);
+        return makeMessage(1, userIds[0], chatIds[0], false, date, std::move(content));
+    };
+
+    tgl.update(make_object<updateNewMessage>(makeRich(false)));
+    uint64_t download = tgl.verifyRequest(downloadFile(102, 1, 0, 0, true));
+    prpl.verifyNoEvents();
+    runTimeouts();
+    prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0), "[photo]", PURPLE_MESSAGE_RECV, date));
+    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
+
+    // Without Pidgin's tab there is nothing to write it over: only the message is asked for again
+    tgl.reply(download, ::makeFile(102, 10000, TEST_SOURCE_DIR "/test.webp"));
+    tgl.verifyRequest(getMessage(chatIds[0], 1));
+    tgl.reply(makeRich(true));
+    prpl.verifyNoEvents();
+}
+#endif
