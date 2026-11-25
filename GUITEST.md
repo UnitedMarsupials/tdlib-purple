@@ -519,6 +519,8 @@ Open a public channel not joined, from a link to it, and quit Pidgin; start it a
   whose conversation was logged, and any person written with who is not a contact, under
   "Telegram: not in contacts".
 * Opened, the channel's tab fills with its messages, as from the link, and nothing is sent to it.
+* A channel never opened before gets a log as its tab is filled (a new directory under
+  `~/.purple/logs/telegram/`), so that it is listed again after the next start.
 * For a group of ours with another member, "Delete group" asks "For everyone" or "For me only";
   the latter leaves it, and the other member still has it. (Make one for this, with the other
   test account.)
