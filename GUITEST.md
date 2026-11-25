@@ -522,6 +522,8 @@ Open a public channel not joined, from a link to it, and quit Pidgin; start it a
 * A channel never opened before gets a log as its tab is filled (a new directory under
   `~/.purple/logs/telegram/`), holding the posts the tab shows, so that it is listed again after
   the next start. Opened again, the tab filled anew, its log gets none of them a second time.
+* With a channel whose newest post is a big photo, on a slow line, closing and opening its tab
+  again before the photo is in: the photo is in the log once.
 * For a group of ours with another member, "Delete group" asks "For everyone" or "For me only";
   the latter leaves it, and the other member still has it. (Make one for this, with the other
   test account.)
