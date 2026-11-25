@@ -126,7 +126,7 @@ void updateUnreadReactions(TdAccountData &account, td::td_api::updateMessageUnre
 bool isButtonKey(const std::string &key);
 bool parseButtonKey(const std::string &key, size_t &row, size_t &column, std::string &url);
 void updateMessageButtons(TdAccountData &account, ChatId chatId, MessageId messageId,
-                          const td::td_api::ReplyMarkup *markup);
+                          td::td_api::object_ptr<td::td_api::ReplyMarkup> markup);
 
 // A chat with reactions to our messages not seen yet is marked, as the phone app marks it: its
 // conversation's title, and its contact in the buddy list, begin with a heart

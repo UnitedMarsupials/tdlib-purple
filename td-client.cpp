@@ -226,9 +226,9 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
 
     case td::td_api::updateMessageEdited::ID: {
         // Its buttons, as a bot changes them; a change of its text comes as updateMessageContent
-        auto &editedUpdate = static_cast<const td::td_api::updateMessageEdited &>(update);
+        auto &editedUpdate = static_cast<td::td_api::updateMessageEdited &>(update);
         updateMessageButtons(m_data, getChatId(editedUpdate), getMessageId(editedUpdate),
-                             editedUpdate.reply_markup_.get());
+                             std::move(editedUpdate.reply_markup_));
         break;
     }
 
@@ -3078,8 +3078,9 @@ void PurpleTdClient::pressButton(ChatId chatId, MessageId messageId, const td::t
         auto request = td::td_api::make_object<td::td_api::getCallbackQueryAnswer>();
         request->chat_id_    = chatId.value();
         request->message_id_ = messageId.value();
-        request->payload_    = td::td_api::make_object<td::td_api::callbackQueryPayloadData>(
-            static_cast<const td::td_api::inlineKeyboardButtonTypeCallback &>(*button.type_).data_);
+        auto payload = td::td_api::make_object<td::td_api::callbackQueryPayloadData>();
+        payload->data_ = static_cast<const td::td_api::inlineKeyboardButtonTypeCallback &>(*button.type_).data_;
+        request->payload_ = std::move(payload);
         m_transceiver.sendQuery(std::move(request), [this, chatId](uint64_t, TdObjectPtr object) {
             if (!object || (object->get_id() != td::td_api::callbackQueryAnswer::ID)) {
                 // TRANSLATOR: In-chat error message, after a message's button was clicked; the reason follows.

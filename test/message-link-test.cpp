@@ -621,7 +621,13 @@ TEST_F(MessageLinkTest, MessageButtons)
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
     tgl.reply(makeButtonsMessage());
     tgl.verifyRequest(getCallbackQueryAnswer(chatIds[0], messageId, make_object<callbackQueryPayloadData>("yes")));
-    tgl.reply(make_object<callbackQueryAnswer>("Done <now>", false, ""));
+    {
+        auto answer = make_object<callbackQueryAnswer>();
+        answer->text_       = "Done <now>";
+        answer->show_alert_ = false;
+        answer->url_        = "";
+        tgl.reply(std::move(answer));
+    }
     prpl.verifyEvents(NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
                       ConversationWriteEvent(purpleUserName(0), purpleUserName(0), "Done &lt;now&gt;",
                                              PURPLE_MESSAGE_NO_LOG, 0));

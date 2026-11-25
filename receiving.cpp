@@ -1685,12 +1685,16 @@ private:
 };
 
 void updateMessageButtons(TdAccountData &account, ChatId chatId, MessageId messageId,
-                          const td::td_api::ReplyMarkup *markup)
+                          td::td_api::object_ptr<td::td_api::ReplyMarkup> markup)
 {
     const td::td_api::chat *chat = account.getChat(chatId);
     PurpleConversation     *conv = (chat && pidginUiFound()) ? findMessageConversation(account, *chat) : nullptr;
     if (conv && findMessageMarks(conv, messageId).start)
-        showMessageButtons(conv, messageId, formatButtons(markup));
+        showMessageButtons(conv, messageId, formatButtons(markup.get()));
+    // Not shown yet, as waiting for what it replies to: shown with them as they are by then
+    IncomingMessage *pending = account.pendingMessages.findPendingMessage(chatId, messageId);
+    if (pending && pending->message)
+        pending->message->reply_markup_ = std::move(markup);
 }
 
 // A member named in a group event, as markup. TDLib tells of every user it names, ourselves too,
