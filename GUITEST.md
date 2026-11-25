@@ -247,12 +247,22 @@ Escape. Do it again, and send the edit this time.
 Right-click a member's message in a group, then one in a private chat and a channel's post.
 
 * In the group, the menu has "Report" and the member's name, besides "Report the message…";
-  in the private chat and the channel it does not, as the chat's own "Report…" is that.
+  in the channel it does not, nor in a private chat with a contact, as Telegram takes no report
+  about them; a stranger's chat that offers to report them has it (below).
 
 Choose it only for someone who deserves it: it does report them. Then:
 
 * Telegram's reasons are asked for, as for a message, and how it went is told in the group,
   without a private chat with them opened; or that Telegram takes no report about them.
+
+When a stranger writes first, as spammers do, right-click their message, and their buddy, under
+"Telegram: not in contacts".
+
+* The message's menu has "Report" and their name; the buddy's, "Report…".
+* Chosen, it asks nothing: the tab says "Reported to Telegram's moderators.", and the buddy
+  leaves "Telegram: not in contacts", as the offer is gone.
+* Before reporting, restart Pidgin: the buddy is under "Telegram: not in contacts" again, and
+  opens their chat with its history.
 
 ### M6. A message's link
 

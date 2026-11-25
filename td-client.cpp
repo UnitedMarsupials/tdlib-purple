@@ -1973,9 +1973,13 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
         };
         items.push_back(std::move(item));
     }
-    // In a group, its member, by themselves; in a private chat, that is the chat's "Report…"
+    // In a group, its member, by themselves; in a private chat, the chat, where Telegram takes it.
+    // Not a channel's author, whose post a signature may name: the phone app offers no such report.
     const td::td_api::chat *reportedIn = m_data.getChat(chatId);
-    if (menu.sender.valid() && reportedIn &&
+    bool                    channel    = reportedIn && reportedIn->type_ &&
+                                         (reportedIn->type_->get_id() == td::td_api::chatTypeSupergroup::ID) &&
+                                         static_cast<const td::td_api::chatTypeSupergroup &>(*reportedIn->type_).is_channel_;
+    if (menu.sender.valid() && reportedIn && !channel &&
         (getBasicGroupId(*reportedIn).valid() || getSupergroupId(*reportedIn).valid()))
     {
         MenuItem item;
@@ -1986,6 +1990,15 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
             PurpleTdClient *client = findConnected(accountName.c_str());
             if (client)
                 client->reportSender(chatId, userId);
+        };
+        items.push_back(std::move(item));
+    } else if (menu.sender.valid() && reportedIn && isPrivateChat(*reportedIn) && canReportChat(chatId)) {
+        MenuItem item;
+        item.label  = formatMessage(_("Report {}…"), m_data.getDisplayName(menu.sender));
+        item.action = [accountName, chatId]() {
+            PurpleTdClient *client = findConnected(accountName.c_str());
+            if (client)
+                client->reportChat(chatId, {});
         };
         items.push_back(std::move(item));
     }
@@ -3564,7 +3577,11 @@ void PurpleTdClient::updateUserInfo(const td::td_api::user &user, const td::td_a
             if (isChatInContactList(*privateChat, &user)) {
                 downloadProfilePhoto(user);
                 updatePrivateChat(m_data, privateChat, user);
-            } else
+            } else if (!privateChat->positions_.empty())
+                // A stranger's, kept from it while it offers to report them: reachable all the same,
+                // after a restart too, as when they write
+                addTransientBuddy(m_data, user);
+            else
                 removePrivateChat(m_data, *privateChat);
         }
     }
@@ -5123,7 +5140,8 @@ ChatId PurpleTdClient::getPrivateChatId(UserId userId)
 bool PurpleTdClient::canReportChat(ChatId chatId)
 {
     const td::td_api::chat *chat = m_data.getChat(chatId);
-    return chat && chat->can_be_reported_;
+    // From the action bar, a report with nothing chosen, which TDLib takes as spam
+    return chat && (chat->can_be_reported_ || canReportAsSpam(*chat));
 }
 
 void PurpleTdClient::reportChat(ChatId chatId, const std::vector<MessageId> &messageIds, const std::string &optionId,
@@ -5157,7 +5175,7 @@ void PurpleTdClient::reportSender(ChatId groupChatId, UserId userId)
         }
         const auto             &chat  = static_cast<const td::td_api::chat &>(*object);
         const td::td_api::chat *group = m_data.getChat(groupChatId);
-        if (!chat.can_be_reported_) {
+        if (!chat.can_be_reported_ && !canReportAsSpam(chat)) {
             std::string name = escapeForDisplay(m_data.getDisplayName(userId));
             if (group)
                 // TRANSLATOR: In-chat notification, not logged, after a message's sender was to be reported. Argument is their name.
