@@ -46,6 +46,8 @@ void clearConversationData();
 std::vector<std::string> takeLoggedMessages();
 // Whether Pidgin is set to log new conversations, as purple_prefs_get_bool tells; on by default
 void setLoggingPreferred(bool logging);
+// What purple_log_get_total_size() says of any conversation: 0 for one never logged
+void setLogTotalSize(int size);
 // Whether the account's presence is idle, as libpurple tells; not by default
 void setPresenceIdle(bool idle);
 

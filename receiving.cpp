@@ -829,7 +829,7 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
     // the conversation logs then: its tab, if still open, or Pidgin's preference for a new one; and
     // as ever where there is no tab to write it into unlogged. One sent already, while waiting to be
     // shown, has that id now.
-    bool                unlogged     = message.unlogged || message.redrawn;
+    bool                unlogged     = message.unlogged || (message.redrawn && !message.logRedrawn);
     MessageId           loggedId     = message.sentLocally ? account.getSentMessageId(getId(chat), message.id)
                                                            : message.id;
     bool                sent         = !message.sentLocally || (loggedId != message.id);
@@ -2807,7 +2807,7 @@ static void showReaction(TdAccountData &account, const td::td_api::chat &chat, M
 
 void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
     td::td_api::object_ptr<td::td_api::message> message,
-    PendingMessageQueue::MessageAction action, bool redrawn)
+    PendingMessageQueue::MessageAction action, bool redrawn, bool logRedrawn)
 {
     if (!message) return;
     ChatId chatId = getId(chat);
@@ -2839,6 +2839,7 @@ void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
     makeFullMessage(chat, std::move(message), fullMessage, account);
     fullMessage.messageInfo.fromHistory = (action == PendingMessageQueue::Prepend) || redrawn;
     fullMessage.messageInfo.redrawn     = redrawn;
+    fullMessage.messageInfo.logRedrawn  = redrawn && logRedrawn;
     // Who sent it, for a notice about it later: several members' messages sent in the same second
     // are otherwise reported deleted in the same words, and in a private chat either of us may have
     // sent it. A channel post signed by nobody has no one to name.
@@ -3429,6 +3430,10 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
         g_historyComplete.erase(redraw.chatId.value());
         g_redrawnCounts[redraw.chatId.value()] = redraw.messages.size();
         std::vector<LoggedLine> lines = getLoggedLines(account, *chat, conv, redraw.messages, stopsShort);
+        // A chat never logged, as a channel only looked at, is logged as it is shown: else nothing
+        // of it would be kept, nor bring it back to the buddy list after a restart
+        bool firstLog = lines.empty() && !hasLog(account.purpleAccount, purple_conversation_get_type(conv),
+                                                 purple_conversation_get_name(conv));
         // Newest first, as the messages, each going ahead of what is queued
         auto line = lines.rbegin();
         auto queueLinesSince = [&](time_t since) {
@@ -3438,7 +3443,8 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
         for (auto &message: redraw.messages)
             if (message && !account.pendingMessages.findPendingMessage(redraw.chatId, getId(*message))) {
                 queueLinesSince(message->date_);
-                handleIncomingMessage(account, *chat, std::move(message), PendingMessageQueue::Prepend, true);
+                handleIncomingMessage(account, *chat, std::move(message), PendingMessageQueue::Prepend, true,
+                                      firstLog);
             }
         queueLinesSince(0);
     }
