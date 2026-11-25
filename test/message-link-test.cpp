@@ -1190,3 +1190,47 @@ TEST_F(TelegramLinkTest, LaterLinkWins)
     tgl.reply(second, std::move(linkType));
     tgl.verifyRequest(searchPublicChat("contact"));
 }
+
+#if TDLIB_API_RICH_MESSAGE
+// A rich message's pictures, each linked to; clicked, the picture is fetched in the size the
+// conversation shows a picture in, here the narrowest at least a thumbnail wide
+TEST_F(MessageLinkTest, RichMessageMedia)
+{
+    purple_account_set_string(account, "media-size-threshold", "0.5");
+    loginWithOneContact();
+    auto makeRichMessage = [this]() {
+        auto collage = make_object<pageBlockCollage>();
+        for (int32_t base: {100, 200}) {
+            auto photoBlock = make_object<pageBlockPhoto>();
+            photoBlock->photo_ = make_object<photo>();
+            for (int32_t width: {160, 800, 1254})
+                photoBlock->photo_->sizes_.push_back(makePhotoSize(::makeFile(base + width / 400, 1000 * width),
+                                                                   width, width));
+            collage->blocks_.push_back(std::move(photoBlock));
+        }
+        auto rich = make_object<richMessage>();
+        rich->blocks_.push_back(std::move(collage));
+        auto content = make_object<messageRichMessage>();
+        content->message_ = std::move(rich);
+        return makeMessage(messageId, userIds[0], chatIds[0], false, date, std::move(content));
+    };
+
+    tgl.update(make_object<updateNewMessage>(makeRichMessage()));
+    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
+    prpl.verifyEvents(ServGotImEvent(
+        connection, purpleUserName(0),
+        "<a href=\"" + link() + "/r0\">[photo]</a> <a href=\"" + link() + "/r1\">[photo]</a>",
+        PURPLE_MESSAGE_RECV, date
+    ));
+
+    tgprpl_open_message_link((link() + "/r1").c_str());
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(makeRichMessage());
+    // 800 wide, file 202
+    tgl.verifyRequest(downloadFile(202, 32, 0, 0, true));
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0), "Downloading photo",
+                                             PURPLE_MESSAGE_SYSTEM, 0));
+    tgl.reply(::makeFile(202, 800000, "/path/photo.jpg"));
+    prpl.verifyEvents(NotifyUriEvent("file:///path/photo.jpg"));
+}
+#endif

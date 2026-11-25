@@ -1962,7 +1962,16 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
 #if TDLIB_API_RICH_MESSAGE
         case td::td_api::messageRichMessage::ID: {
             const auto &rich = static_cast<const td::td_api::messageRichMessage &>(*message.content_);
-            std::string html = rich.message_ ? formatRichMessage(*rich.message_) : std::string();
+            // Its media linked to, as a photo's or video's sizes are, to be fetched when clicked
+            PurpleAccount *purpleAccount = account.purpleAccount;
+            ChatId         chatId        = getId(chat);
+            MessageId      messageId     = messageInfo.id;
+            RichMediaLink  link;
+            if (messageLinksEnabled())
+                link = [purpleAccount, chatId, messageId](size_t index) {
+                    return makeMessageLink(purpleAccount, chatId, messageId, "r" + std::to_string(index));
+                };
+            std::string html = rich.message_ ? formatRichMessage(*rich.message_, link) : std::string();
             if (!html.empty())
                 showMessageText(account, chat, messageInfo, html.c_str(), NULL);
             else
@@ -2019,24 +2028,18 @@ const td::td_api::file *selectPhotoSize(PurpleAccount *account, const td::td_api
     return selectedSize ? selectedSize->photo_.get() : nullptr;
 }
 
-// The thumbnail the sender attached to a video, if it is one the conversation window can show:
-// Telegram also sends MPEG4 thumbnails for some videos and animations, and those are skipped.
-// Of a cover the sender chose for a video, the size that does for a preview: in Pidgin, the smallest
-// at least so many lines of the conversation's text tall, or else the tallest; elsewhere the smallest
-// at least as wide as the video's thumbnail, which is what the preview would be without a cover, or
-// else the widest
+// Of a picture shown in the conversation, as a video's cover, the size that does: in Pidgin, the
+// smallest at least so many lines of the conversation's text tall, or else the tallest; elsewhere
+// the smallest at least so wide, or else the widest
 enum { COVER_LINES = 20 };
-static const td::td_api::file *getCoverPreview(const td::td_api::photo *cover,
-                                               const td::td_api::thumbnail *thumbnail)
+const td::td_api::file *chooseShownPhotoSize(const td::td_api::photo *photo, int32_t fallbackWidth)
 {
-    // Telegram's thumbnails are 320 pixels wide, should one not say
-    int32_t  previewWidth = (thumbnail && (thumbnail->width_ > 0)) ? thumbnail->width_ : 320;
-    unsigned lineHeight   = getTextLineHeight();
-    bool     byHeight     = (lineHeight > 0);
-    int32_t  wanted       = byHeight ? int32_t(lineHeight * COVER_LINES) : previewWidth;
+    unsigned lineHeight = getTextLineHeight();
+    bool     byHeight   = (lineHeight > 0);
+    int32_t  wanted     = byHeight ? int32_t(lineHeight * COVER_LINES) : fallbackWidth;
     const td::td_api::photoSize *chosen = nullptr;
-    if (cover)
-        for (const auto &size: cover->sizes_) {
+    if (photo)
+        for (const auto &size: photo->sizes_) {
             if (!size || !size->photo_)
                 continue;
             int32_t measure       = byHeight ? size->height_ : size->width_;
@@ -2048,6 +2051,17 @@ static const td::td_api::file *getCoverPreview(const td::td_api::photo *cover,
                 chosen = size.get();
         }
     return chosen ? chosen->photo_.get() : nullptr;
+}
+
+// The thumbnail the sender attached to a video, if it is one the conversation window can show:
+// Telegram also sends MPEG4 thumbnails for some videos and animations, and those are skipped.
+// Of a cover the sender chose for a video, the size that does for a preview, as wide, elsewhere
+// than Pidgin, as the video's thumbnail, which is what the preview would be without a cover
+static const td::td_api::file *getCoverPreview(const td::td_api::photo *cover,
+                                               const td::td_api::thumbnail *thumbnail)
+{
+    // Telegram's thumbnails are 320 pixels wide, should one not say
+    return chooseShownPhotoSize(cover, (thumbnail && (thumbnail->width_ > 0)) ? thumbnail->width_ : 320);
 }
 
 static const td::td_api::file *getVideoPreview(const td::td_api::MessageContent &content,

@@ -1,4 +1,5 @@
 #include "media-variants.h"
+#include "rich-message.h"
 #include "client-utils.h"
 #include "config.h"
 #include "purple-info.h"
@@ -69,6 +70,15 @@ static std::string describeVariant(const MediaVariant &variant)
 const td::td_api::file *findMediaVariant(const td::td_api::MessageContent &content, const std::string &key,
                                          std::string &description)
 {
+#if TDLIB_API_RICH_MESSAGE
+    // A rich message's medium, by its number: "r" and it
+    if ((content.get_id() == td::td_api::messageRichMessage::ID) && (key.size() > 1) && (key[0] == 'r')) {
+        const auto &rich  = static_cast<const td::td_api::messageRichMessage &>(content);
+        char       *end   = nullptr;
+        size_t      index = strtoul(key.c_str() + 1, &end, 10);
+        return (rich.message_ && end && !*end) ? findRichMessageMedia(*rich.message_, index, description) : nullptr;
+    }
+#endif
     std::vector<MediaVariant> variants;
     getMediaVariants(content, variants);
     for (const MediaVariant &variant: variants)

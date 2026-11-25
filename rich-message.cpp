@@ -134,8 +134,14 @@ static std::string withCaption(const std::string &media, const td::td_api::pageB
     return text.empty() ? media : media + " " + text;
 }
 
+// Links to its media, numbered in the order they are shown, for the plugin to open when clicked
+struct MediaLinks {
+    const RichMediaLink *link;
+    size_t               next = 0;
+};
+
 static void formatBlocks(const std::vector<td::td_api::object_ptr<td::td_api::PageBlock>> &blocks,
-                         std::vector<std::string> &lines);
+                         std::vector<std::string> &lines, MediaLinks &links);
 
 static std::string formatHeading(const td::td_api::RichText *text, int size)
 {
@@ -143,7 +149,16 @@ static std::string formatHeading(const td::td_api::RichText *text, int size)
     return html.empty() ? html : "<b><font size=\"" + std::to_string(size) + "\">" + html + "</font></b>";
 }
 
-static void formatBlock(const td::td_api::PageBlock &block, std::vector<std::string> &lines)
+// A medium's placeholder, linked to its file, where it can be
+static std::string mediaItem(const char *kind, MediaLinks &links)
+{
+    std::string media = mediaPlaceholder(kind);
+    std::string url   = (links.link && *links.link) ? (*links.link)(links.next) : std::string();
+    links.next++;
+    return url.empty() ? media : "<a href=\"" + escapeForDisplay(url) + "\">" + media + "</a>";
+}
+
+static void formatBlock(const td::td_api::PageBlock &block, std::vector<std::string> &lines, MediaLinks &links)
 {
     switch (block.get_id()) {
     case td::td_api::pageBlockTitle::ID:
@@ -204,7 +219,7 @@ static void formatBlock(const td::td_api::PageBlock &block, std::vector<std::str
             if (!item)
                 continue;
             std::vector<std::string> itemLines;
-            formatBlocks(item->blocks_, itemLines);
+            formatBlocks(item->blocks_, itemLines, links);
             // Its label, a number or a bullet, or a box ticked or not
             std::string label = item->has_checkbox_ ? (item->is_checked_ ? "\xe2\x98\x91" : "\xe2\x98\x90")
                                                     : escapeForDisplay(item->label_);
@@ -215,7 +230,7 @@ static void formatBlock(const td::td_api::PageBlock &block, std::vector<std::str
     case td::td_api::pageBlockBlockQuote::ID: {
         const auto              &quote = static_cast<const td::td_api::pageBlockBlockQuote &>(block);
         std::vector<std::string> quoted;
-        formatBlocks(quote.blocks_, quoted);
+        formatBlocks(quote.blocks_, quoted, links);
         for (const std::string &line: quoted)
             lines.push_back("&nbsp;&nbsp;&nbsp;&nbsp;<i>" + line + "</i>");
         std::string credit = formatRichText(quote.credit_.get());
@@ -233,26 +248,27 @@ static void formatBlock(const td::td_api::PageBlock &block, std::vector<std::str
     }
     case td::td_api::pageBlockPhoto::ID: {
         const auto &photo = static_cast<const td::td_api::pageBlockPhoto &>(block);
-        std::string media = mediaPlaceholder(_("photo"));
-        if (!photo.url_.empty())
+        // The picture, linked to; or where the sender links it to, if it cannot be
+        std::string media = mediaItem(_("photo"), links);
+        if ((media.compare(0, 2, "<a") != 0) && !photo.url_.empty())
             media = linkTo(photo.url_, media);
         lines.push_back(withCaption(media, photo.caption_.get()));
         break;
     }
     case td::td_api::pageBlockVideo::ID:
-        lines.push_back(withCaption(mediaPlaceholder(_("video")),
+        lines.push_back(withCaption(mediaItem(_("video"), links),
                                     static_cast<const td::td_api::pageBlockVideo &>(block).caption_.get()));
         break;
     case td::td_api::pageBlockAnimation::ID:
-        lines.push_back(withCaption(mediaPlaceholder(_("animation")),
+        lines.push_back(withCaption(mediaItem(_("animation"), links),
                                     static_cast<const td::td_api::pageBlockAnimation &>(block).caption_.get()));
         break;
     case td::td_api::pageBlockAudio::ID:
-        lines.push_back(withCaption(mediaPlaceholder(_("audio")),
+        lines.push_back(withCaption(mediaItem(_("audio"), links),
                                     static_cast<const td::td_api::pageBlockAudio &>(block).caption_.get()));
         break;
     case td::td_api::pageBlockVoiceNote::ID:
-        lines.push_back(withCaption(mediaPlaceholder(_("voice message")),
+        lines.push_back(withCaption(mediaItem(_("voice message"), links),
                                     static_cast<const td::td_api::pageBlockVoiceNote &>(block).caption_.get()));
         break;
     case td::td_api::pageBlockCollage::ID:
@@ -264,7 +280,7 @@ static void formatBlock(const td::td_api::PageBlock &block, std::vector<std::str
         const auto *caption = collage ? static_cast<const td::td_api::pageBlockCollage &>(block).caption_.get()
                                       : static_cast<const td::td_api::pageBlockSlideshow &>(block).caption_.get();
         std::vector<std::string> items;
-        formatBlocks(blocks, items);
+        formatBlocks(blocks, items, links);
         std::string row;
         for (const std::string &item: items)
             row += (row.empty() ? "" : " ") + item;
@@ -274,7 +290,7 @@ static void formatBlock(const td::td_api::PageBlock &block, std::vector<std::str
     case td::td_api::pageBlockCover::ID: {
         const auto &cover = static_cast<const td::td_api::pageBlockCover &>(block);
         if (cover.cover_)
-            formatBlock(*cover.cover_, lines);
+            formatBlock(*cover.cover_, lines, links);
         break;
     }
     case td::td_api::pageBlockEmbedded::ID: {
@@ -293,7 +309,7 @@ static void formatBlock(const td::td_api::PageBlock &block, std::vector<std::str
         if (!author.empty())
             lines.push_back("<b>" + author + "</b>");
         std::vector<std::string> posted;
-        formatBlocks(post.blocks_, posted);
+        formatBlocks(post.blocks_, posted, links);
         for (const std::string &line: posted)
             lines.push_back("&nbsp;&nbsp;&nbsp;&nbsp;" + line);
         std::string caption = formatCaption(post.caption_.get());
@@ -318,7 +334,7 @@ static void formatBlock(const td::td_api::PageBlock &block, std::vector<std::str
         std::string header  = formatRichText(details.header_.get());
         if (!header.empty())
             lines.push_back("<b>" + header + "</b>");
-        formatBlocks(details.blocks_, lines);
+        formatBlocks(details.blocks_, lines, links);
         break;
     }
     case td::td_api::pageBlockTable::ID: {
@@ -356,22 +372,99 @@ static void formatBlock(const td::td_api::PageBlock &block, std::vector<std::str
 }
 
 static void formatBlocks(const std::vector<td::td_api::object_ptr<td::td_api::PageBlock>> &blocks,
-                         std::vector<std::string> &lines)
+                         std::vector<std::string> &lines, MediaLinks &links)
 {
     for (const auto &block: blocks)
         if (block)
-            formatBlock(*block, lines);
+            formatBlock(*block, lines, links);
 }
 
-std::string formatRichMessage(const td::td_api::richMessage &message)
+std::string formatRichMessage(const td::td_api::richMessage &message, const RichMediaLink &link)
 {
     std::vector<std::string> lines;
-    formatBlocks(message.blocks_, lines);
+    MediaLinks               links{&link};
+    formatBlocks(message.blocks_, lines, links);
     std::string html;
     for (const std::string &line: lines)
         if (!line.empty())
             html += (html.empty() ? "" : "<br>") + line;
     return html;
+}
+
+// Its media in the order they are shown, as formatBlock numbers them
+static const td::td_api::file *findMedia(const std::vector<td::td_api::object_ptr<td::td_api::PageBlock>> &blocks,
+                                         size_t &index, std::string &description);
+
+static const td::td_api::file *findMedia(const td::td_api::PageBlock &block, size_t &index, std::string &description)
+{
+    auto counted = [&index, &description](const td::td_api::file *file, const char *kind) -> const td::td_api::file * {
+        if (index-- != 0)
+            return nullptr;
+        description = kind;
+        return file;
+    };
+    switch (block.get_id()) {
+    case td::td_api::pageBlockPhoto::ID:
+        return counted(chooseShownPhotoSize(static_cast<const td::td_api::pageBlockPhoto &>(block).photo_.get()),
+                       _("photo"));
+    case td::td_api::pageBlockVideo::ID: {
+        const auto &video = static_cast<const td::td_api::pageBlockVideo &>(block).video_;
+        return counted(video ? video->video_.get() : nullptr, _("video"));
+    }
+    case td::td_api::pageBlockAnimation::ID: {
+        const auto &animation = static_cast<const td::td_api::pageBlockAnimation &>(block).animation_;
+        return counted(animation ? animation->animation_.get() : nullptr, _("animation"));
+    }
+    case td::td_api::pageBlockAudio::ID: {
+        const auto &audio = static_cast<const td::td_api::pageBlockAudio &>(block).audio_;
+        return counted(audio ? audio->audio_.get() : nullptr, _("audio"));
+    }
+    case td::td_api::pageBlockVoiceNote::ID: {
+        const auto &voiceNote = static_cast<const td::td_api::pageBlockVoiceNote &>(block).voice_note_;
+        return counted(voiceNote ? voiceNote->voice_.get() : nullptr, _("voice message"));
+    }
+    case td::td_api::pageBlockList::ID:
+        for (const auto &item: static_cast<const td::td_api::pageBlockList &>(block).items_) {
+            const td::td_api::file *file = item ? findMedia(item->blocks_, index, description) : nullptr;
+            if (file || (index == size_t(-1)))
+                return file;
+        }
+        return nullptr;
+    case td::td_api::pageBlockBlockQuote::ID:
+        return findMedia(static_cast<const td::td_api::pageBlockBlockQuote &>(block).blocks_, index, description);
+    case td::td_api::pageBlockCollage::ID:
+        return findMedia(static_cast<const td::td_api::pageBlockCollage &>(block).blocks_, index, description);
+    case td::td_api::pageBlockSlideshow::ID:
+        return findMedia(static_cast<const td::td_api::pageBlockSlideshow &>(block).blocks_, index, description);
+    case td::td_api::pageBlockCover::ID: {
+        const auto &cover = static_cast<const td::td_api::pageBlockCover &>(block).cover_;
+        return cover ? findMedia(*cover, index, description) : nullptr;
+    }
+    case td::td_api::pageBlockEmbeddedPost::ID:
+        return findMedia(static_cast<const td::td_api::pageBlockEmbeddedPost &>(block).blocks_, index, description);
+    case td::td_api::pageBlockDetails::ID:
+        return findMedia(static_cast<const td::td_api::pageBlockDetails &>(block).blocks_, index, description);
+    default:
+        return nullptr;
+    }
+}
+
+// Counting down to the one wanted, past it once found: size_t(-1) then
+static const td::td_api::file *findMedia(const std::vector<td::td_api::object_ptr<td::td_api::PageBlock>> &blocks,
+                                         size_t &index, std::string &description)
+{
+    for (const auto &block: blocks) {
+        const td::td_api::file *file = block ? findMedia(*block, index, description) : nullptr;
+        if (file || (index == size_t(-1)))
+            return file;
+    }
+    return nullptr;
+}
+
+const td::td_api::file *findRichMessageMedia(const td::td_api::richMessage &message, size_t index,
+                                             std::string &description)
+{
+    return findMedia(message.blocks_, index, description);
 }
 
 std::string getRichMessageSummary(const td::td_api::richMessage &message)
@@ -382,7 +475,8 @@ std::string getRichMessageSummary(const td::td_api::richMessage &message)
         if (!block)
             continue;
         lines.clear();
-        formatBlock(*block, lines);
+        MediaLinks none{nullptr};
+        formatBlock(*block, lines, none);
         for (const std::string &line: lines) {
             gchar      *plain = purple_markup_strip_html(line.c_str());
             gchar      *text  = purple_unescape_html(plain);

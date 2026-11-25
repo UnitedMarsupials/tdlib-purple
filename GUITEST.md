@@ -492,6 +492,8 @@ calls it `messageRichMessage`), such as those of СУВЕНІРНА КЕРАМІ
 
 * Its headings are bold and bigger, its paragraphs, lists and tables each on lines of their own,
   links clickable; its pictures are "[photo]" placeholders, with their captions.
+* A placeholder clicked downloads its picture, "Downloading photo" said in the tab, and opens it,
+  in a size about 20 lines of the tab's text tall, or the biggest there is.
 * Quoted in a reply, its first line of text stands for it.
 
 Since: such a post was shown as TDLib's description of it, cut short.

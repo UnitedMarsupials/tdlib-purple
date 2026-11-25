@@ -8,7 +8,8 @@
 // One of the sizes Telegram has a photo or video in, each a file of its own
 struct MediaVariant {
     std::string             key;    // in a link to it: "p" and the photo size's type, "v" for the
-                                    // video itself, "a" and the id of an alternative video
+                                    // video itself, "a" and the id of an alternative video; a rich
+                                    // message's medium is "r" and its number, in a link alone
     int32_t                 width;
     int32_t                 height;
     int64_t                 size;   // in bytes, as far as known
