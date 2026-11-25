@@ -483,6 +483,8 @@ std::string getRichMessageSummary(const td::td_api::richMessage &message)
             std::string result = text ? text : "";
             g_free(text);
             g_free(plain);
+            // A line of it, as a quote has room for
+            result = result.substr(0, result.find('\n'));
             if (!result.empty())
                 return result;
         }

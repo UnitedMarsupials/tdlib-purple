@@ -1341,6 +1341,13 @@ object_ptr<textEntity> makeTextEntity(std::int32_t offset, std::int32_t length, 
     return result;
 }
 
+object_ptr<textEntityTypeTextUrl> makeTextUrl(const std::string &url)
+{
+    auto result = make_object<textEntityTypeTextUrl>();
+    result->url_ = url;
+    return result;
+}
+
 object_ptr<alternativeVideo> makeAlternativeVideo(std::int64_t id, std::int32_t width, std::int32_t height,
                                                   const std::string &codec, object_ptr<file> &&video)
 {
