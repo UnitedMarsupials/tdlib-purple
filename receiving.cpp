@@ -2465,9 +2465,10 @@ static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId
 }
 
 // Called when the message stops waiting for it, with nothing, and again once it is here: the
-// message, if shown already by then, is shown again with it
+// message, if shown already by then, is shown again with it. A message edited meanwhile may have
+// another file in its place, which this answer is not for
 static void richPictureDownloadResponse(TdAccountData &account, ChatId chatId, MessageId messageId, size_t index,
-                                        td::td_api::object_ptr<td::td_api::Object> object)
+                                        int32_t fileId, td::td_api::object_ptr<td::td_api::Object> object)
 {
     std::string      path           = object ? getDownloadPath(object) : std::string();
     IncomingMessage *pendingMessage = account.pendingMessages.findPendingMessage(chatId, messageId);
@@ -2477,7 +2478,7 @@ static void richPictureDownloadResponse(TdAccountData &account, ChatId chatId, M
         return;
     }
     for (IncomingMessage::RichPicture &picture: pendingMessage->richPictures)
-        if (picture.index == index) {
+        if ((picture.index == index) && (picture.fileId == fileId)) {
             picture.done = true;
             if (!path.empty())
                 picture.path = path;
@@ -2551,12 +2552,13 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
         downloadReq->offset_      = 0;
         downloadReq->limit_       = 0;
         downloadReq->synchronous_ = true;
-        size_t index = picture.index;
+        size_t  index  = picture.index;
+        int32_t fileId = picture.fileId;
         // Past the timeout the message is shown with a placeholder for it, and again with it once
         // it is here, however late, as TDLib goes on fetching it
-        TdTransceiver::ResponseCb2 handler = [&account, chatId, messageId, index](uint64_t,
+        TdTransceiver::ResponseCb2 handler = [&account, chatId, messageId, index, fileId](uint64_t,
                                                 td::td_api::object_ptr<td::td_api::Object> object) {
-            richPictureDownloadResponse(account, chatId, messageId, index, std::move(object));
+            richPictureDownloadResponse(account, chatId, messageId, index, fileId, std::move(object));
         };
         uint64_t queryId = transceiver.sendQuery(std::move(downloadReq), handler);
         transceiver.setQueryTimer(queryId, handler, getMessageWaitSeconds(fullMessage.messageInfo), false);
