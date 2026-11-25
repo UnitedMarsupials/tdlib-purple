@@ -1356,7 +1356,7 @@ msgstr "Видалити повідомлення лише для себе?"
 #. TRANSLATOR: Message deletion dialog, secondary content
 #: ../td-client.cpp:2758
 msgid "This cannot be undone."
-msgstr "Цю дію не можна скасувати."
+msgstr "Це незворотна дія."
 
 #. TRANSLATOR: Message deletion dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
 #: ../td-client.cpp:2765
