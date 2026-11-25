@@ -295,9 +295,14 @@ Open a chat with unread messages.
 Leave a chat's tab open, but not the one shown in its window, while more
 than a screenful of messages comes to it. Then switch to it.
 
-* It is filled anew and scrolled to the first unread, as it was when opened,
-  not left at its end.
+* It is scrolled to the first unread, as it was when opened, not left at its end: the message
+  stays in view, the tab not blanked, as the tab holds it already. Where the tab does not hold it
+  and the last read before it, it is filled anew instead: so too when more came than the tab's
+  `scrollback_lines` keep, Pidgin trimming them both away.
 * A tab with nothing unread is left as it was, scrolled where it was.
+
+Since: the tab was filled anew whenever it had unread messages, the first unread one, shown already,
+flashing, then the tab blank a moment, then the message again.
 
 Open, from the buddy list, a buddy who is not a contact and whose chat is not
 in the chat list, such as one blocked and the chat deleted.

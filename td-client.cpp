@@ -3306,6 +3306,15 @@ void PurpleTdClient::showFirstUnread(PurpleConversation *conv)
     const td::td_api::chat *chat = m_chatListReady ? findConversationChat(m_data, conv) : nullptr;
     if (!chat || (chat->unread_count_ <= 0))
         return;
+    // Shown already, after the last one read: only scrolled to, rather than the tab cleared to be
+    // written again, which would hide it a while
+    MessageId firstUnread = findMessageAfter(conv, getLastReadMessageId(*chat));
+    if (firstUnread.valid()) {
+        purple_debug_misc(config::pluginId, "Chat %" G_GINT64_FORMAT " shown with %d unread: scrolling to the first\n",
+                          getId(*chat).value(), chat->unread_count_);
+        scrollToMessageLater(conv, firstUnread);
+        return;
+    }
     purple_debug_misc(config::pluginId, "Chat %" G_GINT64_FORMAT " shown with %d unread: filling it anew\n",
                       getId(*chat).value(), chat->unread_count_);
     fillConversation(conv);

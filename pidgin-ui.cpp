@@ -3022,6 +3022,36 @@ MessageId findFirstMessage(PurpleConversation *conv)
     return MessageId();
 }
 
+// Whether the message is in the tab still: trimmed away by Pidgin, its marks stay, together
+static bool isMessageShown(GtkTextBuffer *buffer, MessageId messageId)
+{
+    GtkTextMark *start = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Start).c_str());
+    GtkTextMark *end   = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::End).c_str());
+    GtkTextIter  startIter, endIter;
+    if (!start || !end)
+        return false;
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &startIter, start);
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &endIter, end);
+    return p_gtk_text_iter_compare(&startIter, &endIter) < 0;
+}
+
+MessageId findMessageAfter(PurpleConversation *conv, MessageId messageId)
+{
+    GtkTextBuffer *buffer = getTextBuffer(conv);
+    GtkTextIter    iter;
+    if (!buffer || !isMessageShown(buffer, messageId))
+        return MessageId();
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &iter,
+                                       p_gtk_text_buffer_get_mark(buffer,
+                                                                  getMarkName(messageId, MarkKind::End).c_str()));
+    while (p_gtk_text_iter_forward_char(&iter)) {
+        MessageId next = findMessageStart(iter);
+        if (next.valid())
+            return isMessageShown(buffer, next) ? next : MessageId();
+    }
+    return MessageId();
+}
+
 MessageId findLastMessage(PurpleConversation *conv)
 {
     GtkTextBuffer *buffer = getTextBuffer(conv);
@@ -4381,6 +4411,11 @@ void setTopReachedHandler(TopReachedHandler handler)
 unsigned countTabLines(PurpleConversation *conv)
 {
     return 0;
+}
+
+MessageId findMessageAfter(PurpleConversation *conv, MessageId messageId)
+{
+    return MessageId();
 }
 
 MessageId findLastMessage(PurpleConversation *conv)
