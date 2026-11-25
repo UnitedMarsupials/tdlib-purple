@@ -185,6 +185,8 @@ void setTopReachedHandler(TopReachedHandler handler);
 unsigned countTabLines(PurpleConversation *conv);
 // The latest message the tab shows, if any
 MessageId findLastMessage(PurpleConversation *conv);
+// The message the tab shows right after the one given, if it shows both
+MessageId findMessageAfter(PurpleConversation *conv, MessageId messageId);
 // Takes whole messages out of the tab, from its top or from its end, until it has no more than so
 // many lines, if it can, keeping the message given, if any. True if it took any out.
 bool trimTab(PurpleConversation *conv, unsigned maxLines, bool fromTop, MessageId keep = MessageId());

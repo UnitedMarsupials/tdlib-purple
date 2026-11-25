@@ -3022,6 +3022,23 @@ MessageId findFirstMessage(PurpleConversation *conv)
     return MessageId();
 }
 
+MessageId findMessageAfter(PurpleConversation *conv, MessageId messageId)
+{
+    GtkTextBuffer *buffer = getTextBuffer(conv);
+    GtkTextMark   *end    = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::End).c_str())
+                                   : nullptr;
+    GtkTextIter    iter;
+    if (!end)
+        return MessageId();
+    p_gtk_text_buffer_get_iter_at_mark(buffer, &iter, end);
+    while (p_gtk_text_iter_forward_char(&iter)) {
+        MessageId next = findMessageStart(iter);
+        if (next.valid())
+            return next;
+    }
+    return MessageId();
+}
+
 MessageId findLastMessage(PurpleConversation *conv)
 {
     GtkTextBuffer *buffer = getTextBuffer(conv);
@@ -4381,6 +4398,11 @@ void setTopReachedHandler(TopReachedHandler handler)
 unsigned countTabLines(PurpleConversation *conv)
 {
     return 0;
+}
+
+MessageId findMessageAfter(PurpleConversation *conv, MessageId messageId)
+{
+    return MessageId();
 }
 
 MessageId findLastMessage(PurpleConversation *conv)
