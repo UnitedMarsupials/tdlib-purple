@@ -524,6 +524,8 @@ Open a public channel not joined, from a link to it, and quit Pidgin; start it a
   whose conversation was logged, and any person written with who is not a contact, under
   "Telegram: not in contacts".
 * Opened, the channel's tab fills with its messages, as from the link, and nothing is sent to it.
+* Left open while the channel posts, its new posts show in the tab; scrolled far back, the post
+  waits for the tab's end. Closed, nothing more of it comes.
 * For a group of ours with another member, "Delete group" asks "For everyone" or "For me only";
   the latter leaves it, and the other member still has it. (Make one for this, with the other
   test account.)

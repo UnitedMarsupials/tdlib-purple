@@ -863,10 +863,22 @@ TEST_F(SupergroupTest, ForeignChannel)
         ServGotChatEvent(connection, purpleChatId, "Channel post", "Welcome", PURPLE_MESSAGE_RECV, date)
     );
 
-    // ...and once we leave it, its posts are none of ours again
+    // ...and once we leave it, its posts come only while its tab is open, read as the phone app
+    // shows a channel left while it is still in view
     tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusLeft>(), 2)));
     prpl.verifyNoEvents();
     message = makeMessage(messageId + 2, 0, groupChatId, false, date, makeTextMessage("Still here"));
+    message->is_channel_post_ = true;
+    tgl.update(make_object<updateNewMessage>(std::move(message)));
+    tgl.verifyRequest(viewMessages(groupChatId, {messageId + 2}, nullptr, true));
+    prpl.verifyEvents(ServGotChatEvent(connection, purpleChatId, "Channel post", "Still here", PURPLE_MESSAGE_RECV,
+                                       date));
+
+    // Its tab closed, they are none of ours again
+    purple_conversation_destroy(purple_find_conversation_with_account(PURPLE_CONV_TYPE_CHAT,
+                                                                      groupChatPurpleName.c_str(), account));
+    prpl.discardEvents();
+    message = makeMessage(messageId + 3, 0, groupChatId, false, date, makeTextMessage("Gone"));
     message->is_channel_post_ = true;
     tgl.update(make_object<updateNewMessage>(std::move(message)));
     prpl.verifyNoEvents();
