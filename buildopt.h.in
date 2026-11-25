@@ -24,6 +24,8 @@
 // inputMessageVoiceNote wraps its file in an inputVoiceNote, which also holds
 // its duration and waveform (1.8.66)
 #define TDLIB_API_INPUT_VOICE_NOTE ${TDLIB_API_INPUT_VOICE_NOTE}
+// inlineKeyboardButton has a style, as of a warning, and an icon (1.8.61)
+#define TDLIB_API_BUTTON_STYLE     ${TDLIB_API_BUTTON_STYLE}
 
 
 #define TEST_SOURCE_DIR "${CMAKE_SOURCE_DIR}/test"

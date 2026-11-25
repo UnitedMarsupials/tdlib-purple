@@ -448,6 +448,19 @@ static void compare(const getMessage &actual, const getMessage &expected)
     COMPARE(message_id_);
 }
 
+static void compare(const getCallbackQueryAnswer &actual, const getCallbackQueryAnswer &expected)
+{
+    COMPARE(chat_id_);
+    COMPARE(message_id_);
+    ASSERT_EQ(nullptr == expected.payload_, nullptr == actual.payload_);
+    if (expected.payload_) {
+        ASSERT_EQ(expected.payload_->get_id(), actual.payload_->get_id());
+        if (expected.payload_->get_id() == callbackQueryPayloadData::ID)
+            ASSERT_EQ(static_cast<const callbackQueryPayloadData &>(*expected.payload_).data_,
+                      static_cast<const callbackQueryPayloadData &>(*actual.payload_).data_);
+    }
+}
+
 static void compare(const getCustomEmojiStickers &actual, const getCustomEmojiStickers &expected)
 {
     COMPARE(custom_emoji_ids_);
@@ -820,6 +833,7 @@ static void compareRequests(const Function &actual, const Function &expected,
         C(checkAuthenticationCode)
         C(registerUser)
         C(getMessage)
+        C(getCallbackQueryAnswer)
         C(getUser)
         C(getCustomEmojiStickers)
         C(sendChatAction)
