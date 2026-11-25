@@ -816,6 +816,11 @@ PurpleConversation *getMessageConversation(TdAccountData &account, const td::td_
 void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const TgMessageInfo &message,
                      const char *text, const char *notification, uint32_t extraFlags)
 {
+    if (account.isChatDeleted(getId(chat))) {
+        purple_debug_misc(config::pluginId, "Not showing what came of chat %" G_GINT64_FORMAT ", deleted\n",
+                          getId(chat).value());
+        return;
+    }
     PurpleMessageFlags directionFlag = message.outgoing ? PURPLE_MESSAGE_SEND : PURPLE_MESSAGE_RECV;
     PurpleMessageFlags flags = (PurpleMessageFlags) (extraFlags | directionFlag);
     // Not logged (again): with the conversation's logging off while it is written, as Pidgin shows
@@ -901,7 +906,8 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
 void logSentMessage(TdAccountData &account, ChatId chatId, MessageId oldId, MessageId newId)
 {
     UnloggedSent sent;
-    if (!account.extractUnloggedSent(chatId, oldId, sent))
+    // Nor of a chat deleted since it was sent
+    if (!account.extractUnloggedSent(chatId, oldId, sent) || account.isChatDeleted(chatId))
         return;
     std::string             marked = sent.text + makeLogMarker(newId, sent.timestamp);
     PurpleMessageFlags      flags  = (PurpleMessageFlags)sent.flags;

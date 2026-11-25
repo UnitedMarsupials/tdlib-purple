@@ -116,6 +116,16 @@ static void deleteGroupConfirm(RequestData *data, int action)
         tdClient->leaveGroup(request->stringData, true);
 }
 
+// Ours, with others in it: kept for them, we having left it
+static void deleteGroupForSelf(RequestData *data, int action)
+{
+    std::unique_ptr<RequestData> request(data);
+    PurpleTdClient *tdClient = getTdClient(request->account);
+
+    if (tdClient)
+        tdClient->leaveGroup(request->stringData, true, false);
+}
+
 static void leaveGroupConfirm(RequestData *data, int action)
 {
     std::unique_ptr<RequestData> request(data);
@@ -173,26 +183,41 @@ static void deleteGroup(PurpleBlistNode *node, gpointer data)
     PurpleAccount  *account  = purple_chat_get_account(chat);
     PurpleTdClient *tdClient = getTdClient(account);
     if (tdClient) {
-        const char  *chatName  = getChatName(purple_chat_get_components(chat));
-
-        if (tdClient->getBasicGroupMembership(chatName) == BasicGroupMembership::NonCreator) {
-            // TRANSLATOR: Group deletion error dialog, title
-            purple_notify_error(account, _("Cannot delete group"),
-                                // TRANSLATOR: Group deletion error dialog, content
-                                _("Cannot delete basic group created by someone else"), NULL);
-        } else {
-            RequestData *request = new RequestData(account);
-            request->stringData = chatName ? chatName : "";
-            // TRANSLATOR: Group deletion confirmation dialog, title
+        const char  *chatName = getChatName(purple_chat_get_components(chat));
+        RequestData *request  = new RequestData(account);
+        request->stringData = chatName ? chatName : "";
+        if (chatName && tdClient->canDeleteForOthers(chatName)) {
+            // TRANSLATOR: Group deletion dialog, title, for a group or channel of ours with other members
             purple_request_action(purple_account_get_connection(account), _("Deleting group"),
-                                  // TRANSLATOR: Group deletion confirmation dialog, content
-                                  _("Delete the group?"), NULL,
-                                  0, account, NULL, NULL, request, 2,
-                                  // TRANSLATOR: Group deletion dialog, alternative is "_No"
-                                  _("_Yes"), deleteGroupConfirm,
-                                  // TRANSLATOR: Group deletion dialog, alternative is "_Yes"
-                                  _("_No"), cancelRequest);
+                                  // TRANSLATOR: Group deletion dialog, primary content
+                                  _("Delete the group for all its members, or only for yourself?"),
+                                  // TRANSLATOR: Group deletion dialog, secondary content
+                                  _("Either way, its messages, as you see them on Telegram, and its files and "
+                                    "Pidgin's log of it on this computer, are deleted. Only for yourself, you leave "
+                                    "it, and the others keep it."),
+                                  2, account, NULL, NULL, request, 3,
+                                  // TRANSLATOR: Group deletion dialog, button. The underscore marks accelerator keys, they must be different!
+                                  _("For _everyone"), deleteGroupConfirm,
+                                  // TRANSLATOR: Group deletion dialog, button. The underscore marks accelerator keys, they must be different!
+                                  _("For _me only"), deleteGroupForSelf,
+                                  // TRANSLATOR: Group deletion dialog, button. The underscore marks accelerator keys, they must be different!
+                                  _("_Cancel"), cancelRequest);
+            return;
         }
+        // Deleted for all only by its owner; left otherwise, or, not joined, only taken away here
+        // TRANSLATOR: Group deletion confirmation dialog, title
+        purple_request_action(purple_account_get_connection(account), _("Deleting group"),
+                              // TRANSLATOR: Group deletion confirmation dialog, content
+                              _("Delete the group?"),
+                              // TRANSLATOR: Group deletion confirmation dialog, secondary content
+                              _("Its messages, as you see them on Telegram, and its files and Pidgin's log of it on "
+                                "this computer, are deleted too. A group or channel someone else owns is left, or, "
+                                "not joined, only taken out of the buddy list."),
+                              0, account, NULL, NULL, request, 2,
+                              // TRANSLATOR: Group deletion dialog, alternative is "_No"
+                              _("_Yes"), deleteGroupConfirm,
+                              // TRANSLATOR: Group deletion dialog, alternative is "_Yes"
+                              _("_No"), cancelRequest);
     }
 }
 
@@ -634,35 +659,14 @@ static void tgprpl_add_buddy (PurpleConnection *gc, PurpleBuddy *buddy, PurpleGr
     tdClient->addContact(phoneNumberStr, aliasStr, groupName ? groupName : "");
 }
 
-static void request_delete_contact_on_server_yes (RequestData *data, int action)
-{
-    std::unique_ptr<RequestData> request(data);
-    PurpleTdClient *tdClient = getTdClient(request->account);
-
-    if (tdClient)
-        tdClient->removeContactAndPrivateChat(request->stringData);
-}
-
+// Asked already, by Pidgin: a stranger's buddy too, with nothing of the chat with them kept here, and
+// with no contact to remove
 static void tgprpl_request_delete_contact (PurpleConnection *gc, PurpleBuddy *buddy, PurpleGroup *group)
 {
     g_return_if_fail(buddy);
-    // A buddy of one written with though no contact is only taken out of the list: there is no
-    // contact to remove, and the chat with them is theirs too
-    if (isTransientBuddy(buddy))
-        return;
-
-    RequestData *data = new RequestData(purple_connection_get_account(gc));
-    data->stringData = purple_buddy_get_name(buddy);
-
-    // TRANSLATOR: Buddy deletion confirmation, title
-//     purple_request_yes_no(gc, _("Remove contact"),
-//                           // TRANSLATOR: Buddy deletion confirmation, content
-//                           _("Remove from global contact list and delete chat history from the server?\n"),
-//                           NULL,
-//                           0, purple_connection_get_account(gc), purple_buddy_get_name(buddy),
-//                           NULL, data, request_delete_contact_on_server_yes,
-//                           cancelRequest);
-    request_delete_contact_on_server_yes(data, 0);
+    PurpleTdClient *tdClient = getTdClient(purple_connection_get_account(gc));
+    if (tdClient)
+        tdClient->removeContactAndPrivateChat(purple_buddy_get_name(buddy), !isTransientBuddy(buddy));
 }
 
 static std::array<const char *, 3> invitePrefixes {

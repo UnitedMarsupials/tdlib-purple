@@ -480,10 +480,28 @@ the menu of their name in the member list, and send them a message (or have them
 * They are in the buddy list, in "Telegram: not in contacts", until Pidgin quits; `blist.xml`
   does not keep them.
 * Their messages are marked read as they are seen, as a contact's are.
-* Removing them from "Telegram: not in contacts" only takes them out of the list: the chat with
-  them is still there, on the phone too.
+* Removing them from "Telegram: not in contacts" takes them out of the list and deletes the chat
+  for us: its messages, on the phone too, and its files and log here. The chat stays on Telegram
+  for them, and the next start does not bring them back.
 
 With another member who is not a contact, written to in the same way:
 
 * "Add Buddy..." from the menu of their name adds them as a contact, under their name, and the
   same tab stays open.
+
+### G3. Chats known from the log
+
+Open a public channel not joined, from a link to it, and quit Pidgin; start it again.
+
+* The channel is under "Telegram: not joined" again, as is any group left or channel unsubscribed
+  whose conversation was logged, and any person written with who is not a contact, under
+  "Telegram: not in contacts".
+* Opened, the channel's tab fills with its messages, as from the link, and nothing is sent to it.
+* For a group of ours with another member, "Delete group" asks "For everyone" or "For me only";
+  the latter leaves it, and the other member still has it. (Make one for this, with the other
+  test account.)
+* "Delete group" from its menu, the dialog saying what goes: its tab closes and its entry goes,
+  with no error; its directory under `~/.purple/logs/telegram/` is gone, and after the next start
+  it is not in the buddy list.
+* Likewise "Remove" on a buddy written with, under "Telegram: not in contacts": their log's
+  directory is gone, and after the next start they are not back.

@@ -63,7 +63,8 @@ public:
 
     void addContact(const std::string &purpleName, const std::string &alias, const std::string &groupName);
     void renameContact(const char *buddyName, const char *newAlias);
-    void removeContactAndPrivateChat(const std::string &buddyName);
+    void removeContactAndPrivateChat(const std::string &buddyName, bool contact);
+    void deleteLocalChat(ChatId chatId);
     void getUsers(const char *username, std::vector<const td::td_api::user *> &users);
     // A chat member named idNNN, as chats name them: the display name they are shown by, and the
     // name of the conversation with them; empty for another name
@@ -84,7 +85,9 @@ public:
     bool isLatestLink(unsigned serial);
     void createGroup(const char *name, int type, const std::vector<std::string> &basicGroupMembers);
     BasicGroupMembership getBasicGroupMembership(const char *purpleChatName);
-    void leaveGroup(const std::string &purpleChatName, bool deleteSupergroup);
+    void leaveGroup(const std::string &purpleChatName, bool deleteSupergroup, bool forOthers = true);
+    // Whether the chat can be deleted for all its members, and has others than us to ask about
+    bool canDeleteForOthers(const char *purpleChatName);
     int  sendGroupMessage(int purpleChatId, const char *message);
     void setGroupDescription(int purpleChatId, const char *description);
     void kickUserFromChat(PurpleConversation *conv, const char *name);
@@ -246,6 +249,8 @@ private:
     // List of chats is requested after connection is ready, and when response is received,
     // then we report to libpurple that we are connected
     void       onChatListReady();
+    void       showLoggedChats();
+    void       loggedChatLookedUp(ChatId chatId, TdObjectPtr object);
     void       checkBuddiesDeleted();
     void       checkBuddyDeletedResponse(TdObjectPtr object);
     // Login sequence end

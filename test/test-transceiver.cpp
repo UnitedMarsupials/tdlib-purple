@@ -524,6 +524,16 @@ static void compare(const deleteChatHistory &actual, const deleteChatHistory &ex
     COMPARE(revoke_);
 }
 
+static void compare(const optimizeStorage &actual, const optimizeStorage &expected)
+{
+    COMPARE(size_);
+    COMPARE(ttl_);
+    COMPARE(count_);
+    COMPARE(immunity_delay_);
+    ASSERT_EQ(expected.chat_ids_, actual.chat_ids_);
+    ASSERT_EQ(expected.exclude_chat_ids_, actual.exclude_chat_ids_);
+}
+
 static void compare(const removeContacts &actual, const removeContacts &expected)
 {
     COMPARE(user_ids_.size());
@@ -818,6 +828,7 @@ static void compareRequests(const Function &actual, const Function &expected,
         case getProxies::ID: break; // no data fields
         C(removeProxy)
         C(deleteChatHistory)
+        C(optimizeStorage)
         C(removeContacts)
         C(leaveChat)
         C(deleteChat)

@@ -1840,6 +1840,14 @@ GList *purple_log_get_logs(PurpleLogType type, const char *name, PurpleAccount *
     return NULL;
 }
 
+// As Pidgin's file loggers have it, if a test makes any
+char *purple_log_get_log_dir(PurpleLogType type, const char *name, PurpleAccount *account)
+{
+    std::string base = name + std::string(type == PURPLE_LOG_CHAT ? ".chat" : "");
+    return g_build_filename(purple_user_dir(), "logs", "telegram", purple_account_get_username(account), base.c_str(),
+                            NULL);
+}
+
 char *purple_log_read(PurpleLog *log, PurpleLogReadFlags *flags)
 {
     return g_strdup("");

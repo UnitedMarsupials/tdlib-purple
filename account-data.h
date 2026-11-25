@@ -540,6 +540,9 @@ public:
     void                       addShownMessage(ChatId chatId, MessageId messageId, ShownMessage &&message);
     ShownMessage *             findShownMessage(ChatId chatId, MessageId messageId);
     void                       removeShownMessage(ChatId chatId, MessageId messageId);
+    // A chat deleted here is shown no more, nor logged, until a tab of it is opened anew
+    void                       setChatDeleted(ChatId chatId, bool deleted);
+    bool                       isChatDeleted(ChatId chatId) const;
     void                       renameShownMessage(ChatId chatId, MessageId oldId, MessageId newId);
     // The id a message sent goes by once it is, where it went by another while being sent, as the
     // links in its showing do
@@ -632,6 +635,7 @@ private:
     // only so many are kept
     using ShownMessageKey = std::pair<ChatId, MessageId>;
     std::map<ShownMessageKey, ShownMessage> m_shownMessages;
+    std::set<ChatId>                        m_deletedChats;
     std::map<ShownMessageKey, MessageId>    m_sentMessageIds;
     std::deque<ShownMessageKey>             m_shownMessageOrder;
     std::vector<PendingEdit>                m_pendingEdits;

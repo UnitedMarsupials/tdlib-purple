@@ -9,6 +9,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <algorithm>
+#include <glib/gstdio.h>
 #include <functional>
 #include <set>
 #include <ctime>
@@ -294,7 +295,7 @@ PurpleConversation *getImConversation(PurpleAccount *account, const char *userna
 // the tab, and failing that, from the conversation's name, chat-<id>. A group we are not a member of
 // has no entry, so it gets one for as long as the program runs, in a group of its own; neither is
 // saved. Joining the group makes it a lasting one (see updateGroupChat).
-static void addTransientChat(TdAccountData &account, const td::td_api::chat &chat)
+void addTransientChat(TdAccountData &account, const td::td_api::chat &chat)
 {
     // TRANSLATOR: Buddy-list group, holding channels and groups shown in a conversation though not joined. It lasts until the program quits.
     const char  *groupName = _("Telegram: not joined");
@@ -739,6 +740,42 @@ bool isInviteLinkActive(const td::td_api::chatInviteLink &linkInfo)
 static std::string lastMessageSetting(ChatId chatId)
 {
     return "last-message-chat" + std::to_string(chatId.value());
+}
+
+// Of a chat deleted, nothing stays to tell of it: its tab, what is kept of it among the account's
+// settings, and Pidgin's log of it, with the pictures it holds. A group chat's entry goes too; a
+// buddy's is being removed by Pidgin.
+void wipeChatTraces(PurpleAccount *purpleAccount, ChatId chatId, const std::string &convName,
+                    PurpleConversationType type)
+{
+    PurpleConversation *conv = purple_find_conversation_with_account(type, convName.c_str(), purpleAccount);
+    if (conv)
+        purple_conversation_destroy(conv);
+    PurpleChat *purpleChat = (type == PURPLE_CONV_TYPE_CHAT) ? purple_blist_find_chat(purpleAccount, convName.c_str())
+                                                             : nullptr;
+    if (purpleChat)
+        purple_blist_remove_chat(purpleChat);
+    if (chatId.valid()) {
+        std::string setting = lastMessageSetting(chatId);
+        purple_account_remove_setting(purpleAccount, setting.c_str());
+    }
+
+    gchar      *logDir = purple_log_get_log_dir((type == PURPLE_CONV_TYPE_CHAT) ? PURPLE_LOG_CHAT : PURPLE_LOG_IM,
+                                                convName.c_str(), purpleAccount);
+    GDir       *dir    = logDir ? g_dir_open(logDir, 0, NULL) : nullptr;
+    const char *entry;
+    while (dir && (entry = g_dir_read_name(dir))) {
+        gchar *path = g_build_filename(logDir, entry, NULL);
+        if (g_remove(path) != 0)
+            purple_debug_warning(config::pluginId, "Cannot remove %s from the log\n", path);
+        g_free(path);
+    }
+    if (dir) {
+        g_dir_close(dir);
+        if (g_rmdir(logDir) != 0)
+            purple_debug_warning(config::pluginId, "Cannot remove the log's directory %s\n", logDir);
+    }
+    g_free(logDir);
 }
 
 void removeGroupChat(PurpleAccount *purpleAccount, const td::td_api::chat &chat)

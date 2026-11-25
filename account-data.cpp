@@ -1144,6 +1144,21 @@ void TdAccountData::removeShownMessage(ChatId chatId, MessageId messageId)
     m_shownMessages.erase(ShownMessageKey(chatId, messageId));
 }
 
+// TDLib's news of what becomes of it as it is deleted, as of its messages deleted, would open its
+// tab again, and be logged
+void TdAccountData::setChatDeleted(ChatId chatId, bool deleted)
+{
+    if (deleted)
+        m_deletedChats.insert(chatId);
+    else
+        m_deletedChats.erase(chatId);
+}
+
+bool TdAccountData::isChatDeleted(ChatId chatId) const
+{
+    return m_deletedChats.count(chatId) != 0;
+}
+
 MessageId TdAccountData::getSentMessageId(ChatId chatId, MessageId messageId) const
 {
     auto it = m_sentMessageIds.find(ShownMessageKey(chatId, messageId));

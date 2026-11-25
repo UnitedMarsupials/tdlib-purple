@@ -679,6 +679,11 @@ TEST_F(GroupChatTest, DeleteBasicGroup_Creator)
     tgl.update(make_object<updateBasicGroup>(make_object<basicGroup>(
         groupId, 2, makeChatMemberStatusCreator("", false, true), true, 0
     )));
+    constexpr int64_t shownId = 10001;
+    tgl.update(make_object<updateNewMessage>(makeMessage(shownId, userIds[0], groupChatId, false, 12345,
+                                                         makeTextMessage("Hello"))));
+    prpl.discardEvents();
+    tgl.verifyRequest(viewMessages(groupChatId, {shownId}, nullptr, true));
     PurpleChat *chat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
     ASSERT_NE(nullptr, chat);
     GList *actions = pluginInfo().blist_node_menu(&chat->node);
@@ -692,12 +697,69 @@ TEST_F(GroupChatTest, DeleteBasicGroup_Creator)
     nodeMenuAction(&chat->node, actions, "Delete group");
     prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
     prpl.requestedAction("_Yes");
-    tgl.verifyRequests({
-        make_object<leaveChat>(groupChatId),
-        make_object<deleteChatHistory>(groupChatId, true, false)
-    });
+    {
+        auto files = make_object<optimizeStorage>();
+        files->chat_ids_ = {groupChatId};
+        tgl.verifyRequests({
+            make_object<deleteChatHistory>(groupChatId, true, false),
+            std::move(files),
+            make_object<leaveChat>(groupChatId)
+        });
+    }
+    prpl.verifyEvents(RemoveChatEvent(groupChatPurpleName, ""));
+    // TDLib's news of the messages deleted then opens no tab to tell of them, which would be logged
+    tgl.update(makeUpdateDeleteMessages(groupChatId, shownId, true, false));
+    prpl.verifyNoEvents();
 
     g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
+}
+
+// Ours, sent just before the group was deleted, is not logged once sent: nothing of it is
+TEST_F(GroupChatTest, DeleteBasicGroup_SentNotLogged)
+{
+    const int64_t tempId  = 0x100001;
+    const int64_t finalId = 0x200000;
+    setLogMarkersEnabled(true);
+    loginWithBasicGroup();
+    PurpleChat *chat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
+    ASSERT_NE(nullptr, chat);
+    // Its tab open, and logging
+    tgl.update(make_object<updateNewMessage>(makeMessage(0x100000, userIds[0], groupChatId, false, 12340,
+                                                         makeTextMessage("Hi"))));
+    tgl.verifyRequest(viewMessages(groupChatId, {0x100000}, nullptr, true));
+    PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_CHAT,
+                                                                     groupChatPurpleName.c_str(), account);
+    ASSERT_NE(nullptr, conv);
+    purple_conversation_set_logging(conv, TRUE);
+    prpl.discardEvents();
+
+    object_ptr<message> pending = makeMessage(tempId, selfId, groupChatId, true, 12345, makeTextMessage("Bye"));
+    pending->sending_state_ = make_object<messageSendingStatePending>();
+    tgl.update(make_object<updateNewMessage>(std::move(pending)));
+    prpl.discardEvents();
+    tgl.verifyRequest(viewMessages(groupChatId, {tempId}, nullptr, true));
+    takeLoggedMessages();
+
+    GList *actions = pluginInfo().blist_node_menu(&chat->node);
+    nodeMenuAction(&chat->node, actions, "Delete group");
+    g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
+    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
+    prpl.requestedAction("_Yes");
+    {
+        auto files = make_object<optimizeStorage>();
+        files->chat_ids_ = {groupChatId};
+        tgl.verifyRequests({
+            make_object<deleteChatHistory>(groupChatId, true, false),
+            std::move(files),
+            make_object<leaveChat>(groupChatId)
+        });
+    }
+    prpl.discardEvents();
+
+    tgl.update(makeUpdateMessageSendSucceeded(
+        makeMessage(finalId, selfId, groupChatId, true, 12345, makeTextMessage("Bye")), tempId));
+    prpl.verifyNoEvents();
+    ASSERT_TRUE(takeLoggedMessages().empty());
 }
 
 TEST_F(GroupChatTest, DeleteBasicGroup_NonCreator)
@@ -707,9 +769,20 @@ TEST_F(GroupChatTest, DeleteBasicGroup_NonCreator)
     ASSERT_NE(nullptr, chat);
     GList *actions = pluginInfo().blist_node_menu(&chat->node);
 
+    // Someone else's: left, and nothing of it kept here
     nodeMenuAction(&chat->node, actions, "Delete group");
-    prpl.verifyNoEvents();
-    tgl.verifyNoRequests();
+    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
+    prpl.requestedAction("_Yes");
+    {
+        auto files = make_object<optimizeStorage>();
+        files->chat_ids_ = {groupChatId};
+        tgl.verifyRequests({
+            make_object<deleteChatHistory>(groupChatId, true, false),
+            std::move(files),
+            make_object<leaveChat>(groupChatId)
+        });
+    }
+    prpl.verifyEvents(RemoveChatEvent(groupChatPurpleName, ""));
 
     g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
 }
@@ -730,10 +803,8 @@ TEST_F(GroupChatTest, LeaveBasicGroup)
     nodeMenuAction(&chat->node, actions, "Leave group");
     prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
     prpl.requestedAction("_Yes");
-    tgl.verifyRequests({
-        make_object<leaveChat>(groupChatId),
-        make_object<deleteChatHistory>(groupChatId, true, false)
-    });
+    // Only left, nothing of it deleted
+    tgl.verifyRequest(leaveChat(groupChatId));
 
     g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
 }
