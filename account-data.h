@@ -179,6 +179,7 @@ struct TgMessageInfo {
         mediaVariantLinks = other.mediaVariantLinks;
         unlogged = other.unlogged;
         redrawn = other.redrawn;
+        logRedrawn = other.logRedrawn;
     }
 };
 
