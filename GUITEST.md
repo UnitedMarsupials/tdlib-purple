@@ -485,6 +485,17 @@ Receive a video with a cover, and one without.
 * The cover, where there is one, is shown rather than the first frame; the links list the
   video's other sizes, the original marked.
 
+### F7. Rich messages
+
+Find a channel's post laid out in blocks, as a shop's with a heading, a price and pictures (TDLib
+calls it `messageRichMessage`), such as those of СУВЕНІРНА КЕРАМІКА.
+
+* Its headings are bold and bigger, its paragraphs, lists and tables each on lines of their own,
+  links clickable; its pictures are "[photo]" placeholders, with their captions.
+* Quoted in a reply, its first line of text stands for it.
+
+Since: such a post was shown as TDLib's description of it, cut short.
+
 ## Groups
 
 ### G1. A group's news

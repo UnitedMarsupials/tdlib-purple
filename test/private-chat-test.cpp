@@ -2207,3 +2207,95 @@ TEST_F(PrivateChatTest, OpenBuddyUnknownToTelegram)
                                              "Telegram has no chat with this user: code 400 (USER_NOT_FOUND &lt;x&gt;)",
                                              (PurpleMessageFlags)(PURPLE_MESSAGE_SYSTEM | PURPLE_MESSAGE_NO_LOG), 0));
 }
+
+#if TDLIB_API_RICH_MESSAGE
+static object_ptr<RichText> plainText(const std::string &text)
+{
+    auto result = make_object<richTextPlain>();
+    result->text_ = text;
+    return std::move(result);
+}
+
+// A rich message, laid out as an instant view page is: its text and structure, its media as
+// placeholders with their captions
+TEST_F(PrivateChatTest, RichMessage)
+{
+    const int32_t date = 10001;
+    loginWithOneContact();
+
+    auto message = make_object<richMessage>();
+    {
+        auto heading = make_object<pageBlockSectionHeading>();
+        heading->text_ = plainText("Vase <Verona>");
+        heading->size_ = 1;
+        message->blocks_.push_back(std::move(heading));
+    }
+    {
+        auto bold = make_object<richTextBold>();
+        bold->text_ = plainText("800");
+        auto link = make_object<richTextUrl>();
+        link->text_ = plainText("shop");
+        link->url_  = "https://example.com/?a=1&b=2";
+        auto texts = make_object<richTexts>();
+        texts->texts_.push_back(std::move(bold));
+        texts->texts_.push_back(plainText(" UAH at the "));
+        texts->texts_.push_back(std::move(link));
+        auto paragraph = make_object<pageBlockParagraph>();
+        paragraph->text_ = std::move(texts);
+        message->blocks_.push_back(std::move(paragraph));
+    }
+    {
+        auto collage = make_object<pageBlockCollage>();
+        for (int i = 0; i < 2; i++)
+            collage->blocks_.push_back(make_object<pageBlockPhoto>());
+        collage->caption_ = make_object<pageBlockCaption>();
+        collage->caption_->text_ = plainText("Both sides");
+        message->blocks_.push_back(std::move(collage));
+    }
+    {
+        auto list = make_object<pageBlockList>();
+        for (bool checked: {true, false}) {
+            auto paragraph = make_object<pageBlockParagraph>();
+            paragraph->text_ = plainText(checked ? "glazed" : "signed");
+            auto item = make_object<pageBlockListItem>();
+            item->has_checkbox_ = true;
+            item->is_checked_   = checked;
+            item->blocks_.push_back(std::move(paragraph));
+            list->items_.push_back(std::move(item));
+        }
+        message->blocks_.push_back(std::move(list));
+    }
+    {
+        auto table = make_object<pageBlockTable>();
+        table->cells_.resize(2);
+        for (const char *text: {"Size", "Price"}) {
+            auto cell = make_object<pageBlockTableCell>();
+            cell->text_      = plainText(text);
+            cell->is_header_ = true;
+            table->cells_[0].push_back(std::move(cell));
+        }
+        for (const char *text: {"30 cm", "800"}) {
+            auto cell = make_object<pageBlockTableCell>();
+            cell->text_ = plainText(text);
+            table->cells_[1].push_back(std::move(cell));
+        }
+        message->blocks_.push_back(std::move(table));
+    }
+    message->blocks_.push_back(make_object<pageBlockAnchor>());
+    auto content = make_object<messageRichMessage>();
+    content->message_ = std::move(message);
+
+    tgl.update(make_object<updateNewMessage>(makeMessage(1, userIds[0], chatIds[0], false, date, std::move(content))));
+    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
+    prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0),
+        "<b><font size=\"4\">Vase &lt;Verona&gt;</font></b><br>"
+        // The mock escapes only < and >, as the rest of the tests have it
+        "<b>800</b> UAH at the <a href=\"https://example.com/?a=1&b=2\">shop</a><br>"
+        "[photo] [photo] Both sides<br>"
+        "\xe2\x98\x91 glazed<br>"
+        "\xe2\x98\x90 signed<br>"
+        "<b>Size</b> | <b>Price</b><br>"
+        "30 cm | 800",
+        PURPLE_MESSAGE_RECV, date));
+}
+#endif

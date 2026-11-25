@@ -12,6 +12,7 @@ media-variants.cpp
 pidgin-ui.cpp
 purple-info.cpp
 receiving.cpp
+rich-message.cpp
 secret-chat.cpp
 sticker.cpp
 td-client.cpp

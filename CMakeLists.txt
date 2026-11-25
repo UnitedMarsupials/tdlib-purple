@@ -90,6 +90,7 @@ add_library(telegram-tdlib SHARED
     log-history.cpp
     clipboard.cpp
     thumbnail.cpp
+    rich-message.cpp
 )
 
 #target_compile_options(telegram-tdlib PRIVATE -Wmissing-declarations)

@@ -26,6 +26,8 @@
 #define TDLIB_API_INPUT_VOICE_NOTE ${TDLIB_API_INPUT_VOICE_NOTE}
 // inlineKeyboardButton has a style, as of a warning, and an icon (1.8.61)
 #define TDLIB_API_BUTTON_STYLE     ${TDLIB_API_BUTTON_STYLE}
+// a message may be rich, laid out in blocks as an instant view page is (1.8.65)
+#define TDLIB_API_RICH_MESSAGE     ${TDLIB_API_RICH_MESSAGE}
 
 
 #define TEST_SOURCE_DIR "${CMAKE_SOURCE_DIR}/test"

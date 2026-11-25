@@ -1,4 +1,5 @@
 #include "receiving.h"
+#include "rich-message.h"
 #include "client-utils.h"
 #include "format.h"
 #include "purple-info.h"
@@ -757,6 +758,13 @@ static std::string quoteMessage(const td::td_api::message *message, TdAccountDat
                 text += " " + location.venue->title_;
             break;
         }
+#if TDLIB_API_RICH_MESSAGE
+        case td::td_api::messageRichMessage::ID: {
+            const auto &rich = static_cast<const td::td_api::messageRichMessage &>(*message->content_);
+            text = rich.message_ ? getRichMessageSummary(*rich.message_) : std::string();
+            break;
+        }
+#endif
         default:
             text = '[' + getUnsupportedMessageDescription(*message->content_) + ']';
             break;
@@ -1947,6 +1955,17 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
                 showUnsupportedMessage(chat, messageInfo, *message.content_, account);
             break;
         }
+#if TDLIB_API_RICH_MESSAGE
+        case td::td_api::messageRichMessage::ID: {
+            const auto &rich = static_cast<const td::td_api::messageRichMessage &>(*message.content_);
+            std::string html = rich.message_ ? formatRichMessage(*rich.message_) : std::string();
+            if (!html.empty())
+                showMessageText(account, chat, messageInfo, html.c_str(), NULL);
+            else
+                showUnsupportedMessage(chat, messageInfo, *message.content_, account);
+            break;
+        }
+#endif
         default:
             showUnsupportedMessage(chat, messageInfo, *message.content_, account);
     }
