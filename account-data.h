@@ -292,6 +292,15 @@ struct IncomingMessage {
     bool     formattingOnly    = false;
     // Deleted while waiting to be shown, which it then never is
     bool     deleted           = false;
+    // A rich message's pictures, shown in it, by their number among its media: each fetched,
+    // or given up waiting for, before it is shown; the path empty for one not fetched
+    struct RichPicture {
+        size_t      index;
+        int32_t     fileId;
+        std::string path;
+        bool        done;
+    };
+    std::vector<RichPicture> richPictures;
 
     // Not a message but a line of Pidgin's log, as it is, put among them in the tab when it is filled;
     // with the pictures of the image store it shows, which it holds

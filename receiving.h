@@ -13,7 +13,8 @@ std::string getMessageText(const td::td_api::formattedText &text,
                            const std::map<int64_t, std::string> *smileys = nullptr, bool sendable = false);
 // Into the image store, which takes the data, under the file's name, for Pidgin to offer when saving it
 int addImageFile(gchar *data, size_t length, const std::string &filePath);
-std::string makeInlineImageText(int imgstoreId);
+// An image of the store, as markup: on a line of its own, unless placed among text
+std::string makeInlineImageText(int imgstoreId, bool ownLine = true);
 // How long a message may wait for its picture, preview or quoted message before it is shown
 // without: longer when catching up with a chat, where keeping messages in order matters more than
 // showing each at once, but not so long that a message just sent waits behind them for long

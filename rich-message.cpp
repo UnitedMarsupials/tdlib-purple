@@ -136,8 +136,9 @@ static std::string withCaption(const std::string &media, const td::td_api::pageB
 
 // Links to its media, numbered in the order they are shown, for the plugin to open when clicked
 struct MediaLinks {
-    const RichMediaLink *link;
-    size_t               next = 0;
+    const RichMediaLink  *link;
+    const RichMediaImage *image = nullptr;
+    size_t                next  = 0;
 };
 
 static void formatBlocks(const std::vector<td::td_api::object_ptr<td::td_api::PageBlock>> &blocks,
@@ -152,7 +153,10 @@ static std::string formatHeading(const td::td_api::RichText *text, int size)
 // A medium's placeholder, linked to its file, where it can be
 static std::string mediaItem(const char *kind, MediaLinks &links)
 {
-    std::string media = mediaPlaceholder(kind);
+    // The picture itself, where it has been fetched
+    std::string media = (links.image && *links.image) ? (*links.image)(links.next) : std::string();
+    if (media.empty())
+        media = mediaPlaceholder(kind);
     std::string url   = (links.link && *links.link) ? (*links.link)(links.next) : std::string();
     links.next++;
     return url.empty() ? media : "<a href=\"" + escapeForDisplay(url) + "\">" + media + "</a>";
@@ -379,10 +383,11 @@ static void formatBlocks(const std::vector<td::td_api::object_ptr<td::td_api::Pa
             formatBlock(*block, lines, links);
 }
 
-std::string formatRichMessage(const td::td_api::richMessage &message, const RichMediaLink &link)
+std::string formatRichMessage(const td::td_api::richMessage &message, const RichMediaLink &link,
+                              const RichMediaImage &image)
 {
     std::vector<std::string> lines;
-    MediaLinks               links{&link};
+    MediaLinks               links{&link, &image};
     formatBlocks(message.blocks_, lines, links);
     std::string html;
     for (const std::string &line: lines)

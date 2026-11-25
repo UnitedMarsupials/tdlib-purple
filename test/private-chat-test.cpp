@@ -2315,3 +2315,42 @@ TEST_F(PrivateChatTest, RichMessage)
         PURPLE_MESSAGE_RECV, date));
 }
 #endif
+
+#if TDLIB_API_RICH_MESSAGE
+// A rich message's pictures are fetched before it is shown, and shown in it where they are
+TEST_F(PrivateChatTest, RichMessagePictures)
+{
+    const int32_t date = 10001;
+    purple_account_set_string(account, "media-size-threshold", "0");
+    loginWithOneContact();
+
+    auto collage = make_object<pageBlockCollage>();
+    for (bool here: {true, false}) {
+        auto photoBlock = make_object<pageBlockPhoto>();
+        photoBlock->photo_ = make_object<photo>();
+        photoBlock->photo_->sizes_.push_back(makePhotoSize(::makeFile(here ? 101 : 102, 10000,
+                                                                       here ? TEST_SOURCE_DIR "/test.webp" : ""),
+                                                           640, 480));
+        collage->blocks_.push_back(std::move(photoBlock));
+    }
+    collage->caption_ = make_object<pageBlockCaption>();
+    collage->caption_->text_ = plainText("Both sides");
+    auto rich = make_object<richMessage>();
+    rich->blocks_.push_back(std::move(collage));
+    auto content = make_object<messageRichMessage>();
+    content->message_ = std::move(rich);
+
+    // The second fetched first, the message waiting for it
+    tgl.update(make_object<updateNewMessage>(makeMessage(1, userIds[0], chatIds[0], false, date, std::move(content))));
+    tgl.verifyRequest(downloadFile(102, 1, 0, 0, true));
+    prpl.verifyNoEvents();
+    tgl.reply(::makeFile(102, 10000, TEST_SOURCE_DIR "/test.webp"));
+    int second = getLastImgstoreId();
+    int first  = second - 1;
+    prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0),
+                                     "<img id=\"" + std::to_string(first) + "\"> <img id=\"" +
+                                     std::to_string(second) + "\"> Both sides",
+                                     (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES), date));
+    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
+}
+#endif
