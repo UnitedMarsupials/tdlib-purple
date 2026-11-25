@@ -1856,7 +1856,7 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
     // All its parts, notices included, are the message, and its menu goes before the first. An edit
     // goes over the earlier version, saying it was edited.
     std::string editNote;
-    if (fullMessage.replacing)
+    if (fullMessage.replacing && !fullMessage.refreshing)
         editNote = formatMessage(" <font size=\"2\"><i>({})</i></font>",
                                  std::string(fullMessage.formattingOnly ?
                                              // TRANSLATOR: After the text of a message edited where it stands, in Pidgin's conversation window, when only the formatting of its words (bold, italic and the like) changed.
@@ -2436,18 +2436,53 @@ bool isMessageReady(const IncomingMessage &fullMessage, const TdAccountData &acc
     return true;
 }
 
+static void queueMessage(TdAccountData &account, const td::td_api::chat &chat,
+                         IncomingMessage &&fullMessage, PendingMessageQueue::MessageAction action);
+
+// A message shown already without a picture of its own come since, written again over itself where
+// Pidgin's tab shows it, not logged again, not said to be edited
+static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId messageId)
+{
+    auto request = td::td_api::make_object<td::td_api::getMessage>();
+    request->chat_id_    = chatId.value();
+    request->message_id_ = messageId.value();
+    account.transceiver.sendQuery(std::move(request),
+        [&account, chatId, messageId](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
+            const td::td_api::chat *chat = account.getChat(chatId);
+            if (!chat || !object || (object->get_id() != td::td_api::message::ID) ||
+                !canReplaceMessage(findMessageConversation(account, *chat), messageId) ||
+                account.pendingMessages.findPendingMessage(chatId, messageId))
+                return;
+            purple_debug_misc(config::pluginId, "Showing message %" G_GINT64_FORMAT " again, with a picture come late\n",
+                              messageId.value());
+            IncomingMessage fullMessage;
+            makeFullMessage(*chat, td::move_tl_object_as<td::td_api::message>(object), fullMessage, account);
+            fullMessage.replacing              = true;
+            fullMessage.refreshing             = true;
+            fullMessage.messageInfo.unlogged   = true;
+            queueMessage(account, *chat, std::move(fullMessage), PendingMessageQueue::Append);
+        });
+}
+
+// Called when the message stops waiting for it, with nothing, and again once it is here: the
+// message, if shown already by then, is shown again with it
 static void richPictureDownloadResponse(TdAccountData &account, ChatId chatId, MessageId messageId, size_t index,
                                         td::td_api::object_ptr<td::td_api::Object> object)
 {
+    std::string      path           = object ? getDownloadPath(object) : std::string();
     IncomingMessage *pendingMessage = account.pendingMessages.findPendingMessage(chatId, messageId);
-    if (!pendingMessage) return;
+    if (!pendingMessage) {
+        if (!path.empty())
+            refreshShownMessage(account, chatId, messageId);
+        return;
+    }
     for (IncomingMessage::RichPicture &picture: pendingMessage->richPictures)
         if (picture.index == index) {
             picture.done = true;
-            if (object)
-                picture.path = getDownloadPath(object);
+            if (!path.empty())
+                picture.path = path;
             else
-                purple_debug_misc(config::pluginId, "Picture %zu of message %" G_GINT64_FORMAT " timed out\n",
+                purple_debug_misc(config::pluginId, "Picture %zu of message %" G_GINT64_FORMAT " not here yet\n",
                                   index, messageId.value());
         }
     checkMessageReady(pendingMessage, account.transceiver, account);
@@ -2517,11 +2552,14 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
         downloadReq->limit_       = 0;
         downloadReq->synchronous_ = true;
         size_t index = picture.index;
-        // Past the timeout the message is shown with a placeholder for it
-        transceiver.sendQueryWithTimeout(std::move(downloadReq),
-            [&account, chatId, messageId, index](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
-                richPictureDownloadResponse(account, chatId, messageId, index, std::move(object));
-            }, getMessageWaitSeconds(fullMessage.messageInfo));
+        // Past the timeout the message is shown with a placeholder for it, and again with it once
+        // it is here, however late, as TDLib goes on fetching it
+        TdTransceiver::ResponseCb2 handler = [&account, chatId, messageId, index](uint64_t,
+                                                td::td_api::object_ptr<td::td_api::Object> object) {
+            richPictureDownloadResponse(account, chatId, messageId, index, std::move(object));
+        };
+        uint64_t queryId = transceiver.sendQuery(std::move(downloadReq), handler);
+        transceiver.setQueryTimer(queryId, handler, getMessageWaitSeconds(fullMessage.messageInfo), false);
     }
 
     FileInfo fileInfo;

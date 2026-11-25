@@ -288,6 +288,8 @@ struct IncomingMessage {
     bool     captionOnly       = false;
     // Written over its earlier version, where Pidgin's tab still shows it
     bool     replacing         = false;
+    // ...not as edited, but as shown again with a picture come late
+    bool     refreshing        = false;
     // Its words the same, only their formatting changed
     bool     formattingOnly    = false;
     // Deleted while waiting to be shown, which it then never is

@@ -2354,3 +2354,39 @@ TEST_F(PrivateChatTest, RichMessagePictures)
     tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
 }
 #endif
+
+#if TDLIB_API_RICH_MESSAGE
+// A picture not here before the message stopped waiting for it is shown once it is, the message
+// written again over itself, unlogged, not said to be edited
+TEST_F(PrivateChatTest, RichMessagePictureLate)
+{
+    const int32_t date = 10001;
+    purple_account_set_string(account, "media-size-threshold", "0");
+    loginWithOneContact();
+    auto makeRich = [this](bool downloaded) {
+        auto photoBlock = make_object<pageBlockPhoto>();
+        photoBlock->photo_ = make_object<photo>();
+        photoBlock->photo_->sizes_.push_back(makePhotoSize(::makeFile(102, 10000,
+                                                                       downloaded ? TEST_SOURCE_DIR "/test.webp" : ""),
+                                                           640, 480));
+        auto rich = make_object<richMessage>();
+        rich->blocks_.push_back(std::move(photoBlock));
+        auto content = make_object<messageRichMessage>();
+        content->message_ = std::move(rich);
+        return makeMessage(1, userIds[0], chatIds[0], false, date, std::move(content));
+    };
+
+    tgl.update(make_object<updateNewMessage>(makeRich(false)));
+    uint64_t download = tgl.verifyRequest(downloadFile(102, 1, 0, 0, true));
+    prpl.verifyNoEvents();
+    runTimeouts();
+    prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0), "[photo]", PURPLE_MESSAGE_RECV, date));
+    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
+
+    // Without Pidgin's tab there is nothing to write it over: only the message is asked for again
+    tgl.reply(download, ::makeFile(102, 10000, TEST_SOURCE_DIR "/test.webp"));
+    tgl.verifyRequest(getMessage(chatIds[0], 1));
+    tgl.reply(makeRich(true));
+    prpl.verifyNoEvents();
+}
+#endif

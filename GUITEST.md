@@ -493,6 +493,9 @@ calls it `messageRichMessage`), such as those of СУВЕНІРНА КЕРАМІ
 * Its headings are bold and bigger, its paragraphs, lists and tables each on lines of their own,
   links clickable; its pictures are shown in it, a collage's side by side, about 20 lines of the
   tab's text tall, or the biggest there is, with their captions.
+* With the network slow or cut (unplug it, or stop TDLib's traffic, as the message comes), the
+  message shows a placeholder; once the picture is here, the message is written again with it,
+  not said to be edited, and the log not added to.
 * A picture clicked opens it; a placeholder, of a video or a picture past the account's limit on
   what is fetched unasked, downloads its file, "Downloading …" said in the tab, and opens it.
 * Quoted in a reply, its first line of text stands for it.
