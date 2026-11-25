@@ -2281,6 +2281,21 @@ TEST_F(PrivateChatTest, RichMessage)
         }
         message->blocks_.push_back(std::move(table));
     }
+    {
+        // A link to a file is its text alone; a spoiler, hidden until selected
+        auto local = make_object<richTextUrl>();
+        local->text_ = plainText("here");
+        local->url_  = "file:///etc/passwd";
+        auto spoiler = make_object<richTextSpoiler>();
+        spoiler->text_ = plainText("secret");
+        auto texts = make_object<richTexts>();
+        texts->texts_.push_back(std::move(local));
+        texts->texts_.push_back(plainText(" "));
+        texts->texts_.push_back(std::move(spoiler));
+        auto paragraph = make_object<pageBlockParagraph>();
+        paragraph->text_ = std::move(texts);
+        message->blocks_.push_back(std::move(paragraph));
+    }
     message->blocks_.push_back(make_object<pageBlockAnchor>());
     auto content = make_object<messageRichMessage>();
     content->message_ = std::move(message);
@@ -2295,7 +2310,8 @@ TEST_F(PrivateChatTest, RichMessage)
         "\xe2\x98\x91 glazed<br>"
         "\xe2\x98\x90 signed<br>"
         "<b>Size</b> | <b>Price</b><br>"
-        "30 cm | 800",
+        "30 cm | 800<br>"
+        "here <font color=\"#808080\" back=\"#808080\">secret</font>",
         PURPLE_MESSAGE_RECV, date));
 }
 #endif

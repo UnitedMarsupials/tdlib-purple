@@ -3,6 +3,7 @@
 #if TDLIB_API_RICH_MESSAGE
 
 #include "receiving.h"
+#include "client-utils.h"
 #include "translate.h"
 #include <purple.h>
 #include <algorithm>
@@ -18,10 +19,16 @@ static std::string wrap(const char *open, const td::td_api::RichText *text, cons
     return open + formatRichText(text) + close;
 }
 
+// A link to where it may not go is shown as its text alone
+static std::string linkTo(const std::string &url, const std::string &shown)
+{
+    std::string text = shown.empty() ? escapeForDisplay(url) : shown;
+    return isLinkSchemeAllowed(url) ? "<a href=\"" + escapeForDisplay(url) + "\">" + text + "</a>" : text;
+}
+
 static std::string linkTo(const std::string &url, const td::td_api::RichText *text)
 {
-    std::string shown = formatRichText(text);
-    return "<a href=\"" + escapeForDisplay(url) + "\">" + (shown.empty() ? escapeForDisplay(url) : shown) + "</a>";
+    return linkTo(url, formatRichText(text));
 }
 
 static std::string formatRichText(const td::td_api::RichText *text)
@@ -55,7 +62,9 @@ static std::string formatRichText(const td::td_api::RichText *text)
     case td::td_api::richTextMarked::ID:
         return wrap("<u>", static_cast<const td::td_api::richTextMarked &>(*text).text_.get(), "</u>");
     case td::td_api::richTextSpoiler::ID:
-        return formatRichText(static_cast<const td::td_api::richTextSpoiler &>(*text).text_.get());
+        // Hidden until selected, as a spoiler in an ordinary message is
+        return wrap("<font color=\"#808080\" back=\"#808080\">",
+                    static_cast<const td::td_api::richTextSpoiler &>(*text).text_.get(), "</font>");
     case td::td_api::richTextDateTime::ID:
         return formatRichText(static_cast<const td::td_api::richTextDateTime &>(*text).text_.get());
     case td::td_api::richTextMention::ID: {
@@ -105,7 +114,7 @@ static std::string formatRichText(const td::td_api::RichText *text)
 // In brackets, as in a quote of such a message
 static std::string mediaPlaceholder(const char *kind)
 {
-    return std::string("[") + kind + "]";
+    return escapeForDisplay(std::string("[") + kind + "]");
 }
 
 static std::string formatCaption(const td::td_api::pageBlockCaption *caption)
@@ -226,7 +235,7 @@ static void formatBlock(const td::td_api::PageBlock &block, std::vector<std::str
         const auto &photo = static_cast<const td::td_api::pageBlockPhoto &>(block);
         std::string media = mediaPlaceholder(_("photo"));
         if (!photo.url_.empty())
-            media = "<a href=\"" + escapeForDisplay(photo.url_) + "\">" + media + "</a>";
+            media = linkTo(photo.url_, media);
         lines.push_back(withCaption(media, photo.caption_.get()));
         break;
     }
@@ -270,9 +279,7 @@ static void formatBlock(const td::td_api::PageBlock &block, std::vector<std::str
     }
     case td::td_api::pageBlockEmbedded::ID: {
         const auto &embedded = static_cast<const td::td_api::pageBlockEmbedded &>(block);
-        std::string link     = embedded.url_.empty() ? std::string()
-                                                     : "<a href=\"" + escapeForDisplay(embedded.url_) + "\">" +
-                                                       escapeForDisplay(embedded.url_) + "</a>";
+        std::string link     = embedded.url_.empty() ? std::string() : linkTo(embedded.url_, std::string());
         std::string text     = withCaption(link, embedded.caption_.get());
         if (!text.empty())
             lines.push_back(text);
@@ -282,8 +289,7 @@ static void formatBlock(const td::td_api::PageBlock &block, std::vector<std::str
         const auto &post = static_cast<const td::td_api::pageBlockEmbeddedPost &>(block);
         std::string author = escapeForDisplay(post.author_);
         if (!post.url_.empty())
-            author = "<a href=\"" + escapeForDisplay(post.url_) + "\">" + (author.empty() ? escapeForDisplay(post.url_)
-                                                                                         : author) + "</a>";
+            author = linkTo(post.url_, author);
         if (!author.empty())
             lines.push_back("<b>" + author + "</b>");
         std::vector<std::string> posted;
@@ -296,7 +302,7 @@ static void formatBlock(const td::td_api::PageBlock &block, std::vector<std::str
         break;
     }
     case td::td_api::pageBlockMap::ID:
-        lines.push_back(withCaption(_("[location]"), static_cast<const td::td_api::pageBlockMap &>(block).caption_.get()));
+        lines.push_back(withCaption(escapeForDisplay(_("[location]")), static_cast<const td::td_api::pageBlockMap &>(block).caption_.get()));
         break;
     case td::td_api::pageBlockChatLink::ID: {
         const auto &chatLink = static_cast<const td::td_api::pageBlockChatLink &>(block);
@@ -340,8 +346,7 @@ static void formatBlock(const td::td_api::PageBlock &block, std::vector<std::str
             lines.push_back("<b>" + header + "</b>");
         for (const auto &article: related.articles_)
             if (article && !article->url_.empty())
-                lines.push_back("<a href=\"" + escapeForDisplay(article->url_) + "\">" +
-                                escapeForDisplay(article->title_.empty() ? article->url_ : article->title_) + "</a>");
+                lines.push_back(linkTo(article->url_, escapeForDisplay(article->title_)));
         break;
     }
     default:

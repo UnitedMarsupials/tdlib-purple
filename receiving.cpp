@@ -380,11 +380,15 @@ static bool getEntityMarkup(const td::td_api::TextEntityType &type, TextMarkup &
         markup.open = "<s>";
         markup.close = "</s>";
         return true;
-    case td::td_api::textEntityTypeTextUrl::ID:
-        markup.open = "<a href=\"" +
-                      escapeForDisplay(static_cast<const td::td_api::textEntityTypeTextUrl &>(type).url_) + "\">";
-        markup.close = "</a>";
+    case td::td_api::textEntityTypeTextUrl::ID: {
+        // A link to where it may not go is shown as its text alone
+        const std::string &url = static_cast<const td::td_api::textEntityTypeTextUrl &>(type).url_;
+        if (isLinkSchemeAllowed(url)) {
+            markup.open  = "<a href=\"" + escapeForDisplay(url) + "\">";
+            markup.close = "</a>";
+        }
         return true;
+    }
     }
     // The rest, there being no sending them from Pidgin
     if (sendable)

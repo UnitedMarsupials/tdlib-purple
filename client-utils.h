@@ -67,6 +67,9 @@ std::string getSenderDisplayName(const td::td_api::chat &chat, const TgMessageIn
 // front-end lets the plugin handle a scheme of its own, which Pidgin does; elsewhere, files are
 // linked to directly.
 constexpr const char *MESSAGE_LINK_SCHEME = "tdlib://";
+// Whether a link a sender gave may be clicked: to the web, to Telegram, or to write or call;
+// not to a file, nor to a scheme of the plugin's own
+bool        isLinkSchemeAllowed(const std::string &url);
 bool        messageLinksEnabled();
 void        setMessageLinksEnabled(bool enabled);
 // A variant, if given, names one of the sizes a photo or video comes in
