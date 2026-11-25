@@ -3337,10 +3337,15 @@ void PurpleTdClient::onIncomingMessage(td::td_api::object_ptr<td::td_api::messag
     // are in, a channel's discussion group, one Telegram has brought up for us - and delivers
     // their messages, which are none of ours unless the account says otherwise. Nor are their
     // earlier messages fetched. Only the news of our leaving gets through, as the last word on a
-    // group we have just left.
+    // group we have just left; and what comes to one whose tab is open, being read, as TDLib
+    // delivers then, kept past the tab's end as any chat's where it stops short of the newest.
     const td::td_api::chat *groupChat = m_data.getChat(chatId);
+    PurpleConversation     *openConv  = groupChat ? findMessageConversation(m_data, *groupChat) : nullptr;
+    bool                    open      = openConv &&
+                                        ((purple_conversation_get_type(openConv) != PURPLE_CONV_TYPE_CHAT) ||
+                                         !purple_conv_chat_has_left(purple_conversation_get_chat_data(openConv)));
     if (groupChat && (getBasicGroupId(*groupChat).valid() || getSupergroupId(*groupChat).valid()) &&
-        !m_data.isGroupChatWithMembership(*groupChat) &&
+        !m_data.isGroupChatWithMembership(*groupChat) && !open &&
         !purple_account_get_bool(m_account, AccountOptions::ShowUnjoinedChats,
                                  AccountOptions::ShowUnjoinedChatsDefault) &&
         !isLeavingOf(*message, m_data.options.myUserId))
