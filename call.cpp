@@ -25,6 +25,8 @@ bool initiateCall([[maybe_unused]] int64_t userId, [[maybe_unused]] TdAccountDat
         callRequest->user_id_  = userId;
         callRequest->protocol_ = getCallProtocol();
         transceiver.sendQuery(std::move(callRequest), nullptr);
+        // Asked for: libpurple's "call succeeded", not that it was answered
+        return true;
     } else
         // TRANSLATOR: Dialog title of an error message.
         purple_notify_warning(account.purpleAccount, _("Voice call"),

@@ -140,6 +140,19 @@ public:
     : PendingRequest(requestId), xfer(xfer), chatId(chatId), kind(kind) {}
 };
 
+// The message a message replies to, which goes with the latter's info but is not copied with it:
+// whoever needs it moves it (DownloadRequest)
+class RepliedMessage: public td::td_api::object_ptr<td::td_api::message> {
+public:
+    using Base = td::td_api::object_ptr<td::td_api::message>;
+    RepliedMessage() = default;
+    RepliedMessage(const RepliedMessage &) noexcept {}
+    RepliedMessage(RepliedMessage &&) = default;
+    RepliedMessage &operator=(const RepliedMessage &) noexcept { reset(); return *this; }
+    RepliedMessage &operator=(RepliedMessage &&) = default;
+    RepliedMessage &operator=(Base &&other) noexcept { Base::operator=(std::move(other)); return *this; }
+};
+
 struct TgMessageInfo {
     enum class Type {
         Photo,
@@ -156,7 +169,7 @@ struct TgMessageInfo {
     bool        outgoing = false;
     bool        sentLocally = false; // For outgoing messages, whether sent by this very client
     MessageId   repliedMessageId;
-    td::td_api::object_ptr<td::td_api::message> repliedMessage;
+    RepliedMessage repliedMessage;
     std::string forwardedFrom;
     std::string altText; // to show instead of the picture, where it cannot be shown
     bool        anonymousChannelPost = false; // incomingGroupchatSender is "Channel post", naming nobody
@@ -167,25 +180,12 @@ struct TgMessageInfo {
     bool        logRedrawn = false; // shown so into a tab of a chat with no log yet: logged after all
     bool        picturesComing = false; // shown with stand-ins for pictures fetched: logged once they are
 
+    // A copy kept for later, as by a download, without the message replied to (RepliedMessage) and
+    // without picturesComing, which is of the showing in progress, not of what is shown later
     void assign(const TgMessageInfo &other)
     {
-        id = other.id;
-        type = other.type;
-        incomingGroupchatSender = other.incomingGroupchatSender;
-        incomingGroupchatSenderName = other.incomingGroupchatSenderName;
-        timestamp = other.timestamp;
-        outgoing = other.outgoing;
-        sentLocally = other.sentLocally;
-        repliedMessageId = other.repliedMessageId;
-        repliedMessage = nullptr;
-        forwardedFrom = other.forwardedFrom;
-        altText = other.altText;
-        anonymousChannelPost = other.anonymousChannelPost;
-        fromHistory = other.fromHistory;
-        mediaVariantLinks = other.mediaVariantLinks;
-        unlogged = other.unlogged;
-        redrawn = other.redrawn;
-        logRedrawn = other.logRedrawn;
+        *this          = other;
+        picturesComing = false;
     }
 };
 
@@ -246,7 +246,7 @@ public:
     PurpleXfer  *fileUpload;
 
     NewPrivateChatForMessage(uint64_t requestId, const char *username, const char *message)
-    : PendingRequest(requestId), username(username), message(message ? message : nullptr),
+    : PendingRequest(requestId), username(username), message(message ? message : ""),
       fileUpload(nullptr) {}
 
     NewPrivateChatForMessage(uint64_t requestId, const char *username, PurpleXfer *upload)
@@ -278,24 +278,24 @@ struct IncomingMessage {
     // Could be refactored.
     TgMessageInfo messageInfo;
 
-    int32_t  selectedPhotoSizeId;
-    int32_t  previewFileId; // 0 if there is no thumbnail worth showing
+    int32_t  selectedPhotoSizeId = 0;
+    int32_t  previewFileId = 0; // 0 if there is no thumbnail worth showing
     // Its size, and the low-grade picture the video carries, for its stand-in while it comes
     int32_t     previewWidth  = 0;
     int32_t     previewHeight = 0;
     unsigned    previewSizeKb = 0;
     std::string previewLowGrade;
-    unsigned inlineFileSizeLimit;
-    bool     standardDownloadConfigured;
-    bool     repliedMessageFetchDoneOrFailed;
-    bool     previewFetchDone;
+    unsigned inlineFileSizeLimit = 0;
+    bool     standardDownloadConfigured = false;
+    bool     repliedMessageFetchDoneOrFailed = false;
+    bool     previewFetchDone = false;
     // Whether the video's thumbnail is fetched and waited for, as decided once it is received
     bool     previewWaited = false;
     // Whether the chat's media were fetched unasked when it was received: what is fetched for it, and
     // waited for, goes by that, not by the setting changed meanwhile
     bool     downloadsMedia = true;
-    bool     inlineDownloadComplete;
-    bool     inlineDownloadTimeout;
+    bool     inlineDownloadComplete = false;
+    bool     inlineDownloadTimeout = false;
 
     // For a message shown again because it was edited: when it was first sent, and whether
     // its caption is all that changed, and so all there is to show
@@ -372,7 +372,7 @@ struct ShownMessage {
     std::string sender;    // who sent it, as the conversation names them; empty if not known
     bool        outgoing    = false;
     bool        deletedHere = false; // asked to be, from this client: by us, then
-    time_t      timestamp;
+    time_t      timestamp = 0;
     // Who gave which reaction, as far as anyone has been named, and whether it was us
     std::map<std::string, bool> reactions;
     // Those giving each reaction now, by its key: as many as are named, the latest first, all once
@@ -672,7 +672,7 @@ private:
 
     // Voice call data
     std::unique_ptr<tgvoip::VoIPController> m_callData;
-    int32_t                                 m_callId;
+    int32_t                                 m_callId = 0;
 
     std::unique_ptr<PendingRequest> getPendingRequestImpl(uint64_t requestId);
     void                            saveTempFileUploads();

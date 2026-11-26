@@ -1389,6 +1389,10 @@ void PurpleTdClient::supergroupAdministratorsResponse(uint64_t requestId, td::td
 
 void PurpleTdClient::updateGroupFull(BasicGroupId groupId, td::td_api::object_ptr<td::td_api::basicGroupFullInfo> groupInfo)
 {
+    if (!groupInfo) {
+        purple_debug_warning(config::pluginId, "updateBasicGroupFullInfo with null info\n");
+        return;
+    }
     const td::td_api::chat *chat = m_data.getBasicGroupChatByGroup(groupId);
 
     if (chat) {
@@ -1402,6 +1406,10 @@ void PurpleTdClient::updateGroupFull(BasicGroupId groupId, td::td_api::object_pt
 
 void PurpleTdClient::updateSupergroupFull(SupergroupId groupId, td::td_api::object_ptr<td::td_api::supergroupFullInfo> groupInfo)
 {
+    if (!groupInfo) {
+        purple_debug_warning(config::pluginId, "updateSupergroupFullInfo with null info\n");
+        return;
+    }
     const td::td_api::chat *chat = m_data.getSupergroupChatByGroup(groupId);
 
     if (chat) {
@@ -3792,11 +3800,11 @@ void PurpleTdClient::handleUserChatAction(const td::td_api::updateChatAction &up
             purpleDebug("User (id {}) stopped chat action", getUserId(updateChatAction));
             showUserChatAction(getUserId(updateChatAction), false);
         } else if (updateChatAction.action_->get_id() == td::td_api::chatActionStartPlayingGame::ID) {
-            purpleDebug("User (id %d): treating chatActionStartPlayingGame as cancel", getUserId(updateChatAction));
+            purpleDebug("User (id {}): treating chatActionStartPlayingGame as cancel", getUserId(updateChatAction));
             showUserChatAction(getUserId(updateChatAction), false);
         } else {
             purpleDebug("User (id {}) started chat action (id {})", {
-		std::to_string(getUserId(updateChatAction)), std::to_string(updateChatAction.action_->get_id())
+                std::to_string(getUserId(updateChatAction)), std::to_string(updateChatAction.action_->get_id())
             });
             showUserChatAction(getUserId(updateChatAction), true);
         }
@@ -4774,7 +4782,7 @@ void PurpleTdClient::chatActionResponse(uint64_t requestId, td::td_api::object_p
     }
 
     if (!object || (object->get_id() != expectedId)) {
-        const td::td_api::chat *chat = request ? m_data.getChat(request->chatId) : nullptr;
+        const td::td_api::chat *chat = m_data.getChat(request->chatId);
         if (chat) {
             std::string message = getDisplayedError(object);
             switch (request->type) {
@@ -4796,7 +4804,7 @@ void PurpleTdClient::chatActionResponse(uint64_t requestId, td::td_api::object_p
     } else {
         if (request->type == ChatActionRequest::Type::GenerateInviteLink) {
             const td::td_api::chatInviteLink &inviteLink = static_cast<const td::td_api::chatInviteLink &>(*object);
-            const td::td_api::chat *chat = request ? m_data.getChat(request->chatId) : nullptr;
+            const td::td_api::chat *chat = m_data.getChat(request->chatId);
             if (chat)
                 showChatNotification(m_data, *chat, inviteLink.invite_link_.c_str());
         }
