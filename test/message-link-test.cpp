@@ -539,6 +539,27 @@ TEST_F(MessageLinkTest, PhotoSizesIgnored)
                                              PURPLE_MESSAGE_SYSTEM, 0));
 }
 
+// A photo in one size only, too big to be fetched unasked: its stand-in, and a link that fetches it
+TEST_F(MessageLinkTest, BigPhotoLinked)
+{
+    purple_account_set_string(account, "media-size-threshold", "0.5");
+    loginWithOneContact();
+
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(::makeFile(fileId, 655360), 640, 480));
+    tgl.update(make_object<updateNewMessage>(makeMessage(
+        messageId, userIds[0], chatIds[0], false, date,
+        makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText("caption"), false, false, false)
+    )));
+    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
+    prpl.verifyEvents(ServGotImEvent(
+        connection, purpleUserName(0),
+        "[photo]\n<a href=\"" + link() + "\">photo, purple_str_size_to_units</a>\ncaption",
+        PURPLE_MESSAGE_RECV, date
+    ));
+    tgl.verifyNoRequests();
+}
+
 TEST_F(MessageLinkTest, MessageMenu)
 {
     loginWithOneContact();

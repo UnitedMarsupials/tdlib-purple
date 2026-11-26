@@ -1232,11 +1232,18 @@ void TdAccountData::endPictureFetch(ChatId chatId, MessageId messageId, int32_t 
     m_pictureFetches.erase(std::make_tuple(chatId, messageId, fileId));
 }
 
-bool TdAccountData::setRefreshDue(ChatId chatId, MessageId messageId, bool due)
+bool TdAccountData::isRefreshDue(ChatId chatId, MessageId messageId) const
 {
-    if (due)
-        return m_refreshesDue.insert(ShownMessageKey(chatId, messageId)).second;
-    return m_refreshesDue.erase(ShownMessageKey(chatId, messageId)) != 0;
+    return m_refreshesDue.count(ShownMessageKey(chatId, messageId)) != 0;
+}
+
+// 0 once it is done
+void TdAccountData::setRefreshDue(ChatId chatId, MessageId messageId, guint sourceId)
+{
+    if (sourceId)
+        m_refreshesDue[ShownMessageKey(chatId, messageId)] = sourceId;
+    else
+        m_refreshesDue.erase(ShownMessageKey(chatId, messageId));
 }
 
 void TdAccountData::setPictureFailed(int32_t fileId, bool failed)
@@ -1254,6 +1261,8 @@ bool TdAccountData::hasPictureFailed(int32_t fileId) const
 
 TdAccountData::~TdAccountData()
 {
+    for (const auto &due: m_refreshesDue)
+        g_source_remove(due.second);
     for (const auto &converted: m_convertedStickers)
         purple_imgstore_unref_by_id(converted.second);
 }
@@ -1282,9 +1291,11 @@ void TdAccountData::endStickerConversion(int32_t fileId, int imageId,
         waiting = std::move(it->second);
         m_stickerConversions.erase(it);
     }
-    // The store's reference, taken as it was added, is the one kept here
-    if (imageId)
+    // The store's reference, taken as it was added, is the one kept here, for the first converted
+    if (imageId && !m_convertedStickers.count(fileId))
         m_convertedStickers[fileId] = imageId;
+    else if (imageId)
+        purple_imgstore_unref_by_id(imageId);
 }
 
 void TdAccountData::addPendingEdit(const PendingEdit &edit)

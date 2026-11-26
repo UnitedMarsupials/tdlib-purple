@@ -175,9 +175,7 @@ TEST_F(GroupChatTest, Document_LongDownload_StandardDownloadsConfigured)
 
     tgl.update(standardUpdateUserNoPhone(0));
     tgl.update(make_object<updateNewMessage>(makeMessage(messageId, userIds[0], groupChatId, false, date,
-        make_object<messageDocument>(
-            make_object<document>("doc.file.name", "mime/type", nullptr, nullptr, makeFile(fileId, 10000)),
-            makeFormattedText("caption")))));
+        makeMessageDocument("doc.file.name", "mime/type", makeFile(fileId, 10000), "caption"))));
     uint64_t downloadReqId = tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
     prpl.verifyNoEvents();
 

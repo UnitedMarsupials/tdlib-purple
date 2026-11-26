@@ -82,22 +82,14 @@ TEST_F(MessageOrderTest, Document_Download_FlushAtLogout)
     loginWithOneContact();
 
     std::vector<object_ptr<photoSize>> sizes;
-    sizes.push_back(makePhotoSize(make_object<file>(
-            fileId, 10000, 10000,
-            make_object<localFile>("", true, true, false, false, 0, 0, 0),
-            make_object<remoteFile>("beh", "bleh", false, true, 10000)
-        ), 640, 480));
+    sizes.push_back(makePhotoSize(makeFile(fileId, 10000), 640, 480));
     tgl.update(make_object<updateNewMessage>(makeMessage(
         1,
         userIds[0],
         chatIds[0],
         false,
         date,
-        make_object<messageDocument>(
-            make_object<document>("doc.file.name", "mime/type", nullptr, nullptr,
-                                     std::move(sizes[0]->photo_)),
-            make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>())
-        )
+        makeMessageDocument("doc.file.name", "mime/type", std::move(sizes[0]->photo_), "photo")
     )));
     tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
     prpl.verifyNoEvents();
@@ -126,8 +118,7 @@ TEST_F(MessageOrderTest, Photo_Download_LoggedAtLogout)
     std::vector<object_ptr<photoSize>> sizes;
     sizes.push_back(makePhotoSize(makeFile(fileId, 10000), 640, 480));
     tgl.update(make_object<updateNewMessage>(makeMessage(1, userIds[0], chatIds[0], false, date,
-        makeMessagePhoto(make_object<photo>(false, nullptr, std::move(sizes)), makeFormattedText("photo"),
-                         false, false, false))));
+        makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText("photo"), false, false, false))));
     prpl.verifyEvents(
         NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
         ServGotImEvent(connection, purpleUserName(0), "[photo]\nphoto<!--tdlib-message 1-->", PURPLE_MESSAGE_RECV,

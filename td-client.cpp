@@ -2944,7 +2944,8 @@ void PurpleTdClient::onAnimatedStickerConverted(AccountThread *arg)
 {
     std::unique_ptr<AccountThread> baseThread(arg);
     StickerConversionThread *thread = dynamic_cast<StickerConversionThread *>(arg);
-    if (!thread)
+    // Converted for the account's connection before this one, whose messages are gone with it
+    if (!thread || (thread->owner.lock() != m_data.lifetime))
         return;
     std::string  errorMessage = thread->getErrorMessage();
     gchar       *imageData    =  NULL;

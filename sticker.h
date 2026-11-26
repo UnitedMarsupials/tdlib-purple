@@ -3,6 +3,7 @@
 
 #include "client-utils.h"
 #include <functional>
+#include <memory>
 
 enum class ImageSupport {
     Supported,    // the front-end can show it as it is
@@ -40,8 +41,10 @@ private:
 public:
     const std::string inputFileName;
     const ChatId chatId;
-    // Of the sticker, whose animation is kept, once converted, for every message showing it
+    // Of the sticker, whose animation is kept, once converted, for every message showing it, by the
+    // account's connection it was converted for, not the next one
     int32_t fileId = 0;
+    std::weak_ptr<int> owner;
     StickerConversionThread(PurpleAccount *purpleAccount, const std::string &filename,
                             ChatId chatId, const TgMessageInfo *message)
     : AccountThread(purpleAccount), inputFileName(filename), chatId(chatId)

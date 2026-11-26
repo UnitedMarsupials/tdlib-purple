@@ -734,10 +734,8 @@ TEST_F(SupergroupTest, ChannelPostNotice)
     loginWithSupergroup();
 
     // A file too big to be fetched unasked, as a picture no longer is told of
-    auto message = makeMessage(messageId, 0, groupChatId, false, date, make_object<messageDocument>(
-        make_object<document>("doc.file.name", "mime/type", nullptr, nullptr, makeFile(fileId, 655360)),
-        makeFormattedText("caption")
-    ));
+    auto message = makeMessage(messageId, 0, groupChatId, false, date,
+                               makeMessageDocument("doc.file.name", "mime/type", makeFile(fileId, 655360), "caption"));
     message->is_channel_post_ = true;
     tgl.update(make_object<updateNewMessage>(std::move(message)));
 

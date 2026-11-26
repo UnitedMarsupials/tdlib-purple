@@ -395,6 +395,7 @@ struct UnloggedSent {
     std::string conversationName;
     std::string who; // who it is from, other than us
     bool        awaitingPictures = false; // rather than being sent
+    std::vector<int> imageIds; // of the image store, held while it waits
 };
 
 // An edit to a message that was still waiting to be shown at the time
@@ -571,8 +572,10 @@ public:
     // A picture of the message being fetched, to be shown in it once it is; false if it was already
     bool                       startPictureFetch(ChatId chatId, MessageId messageId, int32_t fileId);
     void                       endPictureFetch(ChatId chatId, MessageId messageId, int32_t fileId);
-    // A message to be shown again shortly, with pictures come: false if it is already
-    bool                       setRefreshDue(ChatId chatId, MessageId messageId, bool due);
+    // A message to be shown again shortly, with pictures come, by the GLib source that will, which
+    // goes with the account
+    bool                       isRefreshDue(ChatId chatId, MessageId messageId) const;
+    void                       setRefreshDue(ChatId chatId, MessageId messageId, guint sourceId);
     // A picture that could not be fetched, left as its stand-in rather than tried again at once
     void                       setPictureFailed(int32_t fileId, bool failed);
     bool                       hasPictureFailed(int32_t fileId) const;
@@ -673,7 +676,7 @@ private:
     std::map<ShownMessageKey, UnloggedSent> m_unloggedSent;
     std::set<std::tuple<ChatId, MessageId, int32_t>> m_pictureFetches;
     std::set<int32_t>                       m_failedPictures;
-    std::set<ShownMessageKey>               m_refreshesDue;
+    std::map<ShownMessageKey, guint>        m_refreshesDue;
     std::map<int32_t, int>                  m_convertedStickers;
     std::map<int32_t, std::vector<std::pair<ChatId, MessageId>>> m_stickerConversions;
 };

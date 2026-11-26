@@ -955,6 +955,10 @@ void purple_imgstore_unref_by_id(int id)
 {
 }
 
+void purple_imgstore_ref_by_id(int id)
+{
+}
+
 void *purple_notify_uri(void *handle, const char *uri)
 {
     EVENT(NotifyUriEvent, uri);

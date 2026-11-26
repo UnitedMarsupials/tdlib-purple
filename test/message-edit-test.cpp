@@ -358,6 +358,53 @@ TEST_F(MessageEditTest, DeletedWhileEditDownloads)
     tgl.verifyNoRequests();
 }
 
+// A caption edited while the photo comes: the notice leaves the message, waiting to be logged with
+// the photo, as it is
+TEST_F(MessageEditTest, CaptionEditedWhilePictureComes)
+{
+    setLogMarkersEnabled(true);
+    loginWithOneContact();
+    auto makeComing = [this](const std::string &path, const std::string &caption) {
+        std::vector<object_ptr<photoSize>> sizes;
+        sizes.push_back(makePhotoSize(makeFile(fileId, 10000, path), 640, 480));
+        return makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText(caption), false, false,
+                                false);
+    };
+    tgl.update(make_object<updateNewMessage>(makeMessage(messageId, userIds[0], chatIds[0], false, date,
+                                                         makeComing("", "old"))));
+    prpl.verifyEvents(
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+        ServGotImEvent(connection, purpleUserName(0), "[photo]\nold<!--tdlib-message 1-->", PURPLE_MESSAGE_RECV,
+                       date)
+    );
+    uint64_t download = tgl.verifyRequests({
+        make_object<viewMessages>(chatIds[0], std::vector<int64_t>(1, messageId), nullptr, true),
+        make_object<downloadFile>(fileId, 1, 0, 0, true)
+    })[1];
+
+    tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makeComing("", "new")));
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    object_ptr<message> edited = makeMessage(messageId, userIds[0], chatIds[0], false, date, makeComing("", "new"));
+    edited->edit_date_ = editDate;
+    tgl.reply(std::move(edited));
+    prpl.verifyEvents(ConversationWriteEvent(
+        purpleUserName(0), purpleUserName(0),
+        userFirstNames[0] + " " + userLastNames[0] + " edited the message from " + messageTime(date) + ": new",
+        PURPLE_MESSAGE_SYSTEM, editDate
+    ));
+
+    // The photo here, the message cannot be written over itself here: logged as it was shown
+    tgl.reply(download, makeFile(fileId, 10000, "/path"));
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    edited = makeMessage(messageId, userIds[0], chatIds[0], false, date, makeComing("/path", "new"));
+    edited->edit_date_ = editDate;
+    tgl.reply(std::move(edited));
+    std::string logged = "<!--tdlib-log-only-->[photo]\nold<!--tdlib-message 1 " + std::to_string(date) +
+                         "--><!--/tdlib-log-only-->";
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0), logged, PURPLE_MESSAGE_RECV,
+                                             date));
+}
+
 TEST_F(MessageEditTest, Deleted)
 {
     loginWithOneContact();

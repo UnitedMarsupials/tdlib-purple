@@ -691,15 +691,9 @@ TEST_F(PrivateChatTest, Photo)
     loginWithOneContact();
     auto makePhotoMessage = [this](bool here) {
         std::vector<object_ptr<photoSize>> sizes;
-        sizes.push_back(makePhotoSize(make_object<file>(
-                fileId, 10000, 10000,
-                here ? make_object<localFile>("/path", true, true, false, true, 0, 10000, 10000)
-                     : make_object<localFile>("", true, true, false, false, 0, 0, 0),
-                make_object<remoteFile>("beh", "bleh", false, true, 10000)
-            ), 640, 480));
+        sizes.push_back(makePhotoSize(::makeFile(fileId, 10000, here ? "/path" : ""), 640, 480));
         return makeMessage(1, userIds[0], chatIds[0], false, date,
-                           makeMessagePhoto(make_object<photo>(false, nullptr, std::move(sizes)),
-                                            make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>()),
+                           makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText("photo"),
                                             false, false, false));
     };
 
@@ -716,11 +710,7 @@ TEST_F(PrivateChatTest, Photo)
         make_object<downloadFile>(fileId, 1, 0, 0, true)
     })[1];
 
-    tgl.reply(download, make_object<file>(
-        fileId, 10000, 10000,
-        make_object<localFile>("/path", true, true, false, true, 0, 10000, 10000),
-        make_object<remoteFile>("beh", "bleh", false, true, 10000)
-    ));
+    tgl.reply(download, ::makeFile(fileId, 10000, "/path"));
     tgl.verifyRequest(getMessage(chatIds[0], 1));
     tgl.reply(makePhotoMessage(true));
     // Without Pidgin's tab there is nothing to write it over: logged as it was shown, for the log alone

@@ -108,11 +108,7 @@ TEST_F(FileTransferTest, BigDocument_RequestDownload)
         chatIds[0],
         false,
         date,
-        make_object<messageDocument>(
-            make_object<document>("doc.file.name", "mime/type", nullptr, nullptr,
-                                     std::move(sizes[0]->photo_)),
-            make_object<formattedText>("caption", std::vector<object_ptr<textEntity>>())
-        )
+        makeMessageDocument("doc.file.name", "mime/type", std::move(sizes[0]->photo_), "caption")
     )));
     tgl.verifyRequest(
         viewMessages(chatIds[0], std::vector<int64_t>(1, 1), nullptr, true)
@@ -166,11 +162,7 @@ TEST_F(FileTransferTest, BigDocument_Ignore)
         chatIds[0],
         false,
         date,
-        make_object<messageDocument>(
-            make_object<document>("doc.file.name", "mime/type", nullptr, nullptr,
-                                     std::move(sizes[0]->photo_)),
-            make_object<formattedText>("caption", std::vector<object_ptr<textEntity>>())
-        )
+        makeMessageDocument("doc.file.name", "mime/type", std::move(sizes[0]->photo_), "caption")
     )));
     tgl.verifyRequest(
         viewMessages(chatIds[0], std::vector<int64_t>(1, 1), nullptr, true)
@@ -642,11 +634,7 @@ TEST_F(FileTransferTest, Document_DownloadProgress_StuckAtStart)
         chatIds[0],
         false,
         date,
-        make_object<messageDocument>(
-            make_object<document>("doc.file.name", "mime/type", nullptr, nullptr,
-                                     std::move(sizes[0]->photo_)),
-            make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>())
-        )
+        makeMessageDocument("doc.file.name", "mime/type", std::move(sizes[0]->photo_), "photo")
     )));
     uint64_t downloadReqId = tgl.verifyRequest(
         downloadFile(fileId, 1, 0, 0, true)
@@ -732,11 +720,7 @@ TEST_F(FileTransferTest, Document_DownloadProgress)
         chatIds[0],
         false,
         date,
-        make_object<messageDocument>(
-            make_object<document>("doc.file.name", "mime/type", nullptr, nullptr,
-                                     std::move(sizes[0]->photo_)),
-            make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>())
-        )
+        makeMessageDocument("doc.file.name", "mime/type", std::move(sizes[0]->photo_), "photo")
     )));
     uint64_t downloadReqId = tgl.verifyRequest(
         downloadFile(fileId, 1, 0, 0, true)
@@ -822,11 +806,7 @@ TEST_F(FileTransferTest, Document_DownloadProgress_StuckAtStart_Cancel)
         chatIds[0],
         false,
         date,
-        make_object<messageDocument>(
-            make_object<document>("doc.file.name", "mime/type", nullptr, nullptr,
-                                     std::move(sizes[0]->photo_)),
-            make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>())
-        )
+        makeMessageDocument("doc.file.name", "mime/type", std::move(sizes[0]->photo_), "photo")
     )));
     uint64_t downloadFileReqId = tgl.verifyRequest(
         downloadFile(fileId, 1, 0, 0, true)
@@ -879,11 +859,7 @@ TEST_F(FileTransferTest, Document_DownloadProgress_Cancel)
         chatIds[0],
         false,
         date,
-        make_object<messageDocument>(
-            make_object<document>("doc.file.name", "mime/type", nullptr, nullptr,
-                                     std::move(sizes[0]->photo_)),
-            make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>())
-        )
+        makeMessageDocument("doc.file.name", "mime/type", std::move(sizes[0]->photo_), "photo")
     )));
     auto downloadFileReqId = tgl.verifyRequest(
         downloadFile(fileId, 1, 0, 0, true)
@@ -1318,11 +1294,7 @@ TEST_F(FileTransferTest, ActiveDownloadAtLogout_StuckAtStart)
         chatIds[0],
         false,
         date,
-        make_object<messageDocument>(
-            make_object<document>("doc.file.name", "mime/type", nullptr, nullptr,
-                                     std::move(sizes[0]->photo_)),
-            make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>())
-        )
+        makeMessageDocument("doc.file.name", "mime/type", std::move(sizes[0]->photo_), "photo")
     )));
     tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
     prpl.verifyNoEvents();

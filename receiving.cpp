@@ -826,6 +826,8 @@ PurpleConversation *getMessageConversation(TdAccountData &account, const td::td_
 }
 
 static void writeLog(TdAccountData &account, const UnloggedSent &sent, MessageId newId);
+static void holdImages(UnloggedSent &waiting);
+static void releaseImages(UnloggedSent &waiting);
 
 void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const TgMessageInfo &message,
                      const char *text, const char *notification, uint32_t extraFlags)
@@ -847,7 +849,7 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
     // One shown with pictures still coming is logged once they are here, as it is shown then, shown
     // again with them, however that is: written into its tab unlogged meanwhile, the tab made first,
     // so that it shows when and from whom it is
-    bool                deferred     = logMarkersEnabled() && !message.sentLocally && message.id.valid() &&
+    bool                deferred     = text && logMarkersEnabled() && !message.sentLocally && message.id.valid() &&
                                        ((message.picturesComing && !unlogged) ||
                                         account.hasUnloggedSent(getId(chat), message.id));
     if (deferred) {
@@ -938,30 +940,57 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
                         !message.incomingGroupchatSenderName.empty() ? message.incomingGroupchatSenderName :
                         !message.incomingGroupchatSender.empty() ? message.incomingGroupchatSender : "someone";
         UnloggedSent earlier;
-        account.extractUnloggedSent(getId(chat), message.id, earlier);
-        if (message.picturesComing)
+        if (account.extractUnloggedSent(getId(chat), message.id, earlier))
+            releaseImages(earlier);
+        if (message.picturesComing) {
+            holdImages(shown);
             account.addUnloggedSent(getId(chat), message.id, std::move(shown));
-        else
+        } else
             writeLog(account, shown, message.id);
     }
+}
+
+// The pictures of a message waiting to be logged stay in the image store until it is
+static void holdImages(UnloggedSent &waiting)
+{
+    static const char IMG_ID[] = "<img id=\"";
+    for (size_t pos = waiting.text.find(IMG_ID); pos != std::string::npos;
+         pos = waiting.text.find(IMG_ID, pos + 1)) {
+        int id = atoi(waiting.text.c_str() + pos + sizeof(IMG_ID) - 1);
+        if (id && purple_imgstore_find_by_id(id)) {
+            purple_imgstore_ref_by_id(id);
+            waiting.imageIds.push_back(id);
+        }
+    }
+}
+
+static void releaseImages(UnloggedSent &waiting)
+{
+    for (int id: waiting.imageIds)
+        purple_imgstore_unref_by_id(id);
+    waiting.imageIds.clear();
 }
 
 void logMessagesAwaitingPictures(TdAccountData &account)
 {
     std::vector<std::tuple<ChatId, MessageId, UnloggedSent>> messages;
     account.extractAwaitingPictures(messages);
-    for (const auto &message: messages)
+    for (auto &message: messages) {
         if (!account.isChatDeleted(std::get<0>(message)))
             writeLog(account, std::get<2>(message), std::get<1>(message));
+        releaseImages(std::get<2>(message));
+    }
 }
 
 void logSentMessage(TdAccountData &account, ChatId chatId, MessageId oldId, MessageId newId)
 {
     UnloggedSent sent;
     // Nor of a chat deleted since it was sent
-    if (!account.extractUnloggedSent(chatId, oldId, sent) || account.isChatDeleted(chatId))
+    if (!account.extractUnloggedSent(chatId, oldId, sent))
         return;
-    writeLog(account, sent, newId);
+    if (!account.isChatDeleted(chatId))
+        writeLog(account, sent, newId);
+    releaseImages(sent);
 }
 
 // Into the log alone, under the message's id: of the conversation it was written into, if still open,
@@ -1258,8 +1287,27 @@ static std::string makePreviewImageText(const IncomingMessage &fullMessage)
 // waiting for it: where the front-end can show pictures, and so write one over its stand-in
 static bool showsPictureComing(const IncomingMessage &fullMessage)
 {
+#ifndef NoPidgin
     return canShowImages() && ((fullMessage.messageInfo.type == TgMessageInfo::Type::Photo) ||
                                (fullMessage.messageInfo.type == TgMessageInfo::Type::Sticker));
+#else
+    // Built without Pidgin, nothing can be written over
+    return false;
+#endif
+}
+
+// For a picture shown as its stand-in, not to be fetched unasked: a link that fetches it, where
+// there is no other, as to its sizes
+static std::string makeFetchLink(TdAccountData &account, ChatId chatId, MessageId messageId,
+                                 const td::td_api::file &file, const std::string &fileDesc)
+{
+    if (!messageLinksEnabled())
+        return std::string();
+    char       *size = purple_str_size_to_units(getFileSize(file));
+    std::string link = "<a href=\"" + makeMessageLink(account.purpleAccount, chatId, messageId) + "\">" +
+                       escapeForDisplay(fileDesc) + ", " + size + "</a>";
+    g_free(size);
+    return link;
 }
 
 // The size the picture is shown in, and the low-grade one the message carries, if any
@@ -1294,20 +1342,20 @@ static void refreshShownMessageSoon(TdAccountData &account, ChatId chatId, Messa
         refreshShownMessage(account, chatId, messageId);
         return;
     }
-    if (!account.setRefreshDue(chatId, messageId, true))
+    if (account.isRefreshDue(chatId, messageId))
         return;
-    std::weak_ptr<int> alive = account.lifetime;
-    auto *refresh = new std::function<void()>([&account, alive, chatId, messageId]() {
-        if (alive.expired())
-            return;
-        account.setRefreshDue(chatId, messageId, false);
+    auto *refresh = new std::function<void()>([&account, chatId, messageId]() {
+        account.setRefreshDue(chatId, messageId, 0);
         refreshShownMessage(account, chatId, messageId);
     });
-    g_timeout_add(REFRESH_DELAY_MS, [](gpointer data) -> gboolean {
-        std::unique_ptr<std::function<void()>> refresh(static_cast<std::function<void()> *>(data));
-        (*refresh)();
+    // Removed with the account, if it goes first
+    guint sourceId = g_timeout_add_full(G_PRIORITY_DEFAULT, REFRESH_DELAY_MS, [](gpointer data) -> gboolean {
+        (*static_cast<std::function<void()> *>(data))();
         return FALSE;
-    }, refresh);
+    }, refresh, [](gpointer data) {
+        delete static_cast<std::function<void()> *>(data);
+    });
+    account.setRefreshDue(chatId, messageId, sourceId);
 }
 
 // Fetched for the message, which is shown again once it is here, or once it cannot be, then left
@@ -1336,11 +1384,23 @@ static void fetchPicture(TdAccountData &account, ChatId chatId, MessageId messag
         });
 }
 
+// Stand-ins made for the message being shown, whose own references to them in the image store go
+// once it is: the tab holds its own, and the log, if it waits, its own
+static std::vector<int> g_shownStandIns;
+
+static int makeShownStandIn(const std::string &lowGrade, int32_t width, int32_t height, bool clear)
+{
+    int imageId = makeStandInPicture(lowGrade, width, height, clear);
+    if (imageId)
+        g_shownStandIns.push_back(imageId);
+    return imageId;
+}
+
 // The stand-in of the size given, as markup, or the words for it where there can be none
 static std::string makeStandInText(const std::string &lowGrade, int32_t width, int32_t height, bool clear,
                                    const std::string &words, bool &image)
 {
-    int imageId = makeStandInPicture(lowGrade, width, height, clear);
+    int imageId = makeShownStandIn(lowGrade, width, height, clear);
     image = (imageId != 0);
     return image ? makeInlineImageText(imageId) : ("[" + escapeForDisplay(words) + "]");
 }
@@ -1354,6 +1414,7 @@ static void convertSticker(TdAccountData &account, const TgMessageInfo &message,
         return;
     StickerConversionThread *thread = new StickerConversionThread(account.purpleAccount, path, chatId, &message);
     thread->fileId = fileId;
+    thread->owner  = account.lifetime;
     thread->startThread();
 }
 
@@ -1421,11 +1482,19 @@ static void showSticker(const td::td_api::chat &chat, IncomingMessage &fullMessa
             !account.hasPictureFailed(file.id_))
             fetched = file.id_;
         bool tgs = sticker.format_ && (sticker.format_->get_id() == td::td_api::stickerFormatTgs::ID);
+        // As big as what will be shown: the animation, or else its thumbnail in its place
         if (tgs && convert)
             text = makeStandInText("", StickerConversionThread::DEFAULT_SIZE,
                                    StickerConversionThread::DEFAULT_SIZE, true, words, image);
+        else if (tgs && sticker.thumbnail_)
+            text = makeStandInText("", sticker.thumbnail_->width_, sticker.thumbnail_->height_, true, words, image);
         else
             text = makeStandInText("", sticker.width_, sticker.height_, true, words, image);
+        if (!fetched) {
+            std::string link = makeFetchLink(account, getId(chat), message.id, file, fileDesc);
+            if (!link.empty())
+                text += "\n" + link;
+        }
     }
     message.picturesComing = (fetched != 0);
     showMessageText(account, chat, message, text.c_str(), NULL, image ? PURPLE_MESSAGE_IMAGES : 0);
@@ -1445,13 +1514,16 @@ static void showPictureComing(const td::td_api::chat &chat, IncomingMessage &ful
     bool        image;
     std::string text = makeStandInText(lowGrade, width, height, false, fileDesc, image);
     TgMessageInfo &message = fullMessage.messageInfo;
-    if (!message.mediaVariantLinks.empty())
-        text += "\n" + message.mediaVariantLinks;
+    bool wanted = isSizeWithinLimit(getFileSizeKb(file), fullMessage.inlineFileSizeLimit) &&
+                  !account.hasPictureFailed(file.id_);
+    std::string links = message.mediaVariantLinks;
+    if (links.empty() && !wanted)
+        links = makeFetchLink(account, getId(chat), message.id, file, fileDesc);
+    if (!links.empty())
+        text += "\n" + links;
     if (caption)
         text += "\n" + std::string(caption);
 
-    bool wanted = isSizeWithinLimit(getFileSizeKb(file), fullMessage.inlineFileSizeLimit) &&
-                  !account.hasPictureFailed(file.id_);
     message.picturesComing = wanted;
     showMessageText(account, chat, message, text.c_str(), NULL, image ? PURPLE_MESSAGE_IMAGES : 0);
     message.picturesComing = false;
@@ -1652,8 +1724,10 @@ static void showFileMessage(const td::td_api::chat &chat, IncomingMessage &fullM
                                 PURPLE_MESSAGE_IMAGES);
             } else if (captionStr)
                 showMessageText(account, chat, fullMessage.messageInfo, captionStr, NULL);
-            requestStandardDownload(getId(chat), fullMessage.messageInfo, fileName, *file,
-                                    transceiver, account);
+            // Not asked for again as the message is shown again with its thumbnail
+            if (!fullMessage.refreshing)
+                requestStandardDownload(getId(chat), fullMessage.messageInfo, fileName, *file,
+                                        transceiver, account);
         }
     }
 }
@@ -2274,8 +2348,8 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
                             width  = size->width_;
                             height = size->height_;
                         }
-                    int standIn = makeStandInPicture(photo->minithumbnail_ ? photo->minithumbnail_->data_ : std::string(),
-                                                     width, height, false);
+                    int standIn = makeShownStandIn(photo->minithumbnail_ ? photo->minithumbnail_->data_ : std::string(),
+                                                   width, height, false);
                     pictures = pictures || standIn;
                     return standIn ? makeInlineImageText(standIn, false) : std::string();
                 };
@@ -2301,6 +2375,9 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
         messageInfo.picturesComing = false;
         fetchPicture(account, getId(chat), messageInfo.id, fullMessage.previewFileId);
     }
+    for (int id: g_shownStandIns)
+        purple_imgstore_unref_by_id(id);
+    g_shownStandIns.clear();
 
     // Put it back - may be needed if long download is in progress
     fullMessage.repliedMessage = std::move(messageInfo.repliedMessage);
