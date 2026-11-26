@@ -514,15 +514,13 @@ TEST_F(MessageLinkTest, PhotoSizesIgnored)
         makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText("caption"), false, false, false)
     )));
     tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
+    // The stand-in of the one shown, not fetched
     prpl.verifyEvents(
         ServGotImEvent(connection, purpleUserName(0),
+                       "[photo]\n"
                        "<a href=\"" + link() + "/pm\">320×240, purple_str_size_to_units</a> · "
                        "<a href=\"" + link() + "/py\">1280×960, purple_str_size_to_units</a>\ncaption",
-                       PURPLE_MESSAGE_RECV, date),
-        ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
-                               userFirstNames[0] + " " + userLastNames[0] +
-                               ": Ignoring photo download (purple_str_size_to_units)",
-                               PURPLE_MESSAGE_SYSTEM, date)
+                       PURPLE_MESSAGE_RECV, date)
     );
     tgl.verifyNoRequests();
 }

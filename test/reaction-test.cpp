@@ -121,33 +121,37 @@ TEST_F(ReactionTest, WhileEditDownloads)
     loginWithOneContact();
     receive(makeTextMessage("text"), "text");
 
-    // Edited into a photo still to be fetched, so the edit waits for it
+    // Edited into a photo still to be fetched: shown at once, as its stand-in
     tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makeTextMessage("photo")));
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
-    std::vector<object_ptr<photoSize>> sizes;
-    sizes.push_back(makePhotoSize(makeFile(1234, 10000), 640, 480));
-    object_ptr<message> edited = makeMessage(messageId, userIds[0], chatIds[0], false, date,
-        makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText("photo"), false, false, false));
-    edited->edit_date_ = date + 1;
-    tgl.reply(std::move(edited));
-    tgl.verifyRequest(downloadFile(1234, 1, 0, 0, true));
-    prpl.verifyNoEvents();
-
-    // The message is in the conversation already, so its reactions are news
-    react({{"\U0001F44D", 1, false, {userIds[0]}}});
-    prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0), "reacted with \U0001F44D to message „photo“.",
-                                     PURPLE_MESSAGE_RECV, 0));
-
-    // ...before the edit, shown once its picture is here
-    tgl.reply(makeFile(1234, 10000, "/path"));
+    auto makeEdited = [this](const std::string &path) {
+        std::vector<object_ptr<photoSize>> sizes;
+        sizes.push_back(makePhotoSize(makeFile(1234, 10000, path), 640, 480));
+        object_ptr<message> edited = makeMessage(messageId, userIds[0], chatIds[0], false, date,
+            makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText("photo"), false, false, false));
+        edited->edit_date_ = date + 1;
+        return edited;
+    };
+    tgl.reply(makeEdited(""));
     prpl.verifyEvents(
         ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
                                userFirstNames[0] + " " + userLastNames[0] + " edited the message from " +
                                messageTime(date) + ":",
                                PURPLE_MESSAGE_SYSTEM, date + 1),
-        ServGotImEvent(connection, purpleUserName(0), "<a href=\"file://file:///path\">photo</a>\nphoto",
-                       PURPLE_MESSAGE_RECV, date + 1)
+        ServGotImEvent(connection, purpleUserName(0), "[photo]\nphoto", PURPLE_MESSAGE_RECV, date + 1)
     );
+    uint64_t download = tgl.verifyRequest(downloadFile(1234, 1, 0, 0, true));
+
+    // Its reactions are news while the picture comes
+    react({{"\U0001F44D", 1, false, {userIds[0]}}});
+    prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0), "reacted with \U0001F44D to message „photo“.",
+                                     PURPLE_MESSAGE_RECV, 0));
+
+    // Here, the picture is to be written over its stand-in, which only Pidgin's tab can take
+    tgl.reply(download, makeFile(1234, 10000, "/path"));
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(makeEdited("/path"));
+    prpl.verifyNoEvents();
     tgl.verifyNoRequests();
 }
 

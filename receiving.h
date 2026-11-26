@@ -78,8 +78,11 @@ void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
                            td::td_api::object_ptr<td::td_api::message> message,
                            PendingMessageQueue::MessageAction action, bool redrawn = false,
                            bool logRedrawn = false);
-// Logs our message, sent, as written into its tab while it was being sent, under the id it now has
+// Logs our message, sent, as written into its tab while it was being sent, under the id it now has;
+// or one shown with pictures still coming, as it was shown, under its own
 void logSentMessage(TdAccountData &account, ChatId chatId, MessageId oldId, MessageId newId);
+// Logs those still awaiting their pictures as they were shown, as the account goes
+void logMessagesAwaitingPictures(TdAccountData &account);
 // The chat's conversation, if it is open; none is opened
 PurpleConversation *findMessageConversation(TdAccountData &account, const td::td_api::chat &chat);
 // Names a message by when it was sent, as the conversation window shows it

@@ -58,6 +58,7 @@ PurpleTdClient::~PurpleTdClient()
         fullMessage.inlineDownloadTimeout = true;
 
     showMessages(messages, m_data);
+    logMessagesAwaitingPictures(m_data);
     endAuthInput();
     // A login given up, as the account is disabled before it is done, leaves nothing to answer
     removeAuthInputBuddy();

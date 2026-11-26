@@ -733,10 +733,10 @@ TEST_F(SupergroupTest, ChannelPostNotice)
     purple_account_set_string(account, "media-handling-behavior", "discard");
     loginWithSupergroup();
 
-    std::vector<object_ptr<photoSize>> sizes;
-    sizes.push_back(makePhotoSize(makeFile(fileId, 655360), 640, 480));
-    auto message = makeMessage(messageId, 0, groupChatId, false, date, makeMessagePhoto(
-        makePhotoWithSizes(std::move(sizes)), makeFormattedText("caption"), false, false, false
+    // A file too big to be fetched unasked, as a picture no longer is told of
+    auto message = makeMessage(messageId, 0, groupChatId, false, date, make_object<messageDocument>(
+        make_object<document>("doc.file.name", "mime/type", nullptr, nullptr, makeFile(fileId, 655360)),
+        makeFormattedText("caption")
     ));
     message->is_channel_post_ = true;
     tgl.update(make_object<updateNewMessage>(std::move(message)));
@@ -749,7 +749,7 @@ TEST_F(SupergroupTest, ChannelPostNotice)
         ChatClearUsersEvent(groupChatPurpleName),
         ServGotChatEvent(connection, purpleChatId, "Channel post", "caption", PURPLE_MESSAGE_RECV, date),
         ConversationWriteEvent(groupChatPurpleName, NotificationWho,
-                               "Ignoring photo download (purple_str_size_to_units)",
+                               "Ignoring doc.file.name [mime/type] download (purple_str_size_to_units)",
                                PURPLE_MESSAGE_SYSTEM, date)
     );
 }

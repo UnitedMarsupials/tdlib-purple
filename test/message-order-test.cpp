@@ -1,3 +1,4 @@
+#include "client-utils.h"
 #include "fixture.h"
 #include "libpurple-mock.h"
 #include <fmt/format.h>
@@ -73,10 +74,11 @@ TEST_F(MessageOrderTest, Reply_FlushAtLogout)
     tgl.verifyRequest(viewMessages(chatIds[0], {msgIds[0], msgIds[1]}, nullptr, true));
 }
 
-TEST_F(MessageOrderTest, Photo_Download_FlushAtLogout)
+TEST_F(MessageOrderTest, Document_Download_FlushAtLogout)
 {
     const int32_t date   = 10001;
     const int32_t fileId = 1234;
+    purple_account_set_string(account, "download-behaviour", "hyperlink");
     loginWithOneContact();
 
     std::vector<object_ptr<photoSize>> sizes;
@@ -91,10 +93,10 @@ TEST_F(MessageOrderTest, Photo_Download_FlushAtLogout)
         chatIds[0],
         false,
         date,
-        makeMessagePhoto(
-            make_object<photo>(false, nullptr, std::move(sizes)),
-            make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>()),
-            false, false, false
+        make_object<messageDocument>(
+            make_object<document>("doc.file.name", "mime/type", nullptr, nullptr,
+                                     std::move(sizes[0]->photo_)),
+            make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>())
         )
     )));
     tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
@@ -105,11 +107,44 @@ TEST_F(MessageOrderTest, Photo_Download_FlushAtLogout)
         ServGotImEvent(connection, purpleUserName(0), "photo", PURPLE_MESSAGE_RECV, date),
         ConversationWriteEvent(
             purpleUserName(0), purpleUserName(0),
-            userFirstNames[0] + " " + userLastNames[0] + ": Downloading photo",
+            userFirstNames[0] + " " + userLastNames[0] + ": Downloading doc.file.name [mime/type]",
             PURPLE_MESSAGE_SYSTEM, date
         )
     );
     tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
+}
+
+
+// A photo still coming as the account goes: its message logged as it was shown
+TEST_F(MessageOrderTest, Photo_Download_LoggedAtLogout)
+{
+    const int32_t date   = 10001;
+    const int32_t fileId = 1234;
+    setLogMarkersEnabled(true);
+    loginWithOneContact();
+
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(makeFile(fileId, 10000), 640, 480));
+    tgl.update(make_object<updateNewMessage>(makeMessage(1, userIds[0], chatIds[0], false, date,
+        makeMessagePhoto(make_object<photo>(false, nullptr, std::move(sizes)), makeFormattedText("photo"),
+                         false, false, false))));
+    prpl.verifyEvents(
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+        ServGotImEvent(connection, purpleUserName(0), "[photo]\nphoto<!--tdlib-message 1-->", PURPLE_MESSAGE_RECV,
+                       date)
+    );
+    tgl.verifyRequests({
+        make_object<viewMessages>(chatIds[0], std::vector<int64_t>(1, 1), nullptr, true),
+        make_object<downloadFile>(fileId, 1, 0, 0, true)
+    });
+    ASSERT_TRUE(takeLoggedMessages().empty());
+
+    pluginInfo().close(connection);
+    std::string logged = "<!--tdlib-log-only-->[photo]\nphoto<!--tdlib-message 1 " + std::to_string(date) +
+                         "--><!--/tdlib-log-only-->";
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0), logged, PURPLE_MESSAGE_RECV,
+                                             date));
+    ASSERT_EQ(std::vector<std::string>{logged}, takeLoggedMessages());
 }
 
 class MessageOrderTestLongDownloadInReply: public MessageOrderTest,

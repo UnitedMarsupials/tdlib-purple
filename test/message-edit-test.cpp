@@ -328,25 +328,32 @@ TEST_F(MessageEditTest, DeletedWhileEditDownloads)
     tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makePhoto("other", "caption")));
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
 
-    // The new picture is still to be fetched, so the edit waits for it
     std::vector<object_ptr<photoSize>> sizes;
     sizes.push_back(makePhotoSize(makeFile(fileId + 1, 10000, "", "other"), 640, 480));
     object_ptr<message> edited = makeMessage(messageId, userIds[0], chatIds[0], false, date,
         makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText("caption"), false, false, false));
     edited->edit_date_ = editDate;
     tgl.reply(std::move(edited));
-    tgl.verifyRequest(downloadFile(fileId + 1, 1, 0, 0, true));
-    prpl.verifyNoEvents();
+    // Shown at once, the new picture's stand-in to be written over once it is here
+    prpl.verifyEvents(
+        ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                               userFirstNames[0] + " " + userLastNames[0] + " edited the message from " +
+                               messageTime(date) + ":",
+                               PURPLE_MESSAGE_SYSTEM, editDate),
+        ServGotImEvent(connection, purpleUserName(0), "[photo]\ncaption", PURPLE_MESSAGE_RECV, editDate)
+    );
+    uint64_t download = tgl.verifyRequest(downloadFile(fileId + 1, 1, 0, 0, true));
 
-    // The message shown before is deleted all the same
     tgl.update(makeUpdateDeleteMessages(chatIds[0], messageId, true, false));
     prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
                                              "The message " + userFirstNames[0] + " " + userLastNames[0] + " sent at " + messageTime(date) +
                                              " has been deleted",
                                              PURPLE_MESSAGE_SYSTEM, 0));
 
-    // ...and its edit is not shown once the picture is here
-    tgl.reply(makeFile(fileId + 1, 10000, "/path2", "other"));
+    // ...and not shown again once the picture is here, TDLib having it no more
+    tgl.reply(download, makeFile(fileId + 1, 10000, "/path2", "other"));
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    tgl.reply(make_object<error>(404, "Not Found"));
     prpl.verifyNoEvents();
     tgl.verifyNoRequests();
 }

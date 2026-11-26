@@ -680,65 +680,55 @@ TEST_F(PrivateChatTest, OtherMessage)
     );
 }
 
+// A photo not here yet is shown at once, as its stand-in, and fetched; once it is, the message is
+// shown again with it, where the tab can take it, and logged as it is shown then, or else as it was
 TEST_F(PrivateChatTest, Photo)
 {
     purple_account_set_string(account, "media-size-threshold", "0");
-    const int32_t date   = 10001;
-    const int32_t fileId = 1234;
+    static const int32_t date   = 10001;
+    static const int32_t fileId = 1234;
+    setLogMarkersEnabled(true);
     loginWithOneContact();
+    auto makePhotoMessage = [this](bool here) {
+        std::vector<object_ptr<photoSize>> sizes;
+        sizes.push_back(makePhotoSize(make_object<file>(
+                fileId, 10000, 10000,
+                here ? make_object<localFile>("/path", true, true, false, true, 0, 10000, 10000)
+                     : make_object<localFile>("", true, true, false, false, 0, 0, 0),
+                make_object<remoteFile>("beh", "bleh", false, true, 10000)
+            ), 640, 480));
+        return makeMessage(1, userIds[0], chatIds[0], false, date,
+                           makeMessagePhoto(make_object<photo>(false, nullptr, std::move(sizes)),
+                                            make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>()),
+                                            false, false, false));
+    };
 
-    std::vector<object_ptr<photoSize>> sizes;
-    sizes.push_back(makePhotoSize(make_object<file>(
-            fileId, 10000, 10000,
-            make_object<localFile>("", true, true, false, false, 0, 0, 0),
-            make_object<remoteFile>("beh", "bleh", false, true, 10000)
-        ), 640, 480));
-    tgl.update(make_object<updateNewMessage>(makeMessage(
-        1,
-        userIds[0],
-        chatIds[0],
-        false,
-        date,
-        makeMessagePhoto(
-            make_object<photo>(false, nullptr, std::move(sizes)),
-            make_object<formattedText>("photo", std::vector<object_ptr<textEntity>>()),
-            false, false, false
-        )
-    )));
-    tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
-    prpl.verifyNoEvents();
+    tgl.update(make_object<updateNewMessage>(makePhotoMessage(false)));
+    prpl.verifyEvents(
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+        ServGotImEvent(connection, purpleUserName(0), "[photo]\nphoto<!--tdlib-message 1-->", PURPLE_MESSAGE_RECV,
+                       date)
+    );
+    // Logged once the picture is here
+    ASSERT_TRUE(takeLoggedMessages().empty());
+    uint64_t download = tgl.verifyRequests({
+        make_object<viewMessages>(chatIds[0], std::vector<int64_t>(1, 1), nullptr, true),
+        make_object<downloadFile>(fileId, 1, 0, 0, true)
+    })[1];
 
-    tgl.update(make_object<updateFile>(make_object<file>(
-        fileId, 10000, 10000,
-        make_object<localFile>("/path", true, true, true, false, 0, 0, 2000),
-        make_object<remoteFile>("beh", "bleh", false, true, 10000)
-    )));
-
-    tgl.update(make_object<updateFile>(make_object<file>(
-        fileId, 10000, 10000,
-        make_object<localFile>("/path", true, true, true, false, 0, 0, 5000),
-        make_object<remoteFile>("beh", "bleh", false, true, 10000)
-    )));
-
-    tgl.reply(make_object<file>(
+    tgl.reply(download, make_object<file>(
         fileId, 10000, 10000,
         make_object<localFile>("/path", true, true, false, true, 0, 10000, 10000),
         make_object<remoteFile>("beh", "bleh", false, true, 10000)
     ));
-
-    prpl.verifyEvents(ServGotImEvent(
-        connection, purpleUserName(0),
-        "<a href=\"file://file:///path\">photo</a>\n"
-        "photo",
-        PURPLE_MESSAGE_RECV, date
-    ));
-    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
-
-    tgl.update(make_object<updateFile>(make_object<file>(
-        fileId, 10000, 10000,
-        make_object<localFile>("/path", true, true, false, true, 0, 10000, 10000),
-        make_object<remoteFile>("beh", "bleh", false, true, 10000)
-    )));
+    tgl.verifyRequest(getMessage(chatIds[0], 1));
+    tgl.reply(makePhotoMessage(true));
+    // Without Pidgin's tab there is nothing to write it over: logged as it was shown, for the log alone
+    std::string logged = "<!--tdlib-log-only-->[photo]\nphoto<!--tdlib-message 1 " + std::to_string(date) +
+                         "--><!--/tdlib-log-only-->";
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0), logged, PURPLE_MESSAGE_RECV,
+                                             date));
+    ASSERT_EQ(std::vector<std::string>{logged}, takeLoggedMessages());
 }
 
 TEST_F(PrivateChatTest, AlreadyDownloadedPhoto)

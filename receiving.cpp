@@ -825,6 +825,8 @@ PurpleConversation *getMessageConversation(TdAccountData &account, const td::td_
     return NULL;
 }
 
+static void writeLog(TdAccountData &account, const UnloggedSent &sent, MessageId newId);
+
 void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const TgMessageInfo &message,
                      const char *text, const char *notification, uint32_t extraFlags)
 {
@@ -842,6 +844,16 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
     // as ever where there is no tab to write it into unlogged. One sent already, while waiting to be
     // shown, has that id now.
     bool                unlogged     = message.unlogged || (message.redrawn && !message.logRedrawn);
+    // One shown with pictures still coming is logged once they are here, as it is shown then, shown
+    // again with them, however that is: written into its tab unlogged meanwhile, the tab made first,
+    // so that it shows when and from whom it is
+    bool                deferred     = logMarkersEnabled() && !message.sentLocally && message.id.valid() &&
+                                       ((message.picturesComing && !unlogged) ||
+                                        account.hasUnloggedSent(getId(chat), message.id));
+    if (deferred) {
+        unlogged = true;
+        getMessageConversation(account, chat);
+    }
     MessageId           loggedId     = message.sentLocally ? account.getSentMessageId(getId(chat), message.id)
                                                            : message.id;
     bool                sent         = !message.sentLocally || (loggedId != message.id);
@@ -880,6 +892,8 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
     if (!newText.empty())
         text = newText.c_str();
 
+    std::string forLog = text ? text : "";
+
     // Which message it is, for the log, once it has its id for good: whatever the front-end now, a
     // tab of Pidgin's may be filled from the log later
     std::string marked;
@@ -913,6 +927,32 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
                                              (uint32_t)(flags & ~PURPLE_MESSAGE_DELAYED), message.timestamp,
                                              purple_conversation_get_type(unloggedConv),
                                              purple_conversation_get_name(unloggedConv)});
+    if (deferred && unloggedConv) {
+        UnloggedSent shown{forLog, notification ? notification : "",
+                           (uint32_t)(flags & ~PURPLE_MESSAGE_DELAYED), message.timestamp,
+                           purple_conversation_get_type(unloggedConv), purple_conversation_get_name(unloggedConv)};
+        shown.awaitingPictures = true;
+        if (!message.outgoing)
+            shown.who = privateUser ? getPrivateChatPurpleName(account, *privateUser) :
+                        secretChatId.valid() ? getSecretChatBuddyName(secretChatId) :
+                        !message.incomingGroupchatSenderName.empty() ? message.incomingGroupchatSenderName :
+                        !message.incomingGroupchatSender.empty() ? message.incomingGroupchatSender : "someone";
+        UnloggedSent earlier;
+        account.extractUnloggedSent(getId(chat), message.id, earlier);
+        if (message.picturesComing)
+            account.addUnloggedSent(getId(chat), message.id, std::move(shown));
+        else
+            writeLog(account, shown, message.id);
+    }
+}
+
+void logMessagesAwaitingPictures(TdAccountData &account)
+{
+    std::vector<std::tuple<ChatId, MessageId, UnloggedSent>> messages;
+    account.extractAwaitingPictures(messages);
+    for (const auto &message: messages)
+        if (!account.isChatDeleted(std::get<0>(message)))
+            writeLog(account, std::get<2>(message), std::get<1>(message));
 }
 
 void logSentMessage(TdAccountData &account, ChatId chatId, MessageId oldId, MessageId newId)
@@ -921,9 +961,17 @@ void logSentMessage(TdAccountData &account, ChatId chatId, MessageId oldId, Mess
     // Nor of a chat deleted since it was sent
     if (!account.extractUnloggedSent(chatId, oldId, sent) || account.isChatDeleted(chatId))
         return;
+    writeLog(account, sent, newId);
+}
+
+// Into the log alone, under the message's id: of the conversation it was written into, if still open,
+// or else a log of its own
+static void writeLog(TdAccountData &account, const UnloggedSent &sent, MessageId newId)
+{
     std::string             marked = sent.text + makeLogMarker(newId, sent.timestamp);
     PurpleMessageFlags      flags  = (PurpleMessageFlags)sent.flags;
-    const char             *self   = purple_account_get_name_for_display(account.purpleAccount);
+    const char             *self   = !sent.who.empty() ? sent.who.c_str()
+                                                           : purple_account_get_name_for_display(account.purpleAccount);
     PurpleConversationType  type   = (PurpleConversationType)sent.conversationType;
     PurpleConversation     *conv   = purple_find_conversation_with_account(type, sent.conversationName.c_str(),
                                                                            account.purpleAccount);
@@ -1204,6 +1252,87 @@ static std::string makePreviewImageText(const IncomingMessage &fullMessage)
     return "<img id=\"" + std::to_string(id) + "\">";
 }
 
+// A picture not here yet is shown at once, as a stand-in of its size, rather than the message
+// waiting for it: where the front-end can show pictures, and so write one over its stand-in
+static bool showsPictureComing(const IncomingMessage &fullMessage)
+{
+    return canShowImages() && (fullMessage.messageInfo.type == TgMessageInfo::Type::Photo);
+}
+
+// The size the picture is shown in, and the low-grade one the message carries, if any
+static void getPictureLook(const td::td_api::MessageContent &content, int32_t fileId, int32_t &width,
+                           int32_t &height, std::string &lowGrade)
+{
+    width  = 0;
+    height = 0;
+    lowGrade.clear();
+    if (content.get_id() == td::td_api::messagePhoto::ID) {
+        const auto &photo = static_cast<const td::td_api::messagePhoto &>(content);
+        if (!photo.photo_)
+            return;
+        for (const auto &size: photo.photo_->sizes_)
+            if (size && size->photo_ && (size->photo_->id_ == fileId)) {
+                width  = size->width_;
+                height = size->height_;
+            }
+        if (photo.photo_->minithumbnail_)
+            lowGrade = photo.photo_->minithumbnail_->data_;
+    }
+}
+
+static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId messageId);
+
+// Fetched for the message, which is shown again once it is here, or once it cannot be, then left
+// as its stand-in until it is asked for, rather than tried again and again
+static void fetchPicture(TdAccountData &account, ChatId chatId, MessageId messageId, int32_t fileId)
+{
+    if (!account.startPictureFetch(chatId, messageId, fileId))
+        return;
+    purple_debug_misc(config::pluginId, "Fetching picture (file id %d) of message %" G_GINT64_FORMAT "\n",
+                      (int)fileId, messageId.value());
+    auto request = td::td_api::make_object<td::td_api::downloadFile>();
+    request->file_id_     = fileId;
+    request->priority_    = FILE_DOWNLOAD_PRIORITY;
+    request->offset_      = 0;
+    request->limit_       = 0;
+    request->synchronous_ = true;
+    account.transceiver.sendQuery(std::move(request),
+        [&account, chatId, messageId, fileId](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
+            account.endPictureFetch(chatId, messageId, fileId);
+            bool failed = getDownloadPath(object).empty();
+            account.setPictureFailed(fileId, failed);
+            if (failed)
+                purple_debug_misc(config::pluginId, "Picture (file id %d) of message %" G_GINT64_FORMAT
+                                  " not fetched\n", (int)fileId, messageId.value());
+            refreshShownMessage(account, chatId, messageId);
+        });
+}
+
+// Its stand-in, the message logged once the picture is here, if it is fetched unasked
+static void showPictureComing(const td::td_api::chat &chat, IncomingMessage &fullMessage,
+                              const td::td_api::file &file, const char *caption, const std::string &fileDesc,
+                              TdAccountData &account)
+{
+    int32_t     width, height;
+    std::string lowGrade;
+    getPictureLook(*fullMessage.message->content_, file.id_, width, height, lowGrade);
+    int         imageId = makeStandInPicture(lowGrade, width, height, false);
+    std::string text    = imageId ? makeInlineImageText(imageId) : ("[" + escapeForDisplay(fileDesc) + "]");
+    TgMessageInfo &message = fullMessage.messageInfo;
+    if (!message.mediaVariantLinks.empty())
+        text += "\n" + message.mediaVariantLinks;
+    if (caption)
+        text += "\n" + std::string(caption);
+
+    bool wanted = isSizeWithinLimit(getFileSizeKb(file), fullMessage.inlineFileSizeLimit) &&
+                  !account.hasPictureFailed(file.id_);
+    message.picturesComing = wanted;
+    showMessageText(account, chat, message, text.c_str(), NULL, imageId ? PURPLE_MESSAGE_IMAGES : 0);
+    message.picturesComing = false;
+    if (wanted)
+        fetchPicture(account, getId(chat), message.id, file.id_);
+}
+
 static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMessage,
                            const td::td_api::file &file, const char *caption,
                            const std::string &fileDesc,
@@ -1220,6 +1349,13 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
     // A video's thumbnail goes inside the hyperlink where there is one (see showGenericFileInline);
     // where there is only a notice, it goes above the caption. Either way it precedes the caption.
     std::string preview = makePreviewImageText(fullMessage);
+
+    if (showsPictureComing(fullMessage) && fullMessage.message && fullMessage.message->content_ &&
+        !(file.local_ && file.local_->is_downloading_completed_))
+    {
+        showPictureComing(chat, fullMessage, file, caption, fileDesc, account);
+        return;
+    }
 
     // Fetched and opened only when clicked, if it is not here by then, so it is no reason to wait
     if (linksToMessage(fullMessage)) {
@@ -2268,8 +2404,8 @@ static bool isFileMessageReady(const IncomingMessage &fullMessage, ChatId chatId
     const td::td_api::chat *chat = account.getChat(chatId);
 
     if (chat && isInlineDownload(fullMessage, content, *chat)) {
-        // A link to the message needs nothing but the message
-        if (linksToMessage(fullMessage))
+        // A link to the message needs nothing but the message; nor does a picture shown as it comes
+        if (linksToMessage(fullMessage) || showsPictureComing(fullMessage))
             return true;
         // File will be shown inline
         // Animated stickers are not ready until converted
@@ -2449,10 +2585,16 @@ static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId
     account.transceiver.sendQuery(std::move(request),
         [&account, chatId, messageId](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
             const td::td_api::chat *chat = account.getChat(chatId);
-            if (!chat || !object || (object->get_id() != td::td_api::message::ID) ||
-                !canReplaceMessage(findMessageConversation(account, *chat), messageId) ||
-                account.pendingMessages.findPendingMessage(chatId, messageId))
+            // Shown later, as it is by then
+            if (account.pendingMessages.findPendingMessage(chatId, messageId))
                 return;
+            // With nowhere to show it again, it is logged as it was shown, if it waited for that
+            if (!chat || !object || (object->get_id() != td::td_api::message::ID) ||
+                !canReplaceMessage(findMessageConversation(account, *chat), messageId))
+            {
+                logSentMessage(account, chatId, messageId, messageId);
+                return;
+            }
             purple_debug_misc(config::pluginId, "Showing message %" G_GINT64_FORMAT " again, with a picture come late\n",
                               messageId.value());
             IncomingMessage fullMessage;
@@ -2578,7 +2720,8 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
                 thread->startThread();
             }
             // TODO: if animated stickers are disabled, fetch thumbnail instead
-        } else if (inlineDownloadNeedAutoDl(fullMessage, *fileInfo.file) && !linksToMessage(fullMessage)) {
+        } else if (inlineDownloadNeedAutoDl(fullMessage, *fileInfo.file) && !linksToMessage(fullMessage) &&
+                   !showsPictureComing(fullMessage)) {
             // TgMessageInfo on fullMessage has replyMessage=NULL which will be copied onto DownloadRequest.
             // If message leaves PendingMessageQueue while download is still active, there's probably
             // a replyMessage on IncomingMessage by then, and it needs to be moved over to DownloadRequest.

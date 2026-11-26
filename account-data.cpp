@@ -1207,6 +1207,44 @@ bool TdAccountData::extractUnloggedSent(ChatId chatId, MessageId messageId, Unlo
     return true;
 }
 
+bool TdAccountData::hasUnloggedSent(ChatId chatId, MessageId messageId) const
+{
+    return m_unloggedSent.count(ShownMessageKey(chatId, messageId)) != 0;
+}
+
+void TdAccountData::extractAwaitingPictures(std::vector<std::tuple<ChatId, MessageId, UnloggedSent>> &messages)
+{
+    for (auto it = m_unloggedSent.begin(); it != m_unloggedSent.end(); )
+        if (it->second.awaitingPictures) {
+            messages.emplace_back(it->first.first, it->first.second, std::move(it->second));
+            it = m_unloggedSent.erase(it);
+        } else
+            ++it;
+}
+
+bool TdAccountData::startPictureFetch(ChatId chatId, MessageId messageId, int32_t fileId)
+{
+    return m_pictureFetches.insert(std::make_tuple(chatId, messageId, fileId)).second;
+}
+
+void TdAccountData::endPictureFetch(ChatId chatId, MessageId messageId, int32_t fileId)
+{
+    m_pictureFetches.erase(std::make_tuple(chatId, messageId, fileId));
+}
+
+void TdAccountData::setPictureFailed(int32_t fileId, bool failed)
+{
+    if (failed)
+        m_failedPictures.insert(fileId);
+    else
+        m_failedPictures.erase(fileId);
+}
+
+bool TdAccountData::hasPictureFailed(int32_t fileId) const
+{
+    return m_failedPictures.count(fileId) != 0;
+}
+
 void TdAccountData::addPendingEdit(const PendingEdit &edit)
 {
     auto it = std::find_if(m_pendingEdits.begin(), m_pendingEdits.end(), [&edit](const PendingEdit &other) {
