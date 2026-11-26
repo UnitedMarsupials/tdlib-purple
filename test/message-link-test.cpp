@@ -417,8 +417,8 @@ TEST_F(VideoSizesTest, CoverAboveLimit)
     sizes.push_back(makePhotoSize(::makeFile(coverIds[1], 900000), 1280, 720));
     video.cover_ = makePhotoWithSizes(std::move(sizes));
     tgl.update(make_object<updateNewMessage>(std::move(msg)));
-    prpl.discardEvents();
     tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
+    verifyVideoMessage();
 }
 
 TEST_F(VideoSizesTest, CoverPreview)
