@@ -2252,7 +2252,8 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
                 image = [&rich, &fullMessage, &account, &pictures, &coming](size_t index) {
                     std::string              kind;
                     const td::td_api::photo *photo = nullptr;
-                    const td::td_api::file  *file  = findRichMessageMedia(*rich.message_, index, kind, &photo);
+                    const td::td_api::file  *file  = findRichMessageMedia(*rich.message_, index, kind, &photo,
+                                                                          fullMessage.inlineFileSizeLimit);
                     gchar                   *data  = NULL;
                     gsize                    len   = 0;
                     if (!file || !photo)
@@ -2320,6 +2321,10 @@ void showMessages(std::vector<IncomingMessage>& messages, TdAccountData &account
 const td::td_api::file *selectPhotoSize(PurpleAccount *account, const td::td_api::messagePhoto &photo)
 {
     unsigned                     sizeLimit        = getAutoDownloadLimitKb(account);
+    // In Pidgin, as any picture shown in a conversation
+    if (getTextLineHeight() > 0)
+        return chooseShownPhotoSize(photo.photo_.get(), 0, sizeLimit);
+    // Elsewhere, where it is opened rather than shown, the biggest within the limit
     const td::td_api::photoSize *selectedSize     = nullptr;
     unsigned                     selectedFileSize = 0;
     if (photo.photo_)
@@ -2346,28 +2351,34 @@ const td::td_api::file *selectPhotoSize(PurpleAccount *account, const td::td_api
     return selectedSize ? selectedSize->photo_.get() : nullptr;
 }
 
-// Of a picture shown in the conversation, as a video's cover, the size that does: in Pidgin, the
-// smallest at least so many lines of the conversation's text tall, or else the tallest; elsewhere
-// the smallest at least so wide, or else the widest
-enum { COVER_LINES = 20 };
-const td::td_api::file *chooseShownPhotoSize(const td::td_api::photo *photo, int32_t fallbackWidth)
+// Of a picture shown in the conversation, the size that does: in Pidgin, the smallest at least so
+// many lines of the conversation's text tall, or else the tallest; elsewhere the smallest at least
+// so wide, or else the widest. Only those within the limit on what is fetched unasked, if any is.
+enum { PICTURE_LINES = 23 };
+const td::td_api::file *chooseShownPhotoSize(const td::td_api::photo *photo, int32_t fallbackWidth,
+                                             unsigned sizeLimitKb)
 {
     unsigned lineHeight = getTextLineHeight();
     bool     byHeight   = (lineHeight > 0);
-    int32_t  wanted     = byHeight ? int32_t(lineHeight * COVER_LINES) : fallbackWidth;
+    int32_t  wanted     = byHeight ? int32_t(lineHeight * PICTURE_LINES) : fallbackWidth;
     const td::td_api::photoSize *chosen = nullptr;
-    if (photo)
-        for (const auto &size: photo->sizes_) {
-            if (!size || !size->photo_)
-                continue;
-            int32_t measure       = byHeight ? size->height_ : size->width_;
-            int32_t chosenMeasure = chosen ? (byHeight ? chosen->height_ : chosen->width_) : 0;
-            bool    bigEnough     = (measure >= wanted);
-            if (!chosen ||
-                (bigEnough && ((chosenMeasure < wanted) || (measure < chosenMeasure))) ||
-                (!bigEnough && (chosenMeasure < wanted) && (measure > chosenMeasure)))
-                chosen = size.get();
-        }
+    for (bool limited: {true, false}) {
+        if (photo)
+            for (const auto &size: photo->sizes_) {
+                if (!size || !size->photo_ ||
+                    (limited && !isSizeWithinLimit(getFileSizeKb(*size->photo_), sizeLimitKb)))
+                    continue;
+                int32_t measure       = byHeight ? size->height_ : size->width_;
+                int32_t chosenMeasure = chosen ? (byHeight ? chosen->height_ : chosen->width_) : 0;
+                bool    bigEnough     = (measure >= wanted);
+                if (!chosen ||
+                    (bigEnough && ((chosenMeasure < wanted) || (measure < chosenMeasure))) ||
+                    (!bigEnough && (chosenMeasure < wanted) && (measure > chosenMeasure)))
+                    chosen = size.get();
+            }
+        if (chosen)
+            break;
+    }
     return chosen ? chosen->photo_.get() : nullptr;
 }
 
@@ -2376,10 +2387,11 @@ const td::td_api::file *chooseShownPhotoSize(const td::td_api::photo *photo, int
 // Of a cover the sender chose for a video, the size that does for a preview, as wide, elsewhere
 // than Pidgin, as the video's thumbnail, which is what the preview would be without a cover
 static const td::td_api::file *getCoverPreview(const td::td_api::photo *cover,
-                                               const td::td_api::thumbnail *thumbnail)
+                                               const td::td_api::thumbnail *thumbnail, unsigned sizeLimitKb)
 {
     // Telegram's thumbnails are 320 pixels wide, should one not say
-    return chooseShownPhotoSize(cover, (thumbnail && (thumbnail->width_ > 0)) ? thumbnail->width_ : 320);
+    return chooseShownPhotoSize(cover, (thumbnail && (thumbnail->width_ > 0)) ? thumbnail->width_ : 320,
+                                sizeLimitKb);
 }
 
 // With its size, and the low-grade picture of the video, if asked for
@@ -2402,7 +2414,7 @@ static const td::td_api::file *getVideoPreview(const td::td_api::MessageContent 
                 thumbnail = video.video_->thumbnail_.get();
                 mini      = video.video_->minithumbnail_.get();
             }
-            cover = getCoverPreview(video.cover_.get(), thumbnail);
+            cover = getCoverPreview(video.cover_.get(), thumbnail, getAutoDownloadLimitKb(account));
             coverPhoto = video.cover_.get();
             secret = video.is_secret_;
             break;

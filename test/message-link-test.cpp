@@ -1215,13 +1215,18 @@ TEST_F(MessageLinkTest, RichMessageMedia)
         return makeMessage(messageId, userIds[0], chatIds[0], false, date, std::move(content));
     };
 
+    // Shown in the size within the limit, which is fetched; the bigger ones only when clicked
     tgl.update(make_object<updateNewMessage>(makeRichMessage()));
-    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
     prpl.verifyEvents(ServGotImEvent(
         connection, purpleUserName(0),
         "<a href=\"" + link() + "/r0\">[photo]</a> <a href=\"" + link() + "/r1\">[photo]</a>",
         PURPLE_MESSAGE_RECV, date
     ));
+    tgl.verifyRequests({
+        make_object<viewMessages>(chatIds[0], std::vector<int64_t>(1, messageId), nullptr, true),
+        make_object<downloadFile>(100, 1, 0, 0, true),
+        make_object<downloadFile>(200, 1, 0, 0, true)
+    });
 
     tgprpl_open_message_link((link() + "/r1").c_str());
     tgl.verifyRequest(getMessage(chatIds[0], messageId));

@@ -89,8 +89,10 @@ void logMessagesAwaitingPictures(TdAccountData &account);
 PurpleConversation *findMessageConversation(TdAccountData &account, const td::td_api::chat &chat);
 // Names a message by when it was sent, as the conversation window shows it
 std::string formatMessageTime(time_t timestamp);
-// Of a picture shown in the conversation, the size that does for it, as a video's cover's
-const td::td_api::file *chooseShownPhotoSize(const td::td_api::photo *photo, int32_t fallbackWidth = 320);
+// Of a picture shown in the conversation, the size that does for it, of those within the limit on
+// what is fetched unasked, in kilobytes, if any is (0 for none)
+const td::td_api::file *chooseShownPhotoSize(const td::td_api::photo *photo, int32_t fallbackWidth = 320,
+                                             unsigned sizeLimitKb = 0);
 void fetchHistory(TdAccountData &account, ChatId chatId, MessageId fetchFrom, MessageId stopAt);
 // Fills the chat's tab anew, in Pidgin, from the given message to the latest, if the tab can hold
 // that many; to show a message it does not, such as one just reacted to
