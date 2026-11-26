@@ -188,7 +188,7 @@ const char *getPurpleStatusId(const td::td_api::UserStatus &tdStatus)
         return purple_primitive_get_id_from_type(PURPLE_STATUS_AWAY);
 }
 
-PurpleBlistNode *findChatBlistNode(TdAccountData &account, const td::td_api::chat &chat)
+PurpleBlistNode *findChatBlistNode(const TdAccountData &account, const td::td_api::chat &chat)
 {
     const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
     if (privateUser) {
@@ -217,6 +217,36 @@ bool keepsDeletedMessages(PurpleAccount *account, PurpleBlistNode *node)
 void setKeepsDeletedMessages(PurpleBlistNode *node, bool keep)
 {
     purple_blist_node_set_string(node, DELETED_MESSAGES_SETTING, keep ? "keep" : "remove");
+}
+
+static const char DOWNLOAD_MEDIA_SETTING[] = "tdlib-download-media";
+
+bool downloadsMedia(PurpleAccount *account, PurpleBlistNode *node)
+{
+    const char *chosen = node ? purple_blist_node_get_string(node, DOWNLOAD_MEDIA_SETTING) : nullptr;
+    if (chosen && *chosen)
+        return !strcmp(chosen, "yes");
+    // Under "Telegram: not joined" or "Telegram: not in contacts", which are not saved
+    if (node && (purple_blist_node_get_flags(node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE))
+        return false;
+    return purple_account_get_bool(account, AccountOptions::DownloadMedia, AccountOptions::DownloadMediaDefault);
+}
+
+void setDownloadsMedia(PurpleBlistNode *node, bool download)
+{
+    purple_blist_node_set_string(node, DOWNLOAD_MEDIA_SETTING, download ? "yes" : "no");
+}
+
+bool downloadsChatMedia(const TdAccountData &account, const td::td_api::chat &chat)
+{
+    PurpleBlistNode *node = findChatBlistNode(account, chat);
+    if (!node) {
+        // Its entry removed by hand, a contact's or a chat joined goes by the account
+        const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
+        if (privateUser ? !privateUser->is_contact_ : !account.isGroupChatWithMembership(chat))
+            return false;
+    }
+    return downloadsMedia(account.purpleAccount, node);
 }
 
 std::string getPurpleBuddyName(const td::td_api::user &user)

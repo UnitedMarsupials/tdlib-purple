@@ -45,6 +45,8 @@ namespace AccountOptions {
     constexpr gboolean    AnimatedStickersDefault    = TRUE;
     constexpr const char *ShowSelfDestruct           = "show-self-destruct";
     constexpr gboolean    ShowSelfDestructDefault    = TRUE;
+    constexpr const char *DownloadMedia              = "download-media";
+    constexpr gboolean    DownloadMediaDefault       = TRUE;
     constexpr const char *StrikeOutDeleted           = "strike-out-deleted";
     constexpr gboolean    StrikeOutDeletedDefault    = FALSE;
     constexpr const char *ShowUnjoinedChats          = "show-unjoined-chats";

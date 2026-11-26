@@ -17,11 +17,17 @@ std::string         getPurpleBuddyName(const td::td_api::user &user);
 std::string         getPurpleBuddyName(UserId userId);
 std::string         getSecretChatBuddyName(SecretChatId secretChatId);
 // The contact list's entry for a chat, its buddy or its chat entry; none for a chat not there
-PurpleBlistNode    *findChatBlistNode(TdAccountData &account, const td::td_api::chat &chat);
+PurpleBlistNode    *findChatBlistNode(const TdAccountData &account, const td::td_api::chat &chat);
 // Whether deleted messages stay in the chat's tab, struck out, rather than go: as chosen for its
 // entry in the contact list, if it has one and that was chosen, otherwise as the account has it
 bool                keepsDeletedMessages(PurpleAccount *account, PurpleBlistNode *node);
 void                setKeepsDeletedMessages(PurpleBlistNode *node, bool keep);
+// Whether the pictures of the contact's or chat's messages are fetched unasked: as chosen for it,
+// or else as for the account, but for a stranger or a chat not joined, whose aren't
+bool                downloadsMedia(PurpleAccount *account, PurpleBlistNode *node);
+void                setDownloadsMedia(PurpleBlistNode *node, bool download);
+// The same for a chat: one with no entry, being a stranger's or not joined, is not downloaded
+bool                downloadsChatMedia(const TdAccountData &account, const td::td_api::chat &chat);
 // The user a name is of: an id, as the plugin names users, our own number, a phone number or a
 // @username; a display name too, if asked for, where a person types it
 // A user's buddy, as a conversation with them needs, if they are not a contact: for as long as the

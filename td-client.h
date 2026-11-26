@@ -49,6 +49,8 @@ public:
     // fetches only for open chats; its messages on screen, then, are seen, and so read
     void conversationShown(PurpleConversation *conv, bool shown);
     void messagesViewed(PurpleConversation *conv, const std::vector<MessageId> &messageIds);
+    // The contact's or chat's pictures are fetched unasked now
+    void mediaDownloadsAllowed(PurpleBlistNode *node);
     // Online, for Telegram, while the user is not idle, as libpurple tells; the chats shown are
     // closed meanwhile
     void setIdle(bool idle);
