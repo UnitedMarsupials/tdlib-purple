@@ -17,7 +17,7 @@ std::string         getPurpleBuddyName(const td::td_api::user &user);
 std::string         getPurpleBuddyName(UserId userId);
 std::string         getSecretChatBuddyName(SecretChatId secretChatId);
 // The contact list's entry for a chat, its buddy or its chat entry; none for a chat not there
-PurpleBlistNode    *findChatBlistNode(TdAccountData &account, const td::td_api::chat &chat);
+PurpleBlistNode    *findChatBlistNode(const TdAccountData &account, const td::td_api::chat &chat);
 // Whether deleted messages stay in the chat's tab, struck out, rather than go: as chosen for its
 // entry in the contact list, if it has one and that was chosen, otherwise as the account has it
 bool                keepsDeletedMessages(PurpleAccount *account, PurpleBlistNode *node);

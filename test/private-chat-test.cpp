@@ -730,6 +730,29 @@ TEST_F(PrivateChatTest, StrangerPhotoNotDownloaded)
     prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0), "[photo]\nphoto", PURPLE_MESSAGE_RECV, date));
     tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
 }
+#else
+// Where pictures cannot be written over their stand-ins, a photo not fetched unasked is let be, as
+// one too big is, and the message is shown at once without it
+TEST_F(PrivateChatTest, PhotoNotDownloaded)
+{
+    const int32_t date   = 10001;
+    const int32_t fileId = 1234;
+    purple_account_set_bool(account, "download-media", FALSE);
+    loginWithOneContact();
+
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(::makeFile(fileId, 10000), 640, 480));
+    tgl.update(make_object<updateNewMessage>(makeMessage(1, userIds[0], chatIds[0], false, date,
+        makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText("photo"), false, false, false))));
+    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
+    prpl.verifyEvents(
+        ServGotImEvent(connection, purpleUserName(0), "photo", PURPLE_MESSAGE_RECV, date),
+        ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                               userFirstNames[0] + " " + userLastNames[0] +
+                               ": Ignoring photo download (purple_str_size_to_units)",
+                               PURPLE_MESSAGE_SYSTEM, date)
+    );
+}
 #endif
 
 #ifndef NoPidgin

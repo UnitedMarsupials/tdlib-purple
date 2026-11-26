@@ -1624,10 +1624,12 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
         return;
     }
 
+    // Where the chat's media are not fetched unasked, a file not here is let be, as one too big is
+    bool downloads = downloadsMedia(account.purpleAccount, findChatBlistNode(account, chat));
     if (file.local_ && file.local_->is_downloading_completed_) {
         autoDownload = true;
         notice.clear();
-    } else if (isSizeWithinLimit(fileSize, fullMessage.inlineFileSizeLimit)) {
+    } else if (downloads && isSizeWithinLimit(fileSize, fullMessage.inlineFileSizeLimit)) {
         // Sticker with a caption is not a thing but just in case it was: don't skip "Downloading..."
         // notification for such hypothetical object because it will also include caption
         if ( !((fullMessage.messageInfo.type == TgMessageInfo::Type::Sticker) && !caption) &&
@@ -1637,7 +1639,7 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
             notice = formatMessage(_("Downloading {}"), escapeForDisplay(fileDesc));
         }
         autoDownload = true;
-    } else if (!ignoreBigDownloads(account.purpleAccount) && !fullMessage.messageInfo.redrawn) {
+    } else if (downloads && !ignoreBigDownloads(account.purpleAccount) && !fullMessage.messageInfo.redrawn) {
         // TRANSLATOR: In-chat notification, appears after a colon (':'). Argument is a file *type*, not a filename.
         notice = formatMessage(_("Requesting {} download"), escapeForDisplay(fileDesc));
         askDownload = true;
@@ -2683,13 +2685,15 @@ static bool isInlineDownload(const IncomingMessage &fullMessage,
             (chat.type_->get_id() != td::td_api::chatTypeSecret::ID));
 }
 
-static bool inlineDownloadNeedAutoDl(const IncomingMessage &fullMessage,
-                                     const td::td_api::file &file)
+// Not where the chat's media are not fetched unasked: the message is shown without the file then
+static bool inlineDownloadNeedAutoDl(const IncomingMessage &fullMessage, const td::td_api::file &file,
+                                     const TdAccountData &account, const td::td_api::chat &chat)
 {
     unsigned fileSize = getFileSizeKb(file);
 
     return !((file.local_ && file.local_->is_downloading_completed_)) &&
-           isSizeWithinLimit(fileSize, fullMessage.inlineFileSizeLimit);
+           isSizeWithinLimit(fileSize, fullMessage.inlineFileSizeLimit) &&
+           downloadsMedia(account.purpleAccount, findChatBlistNode(account, chat));
 }
 
 static bool isFileMessageReady(const IncomingMessage &fullMessage, ChatId chatId,
@@ -2708,7 +2712,7 @@ static bool isFileMessageReady(const IncomingMessage &fullMessage, ChatId chatId
         else
             // Files above limit will either be ignored (in which case, message is ready)
             // or requested (in which case, don't try do display in order)
-            return fullMessage.inlineDownloadTimeout || !inlineDownloadNeedAutoDl(fullMessage, file);
+            return fullMessage.inlineDownloadTimeout || !inlineDownloadNeedAutoDl(fullMessage, file, account, *chat);
     } else
         // Standard libpurple transfer will be used, nothing to postpone
         return true;
@@ -2949,7 +2953,7 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
     if (fileInfo.file && message.content_ && chat && isInlineDownload(fullMessage, *message.content_, *chat) &&
         !showsPictureComing(fullMessage))
     {
-        if (inlineDownloadNeedAutoDl(fullMessage, *fileInfo.file) && !linksToMessage(fullMessage)) {
+        if (inlineDownloadNeedAutoDl(fullMessage, *fileInfo.file, account, *chat) && !linksToMessage(fullMessage)) {
             // TgMessageInfo on fullMessage has replyMessage=NULL which will be copied onto DownloadRequest.
             // If message leaves PendingMessageQueue while download is still active, there's probably
             // a replyMessage on IncomingMessage by then, and it needs to be moved over to DownloadRequest.

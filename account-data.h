@@ -469,7 +469,7 @@ public:
     const td::td_api::chat       *getPrivateChatByUserId(UserId userId) const;
     const td::td_api::user       *getUser(UserId userId) const;
     const td::td_api::user       *getUserByPhone(const char *phoneNumber) const;
-    const td::td_api::user       *getUserByPrivateChat(const td::td_api::chat &chat);
+    const td::td_api::user       *getUserByPrivateChat(const td::td_api::chat &chat) const;
     std::string                   getDisplayName(const td::td_api::user &user) const;
     std::string                   getDisplayName(UserId userId) const;
     void                          getUsersByDisplayName(const char *displayName,

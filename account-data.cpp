@@ -619,7 +619,7 @@ const td::td_api::user *TdAccountData::getUserByPhone(const char *phoneNumber) c
         return pUser->second.user.get();
 }
 
-const td::td_api::user *TdAccountData::getUserByPrivateChat(const td::td_api::chat &chat)
+const td::td_api::user *TdAccountData::getUserByPrivateChat(const td::td_api::chat &chat) const
 {
     UserId userId = getUserIdByPrivateChat(chat);
     if (userId.valid())

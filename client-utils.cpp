@@ -188,7 +188,7 @@ const char *getPurpleStatusId(const td::td_api::UserStatus &tdStatus)
         return purple_primitive_get_id_from_type(PURPLE_STATUS_AWAY);
 }
 
-PurpleBlistNode *findChatBlistNode(TdAccountData &account, const td::td_api::chat &chat)
+PurpleBlistNode *findChatBlistNode(const TdAccountData &account, const td::td_api::chat &chat)
 {
     const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
     if (privateUser) {
