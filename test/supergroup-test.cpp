@@ -1138,7 +1138,7 @@ TEST_F(SupergroupTest, UnjoinedChannelMovedRefused)
     purple_blist_add_chat(purpleChat, &standardPurpleGroup, NULL);
     prpl.discardEvents();
     tgl.verifyRequest(joinChat(groupChatId));
-    tgl.reply(make_object<error>(400, "Can't return to kicked from chat"));
+    tgl.reply(makeError(400, "Can't return to kicked from chat"));
     prpl.verifyEvents(AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), NULL));
     tgl.verifyNoRequests();
     EXPECT_EQ(notJoined, purple_chat_get_group(purpleChat));

@@ -343,7 +343,7 @@ void PrivateChatTest::contactedByStranger(object_ptr<ChatActionBar> &&actionBar)
     pluginInfo().group_buddy(connection, purpleUserName(0).c_str(), "Telegram: not in contacts",
                              standardPurpleGroup.name);
     tgl.verifyRequest(*makeAddContact(userIds[0], "", userFirstNames[0], userLastNames[0], false));
-    tgl.reply(make_object<error>(400, "Failed"));
+    tgl.reply(makeError(400, "Failed"));
     prpl.verifyEvents(AddBuddyEvent(purpleUserName(0), displayName, account, nullptr, transient, nullptr));
     EXPECT_TRUE(purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
     EXPECT_EQ(transient, purple_buddy_get_group(buddy));
