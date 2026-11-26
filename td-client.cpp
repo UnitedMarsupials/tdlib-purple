@@ -3888,9 +3888,10 @@ void PurpleTdClient::addContact(const std::string &purpleName, const std::string
 }
 
 // Someone not a contact, moved by the user out of "Telegram: not in contacts" into a group of theirs:
-// kept there, and added to contacts, under their own name, without our phone number given away to
-// someone who may have been a stranger. Our own moves leave a buddy saved before moving it, or are
-// of deleted accounts.
+// added to contacts, under their own name, without our phone number given away to someone who may
+// have been a stranger. As a contact, the buddy is kept where it was put (see updatePrivateChat); if
+// adding fails, it is back under "Telegram: not in contacts" at the next start, or moved again, tried
+// again. Our own moves leave a buddy saved before moving it, or are of deleted accounts.
 void PurpleTdClient::buddyMoved(const char *buddyName, const char *groupName)
 {
     PurpleBuddy *buddy = purple_find_buddy(m_account, buddyName);
@@ -3900,8 +3901,7 @@ void PurpleTdClient::buddyMoved(const char *buddyName, const char *groupName)
     if (!user || user->is_contact_ || isDeletedUser(*user))
         return;
 
-    purple_debug_misc(config::pluginId, "Keeping %s in the buddy list\n", buddyName);
-    keepInBuddyList(PURPLE_BLIST_NODE(buddy));
+    purple_debug_misc(config::pluginId, "Adding %s to contacts, moved into a group\n", buddyName);
     addContactById(getId(*user), "", makeBasicDisplayName(*user), groupName, false);
 }
 

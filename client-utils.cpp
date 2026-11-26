@@ -567,12 +567,19 @@ bool isTransientBuddy(PurpleBuddy *buddy)
 // A conversation with a user goes by their id, which Pidgin shows by the name of the user's buddy:
 // one not a contact gets a buddy for as long as the program runs, in a group of its own; neither is
 // saved. Becoming a contact makes it a lasting one (see updatePrivateChat), as moving it into
-// another group does (PurpleTdClient::buddyMoved); so for a chat not joined (addTransientChat).
+// another group does, by adding them (PurpleTdClient::buddyMoved); so for a chat not joined
+// (addTransientChat).
 std::string addTransientBuddy(TdAccountData &account, const td::td_api::user &user)
 {
-    std::string buddyName = getPurpleBuddyName(user);
-    if (purple_find_buddy(account.purpleAccount, buddyName.c_str()))
+    std::string  buddyName = getPurpleBuddyName(user);
+    std::string  alias     = account.getDisplayName(user);
+    PurpleBuddy *buddy     = purple_find_buddy(account.purpleAccount, buddyName.c_str());
+    if (buddy) {
+        // Renamed, as a contact's buddy is (updatePrivateChat)
+        if (isTransientBuddy(buddy) && !alias.empty())
+            purple_blist_alias_buddy(buddy, alias.c_str());
         return buddyName;
+    }
     // TRANSLATOR: Buddy-list group, holding users written with though not contacts. It lasts until the program quits.
     const char  *groupName = _("Telegram: not in contacts");
     PurpleGroup *group     = purple_find_group(groupName);
@@ -581,9 +588,8 @@ std::string addTransientBuddy(TdAccountData &account, const td::td_api::user &us
         purple_blist_node_set_flags(PURPLE_BLIST_NODE(group), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
         purple_blist_add_group(group, NULL);
     }
-    std::string alias = account.getDisplayName(user);
     purple_debug_misc(config::pluginId, "Adding %s to the buddy list until the program quits\n", buddyName.c_str());
-    PurpleBuddy *buddy = purple_buddy_new(account.purpleAccount, buddyName.c_str(), alias.empty() ? NULL : alias.c_str());
+    buddy = purple_buddy_new(account.purpleAccount, buddyName.c_str(), alias.empty() ? NULL : alias.c_str());
     purple_blist_node_set_flags(PURPLE_BLIST_NODE(buddy), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
     purple_blist_add_buddy(buddy, NULL, group, NULL);
     return buddyName;
@@ -607,6 +613,9 @@ void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, con
         const ContactRequest *contactReq = account.findContactRequest(getId(user));
         PurpleGroup          *group      = (contactReq && !contactReq->groupName.empty()) ?
                                            purple_find_group(contactReq->groupName.c_str()) : NULL;
+        // Moved out of "Telegram: not in contacts" by the user (PurpleTdClient::buddyMoved), it stays
+        if (buddy && isMovedOutOfTransient(PURPLE_BLIST_NODE(buddy), purple_buddy_get_group(buddy)))
+            group = purple_buddy_get_group(buddy);
         if (group)
             purple_debug_misc(config::pluginId, "Adding into group %s\n", purple_group_get_name(group));
 

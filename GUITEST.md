@@ -268,7 +268,8 @@ With someone not a contact, whom you want as one, drag their buddy from "Telegra
 contacts" into a group of yours.
 
 * They are a contact now, in the phone app too, under the name they gave themselves, and our
-  phone number is not shown to them; the buddy stays in that group after a restart.
+  phone number is not shared with them (unless our privacy setting shows it to every contact);
+  the buddy stays in that group after a restart.
 
 ### M6. A message's link
 
