@@ -499,13 +499,31 @@ calls it `messageRichMessage`), such as those of СУВЕНІРНА КЕРАМІ
   links clickable; its pictures are shown in it, a collage's side by side, about 20 lines of the
   tab's text tall, or the biggest there is, with their captions.
 * With the network slow or cut (unplug it, or stop TDLib's traffic, as the message comes), the
-  message shows a placeholder; once the picture is here, the message is written again with it,
-  not said to be edited, and the log not added to.
+  message shows the picture's stand-in; once the picture is here, the message is written again
+  with it, not said to be edited, and logged once, with it.
 * A picture clicked opens it; a placeholder, of a video or a picture past the account's limit on
   what is fetched unasked, downloads its file, "Downloading …" said in the tab, and opens it.
 * Quoted in a reply, its first line of text stands for it.
 
 Since: such a post was shown as TDLib's description of it, cut short.
+
+### F8. Pictures as they come
+
+With the network slowed (a slow proxy, or pulled out for a moment), open a channel whose recent
+posts have photos, stickers, animated ones too, and videos with covers, not fetched on this
+computer before; then have the test group sent a photo, and the same animated sticker twice.
+
+* Each message shows at once, in order with those around it, each picture as a stand-in of its
+  size: blurred, as the phone shows it while loading, or a grey box; a sticker's clear.
+* As each picture comes, it takes its stand-in's place; what is below it does not move.
+* The log viewer has each message once, with its picture, also for one whose picture came after
+  the tab was closed (then as its stand-in), or did not come before Pidgin quit.
+* A photo past the account's limit on what is fetched unasked stays as its stand-in, with no
+  dialog or notice; its size links below fetch it.
+* Both messages of the animated sticker sent twice show its animation, the second at once.
+
+Since: a message waited for its pictures, holding back those after it, and a picture later still
+came at the tab's end as a line of its own.
 
 ## Groups
 
