@@ -1296,7 +1296,9 @@ static bool showsPictureComing(const IncomingMessage &fullMessage)
 #endif
 }
 
-static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId messageId);
+// Pictures left unfetched, which it is shown again to fetch, are left again if it cannot be
+static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId messageId,
+                                const std::vector<int32_t> &leftPictures = {});
 
 // Whether a picture of the message is fetched now, being within the limit on what is fetched
 // unasked: not where the chat's pictures are not, nor one that failed to be; such a one is fetched
@@ -1323,7 +1325,7 @@ void fetchViewedPictures(TdAccountData &account, PurpleConversation *conv, const
         // One that failed is tried again, quietly
         for (int32_t fileId: fileIds)
             account.setPictureFailed(fileId, false);
-        refreshShownMessage(account, getId(*chat), messageId);
+        refreshShownMessage(account, getId(*chat), messageId, fileIds);
     }
 }
 
@@ -1610,7 +1612,10 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
             prefetch = choosePrefetchVariant(account.purpleAccount, variants, fullMessage.inlineFileSizeLimit);
         } else if (!isSizeWithinLimit(fileSize, fullMessage.inlineFileSizeLimit))
             prefetch = nullptr;
-        if (prefetch && !(prefetch->local_ && prefetch->local_->is_downloading_completed_)) {
+        // Not where the chat's media are not fetched unasked: then only once clicked
+        if (prefetch && !(prefetch->local_ && prefetch->local_->is_downloading_completed_) &&
+            downloadsMedia(account.purpleAccount, findChatBlistNode(account, chat)))
+        {
             purple_debug_misc(config::pluginId, "Fetching %s (file id %d) in the background\n",
                               fileDesc.c_str(), (int)prefetch->id_);
             auto request = td::td_api::make_object<td::td_api::downloadFile>();
@@ -2686,6 +2691,16 @@ static bool isInlineDownload(const IncomingMessage &fullMessage,
 }
 
 // Not where the chat's media are not fetched unasked: the message is shown without the file then
+// A video's thumbnail is waited for, or it would land below messages that arrived after it, unless
+// it can be written over its stand-in; not where the chat's media are not fetched unasked
+static bool waitsForPreview(const IncomingMessage &fullMessage, const TdAccountData &account)
+{
+    if (!fullMessage.previewFileId || fullMessage.previewFetchDone || canShowImages() || !fullMessage.message)
+        return false;
+    const td::td_api::chat *chat = account.getChat(getChatId(*fullMessage.message));
+    return chat && downloadsMedia(account.purpleAccount, findChatBlistNode(account, *chat));
+}
+
 static bool inlineDownloadNeedAutoDl(const IncomingMessage &fullMessage, const td::td_api::file &file,
                                      const TdAccountData &account, const td::td_api::chat &chat)
 {
@@ -2837,9 +2852,7 @@ bool isMessageReady(const IncomingMessage &fullMessage, const TdAccountData &acc
         return false;
     }
 
-    // Wait for a video's thumbnail, or it would land below messages that arrived after it, unless
-    // it can be written over its stand-in
-    if (fullMessage.previewFileId && !fullMessage.previewFetchDone && !canShowImages())
+    if (waitsForPreview(fullMessage, account))
         return false;
 
     if (message.content_)
@@ -2864,13 +2877,14 @@ static void queueMessage(TdAccountData &account, const td::td_api::chat &chat,
 
 // A message shown already without a picture of its own come since, written again over itself where
 // Pidgin's tab shows it, not logged again, not said to be edited
-static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId messageId)
+static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId messageId,
+                                const std::vector<int32_t> &leftPictures)
 {
     auto request = td::td_api::make_object<td::td_api::getMessage>();
     request->chat_id_    = chatId.value();
     request->message_id_ = messageId.value();
     account.transceiver.sendQuery(std::move(request),
-        [&account, chatId, messageId](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
+        [&account, chatId, messageId, leftPictures](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
             const td::td_api::chat *chat = account.getChat(chatId);
             // Shown later, as it is by then
             if (account.pendingMessages.findPendingMessage(chatId, messageId))
@@ -2880,6 +2894,8 @@ static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId
                 !canReplaceMessage(findMessageConversation(account, *chat), messageId))
             {
                 logSentMessage(account, chatId, messageId, messageId);
+                for (int32_t fileId: leftPictures)
+                    account.leavePicture(chatId, messageId, fileId);
                 return;
             }
             purple_debug_misc(config::pluginId, "Showing message %" G_GINT64_FORMAT " again, with a picture come late\n",
@@ -2931,7 +2947,7 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
                                          getMessageWaitSeconds(fullMessage.messageInfo));
     }
 
-    if (fullMessage.previewFileId && !fullMessage.previewFetchDone && !canShowImages()) {
+    if (waitsForPreview(fullMessage, account)) {
         purple_debug_misc(config::pluginId, "Fetching video thumbnail for message %" G_GINT64_FORMAT "\n",
                           messageId.value());
         auto downloadReq = td::td_api::make_object<td::td_api::downloadFile>();

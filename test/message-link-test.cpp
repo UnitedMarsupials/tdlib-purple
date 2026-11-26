@@ -402,6 +402,17 @@ TEST_F(VideoSizesTest, None)
     verifyVideoMessage();
 }
 
+// Where the conversation's media are not fetched unasked, a video is not fetched beforehand either
+TEST_F(VideoSizesTest, NotDownloaded)
+{
+    purple_account_set_bool(account, "download-media", FALSE);
+    loginWithOneContact();
+
+    tgl.update(make_object<updateNewMessage>(makeVideoMessage()));
+    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
+    verifyVideoMessage();
+}
+
 // A cover too big to be fetched unasked in any of its sizes stays as its stand-in
 TEST_F(VideoSizesTest, CoverAboveLimit)
 {
