@@ -578,17 +578,19 @@ public:
     // A picture of the message being fetched, to be shown in it once it is; false if it was already
     bool                       startPictureFetch(ChatId chatId, MessageId messageId, int32_t fileId);
     void                       endPictureFetch(ChatId chatId, MessageId messageId, int32_t fileId);
+    bool                       isFetchingPictures(ChatId chatId, MessageId messageId) const;
     // A message to be shown again shortly, with pictures come, by the GLib source that will, which
     // goes with the account
     bool                       isRefreshDue(ChatId chatId, MessageId messageId) const;
     void                       setRefreshDue(ChatId chatId, MessageId messageId, guint sourceId);
-    // A picture of the message left as its stand-in, not fetched unasked or failing to be, to be
-    // fetched as it comes into view where pictures are; taken, all of the message's, as it does
-    void                       leavePicture(ChatId chatId, MessageId messageId, int32_t fileId);
-    bool                       takeLeftPictures(ChatId chatId, MessageId messageId, std::vector<int32_t> &fileIds);
-    // A picture that could not be fetched, left as its stand-in rather than tried again at once
-    void                       setPictureFailed(int32_t fileId, bool failed);
-    bool                       hasPictureFailed(int32_t fileId) const;
+    // The pictures of the message shown as their stand-ins, as it was last shown: whatever kept
+    // each from being here, it is fetched as the message comes into view where pictures are
+    void                       addStandIn(ChatId chatId, MessageId messageId, int32_t fileId);
+    void                       forgetStandIns(ChatId chatId, MessageId messageId);
+    std::vector<int32_t>       getStandIns(ChatId chatId, MessageId messageId) const;
+    // An animated sticker that could not be converted, shown by its thumbnail instead from then on
+    void                       setConversionFailed(int32_t fileId);
+    bool                       hasConversionFailed(int32_t fileId) const;
     // An animated sticker's animation, converted once, in the image store, by the sticker's file id;
     // and the messages waiting for it while it is: false if it was being converted already
     int                        getConvertedSticker(int32_t fileId) const;
@@ -685,9 +687,9 @@ private:
     std::vector<PendingEdit>                m_pendingEdits;
     std::map<ShownMessageKey, UnloggedSent> m_unloggedSent;
     std::set<std::tuple<ChatId, MessageId, int32_t>> m_pictureFetches;
-    std::set<int32_t>                       m_failedPictures;
+    std::set<int32_t>                       m_unconvertedStickers;
     std::map<ShownMessageKey, guint>        m_refreshesDue;
-    std::map<ShownMessageKey, std::vector<int32_t>> m_leftPictures;
+    std::map<ShownMessageKey, std::vector<int32_t>> m_standIns;
     std::map<int32_t, int>                  m_convertedStickers;
     std::map<int32_t, std::vector<std::pair<ChatId, MessageId>>> m_stickerConversions;
 };

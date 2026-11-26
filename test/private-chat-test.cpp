@@ -705,21 +705,18 @@ TEST_F(PrivateChatTest, PhotoNotDownloaded)
     client->messagesViewed(conv, {MessageId::fromString("1")});
     tgl.verifyNoRequests();
 
-    // The conversation's own setting: shown again, to fetch it
+    // The conversation's own setting: fetched as it is seen, then shown again with it
     PurpleBuddy *buddy = purple_find_buddy(account, purpleUserName(0).c_str());
     ASSERT_NE(nullptr, buddy);
     purple_blist_node_set_string(PURPLE_BLIST_NODE(buddy), "tdlib-download-media", "yes");
     client->messagesViewed(conv, {MessageId::fromString("1")});
-    uint64_t refresh = tgl.verifyRequest(getMessage(chatIds[0], 1));
-
-    // Not got: tried again as it is seen again
-    tgl.reply(refresh, makeError(400, "Message not found"));
-    client->messagesViewed(conv, {MessageId::fromString("1")});
+    uint64_t download = tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
+    tgl.reply(download, ::makeFile(fileId, 10000, TEST_SOURCE_DIR "/test.webp"));
     tgl.verifyRequest(getMessage(chatIds[0], 1));
 }
 
-// A photo that failed to be fetched is tried again as it is seen, though the message could not be
-// shown again meanwhile
+// A photo that failed to be fetched stays as its stand-in, the message not shown again, and is
+// tried again as it is seen, as one not fetched unasked is
 TEST_F(PrivateChatTest, PhotoFailed_TriedAgainAsSeen)
 {
     const int32_t date   = 10001;
@@ -739,14 +736,47 @@ TEST_F(PrivateChatTest, PhotoFailed_TriedAgainAsSeen)
     })[1];
 
     tgl.reply(download, makeError(400, "Download failed"));
-    uint64_t refresh = tgl.verifyRequest(getMessage(chatIds[0], 1));
-    tgl.reply(refresh, makeError(400, "Message not found"));
     tgl.verifyNoRequests();
+    prpl.verifyNoEvents();
 
     PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
     ASSERT_NE(nullptr, client);
     client->messagesViewed(conv, {MessageId::fromString("1")});
+    download = tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
+    tgl.reply(download, ::makeFile(fileId, 10000, TEST_SOURCE_DIR "/test.webp"));
     tgl.verifyRequest(getMessage(chatIds[0], 1));
+}
+
+// A message waiting to be logged with its photo is logged as it is shown, once the photo fails
+TEST_F(PrivateChatTest, PhotoFailed_Logged)
+{
+    const int32_t date   = 10001;
+    const int32_t fileId = 1234;
+    setLogMarkersEnabled(true);
+    loginWithOneContact();
+
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(::makeFile(fileId, 10000), 640, 480));
+    tgl.update(make_object<updateNewMessage>(makeMessage(1, userIds[0], chatIds[0], false, date,
+        makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText("photo"), false, false, false))));
+    prpl.verifyEvents(
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+        ServGotImEvent(connection, purpleUserName(0), "[photo]\nphoto<!--tdlib-message 1-->", PURPLE_MESSAGE_RECV,
+                       date)
+    );
+    uint64_t download = tgl.verifyRequests({
+        make_object<viewMessages>(chatIds[0], std::vector<int64_t>(1, 1), nullptr, true),
+        make_object<downloadFile>(fileId, 1, 0, 0, true)
+    })[1];
+    ASSERT_TRUE(takeLoggedMessages().empty());
+
+    tgl.reply(download, makeError(400, "Download failed"));
+    tgl.verifyNoRequests();
+    std::string logged = "<!--tdlib-log-only-->[photo]\nphoto<!--tdlib-message 1 " + std::to_string(date) +
+                         "--><!--/tdlib-log-only-->";
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0), logged, PURPLE_MESSAGE_RECV,
+                                             date));
+    ASSERT_EQ(std::vector<std::string>{logged}, takeLoggedMessages());
 }
 
 // A stranger's photo is not fetched unasked, whatever the account's setting

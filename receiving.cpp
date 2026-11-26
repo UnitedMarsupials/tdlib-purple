@@ -1298,21 +1298,17 @@ static bool showsPictureComing(const IncomingMessage &fullMessage)
 #endif
 }
 
-// Pictures left unfetched, which it is shown again to fetch, are left again if it cannot be
-static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId messageId,
-                                const std::vector<int32_t> &leftPictures = {});
+static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId messageId);
+static void fetchPicture(TdAccountData &account, ChatId chatId, MessageId messageId, int32_t fileId);
 
-// Whether a picture of the message is fetched now, being within the limit on what is fetched
-// unasked: not where the chat's pictures are not, nor one that failed to be; such a one is fetched
-// as it comes into view, where they are by then
+// A picture within the limit on what is fetched unasked, shown as its stand-in, until it is here:
+// whether it is fetched now, as it is where the chat's media are. Either way, it is fetched again
+// as the message comes into view, while it is still a stand-in.
 static bool fetchesPicture(TdAccountData &account, const td::td_api::chat &chat, MessageId messageId,
                            int32_t fileId)
 {
-    if (!account.hasPictureFailed(fileId) &&
-        downloadsChatMedia(account, chat))
-        return true;
-    account.leavePicture(getId(chat), messageId, fileId);
-    return false;
+    account.addStandIn(getId(chat), messageId, fileId);
+    return downloadsChatMedia(account, chat);
 }
 
 void fetchViewedPictures(TdAccountData &account, PurpleConversation *conv, const std::vector<MessageId> &messageIds)
@@ -1320,15 +1316,9 @@ void fetchViewedPictures(TdAccountData &account, PurpleConversation *conv, const
     const td::td_api::chat *chat = findConversationChat(account, conv);
     if (!chat || !downloadsChatMedia(account, *chat))
         return;
-    for (MessageId messageId: messageIds) {
-        std::vector<int32_t> fileIds;
-        if (!account.takeLeftPictures(getId(*chat), messageId, fileIds))
-            continue;
-        // One that failed is tried again, quietly
-        for (int32_t fileId: fileIds)
-            account.setPictureFailed(fileId, false);
-        refreshShownMessage(account, getId(*chat), messageId, fileIds);
-    }
+    for (MessageId messageId: messageIds)
+        for (int32_t fileId: account.getStandIns(getId(*chat), messageId))
+            fetchPicture(account, getId(*chat), messageId, fileId);
 }
 
 // For a picture shown as its stand-in, not to be fetched unasked: a link that fetches it, where
@@ -1391,8 +1381,9 @@ static void refreshShownMessageSoon(TdAccountData &account, ChatId chatId, Messa
     account.setRefreshDue(chatId, messageId, sourceId);
 }
 
-// Fetched for the message, which is shown again once it is here, or once it cannot be, then left
-// as its stand-in until it is asked for, rather than tried again and again
+// Fetched for the message, which is shown again once it is here. One not got is left as its
+// stand-in, to be tried again as the message comes into view: the message, unchanged, is not shown
+// again, but logged, if it waited for that, once none of its pictures is still coming.
 static void fetchPicture(TdAccountData &account, ChatId chatId, MessageId messageId, int32_t fileId)
 {
     if (!account.startPictureFetch(chatId, messageId, fileId))
@@ -1408,15 +1399,14 @@ static void fetchPicture(TdAccountData &account, ChatId chatId, MessageId messag
     account.transceiver.sendQuery(std::move(request),
         [&account, chatId, messageId, fileId](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
             account.endPictureFetch(chatId, messageId, fileId);
-            bool failed = getDownloadPath(object).empty();
-            account.setPictureFailed(fileId, failed);
-            // Left, to be tried again as it is seen, even if it is not shown again meanwhile
-            if (failed) {
-                account.leavePicture(chatId, messageId, fileId);
+            if (!getDownloadPath(object).empty())
+                refreshShownMessageSoon(account, chatId, messageId);
+            else {
                 purple_debug_misc(config::pluginId, "Picture (file id %d) of message %" G_GINT64_FORMAT
                                   " not fetched\n", (int)fileId, messageId.value());
+                if (!account.isFetchingPictures(chatId, messageId) && !account.isRefreshDue(chatId, messageId))
+                    logSentMessage(account, chatId, messageId, messageId);
             }
-            refreshShownMessageSoon(account, chatId, messageId);
         });
 }
 
@@ -1457,7 +1447,7 @@ static void convertSticker(TdAccountData &account, const TgMessageInfo &message,
 void stickerConverted(TdAccountData &account, int32_t fileId, int imageId)
 {
     if (!imageId)
-        account.setPictureFailed(fileId, true);
+        account.setConversionFailed(fileId);
     std::vector<std::pair<ChatId, MessageId>> waiting;
     account.endStickerConversion(fileId, imageId, waiting);
     for (const auto &message: waiting)
@@ -1482,7 +1472,7 @@ static void showSticker(const td::td_api::chat &chat, IncomingMessage &fullMessa
         return;
     }
     bool convert = shouldConvertAnimatedSticker(message, account.purpleAccount) &&
-                   !(here && account.hasPictureFailed(file.id_));
+                   !(here && account.hasConversionFailed(file.id_));
     if (here && convert) {
         int converted = account.getConvertedSticker(file.id_);
         if (converted) {
@@ -2207,6 +2197,8 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
         hideMessage(conv, getId(message));
     }
     purple_debug_misc(config::pluginId, "Displaying message %" G_GINT64_FORMAT "\n", message.id_);
+    // Its stand-ins, as it is shown now
+    account.forgetStandIns(getId(chat), getId(message));
 
     TgMessageInfo &messageInfo = fullMessage.messageInfo;
     messageInfo.repliedMessage = std::move(fullMessage.repliedMessage);
@@ -2889,28 +2881,22 @@ static void queueMessage(TdAccountData &account, const td::td_api::chat &chat,
 
 // A message shown already without a picture of its own come since, written again over itself where
 // Pidgin's tab shows it, not logged again, not said to be edited
-static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId messageId,
-                                const std::vector<int32_t> &leftPictures)
+static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId messageId)
 {
     auto request = td::td_api::make_object<td::td_api::getMessage>();
     request->chat_id_    = chatId.value();
     request->message_id_ = messageId.value();
     account.transceiver.sendQuery(std::move(request),
-        [&account, chatId, messageId, leftPictures](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
+        [&account, chatId, messageId](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
             const td::td_api::chat *chat = account.getChat(chatId);
-            // Shown later, as it is by then; what it leaves is left again, to be tried as it is seen
-            if (account.pendingMessages.findPendingMessage(chatId, messageId)) {
-                for (int32_t fileId: leftPictures)
-                    account.leavePicture(chatId, messageId, fileId);
+            // Shown later, as it is by then
+            if (account.pendingMessages.findPendingMessage(chatId, messageId))
                 return;
-            }
             // With nowhere to show it again, it is logged as it was shown, if it waited for that
             if (!chat || !object || (object->get_id() != td::td_api::message::ID) ||
                 !canReplaceMessage(findMessageConversation(account, *chat), messageId))
             {
                 logSentMessage(account, chatId, messageId, messageId);
-                for (int32_t fileId: leftPictures)
-                    account.leavePicture(chatId, messageId, fileId);
                 return;
             }
             purple_debug_misc(config::pluginId, "Showing message %" G_GINT64_FORMAT " again, with a picture come late\n",

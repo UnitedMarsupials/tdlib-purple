@@ -4,6 +4,7 @@
 #include "format.h"
 #include <purple.h>
 #include <algorithm>
+#include <limits>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -1232,6 +1233,12 @@ void TdAccountData::endPictureFetch(ChatId chatId, MessageId messageId, int32_t 
     m_pictureFetches.erase(std::make_tuple(chatId, messageId, fileId));
 }
 
+bool TdAccountData::isFetchingPictures(ChatId chatId, MessageId messageId) const
+{
+    auto it = m_pictureFetches.lower_bound(std::make_tuple(chatId, messageId, std::numeric_limits<int32_t>::min()));
+    return (it != m_pictureFetches.end()) && (std::get<0>(*it) == chatId) && (std::get<1>(*it) == messageId);
+}
+
 bool TdAccountData::isRefreshDue(ChatId chatId, MessageId messageId) const
 {
     return m_refreshesDue.count(ShownMessageKey(chatId, messageId)) != 0;
@@ -1246,34 +1253,32 @@ void TdAccountData::setRefreshDue(ChatId chatId, MessageId messageId, guint sour
         m_refreshesDue.erase(ShownMessageKey(chatId, messageId));
 }
 
-void TdAccountData::leavePicture(ChatId chatId, MessageId messageId, int32_t fileId)
+void TdAccountData::addStandIn(ChatId chatId, MessageId messageId, int32_t fileId)
 {
-    std::vector<int32_t> &left = m_leftPictures[ShownMessageKey(chatId, messageId)];
-    if (std::find(left.begin(), left.end(), fileId) == left.end())
-        left.push_back(fileId);
+    std::vector<int32_t> &standIns = m_standIns[ShownMessageKey(chatId, messageId)];
+    if (std::find(standIns.begin(), standIns.end(), fileId) == standIns.end())
+        standIns.push_back(fileId);
 }
 
-bool TdAccountData::takeLeftPictures(ChatId chatId, MessageId messageId, std::vector<int32_t> &fileIds)
+void TdAccountData::forgetStandIns(ChatId chatId, MessageId messageId)
 {
-    auto it = m_leftPictures.find(ShownMessageKey(chatId, messageId));
-    if (it == m_leftPictures.end())
-        return false;
-    fileIds = std::move(it->second);
-    m_leftPictures.erase(it);
-    return true;
+    m_standIns.erase(ShownMessageKey(chatId, messageId));
 }
 
-void TdAccountData::setPictureFailed(int32_t fileId, bool failed)
+std::vector<int32_t> TdAccountData::getStandIns(ChatId chatId, MessageId messageId) const
 {
-    if (failed)
-        m_failedPictures.insert(fileId);
-    else
-        m_failedPictures.erase(fileId);
+    auto it = m_standIns.find(ShownMessageKey(chatId, messageId));
+    return (it != m_standIns.end()) ? it->second : std::vector<int32_t>();
 }
 
-bool TdAccountData::hasPictureFailed(int32_t fileId) const
+void TdAccountData::setConversionFailed(int32_t fileId)
 {
-    return m_failedPictures.count(fileId) != 0;
+    m_unconvertedStickers.insert(fileId);
+}
+
+bool TdAccountData::hasConversionFailed(int32_t fileId) const
+{
+    return m_unconvertedStickers.count(fileId) != 0;
 }
 
 TdAccountData::~TdAccountData()
