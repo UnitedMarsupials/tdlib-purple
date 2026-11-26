@@ -2389,6 +2389,49 @@ TEST_F(PrivateChatTest, RichMessagePictures)
 }
 #endif
 
+#if TDLIB_API_RICH_MESSAGE && !defined(NoPidgin)
+// A message waiting to be logged with its pictures keeps those shown already in the image store,
+// until it is logged, here as the account goes
+TEST_F(PrivateChatTest, RichMessagePicturesHeldForLog)
+{
+    const int32_t date = 10001;
+    purple_account_set_string(account, "media-size-threshold", "0");
+    setLogMarkersEnabled(true);
+    loginWithOneContact();
+
+    auto collage = make_object<pageBlockCollage>();
+    for (bool here: {true, false}) {
+        auto photoBlock = make_object<pageBlockPhoto>();
+        photoBlock->photo_ = make_object<photo>();
+        photoBlock->photo_->sizes_.push_back(makePhotoSize(::makeFile(here ? 101 : 102, 10000,
+                                                                       here ? TEST_SOURCE_DIR "/test.webp" : ""),
+                                                           640, 480));
+        collage->blocks_.push_back(std::move(photoBlock));
+    }
+    auto rich = make_object<richMessage>();
+    rich->blocks_.push_back(std::move(collage));
+    auto content = make_object<messageRichMessage>();
+    content->message_ = std::move(rich);
+    tgl.update(make_object<updateNewMessage>(makeMessage(1, userIds[0], chatIds[0], false, date, std::move(content))));
+    int shown = getLastImgstoreId();
+    prpl.verifyEvents(
+        NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
+        ServGotImEvent(connection, purpleUserName(0),
+                       "<img id=\"" + std::to_string(shown) + "\"> [photo]<!--tdlib-message 1-->",
+                       (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES), date)
+    );
+    tgl.verifyRequests({
+        make_object<viewMessages>(chatIds[0], std::vector<int64_t>(1, 1), nullptr, true),
+        make_object<downloadFile>(102, 1, 0, 0, true)
+    });
+    ASSERT_EQ(1, getImageRefs(shown));
+
+    pluginInfo().close(connection);
+    prpl.discardEvents();
+    ASSERT_EQ(0, getImageRefs(shown));
+}
+#endif
+
 #if TDLIB_API_RICH_MESSAGE
 // A picture not here yet is shown once it is, the message written again over itself, not said to
 // be edited

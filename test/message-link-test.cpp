@@ -402,6 +402,25 @@ TEST_F(VideoSizesTest, None)
     verifyVideoMessage();
 }
 
+// A cover too big to be fetched unasked in any of its sizes stays as its stand-in
+TEST_F(VideoSizesTest, CoverAboveLimit)
+{
+    const int32_t coverIds[2] = {1311, 1312};
+    purple_account_set_string(account, "prefetch-videos", "none");
+    purple_account_set_string(account, "media-size-threshold", "0.5");
+    loginWithOneContact();
+
+    object_ptr<message> msg = makeVideoMessage();
+    auto &video = static_cast<messageVideo &>(*msg->content_);
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(::makeFile(coverIds[0], 600000), 320, 180));
+    sizes.push_back(makePhotoSize(::makeFile(coverIds[1], 900000), 1280, 720));
+    video.cover_ = makePhotoWithSizes(std::move(sizes));
+    tgl.update(make_object<updateNewMessage>(std::move(msg)));
+    prpl.discardEvents();
+    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
+}
+
 TEST_F(VideoSizesTest, CoverPreview)
 {
     const int32_t thumbnailId = 1310;
