@@ -551,7 +551,8 @@ bool isTransientBuddy(PurpleBuddy *buddy)
 
 // A conversation with a user goes by their id, which Pidgin shows by the name of the user's buddy:
 // one not a contact gets a buddy for as long as the program runs, in a group of its own; neither is
-// saved. Becoming a contact makes it a lasting one (see updatePrivateChat).
+// saved. Becoming a contact makes it a lasting one (see updatePrivateChat), as moving it into
+// another group does (PurpleTdClient::buddyMoved).
 std::string addTransientBuddy(TdAccountData &account, const td::td_api::user &user)
 {
     std::string buddyName = getPurpleBuddyName(user);

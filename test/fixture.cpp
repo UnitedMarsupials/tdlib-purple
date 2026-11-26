@@ -187,15 +187,18 @@ void CommTest::loginWithOneContact()
     );
 }
 
+// One known by phone number, as contacts are
 object_ptr<updateUser> CommTest::standardUpdateUser(unsigned index)
 {
-    return make_object<updateUser>(makeUser(
+    auto update = make_object<updateUser>(makeUser(
         userIds[index],
         userFirstNames[index],
         userLastNames[index],
         userPhones[index],
         make_object<userStatusOffline>()
     ));
+    update->user_->is_contact_ = true;
+    return update;
 }
 
 object_ptr<updateUser> CommTest::standardUpdateUserNoPhone(unsigned index)

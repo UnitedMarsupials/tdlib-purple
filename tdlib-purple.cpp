@@ -694,6 +694,14 @@ static void tgprpl_request_delete_contact (PurpleConnection *gc, PurpleBuddy *bu
         tdClient->removeContactAndPrivateChat(purple_buddy_get_name(buddy), !isTransientBuddy(buddy));
 }
 
+// Dragged into another group, in Pidgin; the buddy may not have moved yet
+static void tgprpl_group_buddy (PurpleConnection *gc, const char *who, const char *oldGroup, const char *newGroup)
+{
+    PurpleTdClient *tdClient = getTdClient(purple_connection_get_account(gc));
+    if (tdClient && who && newGroup)
+        tdClient->buddyMoved(who, newGroup);
+}
+
 static std::array<const char *, 3> invitePrefixes {
     "https://t.me/joinchat/",
     "https://telegram.me/joinchat/",
@@ -1217,7 +1225,7 @@ static PurplePluginProtocolInfo prpl_info = {
     .get_cb_info              = NULL,
     .get_cb_away              = NULL,
     .alias_buddy              = tgprpl_rename_buddy,
-    .group_buddy              = NULL,
+    .group_buddy              = tgprpl_group_buddy,
     .rename_group             = renameGroup,
     .buddy_free               = NULL,
     .convo_closed             = NULL,

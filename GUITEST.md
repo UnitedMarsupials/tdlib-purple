@@ -260,9 +260,15 @@ When a stranger writes first, as spammers do, right-click their message, and the
 
 * The message's menu has "Report" and their name; the buddy's, "Report…".
 * Chosen, it asks nothing: the tab says "Reported to Telegram's moderators.", and the buddy
-  leaves "Telegram: not in contacts", as the offer is gone.
+  stays under "Telegram: not in contacts", also after a restart, and after we answer them.
 * Before reporting, restart Pidgin: the buddy is under "Telegram: not in contacts" again, and
   opens their chat with its history.
+
+With someone not a contact, whom you want as one, drag their buddy from "Telegram: not in
+contacts" into a group of yours.
+
+* They are a contact now, in the phone app too, under the name they gave themselves, and our
+  phone number is not shown to them; the buddy stays in that group after a restart.
 
 ### M6. A message's link
 

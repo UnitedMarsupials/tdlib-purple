@@ -111,7 +111,8 @@ object_ptr<updateChatReadInbox> makeUpdateChatReadInbox(int64_t chatId, int64_t 
 // Requests and replies whose shape depends on the TDLib version (see buildopt.h).
 object_ptr<importContacts> makeImportContacts(const std::string &phoneNumber);
 object_ptr<addContact> makeAddContact(int64_t userId, const std::string &phoneNumber,
-                                      const std::string &firstName, const std::string &lastName);
+                                      const std::string &firstName, const std::string &lastName,
+                                      bool sharePhoneNumber = true);
 object_ptr<addProxy> makeAddProxy(const std::string &server, int32_t port,
                                   object_ptr<ProxyType> &&type);
 object_ptr<Object> makeAddedProxy(int32_t id, bool isEnabled);

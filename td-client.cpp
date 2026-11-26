@@ -1460,7 +1460,7 @@ void PurpleTdClient::onChatListReady()
 
     for (const td::td_api::chat *chat: chats) {
         const td::td_api::user *user = m_data.getUserByPrivateChat(*chat);
-        if (user && isChatInContactList(*chat, user) && !isDeletedUser(*user)) {
+        if (user && isChatInContactList(m_data, *chat, user) && !isDeletedUser(*user)) {
             std::string userName = getPurpleBuddyName(*user);
             purple_prpl_got_user_status(m_account, userName.c_str(),
                                         getPurpleStatusId(*user->status_), NULL);
@@ -3593,12 +3593,12 @@ void PurpleTdClient::avatarDownloadResponse(uint64_t requestId, td::td_api::obje
                 m_data.updateSmallProfilePhoto(request->userId, std::move(file));
                 const td::td_api::user *user = m_data.getUser(request->userId);
                 const td::td_api::chat *chat = m_data.getPrivateChatByUserId(request->userId);
-                if (user && chat && isChatInContactList(*chat, user))
+                if (user && chat && isChatInContactList(m_data, *chat, user))
                     updatePrivateChat(m_data, chat, *user);
             } else if (request->chatId.valid()) {
                 m_data.updateSmallChatPhoto(request->chatId, std::move(file));
                 const td::td_api::chat *chat = m_data.getPrivateChatByUserId(request->userId);
-                if (chat && isChatInContactList(*chat, nullptr)) {
+                if (chat && isChatInContactList(m_data, *chat, nullptr)) {
                     BasicGroupId basicGroupId = getBasicGroupId(*chat);
                     SupergroupId supergroupId = getSupergroupId(*chat);
                     if (basicGroupId.valid())
@@ -3676,7 +3676,7 @@ void PurpleTdClient::updateChat(const td::td_api::chat *chat)
 
     // A group we are not a member of stays out of the buddy list, but is still tracked above, so
     // that joining it brings it in rather than leaving it invisible for the rest of the session.
-    bool showInBuddyList = isChatInContactList(*chat, privateChatUser);
+    bool showInBuddyList = isChatInContactList(m_data, *chat, privateChatUser);
     if ((basicGroupId.valid() || supergroupId.valid()) && !m_data.isGroupChatWithMembership(*chat))
         showInBuddyList = false;
 
@@ -3707,12 +3707,11 @@ void PurpleTdClient::updateUserInfo(const td::td_api::user &user, const td::td_a
     else {
         restoreDeletedBuddy(m_data, user);
         if (privateChat) {
-            if (isChatInContactList(*privateChat, &user)) {
+            if (isChatInContactList(m_data, *privateChat, &user)) {
                 downloadProfilePhoto(user);
                 updatePrivateChat(m_data, privateChat, user);
             } else if (!privateChat->positions_.empty())
-                // A stranger's, kept from it while it offers to report them: reachable all the same,
-                // after a restart too, as when they write
+                // Not a contact's: reachable all the same, after a restart too, as when they write
                 addTransientBuddy(m_data, user);
             else
                 removePrivateChat(m_data, *privateChat);
@@ -3888,6 +3887,27 @@ void PurpleTdClient::addContact(const std::string &purpleName, const std::string
     }
 }
 
+// Someone not a contact, moved by the user out of "Telegram: not in contacts" into a group of theirs:
+// kept there, and added to contacts, under their own name, without our phone number given away to
+// someone who may have been a stranger. Our own moves leave a buddy saved before moving it, or are
+// of deleted accounts.
+void PurpleTdClient::buddyMoved(const char *buddyName, const char *groupName)
+{
+    PurpleBuddy *buddy = purple_find_buddy(m_account, buddyName);
+    PurpleGroup *group = purple_find_group(groupName);
+    if (!isTransientBuddy(buddy) || !group ||
+        (purple_blist_node_get_flags(PURPLE_BLIST_NODE(group)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE))
+        return;
+    const td::td_api::user *user = m_data.getUser(purpleBuddyNameToUserId(buddyName));
+    if (!user || user->is_contact_ || isDeletedUser(*user))
+        return;
+
+    purple_debug_misc(config::pluginId, "Keeping %s in the buddy list\n", buddyName);
+    purple_blist_node_set_flags(PURPLE_BLIST_NODE(buddy), PurpleBlistNodeFlags(
+        purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & ~PURPLE_BLIST_NODE_FLAG_NO_SAVE));
+    addContactById(getId(*user), "", makeBasicDisplayName(*user), groupName, false);
+}
+
 void PurpleTdClient::addBuddySearchChatResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object)
 {
     std::unique_ptr<ContactRequest> request = m_data.getPendingRequest<ContactRequest>(requestId);
@@ -3913,7 +3933,8 @@ void PurpleTdClient::addBuddySearchChatResponse(uint64_t requestId, td::td_api::
 
 static td::td_api::object_ptr<td::td_api::addContact> makeAddContact(UserId userId, const std::string &phoneNumber,
                                                                     const std::string &firstName,
-                                                                    const std::string &lastName)
+                                                                    const std::string &lastName,
+                                                                    bool sharePhoneNumber)
 {
     auto addContact = td::td_api::make_object<td::td_api::addContact>();
 #if TDLIB_API_IMPORTED_CONTACT
@@ -3926,18 +3947,19 @@ static td::td_api::object_ptr<td::td_api::addContact> makeAddContact(UserId user
     addContact->contact_->phone_number_ = phoneNumber;
     addContact->contact_->first_name_   = firstName;
     addContact->contact_->last_name_    = lastName;
-    addContact->share_phone_number_     = true;
+    addContact->share_phone_number_     = sharePhoneNumber;
     return addContact;
 }
 
 void PurpleTdClient::addContactById(UserId userId, const std::string &phoneNumber, const std::string &alias,
-                                    const std::string &groupName)
+                                    const std::string &groupName, bool sharePhoneNumber)
 {
     purpleDebug("Adding contact: id={} alias={}", {std::to_string(userId.value()), alias});
     std::string firstName, lastName;
     getNamesFromAlias(alias.c_str(), firstName, lastName);
 
-    uint64_t newRequestId = m_transceiver.sendQuery(makeAddContact(userId, phoneNumber, firstName, lastName),
+    uint64_t newRequestId = m_transceiver.sendQuery(makeAddContact(userId, phoneNumber, firstName, lastName,
+                                                                   sharePhoneNumber),
                                                     &PurpleTdClient::addContactResponse);
     m_data.addPendingRequest<ContactRequest>(newRequestId, phoneNumber, alias, groupName, userId);
 }
@@ -3989,7 +4011,7 @@ void PurpleTdClient::addContactCreatePrivateChatResponse(uint64_t requestId, td:
     if (object && (object->get_id() == td::td_api::chat::ID)) {
         const td::td_api::chat &chat = static_cast<const td::td_api::chat &>(*object);
         const td::td_api::user *user = m_data.getUserByPrivateChat(chat);
-        if (user && !isChatInContactList(chat, user)) {
+        if (user && !isChatInContactList(m_data, chat, user)) {
             // Normally, the user will become a contact and this won't happen. But it does happen
             // when adding BotFather, for example. Nothing will be added to buddy list, so open chat
             // window just to make something happen, with a buddy until the program quits.
@@ -4017,7 +4039,7 @@ void PurpleTdClient::renameContact(const char *buddyName, const char *newAlias)
 
     std::string firstName, lastName;
     getNamesFromAlias(newAlias, firstName, lastName);
-    m_transceiver.sendQuery(makeAddContact(userId, "", firstName, lastName), nullptr);
+    m_transceiver.sendQuery(makeAddContact(userId, "", firstName, lastName, true), nullptr);
 }
 
 // Its messages and files that TDLib keeps here, the chat taken out of the chat list; Telegram keeps
