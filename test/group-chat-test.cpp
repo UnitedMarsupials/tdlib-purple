@@ -69,6 +69,38 @@ TEST_F(GroupChatTest, BasicGroupChatAppearsAfterLogin)
     ));
 }
 
+// A group's picture, once downloaded, is the entry's
+TEST_F(GroupChatTest, BasicGroupPhoto)
+{
+    constexpr int32_t fileId = 1234;
+    const std::string path   = std::string(TEST_SOURCE_DIR) + "/test.webp";
+    login();
+
+    tgl.update(make_object<updateBasicGroup>(make_object<basicGroup>(
+        groupId, 2, make_object<chatMemberStatusMember>(), true, 0
+    )));
+    auto chat   = makeChat(groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0);
+    chat->photo_ = make_object<chatPhotoInfo>();
+    chat->photo_->small_ = makeFile(fileId, 10000);
+    chat->photo_->big_   = makeFile(fileId + 1, 100000);
+    tgl.update(make_object<updateNewChat>(std::move(chat)));
+    uint64_t downloadId = tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
+    // Asked again, as the chat is updated before TDLib says it is being downloaded
+    tgl.update(makeUpdateChatListMain(groupChatId));
+    tgl.verifyRequests({
+        make_object<downloadFile>(fileId, 1, 0, 0, true),
+        make_object<getBasicGroupFullInfo>(groupId)
+    });
+    prpl.verifyEvents(AddChatEvent(groupChatPurpleName, groupChatTitle, account, nullptr, nullptr));
+
+    gchar *data = nullptr;
+    gsize  size = 0;
+    ASSERT_TRUE(g_file_get_contents(path.c_str(), &data, &size, nullptr));
+    tgl.reply(downloadId, makeFile(fileId, size, path));
+    prpl.verifyEvents(SetUserPhotoEvent(account, groupChatPurpleName, data, size));
+    g_free(data);
+}
+
 TEST_F(GroupChatTest, ExistingBasicGroupChatAtLogin)
 {
     GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);

@@ -74,6 +74,13 @@ static void compare(const AliasBuddyEvent &actual, const AliasBuddyEvent &expect
     COMPARE(newAlias);
 }
 
+static void compare(const SetUserPhotoEvent &actual, const SetUserPhotoEvent &expected)
+{
+    COMPARE(account);
+    COMPARE(username);
+    ASSERT_TRUE(actual.data == expected.data) << "Wrong picture for " << actual.username;
+}
+
 static void compare(const ConnectionErrorEvent &actual, const ConnectionErrorEvent &expected)
 {
     COMPARE(connection);
@@ -406,6 +413,7 @@ static void compareEvents(const PurpleEvent &actual, const PurpleEvent &expected
         C(RoomlistInProgress)
         C(RoomlistAddRoom)
         C(RequestPassword)
+        C(SetUserPhoto)
         default:
             ASSERT_TRUE(false) << "Unsupported libpurple event " << actual.toString();
     };

@@ -3599,8 +3599,9 @@ void PurpleTdClient::avatarDownloadResponse(uint64_t requestId, td::td_api::obje
                     updatePrivateChat(m_data, chat, *user);
             } else if (request->chatId.valid()) {
                 m_data.updateSmallChatPhoto(request->chatId, std::move(file));
-                const td::td_api::chat *chat = m_data.getPrivateChatByUserId(request->userId);
-                if (chat && isChatInContactList(m_data, *chat, nullptr)) {
+                // A group's entry is made, or not, by whether we are a member (updateGroupChat)
+                const td::td_api::chat *chat = m_data.getChat(request->chatId);
+                if (chat) {
                     BasicGroupId basicGroupId = getBasicGroupId(*chat);
                     SupergroupId supergroupId = getSupergroupId(*chat);
                     if (basicGroupId.valid())

@@ -587,8 +587,8 @@ struct SetUserPhotoEvent: PurpleEvent {
     std::string    username;
     std::vector<uint8_t> data;
 
-    SetUserPhotoEvent(PurpleAccount *, const std::string &username, const void *data, size_t datalen)
-    : PurpleEvent(PurpleEventType::SetUserPhoto), username(username)
+    SetUserPhotoEvent(PurpleAccount *account, const std::string &username, const void *data, size_t datalen)
+    : PurpleEvent(PurpleEventType::SetUserPhoto), account(account), username(username)
     {
         this->data.resize(datalen);
         memmove(this->data.data(), data, datalen);
