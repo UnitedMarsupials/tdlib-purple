@@ -1632,7 +1632,7 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
     }
 
     // Where the chat's media are not fetched unasked, a file not here is let be, as one too big is
-    bool downloads = downloadsMedia(account.purpleAccount, findChatBlistNode(account, chat));
+    bool downloads = fullMessage.downloadsMedia;
     if (file.local_ && file.local_->is_downloading_completed_) {
         autoDownload = true;
         notice.clear();
@@ -2588,7 +2588,7 @@ static const td::td_api::file *getVideoPreview(const td::td_api::MessageContent 
     return chosen;
 }
 
-static bool waitsForPreview(const IncomingMessage &fullMessage, const TdAccountData &account);
+static bool waitsForPreview(const IncomingMessage &fullMessage);
 
 void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td_api::message> message,
                      IncomingMessage &fullMessage, const TdAccountData &account)
@@ -2671,7 +2671,8 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
     }
 
     fullMessage.message = std::move(message);
-    fullMessage.previewWaited = waitsForPreview(fullMessage, account);
+    fullMessage.downloadsMedia = downloadsMedia(account.purpleAccount, findChatBlistNode(account, chat));
+    fullMessage.previewWaited = waitsForPreview(fullMessage);
 }
 
 static const td::td_api::file *getSelectedPhotoSize(const IncomingMessage &fullMessage,
@@ -2700,22 +2701,18 @@ static bool isInlineDownload(const IncomingMessage &fullMessage,
 // A video's thumbnail is waited for, or it would land below messages that arrived after it, unless
 // it can be written over its stand-in; not where the chat's media are not fetched unasked. Decided
 // as the message is received, so that one held back has its thumbnail asked for.
-static bool waitsForPreview(const IncomingMessage &fullMessage, const TdAccountData &account)
+static bool waitsForPreview(const IncomingMessage &fullMessage)
 {
-    if (!fullMessage.previewFileId || fullMessage.previewFetchDone || canShowImages() || !fullMessage.message)
-        return false;
-    const td::td_api::chat *chat = account.getChat(getChatId(*fullMessage.message));
-    return chat && downloadsMedia(account.purpleAccount, findChatBlistNode(account, *chat));
+    return fullMessage.previewFileId && !fullMessage.previewFetchDone && !canShowImages() &&
+           fullMessage.downloadsMedia;
 }
 
-static bool inlineDownloadNeedAutoDl(const IncomingMessage &fullMessage, const td::td_api::file &file,
-                                     const TdAccountData &account, const td::td_api::chat &chat)
+static bool inlineDownloadNeedAutoDl(const IncomingMessage &fullMessage, const td::td_api::file &file)
 {
     unsigned fileSize = getFileSizeKb(file);
 
     return !((file.local_ && file.local_->is_downloading_completed_)) &&
-           isSizeWithinLimit(fileSize, fullMessage.inlineFileSizeLimit) &&
-           downloadsMedia(account.purpleAccount, findChatBlistNode(account, chat));
+           isSizeWithinLimit(fileSize, fullMessage.inlineFileSizeLimit) && fullMessage.downloadsMedia;
 }
 
 static bool isFileMessageReady(const IncomingMessage &fullMessage, ChatId chatId,
@@ -2734,7 +2731,7 @@ static bool isFileMessageReady(const IncomingMessage &fullMessage, ChatId chatId
         else
             // Files above limit will either be ignored (in which case, message is ready)
             // or requested (in which case, don't try do display in order)
-            return fullMessage.inlineDownloadTimeout || !inlineDownloadNeedAutoDl(fullMessage, file, account, *chat);
+            return fullMessage.inlineDownloadTimeout || !inlineDownloadNeedAutoDl(fullMessage, file);
     } else
         // Standard libpurple transfer will be used, nothing to postpone
         return true;
@@ -2976,7 +2973,7 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
     if (fileInfo.file && message.content_ && chat && isInlineDownload(fullMessage, *message.content_, *chat) &&
         !showsPictureComing(fullMessage))
     {
-        if (inlineDownloadNeedAutoDl(fullMessage, *fileInfo.file, account, *chat) && !linksToMessage(fullMessage)) {
+        if (inlineDownloadNeedAutoDl(fullMessage, *fileInfo.file) && !linksToMessage(fullMessage)) {
             // TgMessageInfo on fullMessage has replyMessage=NULL which will be copied onto DownloadRequest.
             // If message leaves PendingMessageQueue while download is still active, there's probably
             // a replyMessage on IncomingMessage by then, and it needs to be moved over to DownloadRequest.

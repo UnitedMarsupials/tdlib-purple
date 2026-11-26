@@ -287,6 +287,9 @@ struct IncomingMessage {
     bool     previewFetchDone;
     // Whether the video's thumbnail is fetched and waited for, as decided once it is received
     bool     previewWaited = false;
+    // Whether the chat's media were fetched unasked when it was received: what is fetched for it, and
+    // waited for, goes by that, not by the setting changed meanwhile
+    bool     downloadsMedia = true;
     bool     inlineDownloadComplete;
     bool     inlineDownloadTimeout;
 

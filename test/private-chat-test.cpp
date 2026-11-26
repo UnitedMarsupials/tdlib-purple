@@ -758,6 +758,40 @@ TEST_F(PrivateChatTest, PhotoNotDownloaded)
                                PURPLE_MESSAGE_SYSTEM, date)
     );
 }
+
+// Turned on while such a photo's message waits for what it replies to, the message is still shown
+// without it, rather than waiting for a download never begun
+TEST_F(PrivateChatTest, PhotoNotDownloaded_TurnedOnMeanwhile)
+{
+    const int32_t date     = 10002;
+    const int32_t fileId   = 1234;
+    const int64_t msgId    = 2;
+    const int64_t srcMsgId = 1;
+    purple_account_set_bool(account, "download-media", FALSE);
+    loginWithOneContact();
+
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(::makeFile(fileId, 10000), 640, 480));
+    object_ptr<message> msg = makeMessage(msgId, userIds[0], chatIds[0], false, date,
+        makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText("photo"), false, false, false));
+    msg->reply_to_ = makeReplyTo(srcMsgId);
+    tgl.update(make_object<updateNewMessage>(std::move(msg)));
+    tgl.verifyRequest(getMessage(chatIds[0], srcMsgId));
+    prpl.verifyNoEvents();
+
+    purple_account_set_bool(account, "download-media", TRUE);
+    tgl.reply(makeError(404, "Not found"));
+    tgl.verifyRequest(viewMessages(chatIds[0], {msgId}, nullptr, true));
+    prpl.verifyEvents(
+        ServGotImEvent(connection, purpleUserName(0),
+                       "<b>&gt; Unknown user wrote:</b>\n&gt; [message unavailable]\nphoto",
+                       PURPLE_MESSAGE_RECV, date),
+        ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
+                               userFirstNames[0] + " " + userLastNames[0] +
+                               ": Ignoring photo download (purple_str_size_to_units)",
+                               PURPLE_MESSAGE_SYSTEM, date)
+    );
+}
 #endif
 
 #ifndef NoPidgin
