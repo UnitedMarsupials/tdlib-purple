@@ -1038,6 +1038,48 @@ TEST_F(SupergroupTest, UnjoinedChannelShownOnRequest)
     prpl.verifyEvents(AddChatEvent(groupChatPurpleName, newTitle, account, NULL, NULL));
 }
 
+// Moved out of "Telegram: not joined" into a group of ours, a channel is joined, and kept there
+TEST_F(SupergroupTest, UnjoinedChannelMovedJoined)
+{
+    constexpr int32_t date         = 12345;
+    constexpr int64_t messageId    = 10000;
+    constexpr int     purpleChatId = 1;
+    login();
+    purple_account_set_bool(account, "show-unjoined-chats", TRUE);
+
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusLeft>(), 2)));
+    tgl.update(make_object<updateNewChat>(makeChat(
+        groupChatId, make_object<chatTypeSupergroup>(groupId, true), groupChatTitle,
+        nullptr, 0, 0, 0
+    )));
+    auto message = makeMessage(messageId, 0, groupChatId, false, date, makeTextMessage("Hello"));
+    message->is_channel_post_ = true;
+    tgl.update(make_object<updateNewMessage>(std::move(message)));
+    tgl.verifyRequest(viewMessages(groupChatId, {messageId}, nullptr, true));
+    prpl.verifyEvents(
+        AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), NULL),
+        ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
+        ConvSetTitleEvent(groupChatPurpleName, groupChatTitle),
+        ServGotChatEvent(connection, purpleChatId, "Channel post", "Hello", PURPLE_MESSAGE_RECV, date)
+    );
+    PurpleChat *purpleChat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
+    ASSERT_NE(nullptr, purpleChat);
+
+    purple_blist_add_chat(purpleChat, &standardPurpleGroup, NULL);
+    prpl.verifyEvents(AddChatEvent(groupChatPurpleName, groupChatTitle, account, &standardPurpleGroup, NULL));
+    tgl.verifyRequest(joinChat(groupChatId));
+    // Not kept until joined, which may be refused
+    EXPECT_TRUE(purple_blist_node_get_flags(&purpleChat->node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusMember>(), 2)));
+    tgl.reply(make_object<ok>());
+    // Its tab is open already; none is opened for it otherwise
+    prpl.verifyNoEvents();
+    EXPECT_FALSE(purple_blist_node_get_flags(&purpleChat->node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+    EXPECT_EQ(&standardPurpleGroup, purple_chat_get_group(purpleChat));
+    tgl.verifyNoRequests();
+}
+
 // Requests and updates of the lookups, built by their fields' names
 static object_ptr<getChat> makeGetChat(int64_t chatId)
 {

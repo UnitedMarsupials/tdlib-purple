@@ -99,6 +99,8 @@ public:
     enum class Type {
         InviteLink,
         Username,
+        // Its entry moved out of "Telegram: not joined": no tab opened for it
+        Moved,
     };
     std::string joinString;
     Type        type;

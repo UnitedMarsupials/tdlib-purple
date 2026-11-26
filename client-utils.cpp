@@ -324,7 +324,8 @@ PurpleConversation *getImConversation(PurpleAccount *account, const char *userna
 // Pidgin takes the title of a group chat's tab from its entry in the buddy list whenever it updates
 // the tab, and failing that, from the conversation's name, chat-<id>. A group we are not a member of
 // has no entry, so it gets one for as long as the program runs, in a group of its own; neither is
-// saved. Joining the group makes it a lasting one (see updateGroupChat).
+// saved. Joining the group makes it a lasting one (see updateGroupChat), as moving it into another
+// group, which joins it, does (PurpleTdClient::chatMoved).
 void addTransientChat(TdAccountData &account, const td::td_api::chat &chat)
 {
     // TRANSLATOR: Buddy-list group, holding channels and groups shown in a conversation though not joined. It lasts until the program quits.
@@ -544,6 +545,20 @@ void restoreDeletedBuddy(TdAccountData &account, const td::td_api::user &user)
         purple_blist_alias_buddy(buddy, alias.c_str());
 }
 
+// An entry kept only while the program runs, as a buddy not a contact or a chat not joined, being
+// moved by the user into a group of theirs, which is saved
+bool isMovedOutOfTransient(PurpleBlistNode *node, PurpleGroup *group)
+{
+    return node && group && (purple_blist_node_get_flags(node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE) &&
+           !(purple_blist_node_get_flags(PURPLE_BLIST_NODE(group)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+}
+
+void keepInBuddyList(PurpleBlistNode *node)
+{
+    purple_blist_node_set_flags(node, PurpleBlistNodeFlags(purple_blist_node_get_flags(node) &
+                                                           ~PURPLE_BLIST_NODE_FLAG_NO_SAVE));
+}
+
 bool isTransientBuddy(PurpleBuddy *buddy)
 {
     return buddy && (purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
@@ -552,7 +567,7 @@ bool isTransientBuddy(PurpleBuddy *buddy)
 // A conversation with a user goes by their id, which Pidgin shows by the name of the user's buddy:
 // one not a contact gets a buddy for as long as the program runs, in a group of its own; neither is
 // saved. Becoming a contact makes it a lasting one (see updatePrivateChat), as moving it into
-// another group does (PurpleTdClient::buddyMoved).
+// another group does (PurpleTdClient::buddyMoved); so for a chat not joined (addTransientChat).
 std::string addTransientBuddy(TdAccountData &account, const td::td_api::user &user)
 {
     std::string buddyName = getPurpleBuddyName(user);
@@ -598,8 +613,7 @@ void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, con
         // One written with before, as no contact, is the same buddy, a lasting one now, so that the
         // conversation with them stays the same tab
         if (buddy) {
-            purple_blist_node_set_flags(PURPLE_BLIST_NODE(buddy), PurpleBlistNodeFlags(
-                purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & ~PURPLE_BLIST_NODE_FLAG_NO_SAVE));
+            keepInBuddyList(PURPLE_BLIST_NODE(buddy));
             if (!alias.empty())
                 purple_blist_alias_buddy(buddy, alias.c_str());
         } else
@@ -670,9 +684,11 @@ static void updateGroupChat(TdAccountData &account, const td::td_api::chat &chat
         PurpleBlistNode *node = PURPLE_BLIST_NODE(purpleChat);
         if (purple_blist_node_get_flags(node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE) {
             purple_debug_misc(config::pluginId, "Keeping chat %s in the buddy list\n", chat.title_.c_str());
-            purple_blist_node_set_flags(node, (PurpleBlistNodeFlags)(purple_blist_node_get_flags(node) &
-                                                                     ~PURPLE_BLIST_NODE_FLAG_NO_SAVE));
-            purple_blist_add_chat(purpleChat, NULL, NULL);
+            // Where joined chats are, unless the user moved it into a group of theirs to join it
+            bool moved = isMovedOutOfTransient(node, purple_chat_get_group(purpleChat));
+            keepInBuddyList(node);
+            if (!moved)
+                purple_blist_add_chat(purpleChat, NULL, NULL);
         }
         // As saved by an earlier version
         completeChatComponents(purpleChat);

@@ -3894,18 +3894,32 @@ void PurpleTdClient::addContact(const std::string &purpleName, const std::string
 void PurpleTdClient::buddyMoved(const char *buddyName, const char *groupName)
 {
     PurpleBuddy *buddy = purple_find_buddy(m_account, buddyName);
-    PurpleGroup *group = purple_find_group(groupName);
-    if (!isTransientBuddy(buddy) || !group ||
-        (purple_blist_node_get_flags(PURPLE_BLIST_NODE(group)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE))
+    if (!buddy || !isMovedOutOfTransient(PURPLE_BLIST_NODE(buddy), purple_find_group(groupName)))
         return;
     const td::td_api::user *user = m_data.getUser(purpleBuddyNameToUserId(buddyName));
     if (!user || user->is_contact_ || isDeletedUser(*user))
         return;
 
     purple_debug_misc(config::pluginId, "Keeping %s in the buddy list\n", buddyName);
-    purple_blist_node_set_flags(PURPLE_BLIST_NODE(buddy), PurpleBlistNodeFlags(
-        purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & ~PURPLE_BLIST_NODE_FLAG_NO_SAVE));
+    keepInBuddyList(PURPLE_BLIST_NODE(buddy));
     addContactById(getId(*user), "", makeBasicDisplayName(*user), groupName, false);
+}
+
+// So for a channel or group not joined, out of "Telegram: not joined": joined, it is kept where it
+// was put (see updateGroupChat). If it cannot be, it is back there at the next start.
+void PurpleTdClient::chatMoved(PurpleChat *purpleChat)
+{
+    if (!isMovedOutOfTransient(PURPLE_BLIST_NODE(purpleChat), purple_chat_get_group(purpleChat)))
+        return;
+    ChatId                  chatId = getTdlibChatId(getChatName(purple_chat_get_components(purpleChat)));
+    const td::td_api::chat *chat   = m_data.getChat(chatId);
+    if (!chat || m_data.isGroupChatWithMembership(*chat))
+        return;
+
+    purple_debug_misc(config::pluginId, "Joining chat %s, moved into a group\n", chat->title_.c_str());
+    auto     joinRequest = td::td_api::make_object<td::td_api::joinChat>(chatId.value());
+    uint64_t requestId   = m_transceiver.sendQuery(std::move(joinRequest), &PurpleTdClient::joinChatResponse);
+    m_data.addPendingRequest<GroupJoinRequest>(requestId, std::string(), GroupJoinRequest::Type::Moved, chatId);
 }
 
 void PurpleTdClient::addBuddySearchChatResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object)
@@ -4211,7 +4225,7 @@ void PurpleTdClient::joinChatResponse(uint64_t requestId, td::td_api::object_ptr
             // Conversation window for the chat should be presented. If joining by invite link, it
             // will happen automatically due to messageChatJoinByLink message. If joining a public
             // group, conversation window needs to be created explicitly instead
-            if (request->type != GroupJoinRequest::Type::InviteLink) {
+            if (request->type == GroupJoinRequest::Type::Username) {
                 const td::td_api::chat *chat     = m_data.getChat(request->chatId);
                 int32_t                 purpleId = m_data.getPurpleChatId(request->chatId);
                 if (chat)

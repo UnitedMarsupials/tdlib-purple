@@ -579,6 +579,10 @@ Open a public channel not joined, from a link to it, and quit Pidgin; start it a
   whose conversation was logged, and any person written with who is not a contact, under
   "Telegram: not in contacts".
 * Opened, the channel's tab fills with its messages, as from the link, and nothing is sent to it.
+* Dragged into a group of yours, the channel is joined (subscribed to, in the phone app too),
+  without a tab opened for it, and stays in that group, also after a restart. A private group
+  that cannot be joined so says it failed, and is back under "Telegram: not joined" at the next
+  start.
 * Left open while the channel posts, its new posts show in the tab; scrolled far back, the post
   waits for the tab's end. Closed, nothing more of it comes.
 * A channel never opened before gets a log as its tab is filled (a new directory under

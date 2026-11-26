@@ -66,6 +66,7 @@ public:
 
     void addContact(const std::string &purpleName, const std::string &alias, const std::string &groupName);
     void buddyMoved(const char *buddyName, const char *groupName);
+    void chatMoved(PurpleChat *purpleChat);
     void renameContact(const char *buddyName, const char *newAlias);
     void removeContactAndPrivateChat(const std::string &buddyName, bool contact);
     void deleteLocalChat(ChatId chatId);
