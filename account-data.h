@@ -285,6 +285,8 @@ struct IncomingMessage {
     bool     standardDownloadConfigured;
     bool     repliedMessageFetchDoneOrFailed;
     bool     previewFetchDone;
+    // Whether the video's thumbnail is fetched and waited for, as decided once it is received
+    bool     previewWaited = false;
     bool     inlineDownloadComplete;
     bool     inlineDownloadTimeout;
 

@@ -713,7 +713,7 @@ TEST_F(PrivateChatTest, PhotoNotDownloaded)
     uint64_t refresh = tgl.verifyRequest(getMessage(chatIds[0], 1));
 
     // Not got: tried again as it is seen again
-    tgl.reply(refresh, make_object<error>(400, "Message not found"));
+    tgl.reply(refresh, makeError(400, "Message not found"));
     client->messagesViewed(conv, {MessageId::fromString("1")});
     tgl.verifyRequest(getMessage(chatIds[0], 1));
 }

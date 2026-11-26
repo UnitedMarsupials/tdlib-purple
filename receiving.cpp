@@ -1108,9 +1108,11 @@ static void showDownloadedSticker(const td::td_api::chat &chat, TgMessageInfo &m
             if (thumbnail->local_ && thumbnail->local_->is_downloading_completed_)
                 showDownloadedSticker(chat, message, thumbnail->local_->path_,
                                       fileDescription, nullptr, transceiver, account);
-            else
+            else if (downloadsMedia(account.purpleAccount, findChatBlistNode(account, chat)))
                 downloadFileInline(thumbnail->id_, getId(chat), message, fileDescription, nullptr,
                                    transceiver, account);
+            else
+                showGenericFileInline(chat, message, filePath, NULL, fileDescription, std::string(), account);
         } else {
             showGenericFileInline(chat, message, filePath, NULL, fileDescription, std::string(), account);
         }
@@ -2586,6 +2588,8 @@ static const td::td_api::file *getVideoPreview(const td::td_api::MessageContent 
     return chosen;
 }
 
+static bool waitsForPreview(const IncomingMessage &fullMessage, const TdAccountData &account);
+
 void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td_api::message> message,
                      IncomingMessage &fullMessage, const TdAccountData &account)
 {
@@ -2601,6 +2605,7 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
     fullMessage.previewFileId = 0;
     fullMessage.previewSizeKb = 0;
     fullMessage.previewFetchDone = false;
+    fullMessage.previewWaited = false;
     fullMessage.inlineDownloadComplete = false;
     fullMessage.inlineDownloadTimeout = false;
 
@@ -2666,6 +2671,7 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
     }
 
     fullMessage.message = std::move(message);
+    fullMessage.previewWaited = waitsForPreview(fullMessage, account);
 }
 
 static const td::td_api::file *getSelectedPhotoSize(const IncomingMessage &fullMessage,
@@ -2692,7 +2698,8 @@ static bool isInlineDownload(const IncomingMessage &fullMessage,
 
 // Not where the chat's media are not fetched unasked: the message is shown without the file then
 // A video's thumbnail is waited for, or it would land below messages that arrived after it, unless
-// it can be written over its stand-in; not where the chat's media are not fetched unasked
+// it can be written over its stand-in; not where the chat's media are not fetched unasked. Decided
+// as the message is received, so that one held back has its thumbnail asked for.
 static bool waitsForPreview(const IncomingMessage &fullMessage, const TdAccountData &account)
 {
     if (!fullMessage.previewFileId || fullMessage.previewFetchDone || canShowImages() || !fullMessage.message)
@@ -2852,7 +2859,7 @@ bool isMessageReady(const IncomingMessage &fullMessage, const TdAccountData &acc
         return false;
     }
 
-    if (waitsForPreview(fullMessage, account))
+    if (fullMessage.previewWaited && !fullMessage.previewFetchDone)
         return false;
 
     if (message.content_)
@@ -2947,7 +2954,7 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
                                          getMessageWaitSeconds(fullMessage.messageInfo));
     }
 
-    if (waitsForPreview(fullMessage, account)) {
+    if (fullMessage.previewWaited && !fullMessage.previewFetchDone) {
         purple_debug_misc(config::pluginId, "Fetching video thumbnail for message %" G_GINT64_FORMAT "\n",
                           messageId.value());
         auto downloadReq = td::td_api::make_object<td::td_api::downloadFile>();
