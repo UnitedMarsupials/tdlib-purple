@@ -1285,6 +1285,31 @@ static void getPictureLook(const td::td_api::MessageContent &content, int32_t fi
 
 static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId messageId);
 
+// Pictures come one after another, a rich message's often a dozen together: in Pidgin's tab, the
+// message is shown again once for those come within a moment, not once for each
+enum { REFRESH_DELAY_MS = 700 };
+static void refreshShownMessageSoon(TdAccountData &account, ChatId chatId, MessageId messageId)
+{
+    if (!pidginUiFound()) {
+        refreshShownMessage(account, chatId, messageId);
+        return;
+    }
+    if (!account.setRefreshDue(chatId, messageId, true))
+        return;
+    std::weak_ptr<int> alive = account.lifetime;
+    auto *refresh = new std::function<void()>([&account, alive, chatId, messageId]() {
+        if (alive.expired())
+            return;
+        account.setRefreshDue(chatId, messageId, false);
+        refreshShownMessage(account, chatId, messageId);
+    });
+    g_timeout_add(REFRESH_DELAY_MS, [](gpointer data) -> gboolean {
+        std::unique_ptr<std::function<void()>> refresh(static_cast<std::function<void()> *>(data));
+        (*refresh)();
+        return FALSE;
+    }, refresh);
+}
+
 // Fetched for the message, which is shown again once it is here, or once it cannot be, then left
 // as its stand-in until it is asked for, rather than tried again and again
 static void fetchPicture(TdAccountData &account, ChatId chatId, MessageId messageId, int32_t fileId)
@@ -1307,7 +1332,7 @@ static void fetchPicture(TdAccountData &account, ChatId chatId, MessageId messag
             if (failed)
                 purple_debug_misc(config::pluginId, "Picture (file id %d) of message %" G_GINT64_FORMAT
                                   " not fetched\n", (int)fileId, messageId.value());
-            refreshShownMessage(account, chatId, messageId);
+            refreshShownMessageSoon(account, chatId, messageId);
         });
 }
 
@@ -1339,7 +1364,7 @@ void stickerConverted(TdAccountData &account, int32_t fileId, int imageId)
     std::vector<std::pair<ChatId, MessageId>> waiting;
     account.endStickerConversion(fileId, imageId, waiting);
     for (const auto &message: waiting)
-        refreshShownMessage(account, message.first, message.second);
+        refreshShownMessageSoon(account, message.first, message.second);
 }
 
 // A sticker, here or not: as its picture, or its animation converted, or its thumbnail where
@@ -2737,6 +2762,8 @@ static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId
             fullMessage.replacing              = true;
             fullMessage.refreshing             = true;
             fullMessage.messageInfo.unlogged   = true;
+            // No news, to make a sound or a notification for
+            fullMessage.messageInfo.fromHistory = true;
             queueMessage(account, *chat, std::move(fullMessage), PendingMessageQueue::Append);
         });
 }

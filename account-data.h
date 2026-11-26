@@ -571,6 +571,8 @@ public:
     // A picture of the message being fetched, to be shown in it once it is; false if it was already
     bool                       startPictureFetch(ChatId chatId, MessageId messageId, int32_t fileId);
     void                       endPictureFetch(ChatId chatId, MessageId messageId, int32_t fileId);
+    // A message to be shown again shortly, with pictures come: false if it is already
+    bool                       setRefreshDue(ChatId chatId, MessageId messageId, bool due);
     // A picture that could not be fetched, left as its stand-in rather than tried again at once
     void                       setPictureFailed(int32_t fileId, bool failed);
     bool                       hasPictureFailed(int32_t fileId) const;
@@ -671,6 +673,7 @@ private:
     std::map<ShownMessageKey, UnloggedSent> m_unloggedSent;
     std::set<std::tuple<ChatId, MessageId, int32_t>> m_pictureFetches;
     std::set<int32_t>                       m_failedPictures;
+    std::set<ShownMessageKey>               m_refreshesDue;
     std::map<int32_t, int>                  m_convertedStickers;
     std::map<int32_t, std::vector<std::pair<ChatId, MessageId>>> m_stickerConversions;
 };

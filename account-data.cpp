@@ -1232,6 +1232,13 @@ void TdAccountData::endPictureFetch(ChatId chatId, MessageId messageId, int32_t 
     m_pictureFetches.erase(std::make_tuple(chatId, messageId, fileId));
 }
 
+bool TdAccountData::setRefreshDue(ChatId chatId, MessageId messageId, bool due)
+{
+    if (due)
+        return m_refreshesDue.insert(ShownMessageKey(chatId, messageId)).second;
+    return m_refreshesDue.erase(ShownMessageKey(chatId, messageId)) != 0;
+}
+
 void TdAccountData::setPictureFailed(int32_t fileId, bool failed)
 {
     if (failed)
