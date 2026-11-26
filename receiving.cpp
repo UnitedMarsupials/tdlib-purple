@@ -953,10 +953,10 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
 // The pictures of a message waiting to be logged stay in the image store until it is
 static void holdImages(UnloggedSent &waiting)
 {
-    static const char IMG_ID[] = "<img id=\"";
+    static const std::string IMG_ID = "<img id=\"";
     for (size_t pos = waiting.text.find(IMG_ID); pos != std::string::npos;
          pos = waiting.text.find(IMG_ID, pos + 1)) {
-        int id = atoi(waiting.text.c_str() + pos + sizeof(IMG_ID) - 1);
+        int id = atoi(waiting.text.substr(pos + IMG_ID.size()).c_str());
         if (id && purple_imgstore_find_by_id(id)) {
             purple_imgstore_ref_by_id(id);
             waiting.imageIds.push_back(id);

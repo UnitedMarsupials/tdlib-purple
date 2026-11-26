@@ -1,3 +1,4 @@
+#include "buildopt.h"
 #include "fixture.h"
 #include "libpurple-mock.h"
 #include "client-utils.h"
@@ -320,6 +321,7 @@ TEST_F(MessageEditTest, PhotoReplaced)
     tgl.verifyNoRequests();
 }
 
+#ifndef NoPidgin
 TEST_F(MessageEditTest, DeletedWhileEditDownloads)
 {
     loginWithOneContact();
@@ -357,7 +359,9 @@ TEST_F(MessageEditTest, DeletedWhileEditDownloads)
     prpl.verifyNoEvents();
     tgl.verifyNoRequests();
 }
+#endif
 
+#ifndef NoPidgin
 // A caption edited while the photo comes: the notice leaves the message, waiting to be logged with
 // the photo, as it is
 TEST_F(MessageEditTest, CaptionEditedWhilePictureComes)
@@ -404,6 +408,7 @@ TEST_F(MessageEditTest, CaptionEditedWhilePictureComes)
     prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0), logged, PURPLE_MESSAGE_RECV,
                                              date));
 }
+#endif
 
 TEST_F(MessageEditTest, Deleted)
 {

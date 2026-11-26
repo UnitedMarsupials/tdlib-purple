@@ -116,6 +116,7 @@ TEST_F(ReactionTest, KeptAcrossEdit)
     tgl.verifyNoRequests();
 }
 
+#ifndef NoPidgin
 TEST_F(ReactionTest, WhileEditDownloads)
 {
     loginWithOneContact();
@@ -154,6 +155,7 @@ TEST_F(ReactionTest, WhileEditDownloads)
     prpl.verifyNoEvents();
     tgl.verifyNoRequests();
 }
+#endif
 
 TEST_F(ReactionTest, OwnFromElsewhere)
 {

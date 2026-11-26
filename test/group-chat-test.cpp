@@ -1,3 +1,4 @@
+#include "buildopt.h"
 #include "fixture.h"
 #include "libpurple-mock.h"
 #include "td-client.h"
@@ -127,6 +128,7 @@ TEST_F(GroupChatTest, BasicGroupReceiveTextAndReply)
     tgl.verifyRequest(viewMessages(groupChatId, {messageId[1]}, nullptr, true));
 }
 
+#ifndef NoPidgin
 TEST_F(GroupChatTest, BasicGroupReceivePhoto)
 {
     const int32_t date         = 12345;
@@ -161,6 +163,7 @@ TEST_F(GroupChatTest, BasicGroupReceivePhoto)
     ));
     tgl.verifyRequest(getMessage(groupChatId, messageId));
 }
+#endif
 
 // A file fetched before it is shown, as in a group, that takes long, with file transfers chosen for
 // files: none is made up to show how its fetching goes, a file transfer being no more than that

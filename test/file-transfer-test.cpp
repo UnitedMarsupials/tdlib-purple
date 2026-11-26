@@ -219,6 +219,7 @@ TEST_F(FileTransferTest, SecretPhoto_AlreadyDownloaded)
     );
 }
 
+#ifndef NoPidgin
 TEST_F(FileTransferTest, PhotoWithoutCaption)
 {
     const int32_t date   = 10001;
@@ -249,7 +250,9 @@ TEST_F(FileTransferTest, PhotoWithoutCaption)
         make_object<downloadFile>(fileId, 1, 0, 0, true)
     });
 }
+#endif
 
+#ifndef NoPidgin
 // One too big to be fetched unasked stays as its stand-in, the message logged as it is, its tab
 // not made beforehand for it to be written into unlogged
 TEST_F(FileTransferTest, BigPhoto_StandIn)
@@ -269,6 +272,7 @@ TEST_F(FileTransferTest, BigPhoto_StandIn)
     prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0), "[photo]\ncaption<!--tdlib-message 1-->",
                                      PURPLE_MESSAGE_RECV, date));
 }
+#endif
 
 TEST_F(FileTransferTest, SendFile_ErrorInUploadResponse)
 {
@@ -464,7 +468,8 @@ TEST_F(FileTransferTest, WebpSticker_NoLoader_Emoji)
     ));
 }
 
-#ifndef NoLottie
+// Converted only where it can be written over its stand-in, in Pidgin
+#if !defined(NoLottie) && !defined(NoPidgin)
 TEST_F(FileTransferTest, AnimatedStickerDecode)
 #else
 TEST_F(FileTransferTest, DISABLED_AnimatedStickerDecode)
@@ -497,6 +502,7 @@ TEST_F(FileTransferTest, DISABLED_AnimatedStickerDecode)
     });
 }
 
+#ifndef NoPidgin
 TEST_F(FileTransferTest, Sticker_AnimatedDisabled_AlreadyDownloaded)
 {
     const int32_t date      = 10001;
@@ -566,7 +572,9 @@ TEST_F(FileTransferTest, Sticker_AnimatedDisabled_AlreadyDownloaded)
         date
     ));
 }
+#endif
 
+#ifndef NoPidgin
 TEST_F(FileTransferTest, Sticker_AnimatedDisabled_ThumbnailAboveLimit)
 {
     const int32_t date      = 10001;
@@ -613,6 +621,7 @@ TEST_F(FileTransferTest, Sticker_AnimatedDisabled_ThumbnailAboveLimit)
     ));
     tgl.verifyRequest(getMessage(chatIds[0], 1));
 }
+#endif
 
 TEST_F(FileTransferTest, Document_DownloadProgress_StuckAtStart)
 {

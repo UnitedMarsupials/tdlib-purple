@@ -499,6 +499,7 @@ TEST_F(MessageLinkTest, PhotoSizes)
     ));
 }
 
+#ifndef NoPidgin
 TEST_F(MessageLinkTest, PhotoSizesIgnored)
 {
     purple_account_set_string(account, "media-size-threshold", "0.5");
@@ -538,7 +539,9 @@ TEST_F(MessageLinkTest, PhotoSizesIgnored)
     prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0), "Downloading photo",
                                              PURPLE_MESSAGE_SYSTEM, 0));
 }
+#endif
 
+#ifndef NoPidgin
 // A photo in one size only, too big to be fetched unasked: its stand-in, and a link that fetches it
 TEST_F(MessageLinkTest, BigPhotoLinked)
 {
@@ -559,6 +562,7 @@ TEST_F(MessageLinkTest, BigPhotoLinked)
     ));
     tgl.verifyNoRequests();
 }
+#endif
 
 TEST_F(MessageLinkTest, MessageMenu)
 {

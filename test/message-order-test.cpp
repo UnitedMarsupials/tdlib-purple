@@ -1,3 +1,4 @@
+#include "buildopt.h"
 #include "client-utils.h"
 #include "fixture.h"
 #include "libpurple-mock.h"
@@ -107,6 +108,7 @@ TEST_F(MessageOrderTest, Document_Download_FlushAtLogout)
 }
 
 
+#ifndef NoPidgin
 // A photo still coming as the account goes: its message logged as it was shown
 TEST_F(MessageOrderTest, Photo_Download_LoggedAtLogout)
 {
@@ -137,6 +139,7 @@ TEST_F(MessageOrderTest, Photo_Download_LoggedAtLogout)
                                              date));
     ASSERT_EQ(std::vector<std::string>{logged}, takeLoggedMessages());
 }
+#endif
 
 class MessageOrderTestLongDownloadInReply: public MessageOrderTest,
     public testing::WithParamInterface<std::string> {};

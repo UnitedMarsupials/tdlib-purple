@@ -680,6 +680,7 @@ TEST_F(PrivateChatTest, OtherMessage)
     );
 }
 
+#ifndef NoPidgin
 // A photo not here yet is shown at once, as its stand-in, and fetched; once it is, the message is
 // shown again with it, where the tab can take it, and logged as it is shown then, or else as it was
 TEST_F(PrivateChatTest, Photo)
@@ -720,6 +721,7 @@ TEST_F(PrivateChatTest, Photo)
                                              date));
     ASSERT_EQ(std::vector<std::string>{logged}, takeLoggedMessages());
 }
+#endif
 
 TEST_F(PrivateChatTest, AlreadyDownloadedPhoto)
 {
