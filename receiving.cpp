@@ -1410,9 +1410,12 @@ static void fetchPicture(TdAccountData &account, ChatId chatId, MessageId messag
             account.endPictureFetch(chatId, messageId, fileId);
             bool failed = getDownloadPath(object).empty();
             account.setPictureFailed(fileId, failed);
-            if (failed)
+            // Left, to be tried again as it is seen, even if it is not shown again meanwhile
+            if (failed) {
+                account.leavePicture(chatId, messageId, fileId);
                 purple_debug_misc(config::pluginId, "Picture (file id %d) of message %" G_GINT64_FORMAT
                                   " not fetched\n", (int)fileId, messageId.value());
+            }
             refreshShownMessageSoon(account, chatId, messageId);
         });
 }
