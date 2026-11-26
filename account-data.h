@@ -507,6 +507,8 @@ public:
     void                       loadTempFileUploads();
     void                       getTempFileUploads(std::vector<std::pair<ChatId, int64_t>> &messages);
     DownloadRequest *          findDownloadRequest(int32_t fileId);
+    // Of the file for the message: the same file may come in several messages
+    bool                       isDownloadingFor(int32_t fileId, ChatId chatId, MessageId messageId);
     void                       extractFileTransferRequests(std::vector<PurpleXfer *> &transfers);
 
     // An upload's kind is what it is to be sent as

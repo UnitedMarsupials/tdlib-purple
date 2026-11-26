@@ -355,8 +355,7 @@ void downloadFileInline(int32_t fileId, ChatId chatId, TgMessageInfo &message,
                                                message, fileId, 0, fileDescription, thumbnail.release());
     // The message shown again, as its tab is filled anew, while its file is still coming: the
     // download already under way logs it, and this one only shows it
-    const DownloadRequest *inProgress = account.findDownloadRequest(fileId);
-    if (inProgress && (inProgress->chatId == chatId) && (inProgress->message.id == message.id))
+    if (account.isDownloadingFor(fileId, chatId, message.id))
         request->message.logRedrawn = false;
 
     account.addPendingRequest<DownloadRequest>(requestId, std::move(request));
