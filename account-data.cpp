@@ -88,18 +88,20 @@ bool canReportAsSpam(const td::td_api::chat &chat)
                                 (chat.action_bar_->get_id() == td::td_api::chatActionBarReportAddBlock::ID));
 }
 
-// It stays out of the buddy list until the offer goes: when we add them to contacts, or dismiss it.
-static bool isUnansweredStranger(const td::td_api::chat &chat)
-{
-    return canReportAsSpam(chat);
-}
-
-bool isChatInContactList(const td::td_api::chat &chat, const td::td_api::user *privateChatUser)
+// A person not a contact is kept under "Telegram: not in contacts", unsaved, whether we answered or
+// reported them or not: until moved into another group, which adds them to contacts, or deleted.
+// A buddy saved for them already, by an earlier version or while they were a contact, stays put.
+bool isChatInContactList(const TdAccountData &account, const td::td_api::chat &chat,
+                         const td::td_api::user *privateChatUser)
 {
     if (privateChatUser && privateChatUser->is_contact_)
         return true;
-    if (privateChatUser && isUnansweredStranger(chat))
-        return false;
+    if (privateChatUser) {
+        std::string  buddyName = getPurpleBuddyName(*privateChatUser);
+        PurpleBuddy *buddy     = purple_find_buddy(account.purpleAccount, buddyName.c_str());
+        if (!buddy || isTransientBuddy(buddy))
+            return false;
+    }
     return !chat.positions_.empty();
 }
 

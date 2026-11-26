@@ -1460,7 +1460,7 @@ void PurpleTdClient::onChatListReady()
 
     for (const td::td_api::chat *chat: chats) {
         const td::td_api::user *user = m_data.getUserByPrivateChat(*chat);
-        if (user && isChatInContactList(*chat, user) && !isDeletedUser(*user)) {
+        if (user && isChatInContactList(m_data, *chat, user) && !isDeletedUser(*user)) {
             std::string userName = getPurpleBuddyName(*user);
             purple_prpl_got_user_status(m_account, userName.c_str(),
                                         getPurpleStatusId(*user->status_), NULL);
@@ -3593,12 +3593,12 @@ void PurpleTdClient::avatarDownloadResponse(uint64_t requestId, td::td_api::obje
                 m_data.updateSmallProfilePhoto(request->userId, std::move(file));
                 const td::td_api::user *user = m_data.getUser(request->userId);
                 const td::td_api::chat *chat = m_data.getPrivateChatByUserId(request->userId);
-                if (user && chat && isChatInContactList(*chat, user))
+                if (user && chat && isChatInContactList(m_data, *chat, user))
                     updatePrivateChat(m_data, chat, *user);
             } else if (request->chatId.valid()) {
                 m_data.updateSmallChatPhoto(request->chatId, std::move(file));
                 const td::td_api::chat *chat = m_data.getPrivateChatByUserId(request->userId);
-                if (chat && isChatInContactList(*chat, nullptr)) {
+                if (chat && isChatInContactList(m_data, *chat, nullptr)) {
                     BasicGroupId basicGroupId = getBasicGroupId(*chat);
                     SupergroupId supergroupId = getSupergroupId(*chat);
                     if (basicGroupId.valid())
@@ -3676,7 +3676,7 @@ void PurpleTdClient::updateChat(const td::td_api::chat *chat)
 
     // A group we are not a member of stays out of the buddy list, but is still tracked above, so
     // that joining it brings it in rather than leaving it invisible for the rest of the session.
-    bool showInBuddyList = isChatInContactList(*chat, privateChatUser);
+    bool showInBuddyList = isChatInContactList(m_data, *chat, privateChatUser);
     if ((basicGroupId.valid() || supergroupId.valid()) && !m_data.isGroupChatWithMembership(*chat))
         showInBuddyList = false;
 
@@ -3707,12 +3707,11 @@ void PurpleTdClient::updateUserInfo(const td::td_api::user &user, const td::td_a
     else {
         restoreDeletedBuddy(m_data, user);
         if (privateChat) {
-            if (isChatInContactList(*privateChat, &user)) {
+            if (isChatInContactList(m_data, *privateChat, &user)) {
                 downloadProfilePhoto(user);
                 updatePrivateChat(m_data, privateChat, user);
             } else if (!privateChat->positions_.empty())
-                // A stranger's, kept from it while it offers to report them: reachable all the same,
-                // after a restart too, as when they write
+                // Not a contact's: reachable all the same, after a restart too, as when they write
                 addTransientBuddy(m_data, user);
             else
                 removePrivateChat(m_data, *privateChat);
@@ -3888,6 +3887,41 @@ void PurpleTdClient::addContact(const std::string &purpleName, const std::string
     }
 }
 
+// Someone not a contact, moved by the user out of "Telegram: not in contacts" into a group of theirs:
+// added to contacts, under their own name, without our phone number given away to someone who may
+// have been a stranger. As a contact, the buddy is kept where it was put (see updatePrivateChat); if
+// adding fails, it is back under "Telegram: not in contacts" at the next start, or moved again, tried
+// again. Our own moves leave a buddy saved before moving it, or are of deleted accounts.
+void PurpleTdClient::buddyMoved(const char *buddyName, const char *groupName)
+{
+    PurpleBuddy *buddy = purple_find_buddy(m_account, buddyName);
+    if (!buddy || !isMovedOutOfTransient(PURPLE_BLIST_NODE(buddy), purple_find_group(groupName)))
+        return;
+    const td::td_api::user *user = m_data.getUser(purpleBuddyNameToUserId(buddyName));
+    if (!user || user->is_contact_ || isDeletedUser(*user))
+        return;
+
+    purple_debug_misc(config::pluginId, "Adding %s to contacts, moved into a group\n", buddyName);
+    addContactById(getId(*user), "", makeBasicDisplayName(*user), groupName, false);
+}
+
+// So for a channel or group not joined, out of "Telegram: not joined": joined, it is kept where it
+// was put (see updateGroupChat). If it cannot be, it is back there at the next start.
+void PurpleTdClient::chatMoved(PurpleChat *purpleChat)
+{
+    if (!isMovedOutOfTransient(PURPLE_BLIST_NODE(purpleChat), purple_chat_get_group(purpleChat)))
+        return;
+    ChatId                  chatId = getTdlibChatId(getChatName(purple_chat_get_components(purpleChat)));
+    const td::td_api::chat *chat   = m_data.getChat(chatId);
+    if (!chat || m_data.isGroupChatWithMembership(*chat))
+        return;
+
+    purple_debug_misc(config::pluginId, "Joining chat %s, moved into a group\n", chat->title_.c_str());
+    auto     joinRequest = td::td_api::make_object<td::td_api::joinChat>(chatId.value());
+    uint64_t requestId   = m_transceiver.sendQuery(std::move(joinRequest), &PurpleTdClient::joinChatResponse);
+    m_data.addPendingRequest<GroupJoinRequest>(requestId, std::string(), GroupJoinRequest::Type::Moved, chatId);
+}
+
 void PurpleTdClient::addBuddySearchChatResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object)
 {
     std::unique_ptr<ContactRequest> request = m_data.getPendingRequest<ContactRequest>(requestId);
@@ -3913,7 +3947,8 @@ void PurpleTdClient::addBuddySearchChatResponse(uint64_t requestId, td::td_api::
 
 static td::td_api::object_ptr<td::td_api::addContact> makeAddContact(UserId userId, const std::string &phoneNumber,
                                                                     const std::string &firstName,
-                                                                    const std::string &lastName)
+                                                                    const std::string &lastName,
+                                                                    bool sharePhoneNumber)
 {
     auto addContact = td::td_api::make_object<td::td_api::addContact>();
 #if TDLIB_API_IMPORTED_CONTACT
@@ -3926,18 +3961,19 @@ static td::td_api::object_ptr<td::td_api::addContact> makeAddContact(UserId user
     addContact->contact_->phone_number_ = phoneNumber;
     addContact->contact_->first_name_   = firstName;
     addContact->contact_->last_name_    = lastName;
-    addContact->share_phone_number_     = true;
+    addContact->share_phone_number_     = sharePhoneNumber;
     return addContact;
 }
 
 void PurpleTdClient::addContactById(UserId userId, const std::string &phoneNumber, const std::string &alias,
-                                    const std::string &groupName)
+                                    const std::string &groupName, bool sharePhoneNumber)
 {
     purpleDebug("Adding contact: id={} alias={}", {std::to_string(userId.value()), alias});
     std::string firstName, lastName;
     getNamesFromAlias(alias.c_str(), firstName, lastName);
 
-    uint64_t newRequestId = m_transceiver.sendQuery(makeAddContact(userId, phoneNumber, firstName, lastName),
+    uint64_t newRequestId = m_transceiver.sendQuery(makeAddContact(userId, phoneNumber, firstName, lastName,
+                                                                   sharePhoneNumber),
                                                     &PurpleTdClient::addContactResponse);
     m_data.addPendingRequest<ContactRequest>(newRequestId, phoneNumber, alias, groupName, userId);
 }
@@ -3976,8 +4012,12 @@ void PurpleTdClient::addContactResponse(uint64_t requestId, td::td_api::object_p
         uint64_t newRequestId = m_transceiver.sendQuery(std::move(createChat),
                                                         &PurpleTdClient::addContactCreatePrivateChatResponse);
         m_data.addPendingRequest(newRequestId, std::move(request));
-    } else
+    } else {
+        if (request->userId.valid())
+            returnToTransientGroup(PURPLE_BLIST_NODE(purple_find_buddy(m_account,
+                                                                       getPurpleBuddyName(request->userId).c_str())));
         notifyFailedContact(getDisplayedError(object));
+    }
 }
 
 void PurpleTdClient::addContactCreatePrivateChatResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object)
@@ -3989,7 +4029,7 @@ void PurpleTdClient::addContactCreatePrivateChatResponse(uint64_t requestId, td:
     if (object && (object->get_id() == td::td_api::chat::ID)) {
         const td::td_api::chat &chat = static_cast<const td::td_api::chat &>(*object);
         const td::td_api::user *user = m_data.getUserByPrivateChat(chat);
-        if (user && !isChatInContactList(chat, user)) {
+        if (user && !isChatInContactList(m_data, chat, user)) {
             // Normally, the user will become a contact and this won't happen. But it does happen
             // when adding BotFather, for example. Nothing will be added to buddy list, so open chat
             // window just to make something happen, with a buddy until the program quits.
@@ -4015,9 +4055,10 @@ void PurpleTdClient::renameContact(const char *buddyName, const char *newAlias)
         return;
     }
 
+    // Only renamed: whoever our phone number was shared with stays so, and no one else is added
     std::string firstName, lastName;
     getNamesFromAlias(newAlias, firstName, lastName);
-    m_transceiver.sendQuery(makeAddContact(userId, "", firstName, lastName), nullptr);
+    m_transceiver.sendQuery(makeAddContact(userId, "", firstName, lastName, false), nullptr);
 }
 
 // Its messages and files that TDLib keeps here, the chat taken out of the chat list; Telegram keeps
@@ -4167,7 +4208,27 @@ void PurpleTdClient::joinChatByInviteLink(const char *inviteLink)
 void PurpleTdClient::joinChatResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object)
 {
     std::unique_ptr<GroupJoinRequest> request = m_data.getPendingRequest<GroupJoinRequest>(requestId);
-    if (object && ((object->get_id() == td::td_api::chat::ID) || (object->get_id() == td::td_api::ok::ID))) {
+    int32_t                           resultId = object ? object->get_id() : 0;
+    std::string                       notJoined;
+#if TDLIB_API_CHAT_JOIN_RESULT
+    // Not joined, though not for an error: told so, and what to do
+    if (resultId == td::td_api::chatJoinResultRequestSent::ID) {
+        // TRANSLATOR: Dialog, title
+        purple_notify_info(purple_account_get_connection(m_account), _("Asked to join the chat"),
+                           // TRANSLATOR: Dialog, content
+                           _("The chat's administrators have to approve it."), NULL);
+        return;
+    } else if (resultId == td::td_api::chatJoinResultGuardBotApprovalRequired::ID)
+        // TRANSLATOR: Error dialog, content, after "Failed to join chat: "
+        notJoined = _("a bot has to approve it, in Telegram's own app");
+    else if (resultId == td::td_api::chatJoinResultDeclined::ID)
+        // TRANSLATOR: Error dialog, content, after "Failed to join chat: "
+        notJoined = _("declined by the chat's bot");
+    bool joined = (resultId == td::td_api::chatJoinResultSuccess::ID);
+#else
+    bool joined = (resultId == td::td_api::chat::ID) || (resultId == td::td_api::ok::ID);
+#endif
+    if (joined) {
         // If the chat was added with something like "Add chat" function from Pidgin, the chat in
         // contact list was created without id component (for if there was the id component,
         // tgprpl_chat_join would not have called PurpleTdClient::joinChatByLink).
@@ -4189,7 +4250,7 @@ void PurpleTdClient::joinChatResponse(uint64_t requestId, td::td_api::object_ptr
             // Conversation window for the chat should be presented. If joining by invite link, it
             // will happen automatically due to messageChatJoinByLink message. If joining a public
             // group, conversation window needs to be created explicitly instead
-            if (request->type != GroupJoinRequest::Type::InviteLink) {
+            if (request->type == GroupJoinRequest::Type::Username) {
                 const td::td_api::chat *chat     = m_data.getChat(request->chatId);
                 int32_t                 purpleId = m_data.getPurpleChatId(request->chatId);
                 if (chat)
@@ -4197,8 +4258,15 @@ void PurpleTdClient::joinChatResponse(uint64_t requestId, td::td_api::object_ptr
             }
         }
     } else {
+        if (request && (request->type == GroupJoinRequest::Type::Moved)) {
+            const td::td_api::chat *chat = m_data.getChat(request->chatId);
+            if (chat)
+                returnToTransientGroup(PURPLE_BLIST_NODE(purple_blist_find_chat(m_account,
+                                                                                getPurpleChatName(*chat).c_str())));
+        }
         // TRANSLATOR: Error dialog, content
-        std::string message = formatMessage(_("Failed to join chat: {}"), getDisplayedError(object));
+        std::string message = formatMessage(_("Failed to join chat: {}"),
+                                            notJoined.empty() ? getDisplayedError(object) : notJoined);
         // TRANSLATOR: Error dialog, title
         purple_notify_error(purple_account_get_connection(m_account), _("Failed to join chat"),
                             message.c_str(), NULL);

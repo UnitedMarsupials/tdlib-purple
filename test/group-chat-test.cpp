@@ -253,11 +253,17 @@ TEST_F(GroupChatTest, ExistingBasicGroupReceiveMessageAtLogin_WithMemberList_Rem
     );
     chat->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
 
+    // Neither a contact, one kept in the buddy list all the same
+    auto user0 = standardUpdateUser(0);
+    auto user1 = standardUpdateUser(1);
+    user0->user_->is_contact_ = false;
+    user1->user_->is_contact_ = false;
+
     chatsOpenedAtLogin = {groupChatId};
     login(
         {
-            // Private chat with the contact
-            standardUpdateUser(0),
+            // Private chat with the buddy
+            std::move(user0),
             standardPrivateChat(0, make_object<chatListMain>()),
 
             make_object<updateBasicGroup>(make_object<basicGroup>(
@@ -267,7 +273,7 @@ TEST_F(GroupChatTest, ExistingBasicGroupReceiveMessageAtLogin_WithMemberList_Rem
             make_object<updateNewMessage>(
                 makeMessage(messageId, userIds[0], groupChatId, false, date, makeTextMessage("Hello"))
             ),
-            standardUpdateUser(1)
+            std::move(user1)
         },
         make_object<users>(1, std::vector<int64_t>(1, userIds[0])),
         make_object<chats>(1, std::vector<int64_t>(1, groupChatId)),
@@ -527,9 +533,9 @@ TEST_F(GroupChatTest, JoinBasicGroupByInviteLink)
     );
 
     // Now reply to join group - original chat is removed
-    tgl.reply(joinRequestId, makeChat(
+    tgl.reply(joinRequestId, makeChatJoined(groupChatId, makeChat(
         groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0
-    ));
+    )));
     prpl.verifyEvents(RemoveChatEvent("", LINK));
 
     // Replying to group full info request with list of members
@@ -1113,14 +1119,12 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
     // Read, the conversation being the chat's
     tgl.verifyRequest(viewMessages(chatIds[0], {echoMessageId[0]}, nullptr, true));
 
+    // In the chat list now, and still no contact: the same buddy, still one until the program quits
     tgl.update(makeUpdateChatList(chatIds[0], make_object<chatListMain>()));
+    PurpleBuddy *buddy = purple_find_buddy(account, purpleUserName(0).c_str());
+    ASSERT_NE(nullptr, buddy);
+    EXPECT_TRUE(purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
     prpl.verifyEvents(
-        // The same buddy, a lasting one now, keeping the conversation's tab
-        AddBuddyEvent(
-            purpleUserName(0),
-            userFirstNames[0] + " " + userLastNames[0],
-            account, NULL, NULL, NULL
-        ),
         ChatSetTopicEvent(groupChatPurpleName, "basic group", ""),
         ChatClearUsersEvent(groupChatPurpleName),
         ChatAddUserEvent(

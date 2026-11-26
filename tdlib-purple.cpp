@@ -511,6 +511,16 @@ static gboolean fillConversation(void *arg)
 
 // Both for a conversation just created, and for a group chat's, kept from an earlier connection,
 // joined again: Pidgin may well have opened it before the account knew the chat
+// Added, or moved: of a chat's move, libpurple tells only this, unlike a buddy's (tgprpl_group_buddy)
+static void blistNodeAdded(PurpleBlistNode *node, void *data)
+{
+    if (!PURPLE_BLIST_NODE_IS_CHAT(node) || (purple_chat_get_account(PURPLE_CHAT(node)) != data))
+        return;
+    PurpleTdClient *tdClient = getTdClient(purple_chat_get_account(PURPLE_CHAT(node)));
+    if (tdClient)
+        tdClient->chatMoved(PURPLE_CHAT(node));
+}
+
 static void conversationCreated(PurpleConversation *conv, void *data)
 {
     PurpleAccount *account = purple_conversation_get_account(conv);
@@ -563,6 +573,8 @@ static void tgprpl_login (PurpleAccount *acct)
                           acct, PURPLE_CALLBACK(conversationCreated), acct);
     purple_signal_connect(purple_conversations_get_handle(), "deleting-conversation",
                           acct, PURPLE_CALLBACK(deletingConversation), acct);
+    purple_signal_connect(purple_blist_get_handle(), "blist-node-added",
+                          acct, PURPLE_CALLBACK(blistNodeAdded), acct);
 }
 
 static void tgprpl_close (PurpleConnection *gc)
@@ -577,6 +589,8 @@ static void tgprpl_close (PurpleConnection *gc)
                              account, PURPLE_CALLBACK(conversationCreated));
     purple_signal_disconnect(purple_conversations_get_handle(), "deleting-conversation",
                              account, PURPLE_CALLBACK(deletingConversation));
+    purple_signal_disconnect(purple_blist_get_handle(), "blist-node-added",
+                             account, PURPLE_CALLBACK(blistNodeAdded));
     delete static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
     purple_connection_set_protocol_data(gc, NULL);
 }
@@ -692,6 +706,14 @@ static void tgprpl_request_delete_contact (PurpleConnection *gc, PurpleBuddy *bu
     PurpleTdClient *tdClient = getTdClient(purple_connection_get_account(gc));
     if (tdClient)
         tdClient->removeContactAndPrivateChat(purple_buddy_get_name(buddy), !isTransientBuddy(buddy));
+}
+
+// Moved into another group, as by dragging it in Pidgin; the buddy may not have moved yet
+static void tgprpl_group_buddy (PurpleConnection *gc, const char *who, const char *oldGroup, const char *newGroup)
+{
+    PurpleTdClient *tdClient = getTdClient(purple_connection_get_account(gc));
+    if (tdClient && who && newGroup)
+        tdClient->buddyMoved(who, newGroup);
 }
 
 static std::array<const char *, 3> invitePrefixes {
@@ -1217,7 +1239,7 @@ static PurplePluginProtocolInfo prpl_info = {
     .get_cb_info              = NULL,
     .get_cb_away              = NULL,
     .alias_buddy              = tgprpl_rename_buddy,
-    .group_buddy              = NULL,
+    .group_buddy              = tgprpl_group_buddy,
     .rename_group             = renameGroup,
     .buddy_free               = NULL,
     .convo_closed             = NULL,

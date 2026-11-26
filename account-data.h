@@ -33,7 +33,9 @@ UserId      purpleBuddyNameToUserId(const char *s);
 SecretChatId purpleBuddyNameToSecretChatId(const char *s);
 bool        isPrivateChat(const td::td_api::chat &chat);
 UserId      getUserIdByPrivateChat(const td::td_api::chat &chat);
-bool        isChatInContactList(const td::td_api::chat &chat, const td::td_api::user *privateChatUser);
+class TdAccountData;
+bool        isChatInContactList(const TdAccountData &account, const td::td_api::chat &chat,
+                                const td::td_api::user *privateChatUser);
 bool        canReportAsSpam(const td::td_api::chat &chat);
 BasicGroupId getBasicGroupId(const td::td_api::chat &chat);
 SupergroupId getSupergroupId(const td::td_api::chat &chat);
@@ -97,6 +99,8 @@ public:
     enum class Type {
         InviteLink,
         Username,
+        // Its entry moved out of "Telegram: not joined": no tab opened for it
+        Moved,
     };
     std::string joinString;
     Type        type;

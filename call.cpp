@@ -72,7 +72,7 @@ static std::string getPurpleUserName(UserId userId, TdAccountData &account)
     const td::td_api::user *user = account.getUser(userId);
     if (user) {
         const td::td_api::chat *privateChat = account.getPrivateChatByUserId(userId);
-        if (privateChat && isChatInContactList(*privateChat, user))
+        if (privateChat && isChatInContactList(account, *privateChat, user))
             return getPurpleBuddyName(*user);
         else
             return account.getDisplayName(*user);

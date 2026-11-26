@@ -223,7 +223,7 @@ TEST_F(PrivateChatTest, ContactedByNew)
         make_object<userStatusOffline>()
     )));
 
-    // They message us
+    // They message us: not a contact of ours, they are kept apart, but not left out
     object_ptr<updateNewChat> chatUpdate = standardPrivateChat(0);
     chatUpdate->chat_->positions_.push_back(make_object<chatPosition>(make_object<chatListMain>(), 1, false, nullptr));
     tgl.update(std::move(chatUpdate));
@@ -231,7 +231,7 @@ TEST_F(PrivateChatTest, ContactedByNew)
         purpleUserName(0),
         userFirstNames[0] + " " + userLastNames[0],
         account,
-        nullptr, nullptr, nullptr
+        nullptr, purple_find_group("Telegram: not in contacts"), nullptr
     ));
 
     tgl.update(make_object<updateNewMessage>(makeMessage(
@@ -265,7 +265,8 @@ TEST_F(PrivateChatTest, ContactedByNew)
     )));
 }
 
-// Either offer to report the chat as spam keeps a stranger out of the lasting buddy list
+// A stranger stays out of the lasting buddy list, reported or not, until moved out of "Telegram: not
+// in contacts", which adds them to contacts
 void PrivateChatTest::contactedByStranger(object_ptr<ChatActionBar> &&actionBar)
 {
     login();
@@ -318,13 +319,67 @@ void PrivateChatTest::contactedByStranger(object_ptr<ChatActionBar> &&actionBar)
     prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
                                              "Reported to Telegram's moderators.", PURPLE_MESSAGE_SYSTEM, 0));
 
-    // We dismiss the offer: the same buddy is a lasting one, keeping the conversation's tab
+    // The offer goes, as after a report: the buddy stays as it was
     auto actionBarUpdate = make_object<updateChatActionBar>();
     actionBarUpdate->chat_id_ = chatIds[0];
     tgl.update(std::move(actionBarUpdate));
-    prpl.verifyEvents(AddBuddyEvent(purpleUserName(0), displayName, account, nullptr, nullptr, nullptr));
+    prpl.verifyNoEvents();
     EXPECT_EQ(buddy, purple_find_buddy(account, purpleUserName(0).c_str()));
+    EXPECT_TRUE(purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+
+    // Renamed, the buddy shows their new name
+    tgl.update(make_object<updateUser>(makeUser(userIds[0], "New", userLastNames[0], "",
+                                                make_object<userStatusOffline>())));
+    prpl.verifyEvents(AliasBuddyEvent(purpleUserName(0), "New " + userLastNames[0]));
+    tgl.update(make_object<updateUser>(makeUser(userIds[0], userFirstNames[0], userLastNames[0], "",
+                                                make_object<userStatusOffline>())));
+    prpl.verifyEvents(AliasBuddyEvent(purpleUserName(0), displayName));
+    EXPECT_TRUE(purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+
+    // Moved into a group of ours: added to contacts, our phone number not given. Until they are a
+    // contact the buddy is not saved; if adding them fails, it is back where it was
+    purple_blist_add_buddy(buddy, NULL, &standardPurpleGroup, NULL);
+    prpl.discardEvents();
+    pluginInfo().group_buddy(connection, purpleUserName(0).c_str(), "Telegram: not in contacts",
+                             standardPurpleGroup.name);
+    tgl.verifyRequest(*makeAddContact(userIds[0], "", userFirstNames[0], userLastNames[0], false));
+    tgl.reply(makeError(400, "Failed"));
+    prpl.verifyEvents(AddBuddyEvent(purpleUserName(0), displayName, account, nullptr, transient, nullptr));
+    EXPECT_TRUE(purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+    EXPECT_EQ(transient, purple_buddy_get_group(buddy));
+
+    // Moved again, tried again: as a contact, kept where it was put
+    purple_blist_add_buddy(buddy, NULL, &standardPurpleGroup, NULL);
+    prpl.discardEvents();
+    pluginInfo().group_buddy(connection, purpleUserName(0).c_str(), "Telegram: not in contacts",
+                             standardPurpleGroup.name);
+    tgl.verifyRequest(*makeAddContact(userIds[0], "", userFirstNames[0], userLastNames[0], false));
+    auto userUpdate = make_object<updateUser>(makeUser(userIds[0], userFirstNames[0], userLastNames[0], "",
+                                                       make_object<userStatusOffline>()));
+    userUpdate->user_->is_contact_ = true;
+    tgl.update(std::move(userUpdate));
+    prpl.verifyEvents(AddBuddyEvent(purpleUserName(0), displayName, account, nullptr, &standardPurpleGroup, nullptr));
     EXPECT_FALSE(purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+    EXPECT_EQ(&standardPurpleGroup, purple_buddy_get_group(buddy));
+    tgl.reply(make_object<ok>());
+    tgl.verifyRequest(createPrivateChat(userIds[0], false));
+    tgl.reply(makeChat(chatIds[0], make_object<chatTypePrivate>(userIds[0]), displayName, nullptr, 0, 0, 0));
+    EXPECT_EQ(buddy, purple_find_buddy(account, purpleUserName(0).c_str()));
+    EXPECT_EQ(&standardPurpleGroup, purple_buddy_get_group(buddy));
+}
+
+// A contact, moved either way, is left to libpurple
+TEST_F(PrivateChatTest, BuddyMovedNotAdded)
+{
+    loginWithOneContact();
+    PurpleBuddy *buddy = purple_find_buddy(account, purpleUserName(0).c_str());
+    ASSERT_NE(nullptr, buddy);
+    pluginInfo().group_buddy(connection, purpleUserName(0).c_str(), standardPurpleGroup.name,
+                             "Telegram: not in contacts");
+    pluginInfo().group_buddy(connection, purpleUserName(0).c_str(), "Telegram: not in contacts",
+                             standardPurpleGroup.name);
+    tgl.verifyNoRequests();
+    prpl.verifyNoEvents();
 }
 
 TEST_F(PrivateChatTest, ContactedByStranger)

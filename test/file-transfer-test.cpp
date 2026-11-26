@@ -927,7 +927,9 @@ TEST_F(FileTransferTest, SendFileToNonContact)
     login();
 
     // Normaly users without chats have to be group chat members, but for the test it doesn't matter
-    tgl.update(standardUpdateUser(0));
+    auto userUpdate = standardUpdateUser(0);
+    userUpdate->user_->is_contact_ = false;
+    tgl.update(std::move(userUpdate));
 
     // Send ﬁle successfully
     pluginInfo().send_file(
@@ -1266,7 +1268,9 @@ TEST_F(FileTransferTest, ActiveUploadAtLogout_SendFileToNonContact_LogoutBeforeC
     login();
 
     // Normaly users without chats have to be group chat members, but for the test it doesn't matter
-    tgl.update(standardUpdateUser(0));
+    auto userUpdate = standardUpdateUser(0);
+    userUpdate->user_->is_contact_ = false;
+    tgl.update(std::move(userUpdate));
 
     // Send ﬁle successfully
     pluginInfo().send_file(

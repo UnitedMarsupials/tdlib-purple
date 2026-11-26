@@ -324,17 +324,34 @@ PurpleConversation *getImConversation(PurpleAccount *account, const char *userna
 // Pidgin takes the title of a group chat's tab from its entry in the buddy list whenever it updates
 // the tab, and failing that, from the conversation's name, chat-<id>. A group we are not a member of
 // has no entry, so it gets one for as long as the program runs, in a group of its own; neither is
-// saved. Joining the group makes it a lasting one (see updateGroupChat).
-void addTransientChat(TdAccountData &account, const td::td_api::chat &chat)
+// saved. Joining the group makes it a lasting one (see updateGroupChat), as moving it into another
+// group, which joins it, does (PurpleTdClient::chatMoved).
+static const char *getTransientChatGroupName()
 {
     // TRANSLATOR: Buddy-list group, holding channels and groups shown in a conversation though not joined. It lasts until the program quits.
-    const char  *groupName = _("Telegram: not joined");
-    PurpleGroup *group     = purple_find_group(groupName);
+    return _("Telegram: not joined");
+}
+
+static const char *getTransientBuddyGroupName()
+{
+    // TRANSLATOR: Buddy-list group, holding users written with though not contacts. It lasts until the program quits.
+    return _("Telegram: not in contacts");
+}
+
+static PurpleGroup *getTransientGroup(const char *groupName)
+{
+    PurpleGroup *group = purple_find_group(groupName);
     if (!group) {
         group = purple_group_new(groupName);
         purple_blist_node_set_flags(PURPLE_BLIST_NODE(group), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
         purple_blist_add_group(group, NULL);
     }
+    return group;
+}
+
+void addTransientChat(TdAccountData &account, const td::td_api::chat &chat)
+{
+    PurpleGroup *group = getTransientGroup(getTransientChatGroupName());
 
     purple_debug_misc(config::pluginId, "Adding chat %s to the buddy list until the program quits\n",
                       chat.title_.c_str());
@@ -544,6 +561,37 @@ void restoreDeletedBuddy(TdAccountData &account, const td::td_api::user &user)
         purple_blist_alias_buddy(buddy, alias.c_str());
 }
 
+// An entry kept only while the program runs, as a buddy not a contact or a chat not joined, being
+// moved by the user into a group of theirs, which is saved. A group by our name, saved as by an
+// earlier version, is still ours: an entry put in it is not moved.
+bool isMovedOutOfTransient(PurpleBlistNode *node, PurpleGroup *group)
+{
+    if (!node || !group || !(purple_blist_node_get_flags(node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE) ||
+        (purple_blist_node_get_flags(PURPLE_BLIST_NODE(group)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE))
+        return false;
+    const char *groupName = purple_group_get_name(group);
+    return g_strcmp0(groupName, getTransientChatGroupName()) &&
+           g_strcmp0(groupName, getTransientBuddyGroupName());
+}
+
+// Moved out by the user, an entry that could not be kept, as a chat that cannot be joined, goes back
+// at once, rather than at the next start
+void returnToTransientGroup(PurpleBlistNode *node)
+{
+    if (!node || !(purple_blist_node_get_flags(node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE))
+        return;
+    if (PURPLE_BLIST_NODE_IS_CHAT(node))
+        purple_blist_add_chat(PURPLE_CHAT(node), getTransientGroup(getTransientChatGroupName()), NULL);
+    else if (PURPLE_BLIST_NODE_IS_BUDDY(node))
+        purple_blist_add_buddy(PURPLE_BUDDY(node), NULL, getTransientGroup(getTransientBuddyGroupName()), NULL);
+}
+
+void keepInBuddyList(PurpleBlistNode *node)
+{
+    purple_blist_node_set_flags(node, PurpleBlistNodeFlags(purple_blist_node_get_flags(node) &
+                                                           ~PURPLE_BLIST_NODE_FLAG_NO_SAVE));
+}
+
 bool isTransientBuddy(PurpleBuddy *buddy)
 {
     return buddy && (purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
@@ -551,23 +599,23 @@ bool isTransientBuddy(PurpleBuddy *buddy)
 
 // A conversation with a user goes by their id, which Pidgin shows by the name of the user's buddy:
 // one not a contact gets a buddy for as long as the program runs, in a group of its own; neither is
-// saved. Becoming a contact makes it a lasting one (see updatePrivateChat).
+// saved. Becoming a contact makes it a lasting one (see updatePrivateChat), as moving it into
+// another group does, by adding them (PurpleTdClient::buddyMoved); so for a chat not joined
+// (addTransientChat).
 std::string addTransientBuddy(TdAccountData &account, const td::td_api::user &user)
 {
-    std::string buddyName = getPurpleBuddyName(user);
-    if (purple_find_buddy(account.purpleAccount, buddyName.c_str()))
+    std::string  buddyName = getPurpleBuddyName(user);
+    std::string  alias     = account.getDisplayName(user);
+    PurpleBuddy *buddy     = purple_find_buddy(account.purpleAccount, buddyName.c_str());
+    if (buddy) {
+        // Renamed, as a contact's buddy is (updatePrivateChat)
+        if (isTransientBuddy(buddy) && !alias.empty())
+            purple_blist_alias_buddy(buddy, alias.c_str());
         return buddyName;
-    // TRANSLATOR: Buddy-list group, holding users written with though not contacts. It lasts until the program quits.
-    const char  *groupName = _("Telegram: not in contacts");
-    PurpleGroup *group     = purple_find_group(groupName);
-    if (!group) {
-        group = purple_group_new(groupName);
-        purple_blist_node_set_flags(PURPLE_BLIST_NODE(group), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
-        purple_blist_add_group(group, NULL);
     }
-    std::string alias = account.getDisplayName(user);
+    PurpleGroup *group = getTransientGroup(getTransientBuddyGroupName());
     purple_debug_misc(config::pluginId, "Adding %s to the buddy list until the program quits\n", buddyName.c_str());
-    PurpleBuddy *buddy = purple_buddy_new(account.purpleAccount, buddyName.c_str(), alias.empty() ? NULL : alias.c_str());
+    buddy = purple_buddy_new(account.purpleAccount, buddyName.c_str(), alias.empty() ? NULL : alias.c_str());
     purple_blist_node_set_flags(PURPLE_BLIST_NODE(buddy), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
     purple_blist_add_buddy(buddy, NULL, group, NULL);
     return buddyName;
@@ -591,14 +639,16 @@ void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, con
         const ContactRequest *contactReq = account.findContactRequest(getId(user));
         PurpleGroup          *group      = (contactReq && !contactReq->groupName.empty()) ?
                                            purple_find_group(contactReq->groupName.c_str()) : NULL;
+        // Moved out of "Telegram: not in contacts" by the user (PurpleTdClient::buddyMoved), it stays
+        if (buddy && isMovedOutOfTransient(PURPLE_BLIST_NODE(buddy), purple_buddy_get_group(buddy)))
+            group = purple_buddy_get_group(buddy);
         if (group)
             purple_debug_misc(config::pluginId, "Adding into group %s\n", purple_group_get_name(group));
 
         // One written with before, as no contact, is the same buddy, a lasting one now, so that the
         // conversation with them stays the same tab
         if (buddy) {
-            purple_blist_node_set_flags(PURPLE_BLIST_NODE(buddy), PurpleBlistNodeFlags(
-                purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & ~PURPLE_BLIST_NODE_FLAG_NO_SAVE));
+            keepInBuddyList(PURPLE_BLIST_NODE(buddy));
             if (!alias.empty())
                 purple_blist_alias_buddy(buddy, alias.c_str());
         } else
@@ -669,9 +719,11 @@ static void updateGroupChat(TdAccountData &account, const td::td_api::chat &chat
         PurpleBlistNode *node = PURPLE_BLIST_NODE(purpleChat);
         if (purple_blist_node_get_flags(node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE) {
             purple_debug_misc(config::pluginId, "Keeping chat %s in the buddy list\n", chat.title_.c_str());
-            purple_blist_node_set_flags(node, (PurpleBlistNodeFlags)(purple_blist_node_get_flags(node) &
-                                                                     ~PURPLE_BLIST_NODE_FLAG_NO_SAVE));
-            purple_blist_add_chat(purpleChat, NULL, NULL);
+            // Where joined chats are, unless the user moved it into a group of theirs to join it
+            bool moved = isMovedOutOfTransient(node, purple_chat_get_group(purpleChat));
+            keepInBuddyList(node);
+            if (!moved)
+                purple_blist_add_chat(purpleChat, NULL, NULL);
         }
         // As saved by an earlier version
         completeChatComponents(purpleChat);

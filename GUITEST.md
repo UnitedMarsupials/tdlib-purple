@@ -260,9 +260,16 @@ When a stranger writes first, as spammers do, right-click their message, and the
 
 * The message's menu has "Report" and their name; the buddy's, "Report…".
 * Chosen, it asks nothing: the tab says "Reported to Telegram's moderators.", and the buddy
-  leaves "Telegram: not in contacts", as the offer is gone.
+  stays under "Telegram: not in contacts", also after a restart, and after we answer them.
 * Before reporting, restart Pidgin: the buddy is under "Telegram: not in contacts" again, and
   opens their chat with its history.
+
+With someone not a contact, whom you want as one, drag their buddy from "Telegram: not in
+contacts" into a group of yours.
+
+* They are a contact now, in the phone app too, under the name they gave themselves, and our
+  phone number is not shared with them (unless our privacy setting shows it to every contact);
+  the buddy stays in that group after a restart.
 
 ### M6. A message's link
 
@@ -573,6 +580,10 @@ Open a public channel not joined, from a link to it, and quit Pidgin; start it a
   whose conversation was logged, and any person written with who is not a contact, under
   "Telegram: not in contacts".
 * Opened, the channel's tab fills with its messages, as from the link, and nothing is sent to it.
+* Dragged into a group of yours, the channel is joined (subscribed to, in the phone app too),
+  without a tab opened for it, and stays in that group, also after a restart. No "Unexpected
+  response" comes up. One that cannot be joined, as a channel that removed us, says why, and goes
+  back under "Telegram: not joined" at once.
 * Left open while the channel posts, its new posts show in the tab; scrolled far back, the post
   waits for the tab's end. Closed, nothing more of it comes.
 * A channel never opened before gets a log as its tab is filled (a new directory under

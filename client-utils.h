@@ -34,6 +34,10 @@ bool                downloadsChatMedia(const TdAccountData &account, const td::t
 // program runs, never saved. Its name, which the conversation goes by, as any user's.
 std::string         addTransientBuddy(TdAccountData &account, const td::td_api::user &user);
 bool                isTransientBuddy(PurpleBuddy *buddy);
+bool                isMovedOutOfTransient(PurpleBlistNode *node, PurpleGroup *group);
+// Saved from now on, wherever it is
+void                keepInBuddyList(PurpleBlistNode *node);
+void                returnToTransientGroup(PurpleBlistNode *node);
 std::vector<const td::td_api::user *> getUsersByPurpleName(const char *buddyName, TdAccountData &account,
                                                            const char *action, bool byDisplayName = false);
 PurpleConversation *getImConversation(PurpleAccount *account, const char *username);

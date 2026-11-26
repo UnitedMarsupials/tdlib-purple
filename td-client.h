@@ -65,6 +65,8 @@ public:
     bool hasUnreadReactions(PurpleBuddy *buddy);
 
     void addContact(const std::string &purpleName, const std::string &alias, const std::string &groupName);
+    void buddyMoved(const char *buddyName, const char *groupName);
+    void chatMoved(PurpleChat *purpleChat);
     void renameContact(const char *buddyName, const char *newAlias);
     void removeContactAndPrivateChat(const std::string &buddyName, bool contact);
     void deleteLocalChat(ChatId chatId);
@@ -280,7 +282,7 @@ private:
     void       updateSupergroupFull(SupergroupId groupId, td::td_api::object_ptr<td::td_api::supergroupFullInfo> groupInfo);
 
     void       addContactById(UserId userId, const std::string &phoneNumber, const std::string &alias,
-                              const std::string &groupName);
+                              const std::string &groupName, bool sharePhoneNumber = true);
     void       addChat(td::td_api::object_ptr<td::td_api::chat> chat);
     void       handleUserChatAction(const td::td_api::updateChatAction &updateChatAction);
     void       showUserChatAction(UserId userId, bool isTyping);

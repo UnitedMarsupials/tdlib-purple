@@ -482,10 +482,11 @@ void purple_blist_add_chat(PurpleChat *chat, PurpleGroup *group, PurpleBlistNode
                                  [chat](const AccountInfo &info) { return (info.account == chat->account); });
     ASSERT_FALSE(pAccount == g_accounts.end()) << "Adding chat with unknown account";
 
-    // One in the buddy list already is moved, as real libpurple does
+    // One in the buddy list already is moved, as real libpurple does, which tells only the signal
     if (std::find(pAccount->chats.begin(), pAccount->chats.end(), chat) != pAccount->chats.end()) {
         chat->node.parent = group ? &group->node : NULL;
         EVENT(AddChatEvent, name, chat->alias, chat->account, group, node);
+        emitBlistNodeAdded(&chat->node);
         return;
     }
 
@@ -500,6 +501,12 @@ void purple_blist_add_chat(PurpleChat *chat, PurpleGroup *group, PurpleBlistNode
     pAccount->chats.push_back(chat);
 
     EVENT(AddChatEvent, name, chat->alias, chat->account, group, node);
+    emitBlistNodeAdded(&chat->node);
+}
+
+PurpleGroup *purple_chat_get_group(PurpleChat *chat)
+{
+    return reinterpret_cast<PurpleGroup *>(chat->node.parent);
 }
 
 PurpleChat *purple_blist_find_chat(PurpleAccount *account, const char *name)
@@ -2278,6 +2285,19 @@ void purple_signal_disconnect(void *instance, const char *signal,
                                               return (handler.signal == signal) && (handler.func == func);
                                           }),
                            g_signalHandlers.end());
+}
+
+void *purple_blist_get_handle()
+{
+    static int handle;
+    return &handle;
+}
+
+void emitBlistNodeAdded(PurpleBlistNode *node)
+{
+    for (const SignalHandler &handler: g_signalHandlers)
+        if (handler.signal == "blist-node-added")
+            reinterpret_cast<void (*)(PurpleBlistNode *, void *)>(handler.func)(node, handler.data);
 }
 
 void emitSignal(const char *signal)

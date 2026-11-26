@@ -1259,7 +1259,8 @@ object_ptr<importContacts> makeImportContacts(const std::string &phoneNumber)
 }
 
 object_ptr<addContact> makeAddContact(int64_t userId, const std::string &phoneNumber,
-                                      const std::string &firstName, const std::string &lastName)
+                                      const std::string &firstName, const std::string &lastName,
+                                      bool sharePhoneNumber)
 {
     auto result = make_object<addContact>();
 #if TDLIB_API_IMPORTED_CONTACT
@@ -1272,8 +1273,19 @@ object_ptr<addContact> makeAddContact(int64_t userId, const std::string &phoneNu
     result->contact_->phone_number_ = phoneNumber;
     result->contact_->first_name_   = firstName;
     result->contact_->last_name_    = lastName;
-    result->share_phone_number_     = true;
+    result->share_phone_number_     = sharePhoneNumber;
     return result;
+}
+
+object_ptr<Object> makeChatJoined(int64_t chatId, object_ptr<Object> &&olderReply)
+{
+#if TDLIB_API_CHAT_JOIN_RESULT
+    auto result = make_object<chatJoinResultSuccess>();
+    result->chat_id_ = chatId;
+    return std::move(result);
+#else
+    return std::move(olderReply);
+#endif
 }
 
 object_ptr<addProxy> makeAddProxy(const std::string &server, int32_t port,
