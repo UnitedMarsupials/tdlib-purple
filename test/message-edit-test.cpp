@@ -381,10 +381,15 @@ TEST_F(MessageEditTest, CaptionEditedWhilePictureComes)
         ServGotImEvent(connection, purpleUserName(0), "[photo]\nold<!--tdlib-message 1-->", PURPLE_MESSAGE_RECV,
                        date)
     );
-    uint64_t download = tgl.verifyRequests({
-        make_object<viewMessages>(chatIds[0], std::vector<int64_t>(1, messageId), nullptr, true),
-        make_object<downloadFile>(fileId, 1, 0, 0, true)
-    })[1];
+    auto viewed = make_object<viewMessages>();
+    viewed->chat_id_     = chatIds[0];
+    viewed->message_ids_ = {messageId};
+    viewed->force_read_  = true;
+    auto fetched = make_object<downloadFile>();
+    fetched->file_id_     = fileId;
+    fetched->priority_    = 1;
+    fetched->synchronous_ = true;
+    uint64_t download = tgl.verifyRequests({std::move(viewed), std::move(fetched)})[1];
 
     tgl.update(makeUpdateMessageContent(chatIds[0], messageId, makeComing("", "new")));
     tgl.verifyRequest(getMessage(chatIds[0], messageId));

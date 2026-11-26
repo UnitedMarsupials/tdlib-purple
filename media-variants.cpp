@@ -69,10 +69,14 @@ static std::string describeVariant(const MediaVariant &variant)
 
 const td::td_api::file *findBiggestPhotoSize(const td::td_api::photo &photo)
 {
+    // One of unknown dimensions, as the original of a photo just sent is, is taken for the largest,
+    // as among the variants
+    auto area = [](const td::td_api::photoSize &size) {
+        return (size.width_ && size.height_) ? int64_t(size.width_) * size.height_ : INT64_MAX;
+    };
     const td::td_api::photoSize *biggest = nullptr;
     for (const auto &size: photo.sizes_)
-        if (size && size->photo_ &&
-            (!biggest || (int64_t(size->width_) * size->height_ > int64_t(biggest->width_) * biggest->height_)))
+        if (size && size->photo_ && (!biggest || (area(*size) > area(*biggest))))
             biggest = size.get();
     return biggest ? biggest->photo_.get() : nullptr;
 }

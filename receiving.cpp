@@ -2227,7 +2227,9 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
     }
 
     // A video's thumbnail still coming: shown as its stand-in, the message logged once it is here
+    // ...within the limit on what is fetched unasked, as a cover may not be in any of its sizes
     bool previewComing = fullMessage.previewFileId && !fullMessage.previewFetchDone && canShowImages() &&
+                         isSizeWithinLimit(fullMessage.previewSizeKb, fullMessage.inlineFileSizeLimit) &&
                          !account.hasPictureFailed(fullMessage.previewFileId);
     if (previewComing)
         messageInfo.picturesComing = true;
@@ -2560,6 +2562,7 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
     fullMessage.repliedMessageFetchDoneOrFailed = false;
     fullMessage.previewPath.clear();
     fullMessage.previewFileId = 0;
+    fullMessage.previewSizeKb = 0;
     fullMessage.previewFetchDone = false;
     fullMessage.inlineDownloadComplete = false;
     fullMessage.inlineDownloadTimeout = false;
@@ -2617,6 +2620,7 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
                                                           &fullMessage.previewLowGrade);
         if (preview) {
             fullMessage.previewFileId = preview->id_;
+            fullMessage.previewSizeKb = getFileSizeKb(*preview);
             if (preview->local_ && preview->local_->is_downloading_completed_) {
                 fullMessage.previewPath = preview->local_->path_;
                 fullMessage.previewFetchDone = true;

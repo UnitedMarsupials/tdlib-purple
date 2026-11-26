@@ -279,6 +279,7 @@ struct IncomingMessage {
     // Its size, and the low-grade picture the video carries, for its stand-in while it comes
     int32_t     previewWidth  = 0;
     int32_t     previewHeight = 0;
+    unsigned    previewSizeKb = 0;
     std::string previewLowGrade;
     unsigned inlineFileSizeLimit;
     bool     standardDownloadConfigured;

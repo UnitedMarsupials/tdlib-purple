@@ -951,12 +951,23 @@ void purple_conversation_update(PurpleConversation *conv, PurpleConvUpdateType t
 {
 }
 
+// References taken beyond the one each image comes with, as the plugin holds them
+static std::map<int, int> g_imageRefs;
+
 void purple_imgstore_unref_by_id(int id)
 {
+    g_imageRefs[id]--;
 }
 
 void purple_imgstore_ref_by_id(int id)
 {
+    g_imageRefs[id]++;
+}
+
+int getImageRefs(int id)
+{
+    auto it = g_imageRefs.find(id);
+    return (it != g_imageRefs.end()) ? it->second : 0;
 }
 
 void *purple_notify_uri(void *handle, const char *uri)
