@@ -45,11 +45,14 @@
 - **A message of ours, edited and then deleted from here, is said to be deleted by us as our own**, rather than named as one we sent like another member's. An edit forgot that the message was ours.
 - **In Pidgin, our own messages deleted since are struck out, or left out, when a chat's tab is filled again, like everyone else's.** Ours were logged as they were written, before Telegram gave them the ids they keep, so that the log could not say which they were. Now each is logged once sent, under its lasting id; one never sent is not logged at all, though TDLib still shows it.
 - **A group's or channel's picture shows on its buddy-list entry as soon as it is downloaded.** The entry was looked for by a user, which a group's picture has none of, so the picture showed only once something else about the chat changed.
+- **A buddy's "Last online" is written as the rest of Pidgin writes dates, on one line.** It was C's `ctime`, in English and ending in a line break.
+- **A video note that cannot be shown says it is a faulty video note, not a voice note.**
 
 ### Translations
 
 - **Czech, German, Polish, Albanian and Ukrainian are complete again**, with the strings 0.9.6 added: forwarding, copying a message's file or picture, a group's news, and who deleted a message.
 - **The same languages have the strings added since: the local database's password, forwarding to several chats at once, the buddy-list group of those not in the contacts, and reporting a group's member.** Some had been matched by msgmerge to older strings they resembled, and said, for instance, "New password" for "Database password" or "Enable secret chats" for encrypting the database.
+- **The notices of a secret file received, and the "Send read receipts" option, are translated**: they were marked for translators but not looked up. Ukrainian has them.
 
 ## 0.9.6 (2026-11-14)
 

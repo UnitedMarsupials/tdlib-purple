@@ -36,7 +36,7 @@ static const char *tgprpl_list_icon (PurpleAccount *, PurpleBuddy *)
     return "telegram";
 }
 
-static const char *getLastOnline(const td::td_api::UserStatus &status)
+static std::string getLastOnline(const td::td_api::UserStatus &status)
 {
     switch (status.get_id()) {
         case td::td_api::userStatusOnline::ID:
@@ -44,8 +44,9 @@ static const char *getLastOnline(const td::td_api::UserStatus &status)
             return _("now");
         case td::td_api::userStatusOffline::ID: {
             const td::td_api::userStatusOffline &offline = static_cast<const td::td_api::userStatusOffline &>(status);
-            time_t timestamp = offline.was_online_;
-            return ctime(&timestamp);
+            time_t    timestamp = offline.was_online_;
+            struct tm local;
+            return localtime_r(&timestamp, &local) ? purple_date_format_long(&local) : "";
         }
         case td::td_api::userStatusRecently::ID:
             // TRANSLATOR: Buddy infobox, value for "last online"
@@ -70,10 +71,10 @@ static void tgprpl_tooltip_text (PurpleBuddy *buddy, PurpleNotifyUserInfo *info,
     tdClient->getUsers(purple_buddy_get_name(buddy), users);
 
     if ((users.size() == 1) && users[0]->status_) {
-        const char *lastOnline = getLastOnline(*users[0]->status_);
-        if (lastOnline && *lastOnline) {
+        std::string lastOnline = getLastOnline(*users[0]->status_);
+        if (!lastOnline.empty()) {
             // TRANSLATOR: Buddy infobox, key
-            purple_notify_user_info_add_pair(info, _("Last online"), lastOnline);
+            purple_notify_user_info_add_pair(info, _("Last online"), lastOnline.c_str());
         }
     }
 }
@@ -655,10 +656,10 @@ static void tgprpl_info_show (PurpleConnection *gc, const char *who)
             purple_notify_user_info_add_pair(info, _("Phone number"), user->phone_number_.c_str());
         }
         if (user->status_) {
-            const char *lastOnline = getLastOnline(*user->status_);
-            if (lastOnline && *lastOnline) {
+            std::string lastOnline = getLastOnline(*user->status_);
+            if (!lastOnline.empty()) {
                 // TRANSLATOR: Buddy infobox, key
-                purple_notify_user_info_add_pair(info, _("Last online"), lastOnline);
+                purple_notify_user_info_add_pair(info, _("Last online"), lastOnline.c_str());
             }
         }
         std::string username = getPurpleBuddyName(*user);
@@ -1922,7 +1923,8 @@ static void tgprpl_init (PurplePlugin *)
     prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
 
     if (canDisableReadReceipts()) {
-        opt = purple_account_option_bool_new ("Send read receipts",
+        // TRANSLATOR: Account settings, key (boolean)
+        opt = purple_account_option_bool_new (_("Send read receipts"),
                                               AccountOptions::ReadReceipts,
                                               AccountOptions::ReadReceiptsDefault);
         prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);

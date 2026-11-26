@@ -2248,14 +2248,14 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
     if (fileInfo.secret) {
         if (purple_account_get_bool(account.purpleAccount, AccountOptions::ShowSelfDestruct, AccountOptions::ShowSelfDestructDefault)) {
             // TRANSLATOR: In-chat warning message
-            std::string notice = formatMessage("Received secret file {}, displaying anyway",
+            std::string notice = formatMessage(_("Received secret file {}, displaying anyway"),
                                                escapeForDisplay(fileInfo.description));
             notice = makeNoticeWithSender(chat, messageInfo, notice.c_str(), account.purpleAccount);
             showMessageText(account, chat, messageInfo, !fileInfo.caption.empty() ? fileInfo.caption.c_str() : nullptr,
                             notice.c_str());
         } else {
             // TRANSLATOR: In-chat warning message
-            std::string notice = formatMessage("Ignoring secret file ({})",
+            std::string notice = formatMessage(_("Ignoring secret file ({})"),
                                                escapeForDisplay(fileInfo.description));
             notice = makeNoticeWithSender(chat, messageInfo, notice.c_str(), account.purpleAccount);
             showMessageText(account, chat, messageInfo, !fileInfo.caption.empty() ? fileInfo.caption.c_str() : nullptr,

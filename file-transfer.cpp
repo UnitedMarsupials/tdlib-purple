@@ -600,7 +600,7 @@ std::string makeDocumentDescription(const td::td_api::videoNote *document)
 {
     if (!document)
         // Unlikely error message not worth translating
-        return "faulty voice note";
+        return "faulty video note";
     // TRANSLATOR: In-line document type. Argument will be a duration.
     return formatMessage(_("video note [{}]"), formatDuration(document->duration_));
 }
@@ -630,6 +630,8 @@ std::string makeDocumentDescription(const td::td_api::video *document, bool orig
 
 std::string getFileName(const td::td_api::voiceNote* document)
 {
+    if (!document)
+        return _("voiceNote");
     td::Client::Response resp = td::Client::execute({0, td::td_api::make_object<td::td_api::getFileExtension>(document->mime_type_)});
     if (resp.object && (resp.object->get_id() == td::td_api::text::ID)) {
         // TRANSLATOR: Filename. Keep it short, and as few special characters as possible.
@@ -638,6 +640,7 @@ std::string getFileName(const td::td_api::voiceNote* document)
     return _("voiceNote");
 }
 
+// Always the same name: Telegram's video notes are of one format
 std::string getFileName(const td::td_api::videoNote *)
 {
     // TRANSLATOR: Filename. Keep it short, and as few special characters as possible.
