@@ -1108,7 +1108,7 @@ static void showDownloadedSticker(const td::td_api::chat &chat, TgMessageInfo &m
             if (thumbnail->local_ && thumbnail->local_->is_downloading_completed_)
                 showDownloadedSticker(chat, message, thumbnail->local_->path_,
                                       fileDescription, nullptr, transceiver, account);
-            else if (downloadsMedia(account.purpleAccount, findChatBlistNode(account, chat)))
+            else if (downloadsChatMedia(account, chat))
                 downloadFileInline(thumbnail->id_, getId(chat), message, fileDescription, nullptr,
                                    transceiver, account);
             else
@@ -1309,7 +1309,7 @@ static bool fetchesPicture(TdAccountData &account, const td::td_api::chat &chat,
                            int32_t fileId)
 {
     if (!account.hasPictureFailed(fileId) &&
-        downloadsMedia(account.purpleAccount, findChatBlistNode(account, chat)))
+        downloadsChatMedia(account, chat))
         return true;
     account.leavePicture(getId(chat), messageId, fileId);
     return false;
@@ -1318,7 +1318,7 @@ static bool fetchesPicture(TdAccountData &account, const td::td_api::chat &chat,
 void fetchViewedPictures(TdAccountData &account, PurpleConversation *conv, const std::vector<MessageId> &messageIds)
 {
     const td::td_api::chat *chat = findConversationChat(account, conv);
-    if (!chat || !downloadsMedia(account.purpleAccount, findChatBlistNode(account, *chat)))
+    if (!chat || !downloadsChatMedia(account, *chat))
         return;
     for (MessageId messageId: messageIds) {
         std::vector<int32_t> fileIds;
@@ -1509,6 +1509,11 @@ static void showSticker(const td::td_api::chat &chat, IncomingMessage &fullMessa
         }
         if (fetchesPicture(account, chat, message.id, thumbnail->id_))
             fetched = thumbnail->id_;
+        else if (!messageLinksEnabled()) {
+            // With no link to fetch the thumbnail, the sticker's own file
+            showGenericFileInline(chat, message, file.local_->path_, NULL, words, std::string(), account);
+            return;
+        }
         text    = makeStandInText("", sticker.thumbnail_ ? sticker.thumbnail_->width_ : 0,
                                   sticker.thumbnail_ ? sticker.thumbnail_->height_ : 0, true, words, image);
     } else {
@@ -1616,7 +1621,7 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
             prefetch = nullptr;
         // Not where the chat's media are not fetched unasked: then only once clicked
         if (prefetch && !(prefetch->local_ && prefetch->local_->is_downloading_completed_) &&
-            downloadsMedia(account.purpleAccount, findChatBlistNode(account, chat)))
+            downloadsChatMedia(account, chat))
         {
             purple_debug_misc(config::pluginId, "Fetching %s (file id %d) in the background\n",
                               fileDesc.c_str(), (int)prefetch->id_);
@@ -2671,7 +2676,7 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
     }
 
     fullMessage.message = std::move(message);
-    fullMessage.downloadsMedia = downloadsMedia(account.purpleAccount, findChatBlistNode(account, chat));
+    fullMessage.downloadsMedia = downloadsChatMedia(account, chat);
     fullMessage.previewWaited = waitsForPreview(fullMessage);
 }
 
@@ -2890,9 +2895,12 @@ static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId
     account.transceiver.sendQuery(std::move(request),
         [&account, chatId, messageId, leftPictures](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
             const td::td_api::chat *chat = account.getChat(chatId);
-            // Shown later, as it is by then
-            if (account.pendingMessages.findPendingMessage(chatId, messageId))
+            // Shown later, as it is by then; what it leaves is left again, to be tried as it is seen
+            if (account.pendingMessages.findPendingMessage(chatId, messageId)) {
+                for (int32_t fileId: leftPictures)
+                    account.leavePicture(chatId, messageId, fileId);
                 return;
+            }
             // With nowhere to show it again, it is logged as it was shown, if it waited for that
             if (!chat || !object || (object->get_id() != td::td_api::message::ID) ||
                 !canReplaceMessage(findMessageConversation(account, *chat), messageId))

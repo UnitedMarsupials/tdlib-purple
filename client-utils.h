@@ -26,6 +26,8 @@ void                setKeepsDeletedMessages(PurpleBlistNode *node, bool keep);
 // or else as for the account, but for a stranger or a chat not joined, whose aren't
 bool                downloadsMedia(PurpleAccount *account, PurpleBlistNode *node);
 void                setDownloadsMedia(PurpleBlistNode *node, bool download);
+// The same for a chat: one with no entry, being a stranger's or not joined, is not downloaded
+bool                downloadsChatMedia(const TdAccountData &account, const td::td_api::chat &chat);
 // The user a name is of: an id, as the plugin names users, our own number, a phone number or a
 // @username; a display name too, if asked for, where a person types it
 // A user's buddy, as a conversation with them needs, if they are not a contact: for as long as the

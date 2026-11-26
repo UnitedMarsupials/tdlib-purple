@@ -237,6 +237,18 @@ void setDownloadsMedia(PurpleBlistNode *node, bool download)
     purple_blist_node_set_string(node, DOWNLOAD_MEDIA_SETTING, download ? "yes" : "no");
 }
 
+bool downloadsChatMedia(const TdAccountData &account, const td::td_api::chat &chat)
+{
+    PurpleBlistNode *node = findChatBlistNode(account, chat);
+    if (!node) {
+        // Its entry removed by hand, a contact's or a chat joined goes by the account
+        const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
+        if (privateUser ? !privateUser->is_contact_ : !account.isGroupChatWithMembership(chat))
+            return false;
+    }
+    return downloadsMedia(account.purpleAccount, node);
+}
+
 std::string getPurpleBuddyName(const td::td_api::user &user)
 {
     return getPurpleBuddyName(getId(user));
