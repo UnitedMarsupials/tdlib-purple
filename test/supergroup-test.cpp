@@ -1,3 +1,4 @@
+#include "buildopt.h"
 #include "supergroup-test.h"
 #include <ctime>
 #include <glib/gstrfuncs.h>
@@ -881,6 +882,43 @@ TEST_F(SupergroupTest, ForeignChannel)
     tgl.update(make_object<updateNewMessage>(std::move(message)));
     prpl.verifyNoEvents();
     tgl.verifyNoRequests();
+}
+
+// A photo in a channel not joined, shown as it comes before it has an entry, is not downloaded
+// unasked, whatever the account's setting
+TEST_F(SupergroupTest, UnjoinedChannelPhotoNotDownloaded)
+{
+    constexpr int32_t date      = 12345;
+    constexpr int64_t messageId = 10000;
+    constexpr int32_t fileId    = 1234;
+    login();
+    purple_account_set_bool(account, "show-unjoined-chats", TRUE);
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusLeft>(), 2)));
+    tgl.update(make_object<updateNewChat>(makeChat(
+        groupChatId, make_object<chatTypeSupergroup>(groupId, true), groupChatTitle,
+        nullptr, 0, 0, 0
+    )));
+    ASSERT_EQ(nullptr, purple_blist_find_chat(account, groupChatPurpleName.c_str()));
+
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(::makeFile(fileId, 10000), 640, 480));
+    auto message = makeMessage(messageId, 0, groupChatId, false, date,
+        makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText("photo"), false, false, false));
+    message->is_channel_post_ = true;
+    tgl.update(make_object<updateNewMessage>(std::move(message)));
+    tgl.verifyRequest(viewMessages(groupChatId, {messageId}, nullptr, true));
+    prpl.verifyEvents(
+        AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), NULL),
+        ServGotJoinedChatEvent(connection, 1, groupChatPurpleName, groupChatTitle),
+        ConvSetTitleEvent(groupChatPurpleName, groupChatTitle),
+#ifndef NoPidgin
+        ServGotChatEvent(connection, 1, "Channel post", "[photo]\nphoto", PURPLE_MESSAGE_RECV, date)
+#else
+        ServGotChatEvent(connection, 1, "Channel post", "photo", PURPLE_MESSAGE_RECV, date),
+        ConversationWriteEvent(groupChatPurpleName, " ", "Ignoring photo download (purple_str_size_to_units)",
+                               PURPLE_MESSAGE_SYSTEM, date)
+#endif
+    );
 }
 
 // A channel not joined, with messages in Pidgin's log, has its entry for this run, unless deleted
