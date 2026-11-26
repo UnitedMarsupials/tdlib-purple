@@ -1080,6 +1080,37 @@ TEST_F(SupergroupTest, UnjoinedChannelMovedJoined)
     tgl.verifyNoRequests();
 }
 
+// A group by our name, though saved, as by an earlier version, is ours: a chat put in it is not moved
+TEST_F(SupergroupTest, UnjoinedChannelInSavedGroupNotJoined)
+{
+    constexpr int32_t date         = 12345;
+    constexpr int64_t messageId    = 10000;
+    constexpr int     purpleChatId = 1;
+    login();
+    purple_account_set_bool(account, "show-unjoined-chats", TRUE);
+    purple_blist_add_group(purple_group_new(notJoinedGroup()->name), NULL);
+
+    tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusLeft>(), 2)));
+    tgl.update(make_object<updateNewChat>(makeChat(
+        groupChatId, make_object<chatTypeSupergroup>(groupId, true), groupChatTitle,
+        nullptr, 0, 0, 0
+    )));
+    auto message = makeMessage(messageId, 0, groupChatId, false, date, makeTextMessage("Hello"));
+    message->is_channel_post_ = true;
+    tgl.update(make_object<updateNewMessage>(std::move(message)));
+    tgl.verifyRequest(viewMessages(groupChatId, {messageId}, nullptr, true));
+    prpl.verifyEvents(
+        AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), NULL),
+        ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
+        ConvSetTitleEvent(groupChatPurpleName, groupChatTitle),
+        ServGotChatEvent(connection, purpleChatId, "Channel post", "Hello", PURPLE_MESSAGE_RECV, date)
+    );
+    PurpleChat *purpleChat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
+    ASSERT_NE(nullptr, purpleChat);
+    EXPECT_TRUE(purple_blist_node_get_flags(&purpleChat->node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+    tgl.verifyNoRequests();
+}
+
 // Requests and updates of the lookups, built by their fields' names
 static object_ptr<getChat> makeGetChat(int64_t chatId)
 {

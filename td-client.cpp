@@ -4051,9 +4051,10 @@ void PurpleTdClient::renameContact(const char *buddyName, const char *newAlias)
         return;
     }
 
+    // Only renamed: whoever our phone number was shared with stays so, and no one else is added
     std::string firstName, lastName;
     getNamesFromAlias(newAlias, firstName, lastName);
-    m_transceiver.sendQuery(makeAddContact(userId, "", firstName, lastName, true), nullptr);
+    m_transceiver.sendQuery(makeAddContact(userId, "", firstName, lastName, false), nullptr);
 }
 
 // Its messages and files that TDLib keeps here, the chat taken out of the chat list; Telegram keeps

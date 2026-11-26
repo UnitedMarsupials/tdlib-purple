@@ -355,6 +355,7 @@ void PrivateChatTest::contactedByStranger(object_ptr<ChatActionBar> &&actionBar)
                                                        make_object<userStatusOffline>()));
     userUpdate->user_->is_contact_ = true;
     tgl.update(std::move(userUpdate));
+    prpl.verifyEvents(AddBuddyEvent(purpleUserName(0), displayName, account, nullptr, &standardPurpleGroup, nullptr));
     EXPECT_FALSE(purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
     EXPECT_EQ(&standardPurpleGroup, purple_buddy_get_group(buddy));
     tgl.reply(make_object<ok>());

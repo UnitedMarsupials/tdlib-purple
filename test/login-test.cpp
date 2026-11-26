@@ -305,7 +305,7 @@ TEST_F(LoginTest, RenameBuddy)
     prpl.discardEvents();
     pluginInfo().alias_buddy(connection, purpleUserName(0).c_str(), "New Name");
 
-    tgl.verifyRequest(*makeAddContact(userIds[0], "", "New", "Name"));
+    tgl.verifyRequest(*makeAddContact(userIds[0], "", "New", "Name", false));
 
     tgl.update(make_object<updateChatTitle>(chatIds[0], "New Name"));
     object_ptr<updateUser> updateUser = standardUpdateUser(0);
