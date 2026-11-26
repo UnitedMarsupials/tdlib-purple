@@ -159,6 +159,7 @@ struct TgMessageInfo {
     std::string mediaVariantLinks; // markup: links to each size a photo or video comes in
     bool        unlogged = false; // shown in the tab only, the log having it in an edit's notice
     bool        redrawn = false; // shown again, as the tab is filled anew: not logged, nothing asked
+    bool        logRedrawn = false; // shown so into a tab of a chat with no log yet: logged after all
 
     void assign(const TgMessageInfo &other)
     {
@@ -178,6 +179,7 @@ struct TgMessageInfo {
         mediaVariantLinks = other.mediaVariantLinks;
         unlogged = other.unlogged;
         redrawn = other.redrawn;
+        logRedrawn = other.logRedrawn;
     }
 };
 
@@ -516,6 +518,8 @@ public:
     void                       loadTempFileUploads();
     void                       getTempFileUploads(std::vector<std::pair<ChatId, int64_t>> &messages);
     DownloadRequest *          findDownloadRequest(int32_t fileId);
+    // Of the file for the message: the same file may come in several messages
+    bool                       isDownloadingFor(int32_t fileId, ChatId chatId, MessageId messageId);
     void                       extractFileTransferRequests(std::vector<PurpleXfer *> &transfers);
 
     // An upload's kind is what it is to be sent as

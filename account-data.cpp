@@ -886,6 +886,16 @@ DownloadRequest* TdAccountData::findDownloadRequest(int32_t fileId)
     return nullptr;
 }
 
+bool TdAccountData::isDownloadingFor(int32_t fileId, ChatId chatId, MessageId messageId)
+{
+    return std::any_of(m_requests.begin(), m_requests.end(),
+                       [fileId, chatId, messageId](const std::unique_ptr<PendingRequest> &req) {
+                           DownloadRequest *downloadReq = dynamic_cast<DownloadRequest *>(req.get());
+                           return (downloadReq && (downloadReq->fileId == fileId) &&
+                                   (downloadReq->chatId == chatId) && (downloadReq->message.id == messageId));
+                       });
+}
+
 void TdAccountData::extractFileTransferRequests(std::vector<PurpleXfer *> &transfers)
 {
     transfers.clear();

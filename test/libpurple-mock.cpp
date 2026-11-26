@@ -713,6 +713,7 @@ void purple_conversation_set_title(PurpleConversation *conv, const char *title)
 
 static std::vector<std::string> g_loggedMessages;
 static bool                     g_loggingPreferred = true;
+static int                      g_logTotalSize     = 1;
 
 void purple_conversation_write(PurpleConversation *conv, const char *who,
 		const char *message, PurpleMessageFlags flags,
@@ -920,6 +921,7 @@ extern "C++" void clearConversationData()
     g_conversationData.clear();
     g_loggedMessages.clear();
     g_loggingPreferred = true;
+    g_logTotalSize     = 1;
 }
 
 extern "C++" void setLoggingPreferred(bool logging)
@@ -1838,6 +1840,17 @@ PurpleBuddyList *purple_get_blist(void)
 GList *purple_log_get_logs(PurpleLogType type, const char *name, PurpleAccount *account)
 {
     return NULL;
+}
+
+// Logged already, unless a test says not
+extern "C++" void setLogTotalSize(int size)
+{
+    g_logTotalSize = size;
+}
+
+int purple_log_get_total_size(PurpleLogType type, const char *name, PurpleAccount *account)
+{
+    return g_logTotalSize;
 }
 
 // As Pidgin's file loggers have it, if a test makes any

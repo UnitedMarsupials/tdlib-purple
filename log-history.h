@@ -26,5 +26,7 @@ std::vector<LoggedLine> parseLoggedLines(const std::string &content, time_t logS
 // beside it as files, go into the image store. Only of logs in HTML.
 std::vector<LoggedLine> readLoggedLines(PurpleAccount *account, PurpleConversationType type, const char *name,
                                         time_t since);
+// Whether the conversation has been logged at all
+bool hasLog(PurpleAccount *account, PurpleConversationType type, const char *name);
 
 #endif

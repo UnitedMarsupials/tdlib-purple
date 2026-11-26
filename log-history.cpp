@@ -136,6 +136,12 @@ static void loadLoggedImages(LoggedLine &line, const std::string &directory)
     }
 }
 
+bool hasLog(PurpleAccount *account, PurpleConversationType type, const char *name)
+{
+    return purple_log_get_total_size((type == PURPLE_CONV_TYPE_CHAT) ? PURPLE_LOG_CHAT : PURPLE_LOG_IM, name,
+                                     account) > 0;
+}
+
 std::vector<LoggedLine> readLoggedLines(PurpleAccount *account, PurpleConversationType type, const char *name,
                                         time_t since)
 {
