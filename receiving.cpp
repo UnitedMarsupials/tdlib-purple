@@ -1071,17 +1071,9 @@ static void showDownloadedSticker(const td::td_api::chat &chat, TgMessageInfo &m
                                   td::td_api::object_ptr<td::td_api::file> thumbnail,
                                   TdTransceiver &transceiver, TdAccountData &account)
 {
+    // Where pictures can be shown, a sticker goes by showSticker(); here an animation is not shown
     if (isStickerAnimated(filePath)) {
-        if (shouldConvertAnimatedSticker(message, account.purpleAccount)) {
-            // TRANSLATOR: In-chat status update
-            std::string notice = makeNoticeWithSender(chat, message, _("Converting sticker"),
-                                                      account.purpleAccount);
-            showMessageText(account, chat, message, NULL, notice.c_str());
-            StickerConversionThread *thread;
-            thread = new StickerConversionThread(account.purpleAccount, filePath, getId(chat),
-                                                 std::move(message));
-            thread->startThread();
-        } else if (thumbnail) {
+        if (thumbnail) {
             // Avoid message like "Downloading sticker thumbnail...
             // Also ignore size limits, but only determined testers and crazy people would notice.
             if (thumbnail->local_ && thumbnail->local_->is_downloading_completed_)
@@ -1555,12 +1547,7 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
     }
 
     if (autoDownload || askDownload) {
-        if (fullMessage.animatedStickerConverted) {
-            if (fullMessage.animatedStickerConvertSuccess) {
-                std::string text = makeInlineImageText(fullMessage.animatedStickerImageId);
-                showMessageText(account, chat, fullMessage.messageInfo, text.c_str(), NULL, PURPLE_MESSAGE_IMAGES);
-            }
-        } else if (file.local_ && file.local_->is_downloading_completed_)
+        if (file.local_ && file.local_->is_downloading_completed_)
             showDownloadedFileInline(getId(chat), fullMessage.messageInfo, file.local_->path_,
                                      caption, fileDesc, std::move(fullMessage.thumbnail), preview,
                                      transceiver, account);
@@ -2462,9 +2449,6 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
     fullMessage.previewFetchDone = false;
     fullMessage.inlineDownloadComplete = false;
     fullMessage.inlineDownloadTimeout = false;
-    fullMessage.animatedStickerConverted = false;
-    fullMessage.animatedStickerConvertSuccess = false;
-    fullMessage.animatedStickerImageId = 0;
 
     const char *option = purple_account_get_string(account.purpleAccount, AccountOptions::DownloadBehaviour,
                                                    AccountOptions::DownloadBehaviourDefault());
@@ -2571,17 +2555,8 @@ static bool isFileMessageReady(const IncomingMessage &fullMessage, ChatId chatId
         if (linksToMessage(fullMessage) || showsPictureComing(fullMessage))
             return true;
         // File will be shown inline
-        // Animated stickers are not ready until converted
-        if (fullMessage.inlineDownloadComplete)
-            return !((content.get_id() == td::td_api::messageSticker::ID) &&
-                     isStickerAnimated(fullMessage.inlineDownloadedFilePath) &&
-                     shouldConvertAnimatedSticker(fullMessage.messageInfo, account.purpleAccount) &&
-                     !fullMessage.animatedStickerConverted);
-        else if (file.local_ && file.local_->is_downloading_completed_)
-            return !((content.get_id() == td::td_api::messageSticker::ID) &&
-                     isStickerAnimated(file.local_->path_) &&
-                     shouldConvertAnimatedSticker(fullMessage.messageInfo, account.purpleAccount) &&
-                     !fullMessage.animatedStickerConverted);
+        if (fullMessage.inlineDownloadComplete || (file.local_ && file.local_->is_downloading_completed_))
+            return true;
         else
             // Files above limit will either be ignored (in which case, message is ready)
             // or requested (in which case, don't try do display in order)
@@ -2824,18 +2799,7 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
     if (fileInfo.file && message.content_ && chat && isInlineDownload(fullMessage, *message.content_, *chat) &&
         !showsPictureComing(fullMessage))
     {
-        if (fileInfo.file->local_ && fileInfo.file->local_->is_downloading_completed_ &&
-            (message.content_->get_id() == td::td_api::messageSticker::ID) &&
-            isStickerAnimated(fileInfo.file->local_->path_))
-        {
-            if (shouldConvertAnimatedSticker(fullMessage.messageInfo, account.purpleAccount)) {
-                StickerConversionThread *thread;
-                thread = new StickerConversionThread(account.purpleAccount, fileInfo.file->local_->path_,
-                                                     chatId, &fullMessage.messageInfo);
-                thread->startThread();
-            }
-            // TODO: if animated stickers are disabled, fetch thumbnail instead
-        } else if (inlineDownloadNeedAutoDl(fullMessage, *fileInfo.file) && !linksToMessage(fullMessage)) {
+        if (inlineDownloadNeedAutoDl(fullMessage, *fileInfo.file) && !linksToMessage(fullMessage)) {
             // TgMessageInfo on fullMessage has replyMessage=NULL which will be copied onto DownloadRequest.
             // If message leaves PendingMessageQueue while download is still active, there's probably
             // a replyMessage on IncomingMessage by then, and it needs to be moved over to DownloadRequest.

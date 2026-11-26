@@ -286,9 +286,6 @@ struct IncomingMessage {
     bool     previewFetchDone;
     bool     inlineDownloadComplete;
     bool     inlineDownloadTimeout;
-    bool     animatedStickerConverted;
-    bool     animatedStickerConvertSuccess;
-    int      animatedStickerImageId;
 
     // For a message shown again because it was edited: when it was first sent, and whether
     // its caption is all that changed, and so all there is to show

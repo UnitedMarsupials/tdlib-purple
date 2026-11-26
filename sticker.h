@@ -43,10 +43,6 @@ public:
     // Of the sticker, whose animation is kept, once converted, for every message showing it
     int32_t fileId = 0;
     StickerConversionThread(PurpleAccount *purpleAccount, const std::string &filename,
-                            ChatId chatId, TgMessageInfo &&message)
-    : AccountThread(purpleAccount), m_message(std::move(message)), inputFileName(filename),
-        chatId(chatId) {}
-    StickerConversionThread(PurpleAccount *purpleAccount, const std::string &filename,
                             ChatId chatId, const TgMessageInfo *message)
     : AccountThread(purpleAccount), inputFileName(filename), chatId(chatId)
     {

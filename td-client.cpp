@@ -2939,8 +2939,6 @@ void PurpleTdClient::onAnimatedStickerConverted(AccountThread *arg)
     StickerConversionThread *thread = dynamic_cast<StickerConversionThread *>(arg);
     if (!thread)
         return;
-    const td::td_api::chat  *chat   = m_data.getChat(thread->chatId);
-
     std::string  errorMessage = thread->getErrorMessage();
     gchar       *imageData    =  NULL;
     gsize        imageSize    = 0;
@@ -2959,43 +2957,10 @@ void PurpleTdClient::onAnimatedStickerConverted(AccountThread *arg)
     }
 
     // Kept for every message showing the sticker
-    if (thread->fileId) {
-        if (!success)
-            purple_debug_warning(config::pluginId, "Cannot convert sticker %s: %s\n",
-                                 thread->inputFileName.c_str(), errorMessage.c_str());
-        stickerConverted(m_data, thread->fileId, success ? purple_imgstore_add_with_id(imageData, imageSize, NULL) : 0);
-        return;
-    }
-    if (!chat) {
-        g_free(imageData);
-        return;
-    }
-    IncomingMessage *pendingMessage = m_data.pendingMessages.findPendingMessage(getId(*chat), thread->message().id);
-    if (success) {
-        int id = purple_imgstore_add_with_id (imageData, imageSize, NULL);
-        if (pendingMessage) {
-            pendingMessage->animatedStickerConverted = true;
-            pendingMessage->animatedStickerConvertSuccess = true;
-            pendingMessage->animatedStickerImageId = id;
-            checkMessageReady(pendingMessage, m_transceiver, m_data);
-            pendingMessage = nullptr;
-        } else {
-            std::string text = makeInlineImageText(id);
-            showMessageText(m_data, *chat, thread->message(), text.c_str(), NULL, PURPLE_MESSAGE_IMAGES);
-        }
-    } else {
-        if (pendingMessage) {
-            pendingMessage->animatedStickerConverted = true;
-            pendingMessage->animatedStickerConvertSuccess = false;
-            checkMessageReady(pendingMessage, m_transceiver, m_data);
-            pendingMessage = nullptr;
-        }
-        // TRANSLATOR: In-chat error message, arguments will be a file name and a proper reason
-        errorMessage = formatMessage(_("Could not read sticker file {0}: {1}"),
-                                        {thread->inputFileName, errorMessage});
-        errorMessage = makeNoticeWithSender(*chat, thread->message(), errorMessage.c_str(), m_account);
-        showMessageText(m_data, *chat, thread->message(), NULL, errorMessage.c_str());
-    }
+    if (!success)
+        purple_debug_warning(config::pluginId, "Cannot convert sticker %s: %s\n",
+                             thread->inputFileName.c_str(), errorMessage.c_str());
+    stickerConverted(m_data, thread->fileId, success ? purple_imgstore_add_with_id(imageData, imageSize, NULL) : 0);
 }
 
 void PurpleTdClient::sendReadReceipts(PurpleConversation *conversation)
