@@ -681,6 +681,58 @@ TEST_F(PrivateChatTest, OtherMessage)
 }
 
 #ifndef NoPidgin
+// Where the account does not fetch pictures unasked, a photo is left as its stand-in; once the
+// conversation does, it is fetched as it comes into view
+TEST_F(PrivateChatTest, PhotoNotDownloaded)
+{
+    const int32_t date   = 10001;
+    const int32_t fileId = 1234;
+    purple_account_set_bool(account, "download-media", FALSE);
+    loginWithOneContact();
+    PurpleConversation *conv = getImConversation(account, purpleUserName(0).c_str());
+    prpl.discardEvents();
+
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(::makeFile(fileId, 10000), 640, 480));
+    tgl.update(make_object<updateNewMessage>(makeMessage(1, userIds[0], chatIds[0], false, date,
+        makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText("photo"), false, false, false))));
+    prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0), "[photo]\nphoto", PURPLE_MESSAGE_RECV, date));
+    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
+
+    // Seen while still not fetched unasked: nothing
+    PurpleTdClient *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
+    ASSERT_NE(nullptr, client);
+    client->messagesViewed(conv, {MessageId::fromString("1")});
+    tgl.verifyNoRequests();
+
+    // The conversation's own setting: shown again, to fetch it
+    PurpleBuddy *buddy = purple_find_buddy(account, purpleUserName(0).c_str());
+    ASSERT_NE(nullptr, buddy);
+    purple_blist_node_set_string(PURPLE_BLIST_NODE(buddy), "tdlib-download-media", "yes");
+    client->messagesViewed(conv, {MessageId::fromString("1")});
+    tgl.verifyRequest(getMessage(chatIds[0], 1));
+}
+
+// A stranger's photo is not fetched unasked, whatever the account's setting
+TEST_F(PrivateChatTest, StrangerPhotoNotDownloaded)
+{
+    const int32_t date   = 10001;
+    const int32_t fileId = 1234;
+    loginWithOneContact();
+    PurpleBuddy *buddy = purple_find_buddy(account, purpleUserName(0).c_str());
+    ASSERT_NE(nullptr, buddy);
+    purple_blist_node_set_flags(PURPLE_BLIST_NODE(buddy), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(::makeFile(fileId, 10000), 640, 480));
+    tgl.update(make_object<updateNewMessage>(makeMessage(1, userIds[0], chatIds[0], false, date,
+        makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText("photo"), false, false, false))));
+    prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0), "[photo]\nphoto", PURPLE_MESSAGE_RECV, date));
+    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
+}
+#endif
+
+#ifndef NoPidgin
 // A photo not here yet is shown at once, as its stand-in, and fetched; once it is, the message is
 // shown again with it, where the tab can take it, and logged as it is shown then, or else as it was
 TEST_F(PrivateChatTest, Photo)

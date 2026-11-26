@@ -1296,6 +1296,37 @@ static bool showsPictureComing(const IncomingMessage &fullMessage)
 #endif
 }
 
+static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId messageId);
+
+// Whether a picture of the message is fetched now, being within the limit on what is fetched
+// unasked: not where the chat's pictures are not, nor one that failed to be; such a one is fetched
+// as it comes into view, where they are by then
+static bool fetchesPicture(TdAccountData &account, const td::td_api::chat &chat, MessageId messageId,
+                           int32_t fileId)
+{
+    if (!account.hasPictureFailed(fileId) &&
+        downloadsMedia(account.purpleAccount, findChatBlistNode(account, chat)))
+        return true;
+    account.leavePicture(getId(chat), messageId, fileId);
+    return false;
+}
+
+void fetchViewedPictures(TdAccountData &account, PurpleConversation *conv, const std::vector<MessageId> &messageIds)
+{
+    const td::td_api::chat *chat = findConversationChat(account, conv);
+    if (!chat || !downloadsMedia(account.purpleAccount, findChatBlistNode(account, *chat)))
+        return;
+    for (MessageId messageId: messageIds) {
+        std::vector<int32_t> fileIds;
+        if (!account.takeLeftPictures(getId(*chat), messageId, fileIds))
+            continue;
+        // One that failed is tried again, quietly
+        for (int32_t fileId: fileIds)
+            account.setPictureFailed(fileId, false);
+        refreshShownMessage(account, getId(*chat), messageId);
+    }
+}
+
 // For a picture shown as its stand-in, not to be fetched unasked: a link that fetches it, where
 // there is no other, as to its sizes
 static std::string makeFetchLink(TdAccountData &account, ChatId chatId, MessageId messageId,
@@ -1330,8 +1361,6 @@ static void getPictureLook(const td::td_api::MessageContent &content, int32_t fi
             lowGrade = photo.photo_->minithumbnail_->data_;
     }
 }
-
-static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId messageId);
 
 // Pictures come one after another, a rich message's often a dozen together: in Pidgin's tab, the
 // message is shown again once for those come within a moment, not once for each
@@ -1470,16 +1499,17 @@ static void showSticker(const td::td_api::chat &chat, IncomingMessage &fullMessa
             showStickerFile(chat, message, thumbnail->local_->path_, fileDesc, account);
             return;
         }
-        if (!thumbnail || account.hasPictureFailed(thumbnail->id_)) {
+        if (!thumbnail) {
             showGenericFileInline(chat, message, file.local_->path_, NULL, words, std::string(), account);
             return;
         }
-        fetched = thumbnail->id_;
+        if (fetchesPicture(account, chat, message.id, thumbnail->id_))
+            fetched = thumbnail->id_;
         text    = makeStandInText("", sticker.thumbnail_ ? sticker.thumbnail_->width_ : 0,
                                   sticker.thumbnail_ ? sticker.thumbnail_->height_ : 0, true, words, image);
     } else {
         if (isSizeWithinLimit(getFileSizeKb(file), fullMessage.inlineFileSizeLimit) &&
-            !account.hasPictureFailed(file.id_))
+            fetchesPicture(account, chat, message.id, file.id_))
             fetched = file.id_;
         bool tgs = sticker.format_ && (sticker.format_->get_id() == td::td_api::stickerFormatTgs::ID);
         // As big as what will be shown: the animation, or else its thumbnail in its place
@@ -1490,11 +1520,11 @@ static void showSticker(const td::td_api::chat &chat, IncomingMessage &fullMessa
             text = makeStandInText("", sticker.thumbnail_->width_, sticker.thumbnail_->height_, true, words, image);
         else
             text = makeStandInText("", sticker.width_, sticker.height_, true, words, image);
-        if (!fetched) {
-            std::string link = makeFetchLink(account, getId(chat), message.id, file, fileDesc);
-            if (!link.empty())
-                text += "\n" + link;
-        }
+    }
+    if (!fetched) {
+        std::string link = makeFetchLink(account, getId(chat), message.id, file, fileDesc);
+        if (!link.empty())
+            text += "\n" + link;
     }
     message.picturesComing = (fetched != 0);
     showMessageText(account, chat, message, text.c_str(), NULL, image ? PURPLE_MESSAGE_IMAGES : 0);
@@ -1515,7 +1545,7 @@ static void showPictureComing(const td::td_api::chat &chat, IncomingMessage &ful
     std::string text = makeStandInText(lowGrade, width, height, false, fileDesc, image);
     TgMessageInfo &message = fullMessage.messageInfo;
     bool wanted = isSizeWithinLimit(getFileSizeKb(file), fullMessage.inlineFileSizeLimit) &&
-                  !account.hasPictureFailed(file.id_);
+                  fetchesPicture(account, chat, message.id, file.id_);
     std::string links = message.mediaVariantLinks;
     if (links.empty() && !wanted)
         links = makeFetchLink(account, getId(chat), message.id, file, fileDesc);
@@ -2228,7 +2258,7 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
 
     // A video's thumbnail still coming: shown as its stand-in, the message logged once it is here
     bool previewComing = fullMessage.previewFileId && !fullMessage.previewFetchDone && canShowImages() &&
-                         !account.hasPictureFailed(fullMessage.previewFileId);
+                         fetchesPicture(account, chat, messageInfo.id, fullMessage.previewFileId);
     if (previewComing)
         messageInfo.picturesComing = true;
 
@@ -2323,7 +2353,7 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
             std::vector<int32_t> coming;
             RichMediaImage       image;
             if (canShowImages())
-                image = [&rich, &fullMessage, &account, &pictures, &coming](size_t index) {
+                image = [&rich, &fullMessage, &account, &chat, &messageInfo, &pictures, &coming](size_t index) {
                     std::string              kind;
                     const td::td_api::photo *photo = nullptr;
                     const td::td_api::file  *file  = findRichMessageMedia(*rich.message_, index, kind, &photo,
@@ -2340,7 +2370,7 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
                         return makeInlineImageText(addImageFile(data, len, file->local_->path_), false);
                     }
                     if (isSizeWithinLimit(getFileSizeKb(*file), fullMessage.inlineFileSizeLimit) &&
-                        !account.hasPictureFailed(file->id_))
+                        fetchesPicture(account, chat, messageInfo.id, file->id_))
                         coming.push_back(file->id_);
                     int32_t width = 0, height = 0;
                     for (const auto &size: photo->sizes_)

@@ -3185,6 +3185,8 @@ void PurpleTdClient::conversationShown(PurpleConversation *conv, bool shown)
 
 void PurpleTdClient::messagesViewed(PurpleConversation *conv, const std::vector<MessageId> &messageIds)
 {
+    fetchViewedPictures(m_data, conv, messageIds);
+
     // Seen messages of an open chat are read, which is the account's to allow
     const td::td_api::chat *chat = findConversationChat(m_data, conv);
     auto                    it   = chat ? m_openChats.find(getId(*chat)) : m_openChats.end();
@@ -3205,6 +3207,21 @@ void PurpleTdClient::messagesViewed(PurpleConversation *conv, const std::vector<
             (it->second == messageIds))
             it->second.clear();
     });
+}
+
+void PurpleTdClient::mediaDownloadsAllowed(PurpleBlistNode *node)
+{
+    // Those of its messages on screen fetched at once, as if come into view
+    PurpleConversation *conv = nullptr;
+    if (PURPLE_BLIST_NODE_IS_CHAT(node))
+        conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_CHAT,
+                                                     getChatName(purple_chat_get_components(PURPLE_CHAT(node))),
+                                                     m_account);
+    else if (PURPLE_BLIST_NODE_IS_BUDDY(node))
+        conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, purple_buddy_get_name(PURPLE_BUDDY(node)),
+                                                     m_account);
+    if (conv)
+        checkViewedLater(conv);
 }
 
 void PurpleTdClient::setIdle(bool idle)

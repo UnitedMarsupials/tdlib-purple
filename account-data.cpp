@@ -1246,6 +1246,23 @@ void TdAccountData::setRefreshDue(ChatId chatId, MessageId messageId, guint sour
         m_refreshesDue.erase(ShownMessageKey(chatId, messageId));
 }
 
+void TdAccountData::leavePicture(ChatId chatId, MessageId messageId, int32_t fileId)
+{
+    std::vector<int32_t> &left = m_leftPictures[ShownMessageKey(chatId, messageId)];
+    if (std::find(left.begin(), left.end(), fileId) == left.end())
+        left.push_back(fileId);
+}
+
+bool TdAccountData::takeLeftPictures(ChatId chatId, MessageId messageId, std::vector<int32_t> &fileIds)
+{
+    auto it = m_leftPictures.find(ShownMessageKey(chatId, messageId));
+    if (it == m_leftPictures.end())
+        return false;
+    fileIds = std::move(it->second);
+    m_leftPictures.erase(it);
+    return true;
+}
+
 void TdAccountData::setPictureFailed(int32_t fileId, bool failed)
 {
     if (failed)

@@ -525,6 +525,20 @@ computer before; then have the test group sent a photo, and the same animated st
 Since: a message waited for its pictures, holding back those after it, and a picture later still
 came at the tab's end as a line of its own.
 
+### F9. Pictures not downloaded
+
+Open a channel not joined, with photos not fetched before.
+
+* Its pictures stay as blurred stand-ins, each with its size links or a link to fetch it, and the
+  debug log has no `Fetching picture` for them.
+* Its menu (the tab's title, or Conversation > More) says "Download media automatically"; picked,
+  the pictures on screen are fetched and written over their stand-ins, and the others as the tab
+  is scrolled to them. The menu then says "Stop downloading media automatically".
+* With the account's "Download media automatically" unticked, a contact's photos stay as
+  stand-ins too, until the contact's menu turns it on.
+
+Since: every picture within the limit was downloaded, whoever sent it.
+
 ## Groups
 
 ### G1. A group's news

@@ -253,6 +253,29 @@ static void toggleDeletedMessages(PurpleBlistNode *node, gpointer data)
     setKeepsDeletedMessages(node, !keepsDeletedMessages(account, node));
 }
 
+// Shown in Pidgin's conversation window's Conversation > More menu as well
+static void toggleDownloadMedia(PurpleBlistNode *node, gpointer data)
+{
+    PurpleAccount  *account  = PURPLE_BLIST_NODE_IS_CHAT(node) ? purple_chat_get_account(PURPLE_CHAT(node))
+                                                               : purple_buddy_get_account(PURPLE_BUDDY(node));
+    bool            download = !downloadsMedia(account, node);
+    setDownloadsMedia(node, download);
+    PurpleTdClient *tdClient = getTdClient(account);
+    if (tdClient && download)
+        tdClient->mediaDownloadsAllowed(node);
+}
+
+static PurpleMenuAction *makeDownloadMediaAction(PurpleBlistNode *node, PurpleAccount *account)
+{
+    // What picking it does, there being no check items here
+    return purple_menu_action_new(downloadsMedia(account, node) ?
+                                  // TRANSLATOR: Contact and conversation menu item, while pictures in the conversation are downloaded as they come. It has them shown as blurred stand-ins instead, downloaded only when asked for.
+                                  _("Stop downloading media automatically") :
+                                  // TRANSLATOR: Contact and conversation menu item, while pictures in the conversation are shown as blurred stand-ins. It has them downloaded as they come, those on screen at once.
+                                  _("Download media automatically"),
+                                  PURPLE_CALLBACK(toggleDownloadMedia), NULL, NULL);
+}
+
 static PurpleMenuAction *makeDeletedMessagesAction(PurpleBlistNode *node, PurpleAccount *account)
 {
     // What picking it does, there being no check items here
@@ -364,6 +387,7 @@ static GList* tgprpl_blist_node_menu (PurpleBlistNode *node)
         menu = g_list_append(menu, action);
 
         menu = g_list_append(menu, makeDeletedMessagesAction(node, purple_chat_get_account(chat)));
+        menu = g_list_append(menu, makeDownloadMediaAction(node, purple_chat_get_account(chat)));
         addReportAction(menu, node);
     } else if ( PURPLE_BLIST_NODE_IS_BUDDY(node) &&
                 purpleBuddyNameToUserId(purple_buddy_get_name(PURPLE_BUDDY(node))).valid() )
@@ -376,6 +400,7 @@ static GList* tgprpl_blist_node_menu (PurpleBlistNode *node)
         menu = g_list_append(menu, action);
 
         menu = g_list_append(menu, makeDeletedMessagesAction(node, purple_buddy_get_account(PURPLE_BUDDY(node))));
+        menu = g_list_append(menu, makeDownloadMediaAction(node, purple_buddy_get_account(PURPLE_BUDDY(node))));
         addReportAction(menu, node);
     }
 
@@ -1784,6 +1809,11 @@ static void tgprpl_init (PurplePlugin *plugin)
     PurpleAccountOption *opt = purple_account_option_list_new (_("File downloads"),
                                                                AccountOptions::DownloadBehaviour, choices);
     prpl_info.protocol_options = g_list_append (prpl_info.protocol_options, opt);
+
+    // TRANSLATOR: Account settings, key (boolean)
+    opt = purple_account_option_bool_new(_("Download media automatically (each conversation can override this)"),
+                                         AccountOptions::DownloadMedia, AccountOptions::DownloadMediaDefault);
+    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
 
     // TRANSLATOR: Account settings, key (choice)
     opt = purple_account_option_string_new (_("Inline auto-download size limit, MB (0 for unlimited)"),

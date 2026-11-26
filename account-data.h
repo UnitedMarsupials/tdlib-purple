@@ -576,6 +576,10 @@ public:
     // goes with the account
     bool                       isRefreshDue(ChatId chatId, MessageId messageId) const;
     void                       setRefreshDue(ChatId chatId, MessageId messageId, guint sourceId);
+    // A picture of the message left as its stand-in, not fetched unasked or failing to be, to be
+    // fetched as it comes into view where pictures are; taken, all of the message's, as it does
+    void                       leavePicture(ChatId chatId, MessageId messageId, int32_t fileId);
+    bool                       takeLeftPictures(ChatId chatId, MessageId messageId, std::vector<int32_t> &fileIds);
     // A picture that could not be fetched, left as its stand-in rather than tried again at once
     void                       setPictureFailed(int32_t fileId, bool failed);
     bool                       hasPictureFailed(int32_t fileId) const;
@@ -677,6 +681,7 @@ private:
     std::set<std::tuple<ChatId, MessageId, int32_t>> m_pictureFetches;
     std::set<int32_t>                       m_failedPictures;
     std::map<ShownMessageKey, guint>        m_refreshesDue;
+    std::map<ShownMessageKey, std::vector<int32_t>> m_leftPictures;
     std::map<int32_t, int>                  m_convertedStickers;
     std::map<int32_t, std::vector<std::pair<ChatId, MessageId>>> m_stickerConversions;
 };
