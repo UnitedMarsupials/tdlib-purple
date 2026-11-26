@@ -81,6 +81,8 @@ void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
 // Logs our message, sent, as written into its tab while it was being sent, under the id it now has;
 // or one shown with pictures still coming, as it was shown, under its own
 void logSentMessage(TdAccountData &account, ChatId chatId, MessageId oldId, MessageId newId);
+// An animated sticker converted, into the image store, or not (0): the messages showing it shown again
+void stickerConverted(TdAccountData &account, int32_t fileId, int imageId);
 // Logs those still awaiting their pictures as they were shown, as the account goes
 void logMessagesAwaitingPictures(TdAccountData &account);
 // The chat's conversation, if it is open; none is opened

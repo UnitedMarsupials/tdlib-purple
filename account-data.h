@@ -437,6 +437,7 @@ public:
     TdTransceiver        &transceiver;
     TdAccountData(PurpleAccount *purpleAccount, TdTransceiver &transceiver)
     : purpleAccount(purpleAccount), transceiver(transceiver) {}
+    ~TdAccountData();
 
     // Gone with this, for work put off to tell whether there is still an account to do it for
     std::shared_ptr<int> lifetime = std::make_shared<int>(0);
@@ -581,6 +582,12 @@ public:
     // A picture that could not be fetched, left as its stand-in rather than tried again at once
     void                       setPictureFailed(int32_t fileId, bool failed);
     bool                       hasPictureFailed(int32_t fileId) const;
+    // An animated sticker's animation, converted once, in the image store, by the sticker's file id;
+    // and the messages waiting for it while it is: false if it was being converted already
+    int                        getConvertedSticker(int32_t fileId) const;
+    bool                       startStickerConversion(int32_t fileId, ChatId chatId, MessageId messageId);
+    void                       endStickerConversion(int32_t fileId, int imageId,
+                                                    std::vector<std::pair<ChatId, MessageId>> &waiting);
 private:
     TdAccountData(const TdAccountData &other) = delete;
     TdAccountData &operator=(const TdAccountData &other) = delete;
@@ -672,6 +679,8 @@ private:
     std::map<ShownMessageKey, UnloggedSent> m_unloggedSent;
     std::set<std::tuple<ChatId, MessageId, int32_t>> m_pictureFetches;
     std::set<int32_t>                       m_failedPictures;
+    std::map<int32_t, int>                  m_convertedStickers;
+    std::map<int32_t, std::vector<std::pair<ChatId, MessageId>>> m_stickerConversions;
 };
 
 #endif

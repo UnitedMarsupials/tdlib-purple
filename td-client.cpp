@@ -2937,10 +2937,9 @@ void PurpleTdClient::onAnimatedStickerConverted(AccountThread *arg)
 {
     std::unique_ptr<AccountThread> baseThread(arg);
     StickerConversionThread *thread = dynamic_cast<StickerConversionThread *>(arg);
-    const td::td_api::chat  *chat   = thread ? m_data.getChat(thread->chatId) : nullptr;
-    if (!chat || !thread)
+    if (!thread)
         return;
-    IncomingMessage *pendingMessage = m_data.pendingMessages.findPendingMessage(getId(*chat), thread->message().id);
+    const td::td_api::chat  *chat   = m_data.getChat(thread->chatId);
 
     std::string  errorMessage = thread->getErrorMessage();
     gchar       *imageData    =  NULL;
@@ -2959,6 +2958,19 @@ void PurpleTdClient::onAnimatedStickerConverted(AccountThread *arg)
             success = true;
     }
 
+    // Kept for every message showing the sticker
+    if (thread->fileId) {
+        if (!success)
+            purple_debug_warning(config::pluginId, "Cannot convert sticker %s: %s\n",
+                                 thread->inputFileName.c_str(), errorMessage.c_str());
+        stickerConverted(m_data, thread->fileId, success ? purple_imgstore_add_with_id(imageData, imageSize, NULL) : 0);
+        return;
+    }
+    if (!chat) {
+        g_free(imageData);
+        return;
+    }
+    IncomingMessage *pendingMessage = m_data.pendingMessages.findPendingMessage(getId(*chat), thread->message().id);
     if (success) {
         int id = purple_imgstore_add_with_id (imageData, imageSize, NULL);
         if (pendingMessage) {

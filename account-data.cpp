@@ -1245,6 +1245,41 @@ bool TdAccountData::hasPictureFailed(int32_t fileId) const
     return m_failedPictures.count(fileId) != 0;
 }
 
+TdAccountData::~TdAccountData()
+{
+    for (const auto &converted: m_convertedStickers)
+        purple_imgstore_unref_by_id(converted.second);
+}
+
+int TdAccountData::getConvertedSticker(int32_t fileId) const
+{
+    auto it = m_convertedStickers.find(fileId);
+    return (it != m_convertedStickers.end()) ? it->second : 0;
+}
+
+bool TdAccountData::startStickerConversion(int32_t fileId, ChatId chatId, MessageId messageId)
+{
+    auto it = m_stickerConversions.find(fileId);
+    bool started = (it == m_stickerConversions.end());
+    std::vector<std::pair<ChatId, MessageId>> &waiting = m_stickerConversions[fileId];
+    if (std::find(waiting.begin(), waiting.end(), std::make_pair(chatId, messageId)) == waiting.end())
+        waiting.emplace_back(chatId, messageId);
+    return started;
+}
+
+void TdAccountData::endStickerConversion(int32_t fileId, int imageId,
+                                         std::vector<std::pair<ChatId, MessageId>> &waiting)
+{
+    auto it = m_stickerConversions.find(fileId);
+    if (it != m_stickerConversions.end()) {
+        waiting = std::move(it->second);
+        m_stickerConversions.erase(it);
+    }
+    // The store's reference, taken as it was added, is the one kept here
+    if (imageId)
+        m_convertedStickers[fileId] = imageId;
+}
+
 void TdAccountData::addPendingEdit(const PendingEdit &edit)
 {
     auto it = std::find_if(m_pendingEdits.begin(), m_pendingEdits.end(), [&edit](const PendingEdit &other) {

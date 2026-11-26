@@ -26,10 +26,12 @@ void showStickerFile(const td::td_api::chat &chat, const TgMessageInfo &message,
                      TdAccountData &account);
 
 class StickerConversionThread: public AccountThread {
+public:
+    static constexpr unsigned DEFAULT_SIZE = 200;
 private:
     std::string   m_errorMessage;
     std::string   m_outputFileName;
-    unsigned      m_size = 200; // of each side of the animation, in pixels
+    unsigned      m_size = DEFAULT_SIZE; // of each side of the animation, in pixels
     void run() override;
 
     static Callback g_callback;
@@ -38,6 +40,8 @@ private:
 public:
     const std::string inputFileName;
     const ChatId chatId;
+    // Of the sticker, whose animation is kept, once converted, for every message showing it
+    int32_t fileId = 0;
     StickerConversionThread(PurpleAccount *purpleAccount, const std::string &filename,
                             ChatId chatId, TgMessageInfo &&message)
     : AccountThread(purpleAccount), m_message(std::move(message)), inputFileName(filename),

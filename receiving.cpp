@@ -1256,7 +1256,8 @@ static std::string makePreviewImageText(const IncomingMessage &fullMessage)
 // waiting for it: where the front-end can show pictures, and so write one over its stand-in
 static bool showsPictureComing(const IncomingMessage &fullMessage)
 {
-    return canShowImages() && (fullMessage.messageInfo.type == TgMessageInfo::Type::Photo);
+    return canShowImages() && ((fullMessage.messageInfo.type == TgMessageInfo::Type::Photo) ||
+                               (fullMessage.messageInfo.type == TgMessageInfo::Type::Sticker));
 }
 
 // The size the picture is shown in, and the low-grade one the message carries, if any
@@ -1308,6 +1309,104 @@ static void fetchPicture(TdAccountData &account, ChatId chatId, MessageId messag
         });
 }
 
+// The stand-in of the size given, as markup, or the words for it where there can be none
+static std::string makeStandInText(const std::string &lowGrade, int32_t width, int32_t height, bool clear,
+                                   const std::string &words, bool &image)
+{
+    int imageId = makeStandInPicture(lowGrade, width, height, clear);
+    image = (imageId != 0);
+    return image ? makeInlineImageText(imageId) : ("[" + escapeForDisplay(words) + "]");
+}
+
+// Converted for the message, which is shown again with its animation once it is, as is any other
+// message showing the same sticker meanwhile; one that cannot be is shown as if not to be converted
+static void convertSticker(TdAccountData &account, const TgMessageInfo &message, ChatId chatId,
+                           int32_t fileId, const std::string &path)
+{
+    if (!account.startStickerConversion(fileId, chatId, message.id))
+        return;
+    StickerConversionThread *thread = new StickerConversionThread(account.purpleAccount, path, chatId, &message);
+    thread->fileId = fileId;
+    thread->startThread();
+}
+
+void stickerConverted(TdAccountData &account, int32_t fileId, int imageId)
+{
+    if (!imageId)
+        account.setPictureFailed(fileId, true);
+    std::vector<std::pair<ChatId, MessageId>> waiting;
+    account.endStickerConversion(fileId, imageId, waiting);
+    for (const auto &message: waiting)
+        refreshShownMessage(account, message.first, message.second);
+}
+
+// A sticker, here or not: as its picture, or its animation converted, or its thumbnail where
+// animations are not converted, or a stand-in for whichever of them is still to come
+static void showSticker(const td::td_api::chat &chat, IncomingMessage &fullMessage,
+                        const td::td_api::sticker &sticker, const std::string &fileDesc, TdAccountData &account)
+{
+    const td::td_api::file &file    = *sticker.sticker_;
+    TgMessageInfo          &message = fullMessage.messageInfo;
+    const std::string      &words   = message.altText.empty() ? fileDesc : message.altText;
+    bool                    here    = file.local_ && file.local_->is_downloading_completed_;
+    int32_t                 fetched = 0;
+    bool                    image;
+    std::string             text;
+
+    if (here && !isStickerAnimated(file.local_->path_)) {
+        showStickerFile(chat, message, file.local_->path_, fileDesc, account);
+        return;
+    }
+    bool convert = shouldConvertAnimatedSticker(message, account.purpleAccount) &&
+                   !(here && account.hasPictureFailed(file.id_));
+    if (here && convert) {
+        int converted = account.getConvertedSticker(file.id_);
+        if (converted) {
+            text = makeInlineImageText(converted);
+            showMessageText(account, chat, message, text.c_str(), NULL, PURPLE_MESSAGE_IMAGES);
+            return;
+        }
+        // As big as the animation will be
+        text = makeStandInText("", StickerConversionThread::DEFAULT_SIZE, StickerConversionThread::DEFAULT_SIZE,
+                               true, words, image);
+        message.picturesComing = true;
+        showMessageText(account, chat, message, text.c_str(), NULL, image ? PURPLE_MESSAGE_IMAGES : 0);
+        message.picturesComing = false;
+        convertSticker(account, message, getId(chat), file.id_, file.local_->path_);
+        return;
+    }
+    if (here) {
+        // Its thumbnail in place of the animation, taken from it as the message was made
+        const td::td_api::file *thumbnail = fullMessage.thumbnail.get();
+        if (thumbnail && thumbnail->local_ && thumbnail->local_->is_downloading_completed_) {
+            showStickerFile(chat, message, thumbnail->local_->path_, fileDesc, account);
+            return;
+        }
+        if (!thumbnail || account.hasPictureFailed(thumbnail->id_)) {
+            showGenericFileInline(chat, message, file.local_->path_, NULL, words, std::string(), account);
+            return;
+        }
+        fetched = thumbnail->id_;
+        text    = makeStandInText("", sticker.thumbnail_ ? sticker.thumbnail_->width_ : 0,
+                                  sticker.thumbnail_ ? sticker.thumbnail_->height_ : 0, true, words, image);
+    } else {
+        if (isSizeWithinLimit(getFileSizeKb(file), fullMessage.inlineFileSizeLimit) &&
+            !account.hasPictureFailed(file.id_))
+            fetched = file.id_;
+        bool tgs = sticker.format_ && (sticker.format_->get_id() == td::td_api::stickerFormatTgs::ID);
+        if (tgs && convert)
+            text = makeStandInText("", StickerConversionThread::DEFAULT_SIZE,
+                                   StickerConversionThread::DEFAULT_SIZE, true, words, image);
+        else
+            text = makeStandInText("", sticker.width_, sticker.height_, true, words, image);
+    }
+    message.picturesComing = (fetched != 0);
+    showMessageText(account, chat, message, text.c_str(), NULL, image ? PURPLE_MESSAGE_IMAGES : 0);
+    message.picturesComing = false;
+    if (fetched)
+        fetchPicture(account, getId(chat), message.id, fetched);
+}
+
 // Its stand-in, the message logged once the picture is here, if it is fetched unasked
 static void showPictureComing(const td::td_api::chat &chat, IncomingMessage &fullMessage,
                               const td::td_api::file &file, const char *caption, const std::string &fileDesc,
@@ -1316,8 +1415,8 @@ static void showPictureComing(const td::td_api::chat &chat, IncomingMessage &ful
     int32_t     width, height;
     std::string lowGrade;
     getPictureLook(*fullMessage.message->content_, file.id_, width, height, lowGrade);
-    int         imageId = makeStandInPicture(lowGrade, width, height, false);
-    std::string text    = imageId ? makeInlineImageText(imageId) : ("[" + escapeForDisplay(fileDesc) + "]");
+    bool        image;
+    std::string text = makeStandInText(lowGrade, width, height, false, fileDesc, image);
     TgMessageInfo &message = fullMessage.messageInfo;
     if (!message.mediaVariantLinks.empty())
         text += "\n" + message.mediaVariantLinks;
@@ -1327,7 +1426,7 @@ static void showPictureComing(const td::td_api::chat &chat, IncomingMessage &ful
     bool wanted = isSizeWithinLimit(getFileSizeKb(file), fullMessage.inlineFileSizeLimit) &&
                   !account.hasPictureFailed(file.id_);
     message.picturesComing = wanted;
-    showMessageText(account, chat, message, text.c_str(), NULL, imageId ? PURPLE_MESSAGE_IMAGES : 0);
+    showMessageText(account, chat, message, text.c_str(), NULL, image ? PURPLE_MESSAGE_IMAGES : 0);
     message.picturesComing = false;
     if (wanted)
         fetchPicture(account, getId(chat), message.id, file.id_);
@@ -1350,6 +1449,15 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
     // where there is only a notice, it goes above the caption. Either way it precedes the caption.
     std::string preview = makePreviewImageText(fullMessage);
 
+    if (showsPictureComing(fullMessage) && fullMessage.message && fullMessage.message->content_ &&
+        (fullMessage.message->content_->get_id() == td::td_api::messageSticker::ID))
+    {
+        const auto &content = static_cast<const td::td_api::messageSticker &>(*fullMessage.message->content_);
+        if (content.sticker_ && content.sticker_->sticker_) {
+            showSticker(chat, fullMessage, *content.sticker_, fileDesc, account);
+            return;
+        }
+    }
     if (showsPictureComing(fullMessage) && fullMessage.message && fullMessage.message->content_ &&
         !(file.local_ && file.local_->is_downloading_completed_))
     {
@@ -2708,7 +2816,10 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
 
     FileInfo fileInfo;
     getFileFromMessage(fullMessage, fileInfo);
-    if (fileInfo.file && message.content_ && chat && isInlineDownload(fullMessage, *message.content_, *chat)) {
+    // Pictures shown as they come are fetched as they are shown
+    if (fileInfo.file && message.content_ && chat && isInlineDownload(fullMessage, *message.content_, *chat) &&
+        !showsPictureComing(fullMessage))
+    {
         if (fileInfo.file->local_ && fileInfo.file->local_->is_downloading_completed_ &&
             (message.content_->get_id() == td::td_api::messageSticker::ID) &&
             isStickerAnimated(fileInfo.file->local_->path_))
@@ -2720,8 +2831,7 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
                 thread->startThread();
             }
             // TODO: if animated stickers are disabled, fetch thumbnail instead
-        } else if (inlineDownloadNeedAutoDl(fullMessage, *fileInfo.file) && !linksToMessage(fullMessage) &&
-                   !showsPictureComing(fullMessage)) {
+        } else if (inlineDownloadNeedAutoDl(fullMessage, *fileInfo.file) && !linksToMessage(fullMessage)) {
             // TgMessageInfo on fullMessage has replyMessage=NULL which will be copied onto DownloadRequest.
             // If message leaves PendingMessageQueue while download is still active, there's probably
             // a replyMessage on IncomingMessage by then, and it needs to be moved over to DownloadRequest.
