@@ -2307,7 +2307,7 @@ TEST_F(PrivateChatTest, RichMessage)
 #endif
 
 #if TDLIB_API_RICH_MESSAGE
-// A rich message's pictures are fetched before it is shown, and shown in it where they are
+// A rich message's pictures are shown in it where they are, those still to come fetched
 TEST_F(PrivateChatTest, RichMessagePictures)
 {
     const int32_t date = 10001;
@@ -2330,24 +2330,24 @@ TEST_F(PrivateChatTest, RichMessagePictures)
     auto content = make_object<messageRichMessage>();
     content->message_ = std::move(rich);
 
-    // The second fetched first, the message waiting for it
+    // Shown at once, the one here as it is, the other fetched, its placeholder written over once it is
+    // here, where Pidgin's tab can take it
     tgl.update(make_object<updateNewMessage>(makeMessage(1, userIds[0], chatIds[0], false, date, std::move(content))));
-    tgl.verifyRequest(downloadFile(102, 1, 0, 0, true));
-    prpl.verifyNoEvents();
-    tgl.reply(::makeFile(102, 10000, TEST_SOURCE_DIR "/test.webp"));
-    int second = getLastImgstoreId();
-    int first  = second - 1;
     prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0),
-                                     "<img id=\"" + std::to_string(first) + "\"> <img id=\"" +
-                                     std::to_string(second) + "\"> Both sides",
+                                     "<img id=\"" + std::to_string(getLastImgstoreId()) + "\"> [photo] Both sides",
                                      (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES), date));
-    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
+    uint64_t download = tgl.verifyRequests({
+        make_object<viewMessages>(chatIds[0], std::vector<int64_t>(1, 1), nullptr, true),
+        make_object<downloadFile>(102, 1, 0, 0, true)
+    })[1];
+    tgl.reply(download, ::makeFile(102, 10000, TEST_SOURCE_DIR "/test.webp"));
+    tgl.verifyRequest(getMessage(chatIds[0], 1));
 }
 #endif
 
 #if TDLIB_API_RICH_MESSAGE
-// A picture not here before the message stopped waiting for it is shown once it is, the message
-// written again over itself, unlogged, not said to be edited
+// A picture not here yet is shown once it is, the message written again over itself, not said to
+// be edited
 TEST_F(PrivateChatTest, RichMessagePictureLate)
 {
     const int32_t date = 10001;
@@ -2367,11 +2367,11 @@ TEST_F(PrivateChatTest, RichMessagePictureLate)
     };
 
     tgl.update(make_object<updateNewMessage>(makeRich(false)));
-    uint64_t download = tgl.verifyRequest(downloadFile(102, 1, 0, 0, true));
-    prpl.verifyNoEvents();
-    runTimeouts();
     prpl.verifyEvents(ServGotImEvent(connection, purpleUserName(0), "[photo]", PURPLE_MESSAGE_RECV, date));
-    tgl.verifyRequest(viewMessages(chatIds[0], {1}, nullptr, true));
+    uint64_t download = tgl.verifyRequests({
+        make_object<viewMessages>(chatIds[0], std::vector<int64_t>(1, 1), nullptr, true),
+        make_object<downloadFile>(102, 1, 0, 0, true)
+    })[1];
 
     // Without Pidgin's tab there is nothing to write it over: only the message is asked for again
     tgl.reply(download, ::makeFile(102, 10000, TEST_SOURCE_DIR "/test.webp"));

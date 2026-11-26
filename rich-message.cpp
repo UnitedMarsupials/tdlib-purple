@@ -398,9 +398,10 @@ std::string formatRichMessage(const td::td_api::richMessage &message, const Rich
 
 // Its media in the order they are shown, as formatBlock numbers them
 static const td::td_api::file *findMedia(const std::vector<td::td_api::object_ptr<td::td_api::PageBlock>> &blocks,
-                                         size_t &index, std::string &description);
+                                         size_t &index, std::string &description, const td::td_api::photo **photo);
 
-static const td::td_api::file *findMedia(const td::td_api::PageBlock &block, size_t &index, std::string &description)
+static const td::td_api::file *findMedia(const td::td_api::PageBlock &block, size_t &index, std::string &description,
+                                         const td::td_api::photo **photo)
 {
     auto counted = [&index, &description](const td::td_api::file *file, const char *kind) -> const td::td_api::file * {
         if (index-- != 0)
@@ -409,9 +410,13 @@ static const td::td_api::file *findMedia(const td::td_api::PageBlock &block, siz
         return file;
     };
     switch (block.get_id()) {
-    case td::td_api::pageBlockPhoto::ID:
-        return counted(chooseShownPhotoSize(static_cast<const td::td_api::pageBlockPhoto &>(block).photo_.get()),
-                       _("photo"));
+    case td::td_api::pageBlockPhoto::ID: {
+        const td::td_api::photo *shown = static_cast<const td::td_api::pageBlockPhoto &>(block).photo_.get();
+        const td::td_api::file  *file  = counted(chooseShownPhotoSize(shown), _("photo"));
+        if (file && photo)
+            *photo = shown;
+        return file;
+    }
     case td::td_api::pageBlockVideo::ID: {
         const auto &video = static_cast<const td::td_api::pageBlockVideo &>(block).video_;
         return counted(video ? video->video_.get() : nullptr, _("video"));
@@ -430,25 +435,25 @@ static const td::td_api::file *findMedia(const td::td_api::PageBlock &block, siz
     }
     case td::td_api::pageBlockList::ID:
         for (const auto &item: static_cast<const td::td_api::pageBlockList &>(block).items_) {
-            const td::td_api::file *file = item ? findMedia(item->blocks_, index, description) : nullptr;
+            const td::td_api::file *file = item ? findMedia(item->blocks_, index, description, photo) : nullptr;
             if (file || (index == size_t(-1)))
                 return file;
         }
         return nullptr;
     case td::td_api::pageBlockBlockQuote::ID:
-        return findMedia(static_cast<const td::td_api::pageBlockBlockQuote &>(block).blocks_, index, description);
+        return findMedia(static_cast<const td::td_api::pageBlockBlockQuote &>(block).blocks_, index, description, photo);
     case td::td_api::pageBlockCollage::ID:
-        return findMedia(static_cast<const td::td_api::pageBlockCollage &>(block).blocks_, index, description);
+        return findMedia(static_cast<const td::td_api::pageBlockCollage &>(block).blocks_, index, description, photo);
     case td::td_api::pageBlockSlideshow::ID:
-        return findMedia(static_cast<const td::td_api::pageBlockSlideshow &>(block).blocks_, index, description);
+        return findMedia(static_cast<const td::td_api::pageBlockSlideshow &>(block).blocks_, index, description, photo);
     case td::td_api::pageBlockCover::ID: {
         const auto &cover = static_cast<const td::td_api::pageBlockCover &>(block).cover_;
-        return cover ? findMedia(*cover, index, description) : nullptr;
+        return cover ? findMedia(*cover, index, description, photo) : nullptr;
     }
     case td::td_api::pageBlockEmbeddedPost::ID:
-        return findMedia(static_cast<const td::td_api::pageBlockEmbeddedPost &>(block).blocks_, index, description);
+        return findMedia(static_cast<const td::td_api::pageBlockEmbeddedPost &>(block).blocks_, index, description, photo);
     case td::td_api::pageBlockDetails::ID:
-        return findMedia(static_cast<const td::td_api::pageBlockDetails &>(block).blocks_, index, description);
+        return findMedia(static_cast<const td::td_api::pageBlockDetails &>(block).blocks_, index, description, photo);
     default:
         return nullptr;
     }
@@ -456,10 +461,10 @@ static const td::td_api::file *findMedia(const td::td_api::PageBlock &block, siz
 
 // Counting down to the one wanted, past it once found: size_t(-1) then
 static const td::td_api::file *findMedia(const std::vector<td::td_api::object_ptr<td::td_api::PageBlock>> &blocks,
-                                         size_t &index, std::string &description)
+                                         size_t &index, std::string &description, const td::td_api::photo **photo)
 {
     for (const auto &block: blocks) {
-        const td::td_api::file *file = block ? findMedia(*block, index, description) : nullptr;
+        const td::td_api::file *file = block ? findMedia(*block, index, description, photo) : nullptr;
         if (file || (index == size_t(-1)))
             return file;
     }
@@ -467,9 +472,9 @@ static const td::td_api::file *findMedia(const std::vector<td::td_api::object_pt
 }
 
 const td::td_api::file *findRichMessageMedia(const td::td_api::richMessage &message, size_t index,
-                                             std::string &description)
+                                             std::string &description, const td::td_api::photo **photo)
 {
-    return findMedia(message.blocks_, index, description);
+    return findMedia(message.blocks_, index, description, photo);
 }
 
 std::string getRichMessageSummary(const td::td_api::richMessage &message)

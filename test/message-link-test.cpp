@@ -425,18 +425,20 @@ TEST_F(VideoSizesTest, CoverPreview)
     sizes.push_back(makePhotoSize(::makeFile(coverIds[2], 200000), 1280, 720));
     video.cover_ = makePhotoWithSizes(std::move(sizes));
     tgl.update(make_object<updateNewMessage>(std::move(msg)));
-    tgl.verifyRequest(downloadFile(coverIds[1], 1, 0, 0, true));
-    prpl.verifyNoEvents();
-
-    tgl.reply(::makeFile(coverIds[1], 20000, TEST_SOURCE_DIR "/test.webp"));
-    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
+    // Shown at once, the cover fetched to be written over its stand-in, which only Pidgin can show
     prpl.verifyEvents(ServGotImEvent(
         connection, purpleUserName(0),
-        "\n<a href=\"" + link() + "\"><img id=\"" + std::to_string(getLastImgstoreId()) + "\">\n"
-        "video.mp4 [video/mp4, 1920×1080 (original), purple_str_size_to_units]</a>\n" + sizeLinks() + "\ncaption",
-        (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES), date
+        "<a href=\"" + link() + "\">video.mp4 [video/mp4, 1920×1080 (original), purple_str_size_to_units]</a>\n" +
+        sizeLinks() + "\ncaption",
+        PURPLE_MESSAGE_RECV, date
     ));
-    tgl.verifyNoRequests();
+    uint64_t download = tgl.verifyRequests({
+        make_object<viewMessages>(chatIds[0], std::vector<int64_t>(1, messageId), nullptr, true),
+        make_object<downloadFile>(coverIds[1], 1, 0, 0, true)
+    })[1];
+
+    tgl.reply(download, ::makeFile(coverIds[1], 20000, TEST_SOURCE_DIR "/test.webp"));
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
 }
 
 TEST_F(VideoSizesTest, OpenSize)

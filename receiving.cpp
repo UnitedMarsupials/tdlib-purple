@@ -1238,12 +1238,22 @@ static bool linksToMessage(const IncomingMessage &fullMessage)
     return messageLinksEnabled() && (fullMessage.messageInfo.type == TgMessageInfo::Type::Other);
 }
 
-// The thumbnail fetched for a video, as markup for the conversation window; empty if there is none
+static std::string makeStandInText(const std::string &lowGrade, int32_t width, int32_t height, bool clear,
+                                   const std::string &words, bool &image);
+
+// A video's thumbnail, as markup for the conversation window: as fetched, or its stand-in while it
+// comes, where it is to be written over; empty if there is none
 static std::string makePreviewImageText(const IncomingMessage &fullMessage)
 {
     gchar *data = NULL;
     gsize  len  = 0;
 
+    if (fullMessage.previewPath.empty() && fullMessage.previewFileId && canShowImages()) {
+        bool image;
+        std::string text = makeStandInText(fullMessage.previewLowGrade, fullMessage.previewWidth,
+                                           fullMessage.previewHeight, false, std::string(), image);
+        return image ? text.substr(1) : std::string();
+    }
     if (fullMessage.previewPath.empty() ||
         !g_file_get_contents(fullMessage.previewPath.c_str(), &data, &len, NULL))
         return "";
@@ -2130,6 +2140,12 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
         }
     }
 
+    // A video's thumbnail still coming: shown as its stand-in, the message logged once it is here
+    bool previewComing = fullMessage.previewFileId && !fullMessage.previewFetchDone && canShowImages() &&
+                         !account.hasPictureFailed(fullMessage.previewFileId);
+    if (previewComing)
+        messageInfo.picturesComing = true;
+
     switch (message.content_->get_id()) {
         case td::td_api::messageText::ID:
             showTextMessage(chat, messageInfo, static_cast<const td::td_api::messageText &>(*message.content_),
@@ -2215,26 +2231,50 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
                 link = [purpleAccount, chatId, messageId](size_t index) {
                     return makeMessageLink(purpleAccount, chatId, messageId, "r" + std::to_string(index));
                 };
-            // Its pictures fetched, shown in place of their placeholders
-            bool           pictures = false;
-            RichMediaImage image    = [&fullMessage, &pictures](size_t index) {
-                for (const IncomingMessage::RichPicture &picture: fullMessage.richPictures) {
-                    gchar *data = NULL;
-                    gsize  len  = 0;
-                    if ((picture.index == index) && !picture.path.empty() &&
-                        g_file_get_contents(picture.path.c_str(), &data, &len, NULL))
+            // Its pictures, where they can be shown: as they are, or as their stand-ins while those
+            // fetched unasked come; elsewhere, placeholders
+            bool                 pictures = false;
+            std::vector<int32_t> coming;
+            RichMediaImage       image;
+            if (canShowImages())
+                image = [&rich, &fullMessage, &account, &pictures, &coming](size_t index) {
+                    std::string              kind;
+                    const td::td_api::photo *photo = nullptr;
+                    const td::td_api::file  *file  = findRichMessageMedia(*rich.message_, index, kind, &photo);
+                    gchar                   *data  = NULL;
+                    gsize                    len   = 0;
+                    if (!file || !photo)
+                        return std::string();
+                    if (file->local_ && file->local_->is_downloading_completed_ &&
+                        g_file_get_contents(file->local_->path_.c_str(), &data, &len, NULL))
                     {
                         pictures = true;
                         // Among the text, as a collage's side by side
-                        return makeInlineImageText(addImageFile(data, len, picture.path), false);
+                        return makeInlineImageText(addImageFile(data, len, file->local_->path_), false);
                     }
-                }
-                return std::string();
-            };
+                    if (isSizeWithinLimit(getFileSizeKb(*file), fullMessage.inlineFileSizeLimit) &&
+                        !account.hasPictureFailed(file->id_))
+                        coming.push_back(file->id_);
+                    int32_t width = 0, height = 0;
+                    for (const auto &size: photo->sizes_)
+                        if (size && (size->photo_.get() == file)) {
+                            width  = size->width_;
+                            height = size->height_;
+                        }
+                    int standIn = makeStandInPicture(photo->minithumbnail_ ? photo->minithumbnail_->data_ : std::string(),
+                                                     width, height, false);
+                    pictures = pictures || standIn;
+                    return standIn ? makeInlineImageText(standIn, false) : std::string();
+                };
             std::string html = rich.message_ ? formatRichMessage(*rich.message_, link, image) : std::string();
-            if (!html.empty())
+            if (!html.empty()) {
+                messageInfo.picturesComing = messageInfo.picturesComing || !coming.empty();
                 showMessageText(account, chat, messageInfo, html.c_str(), NULL,
                                 pictures ? PURPLE_MESSAGE_IMAGES : 0);
+                messageInfo.picturesComing = false;
+                for (int32_t fileId: coming)
+                    fetchPicture(account, chatId, messageId, fileId);
+            }
             else
                 showUnsupportedMessage(chat, messageInfo, *message.content_, account);
             break;
@@ -2242,6 +2282,11 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
 #endif
         default:
             showUnsupportedMessage(chat, messageInfo, *message.content_, account);
+    }
+
+    if (previewComing) {
+        messageInfo.picturesComing = false;
+        fetchPicture(account, getId(chat), messageInfo.id, fullMessage.previewFileId);
     }
 
     // Put it back - may be needed if long download is in progress
@@ -2325,35 +2370,46 @@ static const td::td_api::file *getCoverPreview(const td::td_api::photo *cover,
     return chooseShownPhotoSize(cover, (thumbnail && (thumbnail->width_ > 0)) ? thumbnail->width_ : 320);
 }
 
+// With its size, and the low-grade picture of the video, if asked for
 static const td::td_api::file *getVideoPreview(const td::td_api::MessageContent &content,
-                                               PurpleAccount *account)
+                                               PurpleAccount *account, int32_t *width = nullptr,
+                                               int32_t *height = nullptr, std::string *lowGrade = nullptr)
 {
-    const td::td_api::thumbnail *thumbnail = nullptr;
-    const td::td_api::file      *cover     = nullptr;
-    bool                         secret    = false;
+    const td::td_api::thumbnail     *thumbnail = nullptr;
+    const td::td_api::file          *cover     = nullptr;
+    const td::td_api::photo         *coverPhoto = nullptr;
+    const td::td_api::minithumbnail *mini      = nullptr;
+    bool                             secret    = false;
 
     switch (content.get_id()) {
         case td::td_api::messageVideo::ID: {
             const auto &video = static_cast<const td::td_api::messageVideo &>(content);
             // The thumbnail is the first frame, which is often a title card; a cover, where the
             // sender chose one, is what Telegram's own apps show instead
-            if (video.video_)
+            if (video.video_) {
                 thumbnail = video.video_->thumbnail_.get();
+                mini      = video.video_->minithumbnail_.get();
+            }
             cover = getCoverPreview(video.cover_.get(), thumbnail);
+            coverPhoto = video.cover_.get();
             secret = video.is_secret_;
             break;
         }
         case td::td_api::messageAnimation::ID: {
             const auto &animation = static_cast<const td::td_api::messageAnimation &>(content);
-            if (animation.animation_)
+            if (animation.animation_) {
                 thumbnail = animation.animation_->thumbnail_.get();
+                mini      = animation.animation_->minithumbnail_.get();
+            }
             secret = animation.is_secret_;
             break;
         }
         case td::td_api::messageVideoNote::ID: {
             const auto &videoNote = static_cast<const td::td_api::messageVideoNote &>(content);
-            if (videoNote.video_note_)
+            if (videoNote.video_note_) {
                 thumbnail = videoNote.video_note_->thumbnail_.get();
+                mini      = videoNote.video_note_->minithumbnail_.get();
+            }
             secret = videoNote.is_secret_;
             break;
         }
@@ -2364,12 +2420,30 @@ static const td::td_api::file *getVideoPreview(const td::td_api::MessageContent 
                                            AccountOptions::ShowSelfDestructDefault))
         return nullptr;
 
-    if (cover)
-        return cover;
-    if (thumbnail && thumbnail->format_ &&
-        (thumbnail->format_->get_id() == td::td_api::thumbnailFormatJpeg::ID))
-        return thumbnail->file_.get();
-    return nullptr;
+    int32_t chosenWidth = 0, chosenHeight = 0;
+    const td::td_api::file *chosen = nullptr;
+    if (cover) {
+        chosen = cover;
+        for (const auto &size: coverPhoto->sizes_)
+            if (size && (size->photo_.get() == cover)) {
+                chosenWidth  = size->width_;
+                chosenHeight = size->height_;
+            }
+        if (coverPhoto->minithumbnail_)
+            mini = coverPhoto->minithumbnail_.get();
+    } else if (thumbnail && thumbnail->format_ &&
+               (thumbnail->format_->get_id() == td::td_api::thumbnailFormatJpeg::ID)) {
+        chosen       = thumbnail->file_.get();
+        chosenWidth  = thumbnail->width_;
+        chosenHeight = thumbnail->height_;
+    }
+    if (chosen && width)
+        *width = chosenWidth;
+    if (chosen && height)
+        *height = chosenHeight;
+    if (chosen && lowGrade && mini)
+        *lowGrade = mini->data_;
+    return chosen;
 }
 
 void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td_api::message> message,
@@ -2384,7 +2458,6 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
     fullMessage.selectedPhotoSizeId = 0;
     fullMessage.repliedMessageFetchDoneOrFailed = false;
     fullMessage.previewPath.clear();
-    fullMessage.richPictures.clear();
     fullMessage.previewFileId = 0;
     fullMessage.previewFetchDone = false;
     fullMessage.inlineDownloadComplete = false;
@@ -2441,27 +2514,9 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
             }
         }
 
-#if TDLIB_API_RICH_MESSAGE
-        // A rich message's pictures, in the sizes the conversation shows, within the limit on what
-        // is fetched unasked; others stay placeholders
-        if ((message->content_->get_id() == td::td_api::messageRichMessage::ID) && canShowImages()) {
-            const auto &rich = static_cast<const td::td_api::messageRichMessage &>(*message->content_);
-            for (size_t index = 0; rich.message_; index++) {
-                std::string             kind;
-                const td::td_api::file *file = findRichMessageMedia(*rich.message_, index, kind);
-                if (kind.empty())
-                    break;
-                if (!file || (kind != _("photo")) ||
-                    !isSizeWithinLimit(getFileSizeKb(*file), fullMessage.inlineFileSizeLimit))
-                    continue;
-                bool here = file->local_ && file->local_->is_downloading_completed_;
-                fullMessage.richPictures.push_back({index, file->id_, here ? file->local_->path_ : std::string(),
-                                                    here});
-            }
-        }
-#endif
-
-        const td::td_api::file *preview = getVideoPreview(*message->content_, account.purpleAccount);
+        const td::td_api::file *preview = getVideoPreview(*message->content_, account.purpleAccount,
+                                                          &fullMessage.previewWidth, &fullMessage.previewHeight,
+                                                          &fullMessage.previewLowGrade);
         if (preview) {
             fullMessage.previewFileId = preview->id_;
             if (preview->local_ && preview->local_->is_downloading_completed_) {
@@ -2655,13 +2710,10 @@ bool isMessageReady(const IncomingMessage &fullMessage, const TdAccountData &acc
         return false;
     }
 
-    // Wait for a video's thumbnail, or it would land below messages that arrived after it; so too
-    // for a rich message's pictures
-    if (fullMessage.previewFileId && !fullMessage.previewFetchDone)
+    // Wait for a video's thumbnail, or it would land below messages that arrived after it, unless
+    // it can be written over its stand-in
+    if (fullMessage.previewFileId && !fullMessage.previewFetchDone && !canShowImages())
         return false;
-    for (const IncomingMessage::RichPicture &picture: fullMessage.richPictures)
-        if (!picture.done)
-            return false;
 
     if (message.content_)
     {
@@ -2714,31 +2766,6 @@ static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId
         });
 }
 
-// Called when the message stops waiting for it, with nothing, and again once it is here: the
-// message, if shown already by then, is shown again with it. A message edited meanwhile may have
-// another file in its place, which this answer is not for
-static void richPictureDownloadResponse(TdAccountData &account, ChatId chatId, MessageId messageId, size_t index,
-                                        int32_t fileId, td::td_api::object_ptr<td::td_api::Object> object)
-{
-    std::string      path           = object ? getDownloadPath(object) : std::string();
-    IncomingMessage *pendingMessage = account.pendingMessages.findPendingMessage(chatId, messageId);
-    if (!pendingMessage) {
-        if (!path.empty())
-            refreshShownMessage(account, chatId, messageId);
-        return;
-    }
-    for (IncomingMessage::RichPicture &picture: pendingMessage->richPictures)
-        if ((picture.index == index) && (picture.fileId == fileId)) {
-            picture.done = true;
-            if (!path.empty())
-                picture.path = path;
-            else
-                purple_debug_misc(config::pluginId, "Picture %zu of message %" G_GINT64_FORMAT " not here yet\n",
-                                  index, messageId.value());
-        }
-    checkMessageReady(pendingMessage, account.transceiver, account);
-}
-
 static void previewDownloadResponse(TdAccountData &account, ChatId chatId, MessageId messageId,
                                     td::td_api::object_ptr<td::td_api::Object> object)
 {
@@ -2775,7 +2802,7 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
                                          getMessageWaitSeconds(fullMessage.messageInfo));
     }
 
-    if (fullMessage.previewFileId && !fullMessage.previewFetchDone) {
+    if (fullMessage.previewFileId && !fullMessage.previewFetchDone && !canShowImages()) {
         purple_debug_misc(config::pluginId, "Fetching video thumbnail for message %" G_GINT64_FORMAT "\n",
                           messageId.value());
         auto downloadReq = td::td_api::make_object<td::td_api::downloadFile>();
@@ -2789,29 +2816,6 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
             [&account, chatId, messageId](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
                 previewDownloadResponse(account, chatId, messageId, std::move(object));
             }, getMessageWaitSeconds(fullMessage.messageInfo));
-    }
-
-    for (const IncomingMessage::RichPicture &picture: fullMessage.richPictures) {
-        if (picture.done)
-            continue;
-        purple_debug_misc(config::pluginId, "Fetching picture %zu of message %" G_GINT64_FORMAT "\n", picture.index,
-                          messageId.value());
-        auto downloadReq = td::td_api::make_object<td::td_api::downloadFile>();
-        downloadReq->file_id_     = picture.fileId;
-        downloadReq->priority_    = FILE_DOWNLOAD_PRIORITY;
-        downloadReq->offset_      = 0;
-        downloadReq->limit_       = 0;
-        downloadReq->synchronous_ = true;
-        size_t  index  = picture.index;
-        int32_t fileId = picture.fileId;
-        // Past the timeout the message is shown with a placeholder for it, and again with it once
-        // it is here, however late, as TDLib goes on fetching it
-        TdTransceiver::ResponseCb2 handler = [&account, chatId, messageId, index, fileId](uint64_t,
-                                                td::td_api::object_ptr<td::td_api::Object> object) {
-            richPictureDownloadResponse(account, chatId, messageId, index, fileId, std::move(object));
-        };
-        uint64_t queryId = transceiver.sendQuery(std::move(downloadReq), handler);
-        transceiver.setQueryTimer(queryId, handler, getMessageWaitSeconds(fullMessage.messageInfo), false);
     }
 
     FileInfo fileInfo;

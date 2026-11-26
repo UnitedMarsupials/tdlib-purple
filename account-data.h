@@ -276,6 +276,10 @@ struct IncomingMessage {
 
     int32_t  selectedPhotoSizeId;
     int32_t  previewFileId; // 0 if there is no thumbnail worth showing
+    // Its size, and the low-grade picture the video carries, for its stand-in while it comes
+    int32_t     previewWidth  = 0;
+    int32_t     previewHeight = 0;
+    std::string previewLowGrade;
     unsigned inlineFileSizeLimit;
     bool     standardDownloadConfigured;
     bool     repliedMessageFetchDoneOrFailed;
@@ -298,15 +302,6 @@ struct IncomingMessage {
     bool     formattingOnly    = false;
     // Deleted while waiting to be shown, which it then never is
     bool     deleted           = false;
-    // A rich message's pictures, shown in it, by their number among its media: each fetched,
-    // or given up waiting for, before it is shown; the path empty for one not fetched
-    struct RichPicture {
-        size_t      index;
-        int32_t     fileId;
-        std::string path;
-        bool        done;
-    };
-    std::vector<RichPicture> richPictures;
 
     // Not a message but a line of Pidgin's log, as it is, put among them in the tab when it is filled;
     // with the pictures of the image store it shows, which it holds

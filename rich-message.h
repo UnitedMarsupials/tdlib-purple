@@ -15,9 +15,10 @@ using RichMediaImage = std::function<std::string(size_t index)>;
 // structure, its media as placeholders with their captions, linked to where they can be
 std::string formatRichMessage(const td::td_api::richMessage &message, const RichMediaLink &link = RichMediaLink(),
                               const RichMediaImage &image = RichMediaImage());
-// The file of a rich message's medium, by its number, a picture in the size shown; null if none
+// The file of a rich message's medium, by its number, a picture in the size shown, and the photo
+// it is of, if it is one and that is asked for; null if none
 const td::td_api::file *findRichMessageMedia(const td::td_api::richMessage &message, size_t index,
-                                             std::string &description);
+                                             std::string &description, const td::td_api::photo **photo = nullptr);
 // Its first line of text, plain, as for a quote of it
 std::string getRichMessageSummary(const td::td_api::richMessage &message);
 #endif
