@@ -28,6 +28,9 @@
 #define TDLIB_API_BUTTON_STYLE     ${TDLIB_API_BUTTON_STYLE}
 // a message may be rich, laid out in blocks as an instant view page is (1.8.65)
 #define TDLIB_API_RICH_MESSAGE     ${TDLIB_API_RICH_MESSAGE}
+// joinChat and joinChatByInviteLink tell how joining went by a ChatJoinResult,
+// not ok and a chat; it may be asking to join, or need a bot's approval (1.8.65)
+#define TDLIB_API_CHAT_JOIN_RESULT ${TDLIB_API_CHAT_JOIN_RESULT}
 
 
 #define TEST_SOURCE_DIR "${CMAKE_SOURCE_DIR}/test"

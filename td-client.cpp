@@ -4012,8 +4012,12 @@ void PurpleTdClient::addContactResponse(uint64_t requestId, td::td_api::object_p
         uint64_t newRequestId = m_transceiver.sendQuery(std::move(createChat),
                                                         &PurpleTdClient::addContactCreatePrivateChatResponse);
         m_data.addPendingRequest(newRequestId, std::move(request));
-    } else
+    } else {
+        if (request->userId.valid())
+            returnToTransientGroup(PURPLE_BLIST_NODE(purple_find_buddy(m_account,
+                                                                       getPurpleBuddyName(request->userId).c_str())));
         notifyFailedContact(getDisplayedError(object));
+    }
 }
 
 void PurpleTdClient::addContactCreatePrivateChatResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object)
@@ -4204,7 +4208,27 @@ void PurpleTdClient::joinChatByInviteLink(const char *inviteLink)
 void PurpleTdClient::joinChatResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object)
 {
     std::unique_ptr<GroupJoinRequest> request = m_data.getPendingRequest<GroupJoinRequest>(requestId);
-    if (object && ((object->get_id() == td::td_api::chat::ID) || (object->get_id() == td::td_api::ok::ID))) {
+    int32_t                           resultId = object ? object->get_id() : 0;
+    std::string                       notJoined;
+#if TDLIB_API_CHAT_JOIN_RESULT
+    // Not joined, though not for an error: told so, and what to do
+    if (resultId == td::td_api::chatJoinResultRequestSent::ID) {
+        // TRANSLATOR: Dialog, title
+        purple_notify_info(purple_account_get_connection(m_account), _("Asked to join the chat"),
+                           // TRANSLATOR: Dialog, content
+                           _("The chat's administrators have to approve it."), NULL);
+        return;
+    } else if (resultId == td::td_api::chatJoinResultGuardBotApprovalRequired::ID)
+        // TRANSLATOR: Error dialog, content, after "Failed to join chat: "
+        notJoined = _("a bot has to approve it, in Telegram's own app");
+    else if (resultId == td::td_api::chatJoinResultDeclined::ID)
+        // TRANSLATOR: Error dialog, content, after "Failed to join chat: "
+        notJoined = _("declined by the chat's bot");
+    bool joined = (resultId == td::td_api::chatJoinResultSuccess::ID);
+#else
+    bool joined = (resultId == td::td_api::chat::ID) || (resultId == td::td_api::ok::ID);
+#endif
+    if (joined) {
         // If the chat was added with something like "Add chat" function from Pidgin, the chat in
         // contact list was created without id component (for if there was the id component,
         // tgprpl_chat_join would not have called PurpleTdClient::joinChatByLink).
@@ -4234,8 +4258,15 @@ void PurpleTdClient::joinChatResponse(uint64_t requestId, td::td_api::object_ptr
             }
         }
     } else {
+        if (request && (request->type == GroupJoinRequest::Type::Moved)) {
+            const td::td_api::chat *chat = m_data.getChat(request->chatId);
+            if (chat)
+                returnToTransientGroup(PURPLE_BLIST_NODE(purple_blist_find_chat(m_account,
+                                                                                getPurpleChatName(*chat).c_str())));
+        }
         // TRANSLATOR: Error dialog, content
-        std::string message = formatMessage(_("Failed to join chat: {}"), getDisplayedError(object));
+        std::string message = formatMessage(_("Failed to join chat: {}"),
+                                            notJoined.empty() ? getDisplayedError(object) : notJoined);
         // TRANSLATOR: Error dialog, title
         purple_notify_error(purple_account_get_connection(m_account), _("Failed to join chat"),
                             message.c_str(), NULL);

@@ -533,9 +533,9 @@ TEST_F(GroupChatTest, JoinBasicGroupByInviteLink)
     );
 
     // Now reply to join group - original chat is removed
-    tgl.reply(joinRequestId, makeChat(
+    tgl.reply(joinRequestId, makeChatJoined(groupChatId, makeChat(
         groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0
-    ));
+    )));
     prpl.verifyEvents(RemoveChatEvent("", LINK));
 
     // Replying to group full info request with list of members

@@ -338,15 +338,20 @@ static const char *getTransientBuddyGroupName()
     return _("Telegram: not in contacts");
 }
 
-void addTransientChat(TdAccountData &account, const td::td_api::chat &chat)
+static PurpleGroup *getTransientGroup(const char *groupName)
 {
-    const char  *groupName = getTransientChatGroupName();
-    PurpleGroup *group     = purple_find_group(groupName);
+    PurpleGroup *group = purple_find_group(groupName);
     if (!group) {
         group = purple_group_new(groupName);
         purple_blist_node_set_flags(PURPLE_BLIST_NODE(group), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
         purple_blist_add_group(group, NULL);
     }
+    return group;
+}
+
+void addTransientChat(TdAccountData &account, const td::td_api::chat &chat)
+{
+    PurpleGroup *group = getTransientGroup(getTransientChatGroupName());
 
     purple_debug_misc(config::pluginId, "Adding chat %s to the buddy list until the program quits\n",
                       chat.title_.c_str());
@@ -569,6 +574,18 @@ bool isMovedOutOfTransient(PurpleBlistNode *node, PurpleGroup *group)
            g_strcmp0(groupName, getTransientBuddyGroupName());
 }
 
+// Moved out by the user, an entry that could not be kept, as a chat that cannot be joined, goes back
+// at once, rather than at the next start
+void returnToTransientGroup(PurpleBlistNode *node)
+{
+    if (!node || !(purple_blist_node_get_flags(node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE))
+        return;
+    if (PURPLE_BLIST_NODE_IS_CHAT(node))
+        purple_blist_add_chat(PURPLE_CHAT(node), getTransientGroup(getTransientChatGroupName()), NULL);
+    else if (PURPLE_BLIST_NODE_IS_BUDDY(node))
+        purple_blist_add_buddy(PURPLE_BUDDY(node), NULL, getTransientGroup(getTransientBuddyGroupName()), NULL);
+}
+
 void keepInBuddyList(PurpleBlistNode *node)
 {
     purple_blist_node_set_flags(node, PurpleBlistNodeFlags(purple_blist_node_get_flags(node) &
@@ -596,13 +613,7 @@ std::string addTransientBuddy(TdAccountData &account, const td::td_api::user &us
             purple_blist_alias_buddy(buddy, alias.c_str());
         return buddyName;
     }
-    const char  *groupName = getTransientBuddyGroupName();
-    PurpleGroup *group     = purple_find_group(groupName);
-    if (!group) {
-        group = purple_group_new(groupName);
-        purple_blist_node_set_flags(PURPLE_BLIST_NODE(group), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
-        purple_blist_add_group(group, NULL);
-    }
+    PurpleGroup *group = getTransientGroup(getTransientBuddyGroupName());
     purple_debug_misc(config::pluginId, "Adding %s to the buddy list until the program quits\n", buddyName.c_str());
     buddy = purple_buddy_new(account.purpleAccount, buddyName.c_str(), alias.empty() ? NULL : alias.c_str());
     purple_blist_node_set_flags(PURPLE_BLIST_NODE(buddy), PURPLE_BLIST_NODE_FLAG_NO_SAVE);

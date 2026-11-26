@@ -1277,6 +1277,17 @@ object_ptr<addContact> makeAddContact(int64_t userId, const std::string &phoneNu
     return result;
 }
 
+object_ptr<Object> makeChatJoined(int64_t chatId, object_ptr<Object> &&olderReply)
+{
+#if TDLIB_API_CHAT_JOIN_RESULT
+    auto result = make_object<chatJoinResultSuccess>();
+    result->chat_id_ = chatId;
+    return std::move(result);
+#else
+    return std::move(olderReply);
+#endif
+}
+
 object_ptr<addProxy> makeAddProxy(const std::string &server, int32_t port,
                                   object_ptr<ProxyType> &&type)
 {

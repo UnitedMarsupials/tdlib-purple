@@ -337,18 +337,21 @@ void PrivateChatTest::contactedByStranger(object_ptr<ChatActionBar> &&actionBar)
     EXPECT_TRUE(purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
 
     // Moved into a group of ours: added to contacts, our phone number not given. Until they are a
-    // contact the buddy is not saved, so that adding them fails to where it was
+    // contact the buddy is not saved; if adding them fails, it is back where it was
     purple_blist_add_buddy(buddy, NULL, &standardPurpleGroup, NULL);
     prpl.discardEvents();
     pluginInfo().group_buddy(connection, purpleUserName(0).c_str(), "Telegram: not in contacts",
                              standardPurpleGroup.name);
     tgl.verifyRequest(*makeAddContact(userIds[0], "", userFirstNames[0], userLastNames[0], false));
     tgl.reply(make_object<error>(400, "Failed"));
-    prpl.discardEvents();
+    prpl.verifyEvents(AddBuddyEvent(purpleUserName(0), displayName, account, nullptr, transient, nullptr));
     EXPECT_TRUE(purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy)) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+    EXPECT_EQ(transient, purple_buddy_get_group(buddy));
 
     // Moved again, tried again: as a contact, kept where it was put
-    pluginInfo().group_buddy(connection, purpleUserName(0).c_str(), standardPurpleGroup.name,
+    purple_blist_add_buddy(buddy, NULL, &standardPurpleGroup, NULL);
+    prpl.discardEvents();
+    pluginInfo().group_buddy(connection, purpleUserName(0).c_str(), "Telegram: not in contacts",
                              standardPurpleGroup.name);
     tgl.verifyRequest(*makeAddContact(userIds[0], "", userFirstNames[0], userLastNames[0], false));
     auto userUpdate = make_object<updateUser>(makeUser(userIds[0], userFirstNames[0], userLastNames[0], "",

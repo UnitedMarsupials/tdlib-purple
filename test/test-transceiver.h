@@ -117,6 +117,9 @@ object_ptr<addProxy> makeAddProxy(const std::string &server, int32_t port,
                                   object_ptr<ProxyType> &&type);
 object_ptr<Object> makeAddedProxy(int32_t id, bool isEnabled);
 object_ptr<Object> makeAddedProxies(std::initializer_list<std::pair<int32_t, bool>> idsAndEnabled);
+// A chat joined: joinChat's and joinChatByInviteLink's reply, which TDLib before 1.8.65 gave as
+// ok and a chat, given as olderReply
+object_ptr<Object> makeChatJoined(int64_t chatId, object_ptr<Object> &&olderReply);
 
 // These take what the constructors of TDLib 1.8.50 or so took, in that order, and set fields by
 // name: TDLib keeps inserting fields, which breaks every positional constructor call.
