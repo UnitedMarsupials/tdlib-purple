@@ -20,6 +20,9 @@ struct MediaVariant {
 // Smallest first; empty for a message that is neither photo nor video
 void getMediaVariants(const td::td_api::MessageContent &content, std::vector<MediaVariant> &variants);
 
+// A photo's biggest size, as one opened rather than shown; null if it has none
+const td::td_api::file *findBiggestPhotoSize(const td::td_api::photo &photo);
+
 // The file of the variant a link names; null if there is none such
 const td::td_api::file *findMediaVariant(const td::td_api::MessageContent &content, const std::string &key,
                                          std::string &description);

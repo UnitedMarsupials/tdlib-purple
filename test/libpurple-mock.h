@@ -14,6 +14,9 @@ extern "C" {
 void setFakeFileSize(const char *path, size_t size);
 void clearFakeFiles();
 int  getLastImgstoreId();
+// Of the image store's references to it, those the plugin took beyond the one it came with, less
+// those it gave up
+int  getImageRefs(int id);
 guint8 *arrayDup(gpointer data, size_t size);
 void setUiName(const char *name);
 void setUiInfoMissing(bool missing);

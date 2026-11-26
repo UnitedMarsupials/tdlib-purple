@@ -78,14 +78,21 @@ void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
                            td::td_api::object_ptr<td::td_api::message> message,
                            PendingMessageQueue::MessageAction action, bool redrawn = false,
                            bool logRedrawn = false);
-// Logs our message, sent, as written into its tab while it was being sent, under the id it now has
+// Logs our message, sent, as written into its tab while it was being sent, under the id it now has;
+// or one shown with pictures still coming, as it was shown, under its own
 void logSentMessage(TdAccountData &account, ChatId chatId, MessageId oldId, MessageId newId);
+// An animated sticker converted, into the image store, or not (0): the messages showing it shown again
+void stickerConverted(TdAccountData &account, int32_t fileId, int imageId);
+// Logs those still awaiting their pictures as they were shown, as the account goes
+void logMessagesAwaitingPictures(TdAccountData &account);
 // The chat's conversation, if it is open; none is opened
 PurpleConversation *findMessageConversation(TdAccountData &account, const td::td_api::chat &chat);
 // Names a message by when it was sent, as the conversation window shows it
 std::string formatMessageTime(time_t timestamp);
-// Of a picture shown in the conversation, the size that does for it, as a video's cover's
-const td::td_api::file *chooseShownPhotoSize(const td::td_api::photo *photo, int32_t fallbackWidth = 320);
+// Of a picture shown in the conversation, the size that does for it, of those within the limit on
+// what is fetched unasked, in kilobytes, if any is (0 for none)
+const td::td_api::file *chooseShownPhotoSize(const td::td_api::photo *photo, int32_t fallbackWidth = 320,
+                                             unsigned sizeLimitKb = 0);
 void fetchHistory(TdAccountData &account, ChatId chatId, MessageId fetchFrom, MessageId stopAt);
 // Fills the chat's tab anew, in Pidgin, from the given message to the latest, if the tab can hold
 // that many; to show a message it does not, such as one just reacted to

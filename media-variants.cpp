@@ -67,6 +67,20 @@ static std::string describeVariant(const MediaVariant &variant)
     return result;
 }
 
+const td::td_api::file *findBiggestPhotoSize(const td::td_api::photo &photo)
+{
+    // One of unknown dimensions, as the original of a photo just sent is, is taken for the largest,
+    // as among the variants
+    auto area = [](const td::td_api::photoSize &size) {
+        return (size.width_ && size.height_) ? int64_t(size.width_) * size.height_ : INT64_MAX;
+    };
+    const td::td_api::photoSize *biggest = nullptr;
+    for (const auto &size: photo.sizes_)
+        if (size && size->photo_ && (!biggest || (area(*size) > area(*biggest))))
+            biggest = size.get();
+    return biggest ? biggest->photo_.get() : nullptr;
+}
+
 const td::td_api::file *findMediaVariant(const td::td_api::MessageContent &content, const std::string &key,
                                          std::string &description)
 {
@@ -76,7 +90,12 @@ const td::td_api::file *findMediaVariant(const td::td_api::MessageContent &conte
         const auto &rich  = static_cast<const td::td_api::messageRichMessage &>(content);
         char       *end   = nullptr;
         size_t      index = strtoul(key.c_str() + 1, &end, 10);
-        return (rich.message_ && end && !*end) ? findRichMessageMedia(*rich.message_, index, description) : nullptr;
+        const td::td_api::photo *photo = nullptr;
+        const td::td_api::file  *file  = (rich.message_ && end && !*end) ?
+                                         findRichMessageMedia(*rich.message_, index, description, &photo) : nullptr;
+        // A picture opened, rather than shown, in its biggest size
+        const td::td_api::file  *biggest = photo ? findBiggestPhotoSize(*photo) : nullptr;
+        return biggest ? biggest : file;
     }
 #endif
     std::vector<MediaVariant> variants;

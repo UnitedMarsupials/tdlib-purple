@@ -216,18 +216,11 @@ static void inlineDownloadResponse(uint64_t requestId,
             // Quick download response while message still in PendingMessageQueue
             const td::td_api::file *replacementFile = nullptr;
 
+            // An animated sticker, not shown here, by its thumbnail instead
             if (pendingMessage->message && pendingMessage->message->content_ &&
                 (pendingMessage->message->content_->get_id() == td::td_api::messageSticker::ID) &&
                 isStickerAnimated(path))
-            {
-                if (shouldConvertAnimatedSticker(pendingMessage->messageInfo, account.purpleAccount)) {
-                    StickerConversionThread *thread;
-                    thread = new StickerConversionThread(account.purpleAccount, path, getChatId(*pendingMessage->message),
-                                                         &pendingMessage->messageInfo);
-                    thread->startThread();
-                } else
-                    replacementFile = pendingMessage->thumbnail.get();
-            }
+                replacementFile = pendingMessage->thumbnail.get();
 
             if (replacementFile)
                 // TODO: if thumbnail already downloaded, mark ready and don't download

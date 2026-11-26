@@ -58,6 +58,7 @@ PurpleTdClient::~PurpleTdClient()
         fullMessage.inlineDownloadTimeout = true;
 
     showMessages(messages, m_data);
+    logMessagesAwaitingPictures(m_data);
     endAuthInput();
     // A login given up, as the account is disabled before it is done, leaves nothing to answer
     removeAuthInputBuddy();
@@ -2826,10 +2827,17 @@ void PurpleTdClient::fetchMessageFileResponse(ChatId chatId, const std::string &
     makeFullMessage(*chat, td::move_tl_object_as<td::td_api::message>(object), fullMessage, m_data);
     FileInfo fileInfo;
     getFileFromMessage(fullMessage, fileInfo);
-    // One of the sizes of a photo or video, where the link names one
+    // One of the sizes of a photo or video, where the link names one; a photo opened, rather than
+    // shown, in its biggest size otherwise
     if (!variant.empty()) {
         fileInfo.file = fullMessage.message->content_ ?
                         findMediaVariant(*fullMessage.message->content_, variant, fileInfo.description) : nullptr;
+    } else if (fullMessage.message->content_ &&
+               (fullMessage.message->content_->get_id() == td::td_api::messagePhoto::ID)) {
+        const auto &photo = static_cast<const td::td_api::messagePhoto &>(*fullMessage.message->content_);
+        const td::td_api::file *biggest = photo.photo_ ? findBiggestPhotoSize(*photo.photo_) : nullptr;
+        if (biggest)
+            fileInfo.file = biggest;
     }
     if (!fileInfo.file) {
         // Unlikely error message not worth translating
@@ -2936,11 +2944,9 @@ void PurpleTdClient::onAnimatedStickerConverted(AccountThread *arg)
 {
     std::unique_ptr<AccountThread> baseThread(arg);
     StickerConversionThread *thread = dynamic_cast<StickerConversionThread *>(arg);
-    const td::td_api::chat  *chat   = thread ? m_data.getChat(thread->chatId) : nullptr;
-    if (!chat || !thread)
+    // Converted for the account's connection before this one, whose messages are gone with it
+    if (!thread || (thread->owner.lock() != m_data.lifetime))
         return;
-    IncomingMessage *pendingMessage = m_data.pendingMessages.findPendingMessage(getId(*chat), thread->message().id);
-
     std::string  errorMessage = thread->getErrorMessage();
     gchar       *imageData    =  NULL;
     gsize        imageSize    = 0;
@@ -2958,31 +2964,11 @@ void PurpleTdClient::onAnimatedStickerConverted(AccountThread *arg)
             success = true;
     }
 
-    if (success) {
-        int id = purple_imgstore_add_with_id (imageData, imageSize, NULL);
-        if (pendingMessage) {
-            pendingMessage->animatedStickerConverted = true;
-            pendingMessage->animatedStickerConvertSuccess = true;
-            pendingMessage->animatedStickerImageId = id;
-            checkMessageReady(pendingMessage, m_transceiver, m_data);
-            pendingMessage = nullptr;
-        } else {
-            std::string text = makeInlineImageText(id);
-            showMessageText(m_data, *chat, thread->message(), text.c_str(), NULL, PURPLE_MESSAGE_IMAGES);
-        }
-    } else {
-        if (pendingMessage) {
-            pendingMessage->animatedStickerConverted = true;
-            pendingMessage->animatedStickerConvertSuccess = false;
-            checkMessageReady(pendingMessage, m_transceiver, m_data);
-            pendingMessage = nullptr;
-        }
-        // TRANSLATOR: In-chat error message, arguments will be a file name and a proper reason
-        errorMessage = formatMessage(_("Could not read sticker file {0}: {1}"),
-                                        {thread->inputFileName, errorMessage});
-        errorMessage = makeNoticeWithSender(*chat, thread->message(), errorMessage.c_str(), m_account);
-        showMessageText(m_data, *chat, thread->message(), NULL, errorMessage.c_str());
-    }
+    // Kept for every message showing the sticker
+    if (!success)
+        purple_debug_warning(config::pluginId, "Cannot convert sticker %s: %s\n",
+                             thread->inputFileName.c_str(), errorMessage.c_str());
+    stickerConverted(m_data, thread->fileId, success ? purple_imgstore_add_with_id(imageData, imageSize, NULL) : 0);
 }
 
 void PurpleTdClient::sendReadReceipts(PurpleConversation *conversation)

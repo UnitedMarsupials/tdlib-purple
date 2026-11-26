@@ -38,6 +38,11 @@ bool pidginUiFound();
 // Pidgin
 unsigned getTextLineHeight();
 
+// A picture standing in for one still to come, of the size it will be shown in: the low-grade one
+// given, as its data, scaled up to that, or a box, clear for a sticker and grey otherwise; put into
+// the image store, its id there, or 0 without Pidgin
+int makeStandInPicture(const std::string &lowGrade, int width, int height, bool clear);
+
 // Each message shown is bracketed in its tab by two marks, found again by its id; those of a
 // message shown again are moved. While an object of this class lives, what is written into a
 // conversation belongs to the given message. With an edit note, the message is written over its

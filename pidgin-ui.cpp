@@ -213,6 +213,8 @@ FRONT_END_FUNCTION(gtk_image_get_pixbuf);
 FRONT_END_FUNCTION(gdk_pixbuf_scale_simple);
 FRONT_END_FUNCTION(gdk_pixbuf_get_width);
 FRONT_END_FUNCTION(gdk_pixbuf_get_height);
+FRONT_END_FUNCTION(gdk_pixbuf_new);
+FRONT_END_FUNCTION(gdk_pixbuf_fill);
 FRONT_END_FUNCTION(pidgin_conv_window_get_active_conversation);
 FRONT_END_FUNCTION(pidgin_conv_window_switch_gtkconv);
 FRONT_END_FUNCTION(gdk_window_get_state);
@@ -1255,6 +1257,51 @@ static int getThumbnailSize(GtkWidget *entry)
 {
     int height = getLineHeight(entry);
     return (height > 0) ? height * THUMBNAIL_LINES : THUMBNAIL_SIZE;
+}
+
+int makeStandInPicture(const std::string &lowGrade, int width, int height, bool clear)
+{
+    static bool found = LOOK_UP(gdk_pixbuf_loader_new) && LOOK_UP(gdk_pixbuf_loader_write) &&
+                        LOOK_UP(gdk_pixbuf_loader_close) && LOOK_UP(gdk_pixbuf_loader_get_pixbuf) &&
+                        LOOK_UP(gdk_pixbuf_scale_simple) && LOOK_UP(gdk_pixbuf_new) && LOOK_UP(gdk_pixbuf_fill) &&
+                        LOOK_UP(gdk_pixbuf_save_to_buffer) && LOOK_UP(g_object_unref);
+    if (!g_pidginUi || !found || (width <= 0) || (height <= 0))
+        return 0;
+
+    GdkPixbuf *pixbuf = nullptr;
+    if (!lowGrade.empty()) {
+        GdkPixbufLoader *loader = p_gdk_pixbuf_loader_new();
+        bool read = p_gdk_pixbuf_loader_write(loader, reinterpret_cast<const guchar *>(lowGrade.data()),
+                                              lowGrade.size(), nullptr) &&
+                    p_gdk_pixbuf_loader_close(loader, nullptr);
+        GdkPixbuf *small = read ? p_gdk_pixbuf_loader_get_pixbuf(loader) : nullptr;
+        if (!read)
+            p_gdk_pixbuf_loader_close(loader, nullptr);
+        if (small)
+            pixbuf = p_gdk_pixbuf_scale_simple(small, width, height, GDK_INTERP_BILINEAR);
+        p_g_object_unref(loader);
+    }
+
+    gchar      *data   = nullptr;
+    gsize       size   = 0;
+    bool        saved;
+    const char *name;
+    if (pixbuf) {
+        // Blurred as it is, JPEG keeps it small, and is quick to make
+        saved = p_gdk_pixbuf_save_to_buffer(pixbuf, &data, &size, "jpeg", nullptr, "quality", "60", NULL);
+        name  = "preview.jpg";
+    } else {
+        pixbuf = p_gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, width, height);
+        if (!pixbuf)
+            return 0;
+        p_gdk_pixbuf_fill(pixbuf, clear ? 0 : 0xC0C0C0FF);
+        // One colour, which PNG makes next to nothing of
+        saved = p_gdk_pixbuf_save_to_buffer(pixbuf, &data, &size, "png", nullptr, NULL);
+        name  = "preview.png";
+    }
+    p_g_object_unref(pixbuf);
+    // The store takes the data
+    return saved ? purple_imgstore_add_with_id(data, size, name) : 0;
 }
 
 unsigned getTextLineHeight()
@@ -4258,6 +4305,11 @@ bool pidginUiFound()
 }
 
 unsigned getTextLineHeight()
+{
+    return 0;
+}
+
+int makeStandInPicture(const std::string &lowGrade, int width, int height, bool clear)
 {
     return 0;
 }

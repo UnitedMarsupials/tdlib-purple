@@ -1,3 +1,4 @@
+#include "buildopt.h"
 #include "fixture.h"
 #include "libpurple-mock.h"
 #include "td-client.h"
@@ -127,6 +128,7 @@ TEST_F(GroupChatTest, BasicGroupReceiveTextAndReply)
     tgl.verifyRequest(viewMessages(groupChatId, {messageId[1]}, nullptr, true));
 }
 
+#ifndef NoPidgin
 TEST_F(GroupChatTest, BasicGroupReceivePhoto)
 {
     const int32_t date         = 12345;
@@ -144,24 +146,67 @@ TEST_F(GroupChatTest, BasicGroupReceivePhoto)
             false, false, false
         )
     )));
-    tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
-    prpl.verifyNoEvents();
+    // Shown at once, its stand-in to be written over once the photo is here
+    prpl.verifyEvents(
+        ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
+        ServGotChatEvent(connection, 1, purpleUserName(0), "[photo]\nphoto", PURPLE_MESSAGE_RECV, date)
+    );
+    uint64_t download = tgl.verifyRequests({
+        make_object<viewMessages>(groupChatId, std::vector<int64_t>(1, messageId), nullptr, true),
+        make_object<downloadFile>(fileId, 1, 0, 0, true)
+    })[1];
 
-    tgl.reply(make_object<file>(
+    tgl.reply(download, make_object<file>(
         fileId, 10000, 10000,
         make_object<localFile>("/path", true, true, false, true, 0, 10000, 10000),
         make_object<remoteFile>("beh", "bleh", false, true, 10000)
     ));
+    tgl.verifyRequest(getMessage(groupChatId, messageId));
+}
+#endif
+
+// A file fetched before it is shown, as in a group, that takes long, with file transfers chosen for
+// files: none is made up to show how its fetching goes, a file transfer being no more than that
+TEST_F(GroupChatTest, Document_LongDownload_StandardDownloadsConfigured)
+{
+    purple_account_set_string(account, "download-behaviour", "file-transfer");
+    const int32_t date         = 12345;
+    const int64_t messageId    = 10001;
+    const int32_t fileId       = 1234;
+    constexpr int purpleChatId = 1;
+    loginWithBasicGroup();
+
+    tgl.update(standardUpdateUserNoPhone(0));
+    tgl.update(make_object<updateNewMessage>(makeMessage(messageId, userIds[0], groupChatId, false, date,
+        makeMessageDocument("doc.file.name", "mime/type", makeFile(fileId, 10000), "caption"))));
+    uint64_t downloadReqId = tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
+    prpl.verifyNoEvents();
+
+    tgl.update(make_object<updateFile>(make_object<file>(
+        fileId, 10000, 10000,
+        make_object<localFile>("/path", true, true, true, false, 0, 0, 2000),
+        make_object<remoteFile>("beh", "bleh", false, true, 10000)
+    )));
+
+    tgl.runTimeouts();
     prpl.verifyEvents(
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
-        ServGotChatEvent(
-            connection, 1, purpleUserName(0),
-            "<a href=\"file://file:///path\">photo</a>\n"
-            "photo",
-            PURPLE_MESSAGE_RECV, date
-        )
+        ServGotChatEvent(connection, purpleChatId, purpleUserName(0), "caption", PURPLE_MESSAGE_RECV, date),
+        ConversationWriteEvent(groupChatPurpleName, NotificationWho,
+                               userFirstNames[0] + " " + userLastNames[0] +
+                               ": Downloading doc.file.name [mime/type]",
+                               PURPLE_MESSAGE_SYSTEM, date)
     );
     tgl.verifyRequest(viewMessages(groupChatId, {messageId}, nullptr, true));
+
+    tgl.reply(downloadReqId, make_object<file>(
+        fileId, 10000, 10000,
+        make_object<localFile>("/path", true, true, false, true, 0, 10000, 10000),
+        make_object<remoteFile>("beh", "bleh", false, true, 10000)
+    ));
+    prpl.verifyEvents(ServGotChatEvent(connection, purpleChatId, purpleUserName(0),
+                                       "<a href=\"file://file:///path\">doc.file.name [mime/type]</a>",
+                                       PURPLE_MESSAGE_RECV, date));
 }
 
 TEST_F(GroupChatTest, ExistingBasicGroupReceiveMessageAtLogin_WithMemberList_RemoveGroupMemberFromBuddies)

@@ -11,6 +11,7 @@
 #include <map>
 #include <mutex>
 #include <set>
+#include <tuple>
 #include <list>
 #include <purple.h>
 
@@ -160,6 +161,7 @@ struct TgMessageInfo {
     bool        unlogged = false; // shown in the tab only, the log having it in an edit's notice
     bool        redrawn = false; // shown again, as the tab is filled anew: not logged, nothing asked
     bool        logRedrawn = false; // shown so into a tab of a chat with no log yet: logged after all
+    bool        picturesComing = false; // shown with stand-ins for pictures fetched: logged once they are
 
     void assign(const TgMessageInfo &other)
     {
@@ -274,15 +276,17 @@ struct IncomingMessage {
 
     int32_t  selectedPhotoSizeId;
     int32_t  previewFileId; // 0 if there is no thumbnail worth showing
+    // Its size, and the low-grade picture the video carries, for its stand-in while it comes
+    int32_t     previewWidth  = 0;
+    int32_t     previewHeight = 0;
+    unsigned    previewSizeKb = 0;
+    std::string previewLowGrade;
     unsigned inlineFileSizeLimit;
     bool     standardDownloadConfigured;
     bool     repliedMessageFetchDoneOrFailed;
     bool     previewFetchDone;
     bool     inlineDownloadComplete;
     bool     inlineDownloadTimeout;
-    bool     animatedStickerConverted;
-    bool     animatedStickerConvertSuccess;
-    int      animatedStickerImageId;
 
     // For a message shown again because it was edited: when it was first sent, and whether
     // its caption is all that changed, and so all there is to show
@@ -296,15 +300,6 @@ struct IncomingMessage {
     bool     formattingOnly    = false;
     // Deleted while waiting to be shown, which it then never is
     bool     deleted           = false;
-    // A rich message's pictures, shown in it, by their number among its media: each fetched,
-    // or given up waiting for, before it is shown; the path empty for one not fetched
-    struct RichPicture {
-        size_t      index;
-        int32_t     fileId;
-        std::string path;
-        bool        done;
-    };
-    std::vector<RichPicture> richPictures;
 
     // Not a message but a line of Pidgin's log, as it is, put among them in the tab when it is filled;
     // with the pictures of the image store it shows, which it holds
@@ -389,7 +384,8 @@ struct ShownMessage {
 };
 
 // A message of ours as written into its tab while it was being sent, under an id it did not keep:
-// for the log once it is sent, under the one it does
+// for the log once it is sent, under the one it does. So too a message shown with pictures still
+// coming, for the log once they are here, as it is shown then, or as it was if it cannot be again
 struct UnloggedSent {
     std::string text;
     std::string notification;
@@ -398,6 +394,9 @@ struct UnloggedSent {
     // The conversation it was written into, which may be closed by the time it is sent
     int         conversationType = 0;
     std::string conversationName;
+    std::string who; // who it is from, other than us
+    bool        awaitingPictures = false; // rather than being sent
+    std::vector<int> imageIds; // of the image store, held while it waits
 };
 
 // An edit to a message that was still waiting to be shown at the time
@@ -432,6 +431,7 @@ public:
     TdTransceiver        &transceiver;
     TdAccountData(PurpleAccount *purpleAccount, TdTransceiver &transceiver)
     : purpleAccount(purpleAccount), transceiver(transceiver) {}
+    ~TdAccountData();
 
     // Gone with this, for work put off to tell whether there is still an account to do it for
     std::shared_ptr<int> lifetime = std::make_shared<int>(0);
@@ -567,6 +567,25 @@ public:
     bool                       extractPendingEdit(ChatId chatId, MessageId messageId, PendingEdit &edit);
     void                       addUnloggedSent(ChatId chatId, MessageId messageId, UnloggedSent &&sent);
     bool                       extractUnloggedSent(ChatId chatId, MessageId messageId, UnloggedSent &sent);
+    bool                       hasUnloggedSent(ChatId chatId, MessageId messageId) const;
+    // Those awaiting their pictures, by chat and message
+    void                       extractAwaitingPictures(std::vector<std::tuple<ChatId, MessageId, UnloggedSent>> &messages);
+    // A picture of the message being fetched, to be shown in it once it is; false if it was already
+    bool                       startPictureFetch(ChatId chatId, MessageId messageId, int32_t fileId);
+    void                       endPictureFetch(ChatId chatId, MessageId messageId, int32_t fileId);
+    // A message to be shown again shortly, with pictures come, by the GLib source that will, which
+    // goes with the account
+    bool                       isRefreshDue(ChatId chatId, MessageId messageId) const;
+    void                       setRefreshDue(ChatId chatId, MessageId messageId, guint sourceId);
+    // A picture that could not be fetched, left as its stand-in rather than tried again at once
+    void                       setPictureFailed(int32_t fileId, bool failed);
+    bool                       hasPictureFailed(int32_t fileId) const;
+    // An animated sticker's animation, converted once, in the image store, by the sticker's file id;
+    // and the messages waiting for it while it is: false if it was being converted already
+    int                        getConvertedSticker(int32_t fileId) const;
+    bool                       startStickerConversion(int32_t fileId, ChatId chatId, MessageId messageId);
+    void                       endStickerConversion(int32_t fileId, int imageId,
+                                                    std::vector<std::pair<ChatId, MessageId>> &waiting);
 private:
     TdAccountData(const TdAccountData &other) = delete;
     TdAccountData &operator=(const TdAccountData &other) = delete;
@@ -656,6 +675,11 @@ private:
     std::deque<ShownMessageKey>             m_shownMessageOrder;
     std::vector<PendingEdit>                m_pendingEdits;
     std::map<ShownMessageKey, UnloggedSent> m_unloggedSent;
+    std::set<std::tuple<ChatId, MessageId, int32_t>> m_pictureFetches;
+    std::set<int32_t>                       m_failedPictures;
+    std::map<ShownMessageKey, guint>        m_refreshesDue;
+    std::map<int32_t, int>                  m_convertedStickers;
+    std::map<int32_t, std::vector<std::pair<ChatId, MessageId>>> m_stickerConversions;
 };
 
 #endif

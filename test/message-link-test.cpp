@@ -402,6 +402,25 @@ TEST_F(VideoSizesTest, None)
     verifyVideoMessage();
 }
 
+// A cover too big to be fetched unasked in any of its sizes stays as its stand-in
+TEST_F(VideoSizesTest, CoverAboveLimit)
+{
+    const int32_t coverIds[2] = {1311, 1312};
+    purple_account_set_string(account, "prefetch-videos", "none");
+    purple_account_set_string(account, "media-size-threshold", "0.5");
+    loginWithOneContact();
+
+    object_ptr<message> msg = makeVideoMessage();
+    auto &video = static_cast<messageVideo &>(*msg->content_);
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(::makeFile(coverIds[0], 600000), 320, 180));
+    sizes.push_back(makePhotoSize(::makeFile(coverIds[1], 900000), 1280, 720));
+    video.cover_ = makePhotoWithSizes(std::move(sizes));
+    tgl.update(make_object<updateNewMessage>(std::move(msg)));
+    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
+    verifyVideoMessage();
+}
+
 TEST_F(VideoSizesTest, CoverPreview)
 {
     const int32_t thumbnailId = 1310;
@@ -425,18 +444,20 @@ TEST_F(VideoSizesTest, CoverPreview)
     sizes.push_back(makePhotoSize(::makeFile(coverIds[2], 200000), 1280, 720));
     video.cover_ = makePhotoWithSizes(std::move(sizes));
     tgl.update(make_object<updateNewMessage>(std::move(msg)));
-    tgl.verifyRequest(downloadFile(coverIds[1], 1, 0, 0, true));
-    prpl.verifyNoEvents();
-
-    tgl.reply(::makeFile(coverIds[1], 20000, TEST_SOURCE_DIR "/test.webp"));
-    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
+    // Shown at once, the cover fetched to be written over its stand-in, which only Pidgin can show
     prpl.verifyEvents(ServGotImEvent(
         connection, purpleUserName(0),
-        "\n<a href=\"" + link() + "\"><img id=\"" + std::to_string(getLastImgstoreId()) + "\">\n"
-        "video.mp4 [video/mp4, 1920×1080 (original), purple_str_size_to_units]</a>\n" + sizeLinks() + "\ncaption",
-        (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES), date
+        "<a href=\"" + link() + "\">video.mp4 [video/mp4, 1920×1080 (original), purple_str_size_to_units]</a>\n" +
+        sizeLinks() + "\ncaption",
+        PURPLE_MESSAGE_RECV, date
     ));
-    tgl.verifyNoRequests();
+    uint64_t download = tgl.verifyRequests({
+        make_object<viewMessages>(chatIds[0], std::vector<int64_t>(1, messageId), nullptr, true),
+        make_object<downloadFile>(coverIds[1], 1, 0, 0, true)
+    })[1];
+
+    tgl.reply(download, ::makeFile(coverIds[1], 20000, TEST_SOURCE_DIR "/test.webp"));
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
 }
 
 TEST_F(VideoSizesTest, OpenSize)
@@ -497,6 +518,7 @@ TEST_F(MessageLinkTest, PhotoSizes)
     ));
 }
 
+#ifndef NoPidgin
 TEST_F(MessageLinkTest, PhotoSizesIgnored)
 {
     purple_account_set_string(account, "media-size-threshold", "0.5");
@@ -514,18 +536,52 @@ TEST_F(MessageLinkTest, PhotoSizesIgnored)
         makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText("caption"), false, false, false)
     )));
     tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
+    // The stand-in of the one shown, not fetched
     prpl.verifyEvents(
         ServGotImEvent(connection, purpleUserName(0),
+                       "[photo]\n"
                        "<a href=\"" + link() + "/pm\">320×240, purple_str_size_to_units</a> · "
                        "<a href=\"" + link() + "/py\">1280×960, purple_str_size_to_units</a>\ncaption",
-                       PURPLE_MESSAGE_RECV, date),
-        ConversationWriteEvent(purpleUserName(0), purpleUserName(0),
-                               userFirstNames[0] + " " + userLastNames[0] +
-                               ": Ignoring photo download (purple_str_size_to_units)",
-                               PURPLE_MESSAGE_SYSTEM, date)
+                       PURPLE_MESSAGE_RECV, date)
     );
     tgl.verifyNoRequests();
+
+    // Opened from the link to the message, in its biggest size, the limit notwithstanding
+    tgprpl_open_message_link(link().c_str());
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    std::vector<object_ptr<photoSize>> again;
+    again.push_back(makePhotoSize(makeFile(600000, "", false), 320, 240));
+    again.push_back(makePhotoSize(::makeFile(fileId + 1, 900000), 1280, 960));
+    tgl.reply(makeMessage(messageId, userIds[0], chatIds[0], false, date,
+        makeMessagePhoto(makePhotoWithSizes(std::move(again)), makeFormattedText("caption"), false, false, false)));
+    tgl.verifyRequest(downloadFile(fileId + 1, 32, 0, 0, true));
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0), "Downloading photo",
+                                             PURPLE_MESSAGE_SYSTEM, 0));
 }
+#endif
+
+#ifndef NoPidgin
+// A photo in one size only, too big to be fetched unasked: its stand-in, and a link that fetches it
+TEST_F(MessageLinkTest, BigPhotoLinked)
+{
+    purple_account_set_string(account, "media-size-threshold", "0.5");
+    loginWithOneContact();
+
+    std::vector<object_ptr<photoSize>> sizes;
+    sizes.push_back(makePhotoSize(::makeFile(fileId, 655360), 640, 480));
+    tgl.update(make_object<updateNewMessage>(makeMessage(
+        messageId, userIds[0], chatIds[0], false, date,
+        makeMessagePhoto(makePhotoWithSizes(std::move(sizes)), makeFormattedText("caption"), false, false, false)
+    )));
+    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
+    prpl.verifyEvents(ServGotImEvent(
+        connection, purpleUserName(0),
+        "[photo]\n<a href=\"" + link() + "\">photo, purple_str_size_to_units</a>\ncaption",
+        PURPLE_MESSAGE_RECV, date
+    ));
+    tgl.verifyNoRequests();
+}
+#endif
 
 TEST_F(MessageLinkTest, MessageMenu)
 {
@@ -1215,22 +1271,27 @@ TEST_F(MessageLinkTest, RichMessageMedia)
         return makeMessage(messageId, userIds[0], chatIds[0], false, date, std::move(content));
     };
 
+    // Shown in the size within the limit, which is fetched; the bigger ones only when clicked
     tgl.update(make_object<updateNewMessage>(makeRichMessage()));
-    tgl.verifyRequest(viewMessages(chatIds[0], {messageId}, nullptr, true));
     prpl.verifyEvents(ServGotImEvent(
         connection, purpleUserName(0),
         "<a href=\"" + link() + "/r0\">[photo]</a> <a href=\"" + link() + "/r1\">[photo]</a>",
         PURPLE_MESSAGE_RECV, date
     ));
+    tgl.verifyRequests({
+        make_object<viewMessages>(chatIds[0], std::vector<int64_t>(1, messageId), nullptr, true),
+        make_object<downloadFile>(100, 1, 0, 0, true),
+        make_object<downloadFile>(200, 1, 0, 0, true)
+    });
 
     tgprpl_open_message_link((link() + "/r1").c_str());
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
     tgl.reply(makeRichMessage());
-    // 800 wide, file 202
-    tgl.verifyRequest(downloadFile(202, 32, 0, 0, true));
+    // Opened in its biggest size, 1254 wide, file 203, whatever the limit
+    tgl.verifyRequest(downloadFile(203, 32, 0, 0, true));
     prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0), "Downloading photo",
                                              PURPLE_MESSAGE_SYSTEM, 0));
-    tgl.reply(::makeFile(202, 800000, "/path/photo.jpg"));
+    tgl.reply(::makeFile(203, 1254000, "/path/photo.jpg"));
     prpl.verifyEvents(NotifyUriEvent("file:///path/photo.jpg"));
 }
 #endif
