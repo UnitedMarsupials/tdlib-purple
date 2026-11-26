@@ -2827,10 +2827,17 @@ void PurpleTdClient::fetchMessageFileResponse(ChatId chatId, const std::string &
     makeFullMessage(*chat, td::move_tl_object_as<td::td_api::message>(object), fullMessage, m_data);
     FileInfo fileInfo;
     getFileFromMessage(fullMessage, fileInfo);
-    // One of the sizes of a photo or video, where the link names one
+    // One of the sizes of a photo or video, where the link names one; a photo opened, rather than
+    // shown, in its biggest size otherwise
     if (!variant.empty()) {
         fileInfo.file = fullMessage.message->content_ ?
                         findMediaVariant(*fullMessage.message->content_, variant, fileInfo.description) : nullptr;
+    } else if (fullMessage.message->content_ &&
+               (fullMessage.message->content_->get_id() == td::td_api::messagePhoto::ID)) {
+        const auto &photo = static_cast<const td::td_api::messagePhoto &>(*fullMessage.message->content_);
+        const td::td_api::file *biggest = photo.photo_ ? findBiggestPhotoSize(*photo.photo_) : nullptr;
+        if (biggest)
+            fileInfo.file = biggest;
     }
     if (!fileInfo.file) {
         // Unlikely error message not worth translating

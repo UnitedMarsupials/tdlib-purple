@@ -525,6 +525,18 @@ TEST_F(MessageLinkTest, PhotoSizesIgnored)
                        PURPLE_MESSAGE_RECV, date)
     );
     tgl.verifyNoRequests();
+
+    // Opened from the link to the message, in its biggest size, the limit notwithstanding
+    tgprpl_open_message_link(link().c_str());
+    tgl.verifyRequest(getMessage(chatIds[0], messageId));
+    std::vector<object_ptr<photoSize>> again;
+    again.push_back(makePhotoSize(makeFile(600000, "", false), 320, 240));
+    again.push_back(makePhotoSize(::makeFile(fileId + 1, 900000), 1280, 960));
+    tgl.reply(makeMessage(messageId, userIds[0], chatIds[0], false, date,
+        makeMessagePhoto(makePhotoWithSizes(std::move(again)), makeFormattedText("caption"), false, false, false)));
+    tgl.verifyRequest(downloadFile(fileId + 1, 32, 0, 0, true));
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0), "Downloading photo",
+                                             PURPLE_MESSAGE_SYSTEM, 0));
 }
 
 TEST_F(MessageLinkTest, MessageMenu)
@@ -1231,11 +1243,11 @@ TEST_F(MessageLinkTest, RichMessageMedia)
     tgprpl_open_message_link((link() + "/r1").c_str());
     tgl.verifyRequest(getMessage(chatIds[0], messageId));
     tgl.reply(makeRichMessage());
-    // 800 wide, file 202
-    tgl.verifyRequest(downloadFile(202, 32, 0, 0, true));
+    // Opened in its biggest size, 1254 wide, file 203, whatever the limit
+    tgl.verifyRequest(downloadFile(203, 32, 0, 0, true));
     prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0), "Downloading photo",
                                              PURPLE_MESSAGE_SYSTEM, 0));
-    tgl.reply(::makeFile(202, 800000, "/path/photo.jpg"));
+    tgl.reply(::makeFile(203, 1254000, "/path/photo.jpg"));
     prpl.verifyEvents(NotifyUriEvent("file:///path/photo.jpg"));
 }
 #endif
