@@ -2374,8 +2374,14 @@ TEST_F(PrivateChatTest, RichMessagePicturesHeldForLog)
     });
     ASSERT_EQ(1, getImageRefs(shown));
 
+    takeLoggedMessages();
     pluginInfo().close(connection);
-    prpl.discardEvents();
+    std::string logged = "<!--tdlib-log-only--><img id=\"" + std::to_string(shown) +
+                         "\"> [photo]<!--tdlib-message 1 " + std::to_string(date) + "--><!--/tdlib-log-only-->";
+    prpl.verifyEvents(ConversationWriteEvent(purpleUserName(0), purpleUserName(0), logged,
+                                             (PurpleMessageFlags)(PURPLE_MESSAGE_RECV | PURPLE_MESSAGE_IMAGES),
+                                             date));
+    ASSERT_EQ(std::vector<std::string>{logged}, takeLoggedMessages());
     ASSERT_EQ(0, getImageRefs(shown));
 }
 #endif
