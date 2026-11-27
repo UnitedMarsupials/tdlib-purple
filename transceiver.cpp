@@ -71,10 +71,7 @@ void TdTransceiverImpl::cancelTimer(uint64_t requestId)
     }
 }
 
-TdTransceiver::TdTransceiver(PurpleTdClient *owner, PurpleAccount *account, UpdateCb updateCb,
-                             ITransceiverBackend *testBackend)
-:   m_account(account),
-    m_stopThread(false)
+TdTransceiver::TdTransceiver(PurpleTdClient *owner, UpdateCb updateCb, ITransceiverBackend *testBackend)
 {
     m_impl = std::make_shared<TdTransceiverImpl>(owner, updateCb, testBackend);
 
@@ -106,7 +103,6 @@ TdTransceiver::~TdTransceiver()
     }
     m_impl->m_timers.clear();
 
-    m_stopThread = true;
     if (!m_testBackend) {
         m_impl->m_client->send({UINT64_MAX, td::td_api::make_object<td::td_api::close>()});
         m_pollThread.join();

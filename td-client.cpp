@@ -22,7 +22,7 @@ enum {
 };
 
 PurpleTdClient::PurpleTdClient(PurpleAccount *acct, ITransceiverBackend *testBackend)
-:   m_transceiver(this, acct, &PurpleTdClient::processUpdate, testBackend),
+:   m_transceiver(this, &PurpleTdClient::processUpdate, testBackend),
     m_data(acct, m_transceiver)
 {
     StickerConversionThread::setCallback(&PurpleTdClient::onAnimatedStickerConverted);

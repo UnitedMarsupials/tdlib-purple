@@ -45,8 +45,9 @@ SecretChatId getSecretChatId(const td::td_api::chat &chat);
 bool        isGroupMember(const td::td_api::object_ptr<td::td_api::ChatMemberStatus> &status);
 bool        isSameUser(const td::td_api::MessageSender &member1, const td::td_api::MessageSender &member2);
 
+// Catching up with a chat: as many messages asked for at once, and at most so many in all
 enum {
-    CHAT_HISTORY_REQUEST_LIMIT  = 50,
+    CHAT_HISTORY_REQUEST_LIMIT  = 30,
     CHAT_HISTORY_RETRIEVE_LIMIT = 100
 };
 

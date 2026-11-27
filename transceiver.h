@@ -6,7 +6,6 @@
 #include <thread>
 #include <mutex>
 #include <map>
-#include <atomic>
 #include <purple.h>
 #include <functional>
 
@@ -38,8 +37,7 @@ public:
     using ResponseCb2 = std::function<void(uint64_t, TdObjectPtr)>;
     using UpdateCb    = void (PurpleTdClient::*)(td::td_api::Object &object);
 
-    TdTransceiver(PurpleTdClient *owner, PurpleAccount *account, UpdateCb updateCb,
-                  ITransceiverBackend *testBackend);
+    TdTransceiver(PurpleTdClient *owner, UpdateCb updateCb, ITransceiverBackend *testBackend);
     ~TdTransceiver();
     uint64_t sendQuery(td::td_api::object_ptr<td::td_api::Function> f, ResponseCb handler);
     uint64_t sendQuery(td::td_api::object_ptr<td::td_api::Function> f, ResponseCb2 handler);
@@ -56,9 +54,7 @@ private:
     static gboolean timerCallback(gpointer userdata);
 
     std::shared_ptr<TdTransceiverImpl>  m_impl;
-    PurpleAccount                      *m_account;
     std::thread                         m_pollThread;
-    std::atomic_bool                    m_stopThread;
     ITransceiverBackend                *m_testBackend;
 };
 

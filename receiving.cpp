@@ -3688,7 +3688,7 @@ static void fetchHistoryResponse(TdAccountData &account, ChatId chatId, MessageI
                                   stopAt.value());
                 break;
             }
-            if (!stopAt.valid() && (messagesFetched >= 100)) {
+            if (!stopAt.valid() && (messagesFetched >= CHAT_HISTORY_RETRIEVE_LIMIT)) {
                 purple_debug_misc(config::pluginId, "Reached history limit, stopping\n");
                 break;
             }
@@ -3726,7 +3726,7 @@ static void fetchHistoryRequest(TdAccountData &account, ChatId chatId, unsigned 
     auto request = td::td_api::make_object<td::td_api::getChatHistory>();
     request->chat_id_ = chatId.value();
     request->from_message_id_ = fetchBackFrom.valid() ? fetchBackFrom.value() : 0;
-    request->limit_ = 30;
+    request->limit_ = CHAT_HISTORY_REQUEST_LIMIT;
     request->offset_ = 0;
     request->only_local_ = false;
     purple_debug_misc(config::pluginId, "Requesting history for chat %" G_GINT64_FORMAT
