@@ -280,7 +280,7 @@ static std::string getMarkName(MessageId messageId, MarkKind kind)
 
 static GtkTextMark *getMessageMark(GtkTextBuffer *buffer, MessageId messageId, MarkKind kind)
 {
-    return getMessageMark(buffer, messageId, kind);
+    return p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, kind).c_str());
 }
 
 // Moved to the latest of the message's marks of those kinds, where that is later
