@@ -351,6 +351,8 @@ private:
     std::vector<ChatQueue> m_queues;
 
     std::vector<ChatQueue>::iterator getChatQueue(ChatId chatId);
+    ChatQueue &getOrAddChatQueue(ChatId chatId);
+    static std::list<Message>::iterator findMessage(ChatQueue &queue, MessageId messageId);
     Message &addMessage(ChatQueue &queue, MessageAction action);
     void extractReadyMessages(std::vector<ChatQueue>::iterator pQueue,
                               std::vector<IncomingMessage> &readyMessages);
@@ -676,7 +678,7 @@ private:
     PendingRequest *                findPendingRequestImpl(uint64_t requestId);
 
     // Read receipts not sent immediately due to away status (grouped per chat)
-    std::vector<std::vector<ReadReceipt>> m_pendingReadReceipts;
+    std::map<ChatId, std::vector<ReadReceipt>> m_pendingReadReceipts;
 
     // Messages received in this session, and the order they came in, oldest first, so that
     // only so many are kept
