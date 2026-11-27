@@ -175,6 +175,14 @@ struct TgMessageInfo {
     bool        logRedrawn = false; // shown so into a tab of a chat with no log yet: logged after all
     bool        picturesComing = false; // shown with stand-ins for pictures fetched: logged once they are
 
+    // Who sent it, as a group chat names them: by idNNN, else by name, else "someone"
+    const std::string &getGroupchatSender() const
+    {
+        static const std::string someone = "someone";
+        return !incomingGroupchatSenderName.empty() ? incomingGroupchatSenderName :
+               !incomingGroupchatSender.empty()     ? incomingGroupchatSender : someone;
+    }
+
     // A copy kept for later, as by a download, without picturesComing, which is of the showing in
     // progress, not of what is shown later
     void assign(const TgMessageInfo &other)
