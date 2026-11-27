@@ -931,14 +931,14 @@ std::string makeBasicDisplayName(const td::td_api::user &user)
 // Posted in a channel, by nobody named: its sender is "Channel post"
 bool isAnonymousChannelPost(const td::td_api::chat &chat, const td::td_api::message &message)
 {
-    return !message.is_outgoing_ && (getBasicGroupId(chat).valid() || getSupergroupId(chat).valid()) &&
+    return !message.is_outgoing_ && isGroupChat(chat) &&
            !getSenderUserId(message).valid() && message.author_signature_.empty() && message.is_channel_post_;
 }
 
 std::string getIncomingGroupchatSenderPurpleName(const td::td_api::chat &chat, const td::td_api::message &message,
                                                  const TdAccountData &account)
 {
-    if (!message.is_outgoing_ && (getBasicGroupId(chat).valid() || getSupergroupId(chat).valid())) {
+    if (!message.is_outgoing_ && isGroupChat(chat)) {
         UserId senderId = getSenderUserId(message);
         if (senderId.valid())
             return account.getDisplayName(senderId);

@@ -32,6 +32,8 @@ bool        isUserIdName(const char *s);
 UserId      purpleBuddyNameToUserId(const char *s);
 SecretChatId purpleBuddyNameToSecretChatId(const char *s);
 bool        isPrivateChat(const td::td_api::chat &chat);
+// A basic group, or a supergroup: a group or a channel
+bool        isGroupChat(const td::td_api::chat &chat);
 UserId      getUserIdByPrivateChat(const td::td_api::chat &chat);
 class TdAccountData;
 bool        isChatInContactList(const TdAccountData &account, const td::td_api::chat &chat,

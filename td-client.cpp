@@ -1878,8 +1878,7 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
     reactionItem.submenu = std::move(shown);
     std::vector<MenuItem> items{std::move(reactionItem)};
 
-    const td::td_api::chat *chat = m_data.getChat(chatId);
-    PurpleConversation     *conv = chat ? findMessageConversation(m_data, *chat) : nullptr;
+    PurpleConversation *conv = findMessageConversation(m_data, chatId);
     bool marked;
     if (canMarkChanges(conv, messageId, marked)) {
         MenuItem item;
@@ -1985,9 +1984,7 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
     bool                    channel    = reportedIn && reportedIn->type_ &&
                                          (reportedIn->type_->get_id() == td::td_api::chatTypeSupergroup::ID) &&
                                          static_cast<const td::td_api::chatTypeSupergroup &>(*reportedIn->type_).is_channel_;
-    if (menu.sender.valid() && reportedIn && !channel &&
-        (getBasicGroupId(*reportedIn).valid() || getSupergroupId(*reportedIn).valid()))
-    {
+    if (menu.sender.valid() && reportedIn && !channel && isGroupChat(*reportedIn)) {
         MenuItem item;
         UserId   userId = menu.sender;
         // TRANSLATOR: Item of a message's menu in a group; it asks why, in a dialog or more. Argument is the name of the message's sender.
@@ -2287,16 +2284,14 @@ void PurpleTdClient::askEditMessage(ChatId chatId, MessageId messageId, const st
 
 void PurpleTdClient::cancelEntryEdit(ChatId chatId)
 {
-    const td::td_api::chat *chat = m_data.getChat(chatId);
-    PurpleConversation     *conv = chat ? findMessageConversation(m_data, *chat) : nullptr;
+    PurpleConversation *conv = findMessageConversation(m_data, chatId);
     if (conv && endEntryEdit(conv, nullptr))
         showEditCancelled(chatId);
 }
 
 void PurpleTdClient::showEditCancelled(ChatId chatId)
 {
-    const td::td_api::chat *chat = m_data.getChat(chatId);
-    PurpleConversation     *conv = chat ? findMessageConversation(m_data, *chat) : nullptr;
+    PurpleConversation *conv = findMessageConversation(m_data, chatId);
     if (conv)
         // TRANSLATOR: In-chat notification, not logged, once editing a message was given up.
         showEditOutcome(conv, _("The message is left as it was."));
@@ -2330,7 +2325,7 @@ void PurpleTdClient::showEditRefused(ChatId chatId, const std::string &reason)
     // TRANSLATOR: In-chat notification, after an edit Telegram does not allow was sent. The argument is why.
     std::string             notice = formatMessage(_("The message is left as it was: {}"), reason);
     const td::td_api::chat *chat   = m_data.getChat(chatId);
-    PurpleConversation     *conv   = chat ? findMessageConversation(m_data, *chat) : nullptr;
+    PurpleConversation     *conv   = findMessageConversation(m_data, chatId);
     if (conv && pidginUiFound())
         showEditOutcome(conv, notice);
     else if (chat)
@@ -3313,7 +3308,7 @@ void PurpleTdClient::onIncomingMessage(td::td_api::object_ptr<td::td_api::messag
     bool                    open      = openConv &&
                                         ((purple_conversation_get_type(openConv) != PURPLE_CONV_TYPE_CHAT) ||
                                          !purple_conv_chat_has_left(purple_conversation_get_chat_data(openConv)));
-    if (groupChat && (getBasicGroupId(*groupChat).valid() || getSupergroupId(*groupChat).valid()) &&
+    if (groupChat && isGroupChat(*groupChat) &&
         !m_data.isGroupChatWithMembership(*groupChat) && !open &&
         !purple_account_get_bool(m_account, AccountOptions::ShowUnjoinedChats,
                                  AccountOptions::ShowUnjoinedChatsDefault) &&
@@ -4280,7 +4275,7 @@ void PurpleTdClient::loggedChatLookedUp(ChatId chatId, TdObjectPtr object)
     if (user) {
         if (!isDeletedUser(*user) && !purple_find_buddy(m_account, getPurpleBuddyName(*user).c_str()))
             addTransientBuddy(m_data, *user);
-    } else if ((getBasicGroupId(*chat).valid() || getSupergroupId(*chat).valid()) &&
+    } else if (isGroupChat(*chat) &&
                !purple_blist_find_chat(m_account, getPurpleChatName(*chat).c_str()))
         addTransientChat(m_data, *chat);
 }
@@ -4653,7 +4648,7 @@ void PurpleTdClient::setGroupDescription(int purpleChatId, const char *descripti
         return;
     }
 
-    if (getBasicGroupId(*chat).valid() || getSupergroupId(*chat).valid()) {
+    if (isGroupChat(*chat)) {
         auto request = td::td_api::make_object<td::td_api::setChatDescription>();
         request->chat_id_ = chat->id_;
         request->description_ =  description ? description : "";
@@ -4762,7 +4757,7 @@ void PurpleTdClient::addUserToChat(int purpleChatId, const char *name)
         return;
     }
 
-    if (getBasicGroupId(*chat).valid() || getSupergroupId(*chat).valid()) {
+    if (isGroupChat(*chat)) {
         auto request = td::td_api::make_object<td::td_api::addChatMember>();
         request->chat_id_ = chat->id_;
         request->user_id_ = users[0]->id_;

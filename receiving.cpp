@@ -807,6 +807,12 @@ PurpleConversation *findMessageConversation(TdAccountData &account, const td::td
     return conv ? purple_conv_chat_get_conversation(conv) : nullptr;
 }
 
+PurpleConversation *findMessageConversation(TdAccountData &account, ChatId chatId)
+{
+    const td::td_api::chat *chat = account.getChat(chatId);
+    return chat ? findMessageConversation(account, *chat) : nullptr;
+}
+
 PurpleConversation *getMessageConversation(TdAccountData &account, const td::td_api::chat &chat)
 {
     const td::td_api::user *privateUser = account.getUserByPrivateChat(chat);
@@ -817,7 +823,7 @@ PurpleConversation *getMessageConversation(TdAccountData &account, const td::td_
     if (secretChatId.valid())
         return getImConversation(account.purpleAccount, getSecretChatBuddyName(secretChatId).c_str());
 
-    if (getBasicGroupId(chat).valid() || getSupergroupId(chat).valid()) {
+    if (isGroupChat(chat)) {
         PurpleConvChat *conv = getChatConversation(account, chat, account.getPurpleChatId(getId(chat)));
         return conv ? purple_conv_chat_get_conversation(conv) : nullptr;
     }
@@ -917,7 +923,7 @@ void showMessageText(TdAccountData &account, const td::td_api::chat &chat, const
         showMessageTextIm(account, userName.c_str(), text, notification, message.timestamp, flags);
     }
 
-    if (getBasicGroupId(chat).valid() || getSupergroupId(chat).valid())
+    if (isGroupChat(chat))
         showMessageTextChat(account, chat, message, text, notification, flags);
 
     if (logging && g_list_find(purple_get_conversations(), unloggedConv))
@@ -2589,8 +2595,7 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
     messageInfo.type             = TgMessageInfo::Type::Other;
     messageInfo.incomingGroupchatSender = getIncomingGroupchatSenderPurpleName(chat, *message, account);
     UserId senderId = getSenderUserId(*message);
-    if (!message->is_outgoing_ && senderId.valid() && account.getUser(senderId) &&
-        (getBasicGroupId(chat).valid() || getSupergroupId(chat).valid()))
+    if (!message->is_outgoing_ && senderId.valid() && account.getUser(senderId) && isGroupChat(chat))
         messageInfo.incomingGroupchatSenderName = getPurpleBuddyName(*account.getUser(senderId));
     messageInfo.anonymousChannelPost    = isAnonymousChannelPost(chat, *message);
     // In Pidgin, links to each size a photo or video comes in, below it; here already, as a download
@@ -3907,7 +3912,7 @@ static void queueLoggedLine(TdAccountData &account, ChatId chatId, LoggedLine &l
 static void redrawShow(TdAccountData &account, Redraw &redraw)
 {
     const td::td_api::chat *chat = account.getChat(redraw.chatId);
-    PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+    PurpleConversation     *conv = findMessageConversation(account, redraw.chatId);
     stopProgress(conv);
     unsigned windowLines = conv ? getWindowLines(conv) : 0;
     // The earliest of them only, the rest shown later, if there are too many to write at once: also
@@ -4012,8 +4017,7 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
         if (enough || (redraw->opening && (full || !added))) {
             if (!redraw->messages.empty()) {
                 // Said while they are written, which nothing is drawn during
-                const td::td_api::chat *chat = account.getChat(redraw->chatId);
-                PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+                PurpleConversation *conv = findMessageConversation(account, redraw->chatId);
                 if (conv)
                     // TRANSLATOR: At the end or the top of a conversation window while it is being filled, followed by a turning character. Argument is a number.
                     updateProgress(conv, escapeForDisplay(formatMessage(_("Showing {} messages"),
@@ -4026,8 +4030,7 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
                 return;
             }
         } else if (!full && added) {
-            const td::td_api::chat *chat = account.getChat(redraw->chatId);
-            PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+            PurpleConversation *conv = findMessageConversation(account, redraw->chatId);
             if (conv)
                 updateProgress(conv, escapeForDisplay(formatMessage(
                     // TRANSLATOR: At the top of a conversation window while earlier messages are fetched, followed by a turning character. Argument is a number.
@@ -4094,7 +4097,7 @@ static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earlies
                         unsigned extra, bool filling, bool linked, bool newest, bool back)
 {
     const td::td_api::chat *chat = account.getChat(chatId);
-    PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+    PurpleConversation     *conv = findMessageConversation(account, chatId);
     if (!conv || !canRedrawConversation(conv))
         return true;
     // Not while history is being fetched, or the tab redrawn already
@@ -4210,8 +4213,7 @@ static std::set<std::pair<std::string, int64_t>> g_newestPending;
 
 void showNewestMessages(TdAccountData &account, ChatId chatId)
 {
-    const td::td_api::chat *chat = account.getChat(chatId);
-    PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+    PurpleConversation *conv = findMessageConversation(account, chatId);
     // Busy, as with later messages being fetched: once it is not, or what is sent meanwhile would be
     // past the end it comes to
     if (conv && getTabEnd(conv).valid() &&
@@ -4233,7 +4235,7 @@ static void showFetchedLater(TdAccountData &account, ChatId chatId, MessageId en
                              MessagesNewestFirst later)
 {
     const td::td_api::chat *chat = account.getChat(chatId);
-    PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+    PurpleConversation     *conv = findMessageConversation(account, chatId);
     stopProgress(conv);
     // Unless filled anew meanwhile
     if (fetched && conv && (getTabEnd(conv) == end)) {
@@ -4282,8 +4284,7 @@ static void laterMessagesResponse(TdAccountData &account, ChatId chatId, Message
         purple_debug_warning(config::pluginId, "Cannot fetch messages after %" G_GINT64_FORMAT ": %s\n",
                              end.value(), getDisplayedError(response).c_str());
     // Said while they are written, which nothing is drawn during
-    const td::td_api::chat *chat = account.getChat(chatId);
-    PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+    PurpleConversation *conv = findMessageConversation(account, chatId);
     if (conv && !later->empty())
         updateProgress(conv, escapeForDisplay(formatMessage(_("Showing {} messages"), later->size())));
     std::weak_ptr<int> alive = account.lifetime;
@@ -4409,8 +4410,7 @@ static void fetchReactionGivers(TdAccountData &account, ChatId chatId, MessageId
                     senders.push_back(getSenderKey(*reaction->sender_id_));
             if (senders.size() > it->second.senders.size())
                 it->second.senders = std::move(senders);
-            const td::td_api::chat *chat = account.getChat(chatId);
-            PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+            PurpleConversation *conv = findMessageConversation(account, chatId);
             if (conv)
                 refreshReactionTip(conv);
         });
@@ -4563,8 +4563,7 @@ void readChatInbox(TdAccountData &account, ChatId chatId, MessageId lastRead, in
     account.updateChatReadInbox(chatId, lastRead, unreadCount);
     if (unreadCount != 0)
         return;
-    const td::td_api::chat *chat = account.getChat(chatId);
-    PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+    PurpleConversation *conv = findMessageConversation(account, chatId);
     if (conv && clearUnseen(conv))
         purple_debug_misc(config::pluginId, "Chat %" G_GINT64_FORMAT " read elsewhere\n", chatId.value());
 }
@@ -4577,7 +4576,7 @@ void setUnreadReactionCount(TdAccountData &account, ChatId chatId, int32_t count
         return;
     purple_debug_misc(config::pluginId, "Chat %" G_GINT64_FORMAT ": %d reactions unread\n", chatId.value(), int(count));
     const td::td_api::chat *chat = account.getChat(chatId);
-    PurpleConversation     *conv = chat ? findMessageConversation(account, *chat) : nullptr;
+    PurpleConversation     *conv = findMessageConversation(account, chatId);
     if (conv)
         markConversationTitle(account, conv);
     // The buddy list draws its contact anew, asking for the mark

@@ -66,6 +66,11 @@ bool isPrivateChat(const td::td_api::chat &chat)
     return getUserIdByPrivateChat(chat).valid();
 }
 
+bool isGroupChat(const td::td_api::chat &chat)
+{
+    return getBasicGroupId(chat).valid() || getSupergroupId(chat).valid();
+}
+
 UserId getUserIdByPrivateChat(const td::td_api::chat &chat)
 {
     if (chat.type_ && (chat.type_->get_id() == td::td_api::chatTypePrivate::ID)) {

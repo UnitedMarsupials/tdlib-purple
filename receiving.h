@@ -90,6 +90,7 @@ void stickerConverted(TdAccountData &account, int32_t fileId, int imageId);
 void logMessagesAwaitingPictures(TdAccountData &account);
 // The chat's conversation, if it is open; none is opened
 PurpleConversation *findMessageConversation(TdAccountData &account, const td::td_api::chat &chat);
+PurpleConversation *findMessageConversation(TdAccountData &account, ChatId chatId);
 // Names a message by when it was sent, as the conversation window shows it
 std::string formatMessageTime(time_t timestamp);
 // Of a picture shown in the conversation, the size that does for it, of those within the limit on
