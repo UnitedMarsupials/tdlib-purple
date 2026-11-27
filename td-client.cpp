@@ -9,7 +9,6 @@
 #include "sticker.h"
 #include "media-variants.h"
 #include "pidgin-ui.h"
-#include "receiving.h"
 #include <glib/gstdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -88,7 +87,6 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         auto &update_authorization_state = static_cast<td::td_api::updateAuthorizationState &>(update);
         purple_debug_misc(config::pluginId, "Incoming update: authorization state\n");
         if (update_authorization_state.authorization_state_) {
-            m_lastAuthState = update_authorization_state.authorization_state_->get_id();
             processAuthorizationState(*update_authorization_state.authorization_state_);
         }
         break;
@@ -174,13 +172,13 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         auto &groupUpdate = static_cast<td::td_api::updateBasicGroupFullInfo &>(update);
         updateGroupFull(getBasicGroupId(groupUpdate), std::move(groupUpdate.basic_group_full_info_));
         break;
-    };
+    }
 
     case td::td_api::updateSupergroupFullInfo::ID: {
         auto &groupUpdate = static_cast<td::td_api::updateSupergroupFullInfo &>(update);
         updateSupergroupFull(getSupergroupId(groupUpdate), std::move(groupUpdate.supergroup_full_info_));
         break;
-    };
+    }
 
     case td::td_api::updateMessageSendSucceeded::ID: {
         auto &sendSucceeded = static_cast<const td::td_api::updateMessageSendSucceeded &>(update);
@@ -304,15 +302,15 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
             updateFileTransferProgress(*fileUpdate.file_, m_transceiver, m_data,
                                        &PurpleTdClient::sendMessageResponse);
         break;
-    };
+    }
 
     case td::td_api::updateSecretChat::ID: {
         auto &chatUpdate = static_cast<td::td_api::updateSecretChat &>(update);
         purple_debug_misc(config::pluginId, "Incoming update: secret chat, id %d\n",
                           chatUpdate.secret_chat_ ? chatUpdate.secret_chat_->id_ : 0);
-        updateSecretChat(std::move(chatUpdate.secret_chat_), m_transceiver, m_data);
+        updateSecretChat(std::move(chatUpdate.secret_chat_), m_data);
         break;
-    };
+    }
 
     case td::td_api::updateCall::ID: {
         auto &callUpdate = static_cast<const td::td_api::updateCall &>(update);
@@ -325,7 +323,7 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
             updateCall(*callUpdate.call_, m_data, m_transceiver);
         }
         break;
-    };
+    }
 
     default:
         purple_debug_misc(config::pluginId, "Incoming update: ignorig ID=%d\n", update.get_id());
@@ -339,14 +337,7 @@ void PurpleTdClient::processAuthorizationState(td::td_api::AuthorizationState &a
     endAuthInput();
 
     switch (authState.get_id()) {
-    // Database encryption is handled automatically in newer tdlib versions
-    // case td::td_api::authorizationStateWaitEncryptionKey::ID:
-    //     purple_debug_misc(config::pluginId, "Authorization state update: encriytion key requested\n");
-    //     m_transceiver.sendQuery(td::td_api::make_object<td::td_api::checkDatabaseEncryptionKey>(""),
-    //                             &PurpleTdClient::authResponse);
-    //     break;
-
-    case td::td_api::authorizationStateWaitTdlibParameters::ID: 
+    case td::td_api::authorizationStateWaitTdlibParameters::ID:
         purple_debug_misc(config::pluginId, "Authorization state update: TDLib parameters requested\n");
         m_transceiver.sendQuery(td::td_api::make_object<td::td_api::disableProxy>(), nullptr);
         if (addProxy()) {
@@ -1179,15 +1170,8 @@ void PurpleTdClient::authResponse(uint64_t requestId, td::td_api::object_ptr<td:
 
 void PurpleTdClient::notifyAuthError(const td::td_api::object_ptr<td::td_api::Object> &response)
 {
-    std::string message;
-    switch (m_lastAuthState) {
-    default:
-        // TRANSLATOR: Connection error message, argument is text (a proper reason)
-        message = _("Authentication error: {}");
-        break;
-    }
-
-    message = formatMessage(message.c_str(), getDisplayedError(response));
+    // TRANSLATOR: Connection error message, argument is text (a proper reason)
+    std::string message = formatMessage(_("Authentication error: {}"), getDisplayedError(response));
 
     purple_connection_error(purple_account_get_connection(m_account), message.c_str());
 }
@@ -1349,7 +1333,7 @@ void PurpleTdClient::supergroupMembersResponse(uint64_t requestId, td::td_api::o
         getMembersReq->filter_ = td::td_api::make_object<td::td_api::supergroupMembersFilterAdministrators>();
         getMembersReq->limit_ = SUPERGROUP_MEMBER_LIMIT;
         uint64_t newRequestId = m_transceiver.sendQuery(std::move(getMembersReq), &PurpleTdClient::supergroupAdministratorsResponse);
-        m_data.addPendingRequest<GroupMembersRequestCont>(newRequestId, request->groupId, members.release());
+        m_data.addPendingRequest<GroupMembersRequestCont>(newRequestId, request->groupId, std::move(members));
     }
 }
 
@@ -2982,10 +2966,8 @@ void PurpleTdClient::onAnimatedStickerConverted(AccountThread *arg)
 
 void PurpleTdClient::sendReadReceipts(PurpleConversation *conversation)
 {
-    if (conversation != nullptr) {
+    if (conversation != nullptr)
         sendConversationReadReceipts(m_data, conversation);
-        return;
-    }
 }
 
 void PurpleTdClient::showEarlierMessages(PurpleConversation *conv, double filling)
@@ -3707,7 +3689,7 @@ void PurpleTdClient::updateChat(const td::td_api::chat *chat)
     }
 
     if (secretChatId.valid())
-        updateKnownSecretChat(secretChatId, m_transceiver, m_data);
+        updateKnownSecretChat(secretChatId, m_data);
 }
 
 void PurpleTdClient::updateUserInfo(const td::td_api::user &user, const td::td_api::chat *privateChat)
@@ -3724,8 +3706,6 @@ void PurpleTdClient::updateUserInfo(const td::td_api::user &user, const td::td_a
             } else if (!privateChat->positions_.empty())
                 // Not a contact's: reachable all the same, after a restart too, as when they write
                 addTransientBuddy(m_data, user);
-            else
-                removePrivateChat(m_data, *privateChat);
         }
     }
 
@@ -3950,7 +3930,6 @@ void PurpleTdClient::addBuddySearchChatResponse(uint64_t requestId, td::td_api::
             // When it's vice versa here, don't make it an error: there are enough error messages to
             // translate as it is.
             joinGroupSearchChatResponse(requestId, std::move(object));
-            chat = nullptr;
         }
     } else
         notifyFailedContact(getDisplayedError(object));
@@ -4993,10 +4972,6 @@ void PurpleTdClient::setTwoFactorAuth(const char *oldPassword, const char *newPa
     m_transceiver.sendQuery(std::move(setPassword), &PurpleTdClient::setTwoFactorAuthResponse);
 }
 
-static void inputCancelled(void *)
-{
-}
-
 void PurpleTdClient::requestRecoveryEmailConfirmation(const std::string &emailInfo)
 {
     // TRANSLATOR: 2FA setup confirmation dialog, secondary content, argument is an e-mail description (address and code length)
@@ -5013,7 +4988,7 @@ void PurpleTdClient::requestRecoveryEmailConfirmation(const std::string &emailIn
                          // TRANSLATOR: 2FA setup confirmation dialog, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
                          _("_OK"), G_CALLBACK(PurpleTdClient::verifyRecoveryEmail),
                          // TRANSLATOR: 2FA setup confirmation dialog, alternative is "_OK". The underscore marks accelerator keys, they must be different!
-                         _("_Cancel"), G_CALLBACK(inputCancelled),
+                         _("_Cancel"), nullptr,
                          purple_connection_get_account(gc),
                          nullptr, // buddy
                          nullptr, // conversation
@@ -5211,20 +5186,14 @@ PlaceholderUse PurpleTdClient::findPasted(const std::string &placeholder)
 void PurpleTdClient::cancelUpload(PurpleXfer *xfer)
 {
     int32_t fileId;
-    if (m_data.getFileIdForTransfer(xfer, fileId)) {
-        purple_debug_misc(config::pluginId, "Cancelling upload of %s (file id %d)\n",
-                          purple_xfer_get_local_filename(xfer), fileId);
-        // cancelUploadFile was removed in newer tdlib versions
-        // auto cancelRequest = td::td_api::make_object<td::td_api::cancelUploadFile>(fileId);
-        // m_transceiver.sendQuery(std::move(cancelRequest), nullptr);
-        m_data.removeFileTransfer(fileId);
-        purple_xfer_unref(xfer);
-    } else {
-        // This could mean that response to upload request has not come yet - when it does,
-        // uploadResponse will notice that the transfer is cancelled and act accordingly.
-        // Or it could just be that the upload got cancelled programmatically due to some error,
-        // in which case nothing more should be done.
-    }
+    // Not known yet, the upload not answered: uploadResponse will find the transfer cancelled. Or
+    // it was cancelled for an error, and there is nothing more to do.
+    if (!m_data.getFileIdForTransfer(xfer, fileId))
+        return;
+    purple_debug_misc(config::pluginId, "Cancelling upload of %s (file id %d)\n",
+                      purple_xfer_get_local_filename(xfer), fileId);
+    m_data.removeFileTransfer(fileId);
+    purple_xfer_unref(xfer);
 }
 
 bool PurpleTdClient::startVoiceCall(const char *buddyName)

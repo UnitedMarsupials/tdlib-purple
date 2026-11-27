@@ -220,10 +220,8 @@ void PendingMessageQueue::extractReadyMessages(
     }
 
     pQueue->messages.erase(pQueue->messages.begin(), pReady);
-    if (pQueue->messages.empty()) {
+    if (pQueue->messages.empty())
         m_queues.erase(pQueue);
-        pQueue = m_queues.end();
-    }
 }
 
 void PendingMessageQueue::setMessageReady(ChatId chatId, MessageId messageId,

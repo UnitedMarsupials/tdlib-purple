@@ -12,19 +12,13 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <functional>
-#include <iostream>
-#include <limits>
-#include <map>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <type_traits>
 #include <vector>
 #include <array>
 #include <deque>
 #include <mutex>
-#include <ctype.h>
 #include <unistd.h>
 
 #ifndef NoLottie
@@ -982,6 +976,7 @@ static void tgprpl_send_file (PurpleConnection * gc, const char *who, const char
     }
 }
 
+#if PURPLE_VERSION_CHECK(2,14,0)
 static void sendFileToChat(PurpleConnection *gc, int id, const char *filename)
 {
     PurpleConversation *conv = purple_find_chat(gc, id);
@@ -999,6 +994,7 @@ static void sendFileToChat(PurpleConnection *gc, int id, const char *filename)
         purple_xfer_request (X);
     }
 }
+#endif
 
 static GHashTable *tgprpl_get_account_text_table (PurpleAccount *)
 {
@@ -1036,7 +1032,7 @@ static PurpleMediaCaps getMediaCaps(PurpleAccount *, const char *)
 #endif
 }
 
-gboolean initiateMedia([[maybe_unused]] PurpleAccount *account, [[maybe_unused]] const char *who, [[maybe_unused]] PurpleMediaSessionType type)
+static gboolean initiateMedia([[maybe_unused]] PurpleAccount *account, [[maybe_unused]] const char *who, [[maybe_unused]] PurpleMediaSessionType type)
 {
 #ifndef NoVoip
     if (!(type & PURPLE_MEDIA_AUDIO))
@@ -1797,9 +1793,6 @@ static void tgprpl_init (PurplePlugin *)
     bind_textdomain_codeset(GETTEXT_PACKAGE, "UTF-8");
 #endif
 
-#if !PURPLE_VERSION_CHECK(2,14,0)
-    (void)sendFileToChat;
-#endif
     if (purple_debug_is_verbose())
         // Log everything
         PurpleTdClient::setLogLevel(1024);

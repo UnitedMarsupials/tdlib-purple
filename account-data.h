@@ -77,7 +77,8 @@ public:
     SupergroupId groupId;
     td::td_api::object_ptr<td::td_api::chatMembers> members;
 
-    GroupMembersRequestCont(uint64_t requestId, SupergroupId groupId, td::td_api::chatMembers *members)
+    GroupMembersRequestCont(uint64_t requestId, SupergroupId groupId,
+                            td::td_api::object_ptr<td::td_api::chatMembers> &&members)
     : PendingRequest(requestId), groupId(groupId), members(std::move(members)) {}
 };
 
@@ -325,7 +326,6 @@ public:
     };
     static constexpr MessageAction Append = MessageAction::Append;
     static constexpr MessageAction Prepend = MessageAction::Prepend;
-    using TdMessagePtr = td::td_api::object_ptr<td::td_api::message>;
 
     IncomingMessage &addPendingMessage(IncomingMessage &&message, MessageAction action);
     void             setMessageReady(ChatId chatId, MessageId messageId,
@@ -500,9 +500,9 @@ public:
     const td::td_api::chat       *getChatBySecretChat(SecretChatId secretChatId);
 
     template<typename ReqType, typename... ArgsType>
-    void addPendingRequest(ArgsType... args)
+    void addPendingRequest(ArgsType &&... args)
     {
-        m_requests.push_back(std::make_unique<ReqType>(args...));
+        m_requests.push_back(std::make_unique<ReqType>(std::forward<ArgsType>(args)...));
     }
     template<typename ReqType>
     void addPendingRequest(uint64_t requestId, std::unique_ptr<ReqType> &&request)
@@ -654,9 +654,6 @@ private:
 
     // List of contacts for which private chat is not known yet.
     std::vector<UserId>                m_contactUserIdsNoChat;
-
-    // Used to remember stuff during asynchronous communication when adding contact
-    std::vector<ContactRequest>        m_addContactRequests;
 
     // Chats we want to libpurple-join when we get an updateNewChat about them
     std::vector<ChatId>                m_expectedChats;

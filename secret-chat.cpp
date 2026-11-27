@@ -5,8 +5,7 @@
 #include "receiving.h"
 #include "config.h"
 
-void updateKnownSecretChat(SecretChatId secretChatId, TdTransceiver &,
-                           TdAccountData &account)
+void updateKnownSecretChat(SecretChatId secretChatId, TdAccountData &account)
 {
     const td::td_api::secretChat *secretChat = account.getSecretChat(secretChatId);
 
@@ -65,8 +64,7 @@ void updateKnownSecretChat(SecretChatId secretChatId, TdTransceiver &,
                                     purple_primitive_get_id_from_type(PURPLE_STATUS_OFFLINE), nullptr);
 }
 
-void updateSecretChat(td::td_api::object_ptr<td::td_api::secretChat> secretChat,
-                      TdTransceiver &transceiver, TdAccountData &account)
+void updateSecretChat(td::td_api::object_ptr<td::td_api::secretChat> secretChat, TdAccountData &account)
 {
     if (!secretChat) return;
 
@@ -76,5 +74,5 @@ void updateSecretChat(td::td_api::object_ptr<td::td_api::secretChat> secretChat,
         account.deleteSecretChat(secretChatId);
     else
         account.addSecretChat(std::move(secretChat));
-    updateKnownSecretChat(secretChatId, transceiver, account);
+    updateKnownSecretChat(secretChatId, account);
 }

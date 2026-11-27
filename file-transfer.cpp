@@ -229,8 +229,8 @@ static void inlineDownloadResponse(uint64_t requestId,
             else {
                 pendingMessage->inlineDownloadComplete = true;
                 pendingMessage->inlineDownloadedFilePath = path;
+                // pendingMessage may have left the queue now
                 checkMessageReady(pendingMessage, transceiver, account);
-                pendingMessage = nullptr;
             }
         } else {
             // Message no longer in PendingMessageQueue
@@ -307,8 +307,8 @@ static void handleLongInlineDownload(uint64_t requestId, TdTransceiver &transcei
 
             pendingMessage->inlineDownloadTimeout = true;
             std::vector<IncomingMessage> readyMessages;
+            // pendingMessage leaves the queue now, if it is ready
             checkMessageReady(pendingMessage, transceiver, account, &readyMessages);
-            pendingMessage = nullptr;
 
             // Now after "Downloading..." notification has been displayed (which may have been
             // accompanied by file caption, if any, in which case it needs reply source if it was a
@@ -317,10 +317,10 @@ static void handleLongInlineDownload(uint64_t requestId, TdTransceiver &transcei
             // If the message is a reply but fetching reply source hasn't produced a response yet
             // at this point, a successful such response may technically yet come in which case we
             // will lose the reply source. But this is extremely unlikely, and not even a problem.
-            for (IncomingMessage &pendingMessage: readyMessages)
-                if (pendingMessage.message && (getId(*pendingMessage.message) == pRequest->message.id)) {
-                    pRequest->message.repliedMessage = std::move(pendingMessage.repliedMessage);
-                    pRequest->thumbnail = std::move(pendingMessage.thumbnail);
+            for (IncomingMessage &readyMessage: readyMessages)
+                if (readyMessage.message && (getId(*readyMessage.message) == pRequest->message.id)) {
+                    pRequest->message.repliedMessage = std::move(readyMessage.repliedMessage);
+                    pRequest->thumbnail = std::move(readyMessage.thumbnail);
                 }
         }
     }

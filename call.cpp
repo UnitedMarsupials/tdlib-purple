@@ -83,7 +83,7 @@ static std::string getPurpleUserName(UserId userId, TdAccountData &account)
 }
 
 static bool activateCall([[maybe_unused]] const td::td_api::call &call, [[maybe_unused]] const std::string &buddyName,
-                         [[maybe_unused]] TdAccountData &account, TdTransceiver &)
+                         [[maybe_unused]] TdAccountData &account)
 {
 #ifndef NoVoip
     if (call.state_->get_id() != td::td_api::callStateReady::ID)
@@ -175,19 +175,26 @@ static void notifyCallError(const td::td_api::callStateError &error, const std::
                           time(nullptr), PURPLE_MESSAGE_SYSTEM);
 }
 
-void updateCall(const td::td_api::call &call, TdAccountData &account, TdTransceiver &transceiver)
+// Whether an incoming call can be taken: with voice calls built in, by Pidgin or a front-end that
+// says it does audio
+static bool canTakeCalls()
 {
-    std::string buddyName = getPurpleUserName(getUserId(call), account);
-
 #ifndef NoVoip
     PurpleMediaManager *mediaManager = purple_media_manager_get();
     PurpleMediaCaps capabilities = purple_media_manager_get_ui_caps(mediaManager);
 
-    if (!(capabilities & PURPLE_MEDIA_CAPS_AUDIO) && !(capabilities & PURPLE_MEDIA_CAPS_AUDIO_SINGLE_DIRECTION) &&
-        (strcasecmp(getUiName(), "pidgin") != 0)) {
+    return (capabilities & PURPLE_MEDIA_CAPS_AUDIO) || (capabilities & PURPLE_MEDIA_CAPS_AUDIO_SINGLE_DIRECTION) ||
+           (strcasecmp(getUiName(), "pidgin") == 0);
 #else
-    if (true) {
+    return false;
 #endif
+}
+
+void updateCall(const td::td_api::call &call, TdAccountData &account, TdTransceiver &transceiver)
+{
+    std::string buddyName = getPurpleUserName(getUserId(call), account);
+
+    if (!canTakeCalls()) {
         purple_debug_misc(config::pluginId, "Ignoring incoming call: no audio capability\n");
         if (call.state_ && (call.state_->get_id() == td::td_api::callStatePending::ID)) {
             if (!buddyName.empty())
@@ -246,7 +253,7 @@ void updateCall(const td::td_api::call &call, TdAccountData &account, TdTranscei
             discardCall(call.id_, transceiver);
         }
     } else if (call.state_->get_id() == td::td_api::callStateReady::ID) {
-        if (! activateCall(call, buddyName, account, transceiver)) {
+        if (! activateCall(call, buddyName, account)) {
             discardCall(call.id_, transceiver);
             account.removeActiveCall();
         }

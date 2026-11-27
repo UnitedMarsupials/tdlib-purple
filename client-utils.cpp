@@ -873,18 +873,8 @@ void removeGroupChat(PurpleAccount *purpleAccount, const td::td_api::chat &chat)
         return;
     }
     purple_blist_remove_chat(purpleChat);
-    // TODO: uncomment when updateNewChat(chat_list=NULL) + updateChatChatList(non-NULL) at login
-    // no longer removes chat
-    //std::string setting = lastMessageSetting(getId(chat));
-    //purple_account_remove_setting(purpleAccount, setting.c_str());
-}
-
-void removePrivateChat(TdAccountData &, const td::td_api::chat &)
-{
-    // TODO: uncomment when updateNewChat(chat_list=NULL) + updateChatChatList(non-NULL) at login
-    // no longer removes chat
-    //std::string setting = lastMessageSetting(getId(chat));
-    //purple_account_remove_setting(account.purpleAccount, setting.c_str());
+    // TODO: the chat's lastMessageSetting is kept: at login, updateNewChat with no chat list, then
+    // updateChatChatList, would remove it, though the chat stays. So for a private chat's.
 }
 
 void saveChatLastMessage(TdAccountData &account, ChatId chatId, MessageId messageId)
@@ -1095,6 +1085,7 @@ void updateChatConversation(PurpleConvChat *purpleChat, const td::td_api::basicG
     setChatMembers(purpleChat, groupInfo.members_, account);
 }
 
+// As for a basic group, whose members come with its info; a supergroup's are asked for
 void updateChatConversation(PurpleConvChat *purpleChat, const td::td_api::supergroupFullInfo &groupInfo,
                     const TdAccountData &)
 {

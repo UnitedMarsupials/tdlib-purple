@@ -336,7 +336,6 @@ private:
     PurpleAccount        *m_account;
     TdTransceiver         m_transceiver;
     TdAccountData         m_data;
-    int32_t               m_lastAuthState = 0;
     DatabaseOpening       m_databaseOpening = DatabaseOpening::Plain;
     // Made of the account's password, while the database is being opened for it
     std::string           m_passwordKey;

@@ -1219,7 +1219,7 @@ static void ignoreInlineDownload(InlineDownloadInfo *info)
     delete info;
 }
 
-static void requestInlineDownload(const char *, const td::td_api::file &file,
+static void requestInlineDownload(const td::td_api::file &file,
                                   const std::string &fileDesc, const td::td_api::chat &chat,
                                   TgMessageInfo &message, TdTransceiver &transceiver, TdAccountData &account)
 {
@@ -1698,10 +1698,7 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
                                 std::move(fullMessage.thumbnail), transceiver, account);
             }
         } else if (askDownload) {
-            std::string sender = getSenderDisplayName(chat, fullMessage.messageInfo,
-                                                      account.purpleAccount);
-            requestInlineDownload(sender.c_str(), file, fileDesc, chat, fullMessage.messageInfo,
-                                  transceiver, account);
+            requestInlineDownload(file, fileDesc, chat, fullMessage.messageInfo, transceiver, account);
         }
     }
 
@@ -2211,22 +2208,6 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
         }
         messageInfo.unlogged = true;
     }
-
-    // ttl_ field was removed in newer tdlib versions
-    // if (message.ttl_ != 0) {
-    //     if (purple_account_get_bool(account.purpleAccount, AccountOptions::ShowSelfDestruct, AccountOptions::ShowSelfDestructDefault)) {
-    //         // TRANSLATOR: In-chat warning message
-    //         const char *text   = _("Received self-destructing message, displaying anyway");
-    //         std::string notice = makeNoticeWithSender(chat, messageInfo, text, account.purpleAccount);
-    //         showMessageText(account, chat, messageInfo, NULL, notice.c_str());
-    //     } else {
-    //         // TRANSLATOR: In-chat warning message
-    //         const char *text   = _("Received self-destructing message, not displayed due to lack of support");
-    //         std::string notice = makeNoticeWithSender(chat, messageInfo, text, account.purpleAccount);
-    //         showMessageText(account, chat, messageInfo, NULL, notice.c_str());
-    //         return;
-    //     }
-    // }
 
     // Under the message, once all of it is written: its buttons, then its reactions
     ReactionsLine reactionsLine(account, chat, messageInfo.id, message.interaction_info_.get());
