@@ -144,6 +144,15 @@ std::string describeUnsupportedContent(const td::td_api::MessageContent &content
     return result;
 }
 
+std::string getUserLookupError(const std::vector<const td::td_api::user *> &users, const std::string &name)
+{
+    if (users.empty())
+        // TRANSLATOR: Error message, as of a user named to send a message to or to add to a group
+        return _("User not found");
+    // TRANSLATOR: Error message, argument is a name several users go by
+    return formatMessage(_("More than one user known with name '{}'"), name);
+}
+
 td::td_api::object_ptr<td::td_api::getMessage> makeGetMessage(ChatId chatId, MessageId messageId)
 {
     auto request = td::td_api::make_object<td::td_api::getMessage>();

@@ -53,6 +53,7 @@
 - **Czech, German, Polish, Albanian and Ukrainian are complete again**, with the strings 0.9.6 added: forwarding, copying a message's file or picture, a group's news, and who deleted a message.
 - **The same languages have the strings added since: the local database's password, forwarding to several chats at once, the buddy-list group of those not in the contacts, and reporting a group's member.** Some had been matched by msgmerge to older strings they resembled, and said, for instance, "New password" for "Database password" or "Enable secret chats" for encrypting the database.
 - **The notices of a secret file received, and the "Send read receipts" option, are translated**: they were marked for translators but not looked up. Ukrainian has them.
+- **"User not found", and the error for a name that several users go by, which then names it, are translated wherever a user is looked up by name**: sending, calling, adding to a group, kicking. They were in English but in two places, in four wordings.
 
 ## 0.9.6 (2026-11-14)
 

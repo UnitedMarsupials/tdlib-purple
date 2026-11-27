@@ -3415,12 +3415,7 @@ int PurpleTdClient::sendMessage(const char *buddyName, const char *message)
     } else {
         std::vector<const td::td_api::user *> users = getUsersByPurpleName(buddyName, m_data, "send message");
         if (users.size() != 1) {
-            // Unlikely error messages not worth translating
-            std::string errorMessage;
-            if (users.empty())
-                errorMessage = "User not found";
-            else
-                errorMessage = formatMessage("More than one user known with name '{}'", std::string(buddyName));
+            std::string errorMessage = getUserLookupError(users, buddyName);
             showMessageTextIm(m_data, buddyName, nullptr, errorMessage.c_str(), time(nullptr), PURPLE_MESSAGE_ERROR);
             return -1;
         }
@@ -3816,7 +3811,7 @@ void PurpleTdClient::addContact(const std::string &purpleName, const std::string
     } else
         m_data.getUsersByDisplayName(purpleName.c_str(), users);
     if (users.size() > 1) {
-        notifyFailedContactDeferred(formatMessage("More than one user known with name '{}'", purpleName));
+        notifyFailedContactDeferred(getUserLookupError(users, purpleName));
         return;
     }
 
@@ -4540,10 +4535,8 @@ void PurpleTdClient::createGroup(const char *name, int type,
                 else if (users.empty()) {
                     // TRANSLATOR: Error dialog, secondary content, argument is a username
                     errorMessage = formatMessage(_("No known user by the name '{}'"), memberName);
-                } else {
-                    // Unlikely error message not worth translating
-                    errorMessage = formatMessage("More than one user known with name '{}'", memberName);
-                }
+                } else
+                    errorMessage = getUserLookupError(users, memberName);
             }
             if (!errorMessage.empty())
                 break;
@@ -4692,12 +4685,8 @@ void PurpleTdClient::kickUserFromChat(PurpleConversation *conv, const char *name
 
     std::vector<const td::td_api::user *> users = getUsersByPurpleName(name, m_data, "kick user", true);
     if (users.size() != 1) {
-        // TRANSLATOR: In-chat error message, appears after a colon (':')
-        const char *reason = users.empty() ? _("User not found") :
-                                             // Unlikely error message not worth translating
-                                             "More than one user found with this name";
         // TRANSLATOR: In-chat error message, argument is a reason (text)
-        std::string message = formatMessage(_("Cannot kick user: {}"), std::string(reason));
+        std::string message = formatMessage(_("Cannot kick user: {}"), getUserLookupError(users, name));
         purple_conversation_write(conv, "", message.c_str(), PURPLE_MESSAGE_NO_LOG, 0);
         return;
     }
@@ -4767,12 +4756,8 @@ void PurpleTdClient::addUserToChat(int purpleChatId, const char *name)
 
     std::vector<const td::td_api::user *> users = getUsersByPurpleName(name, m_data, "invite user", true);
     if (users.size() != 1) {
-        // TRANSLATOR: In-chat error message, appears after a colon (':')
-        const char *reason = users.empty() ? _("User not found") :
-                                             // Unlikely error message not worth translating
-                                             "More than one user found with this name";
         // TRANSLATOR: In-chat error message, argument is a reason (text)
-        std::string message = formatMessage(_("Cannot add user to group: {}"), std::string(reason));
+        std::string message = formatMessage(_("Cannot add user to group: {}"), getUserLookupError(users, name));
         showChatNotification(m_data, *chat, message.c_str(), PURPLE_MESSAGE_NO_LOG);
         return;
     }
@@ -5164,12 +5149,7 @@ bool PurpleTdClient::startVoiceCall(const char *buddyName)
 {
     std::vector<const td::td_api::user *> users = getUsersByPurpleName(buddyName, m_data, "start voice call");
     if (users.size() != 1) {
-        // Unlikely error messages not worth translating
-        std::string errorMessage;
-        if (users.empty())
-            errorMessage = "User not found";
-        else
-            errorMessage = formatMessage("More than one user known with name '{}'", std::string(buddyName));
+        std::string errorMessage = getUserLookupError(users, buddyName);
         showMessageTextIm(m_data, buddyName, nullptr, errorMessage.c_str(), time(nullptr), PURPLE_MESSAGE_ERROR);
         return false;
     }
@@ -5190,10 +5170,8 @@ void PurpleTdClient::createSecretChat(const char* buddyName)
 {
     std::vector<const td::td_api::user *> users = getUsersByPurpleName(buddyName, m_data, "create secret chat");
     if (users.size() != 1) {
-        // Unlikely error messages not worth translating
-        const char *reason = users.empty() ? "User not found" :
-                                             "More than one user found with this name";
-        std::string message = formatMessage("Cannot create secret chat: {}", std::string(reason));
+        // Unlikely error message not worth translating
+        std::string message = formatMessage("Cannot create secret chat: {}", getUserLookupError(users, buddyName));
         purple_notify_error(purple_account_get_connection(m_account),
                             // TRANSLATOR: Failure notification, title
                             _("Failed to create secret chat"),
