@@ -1784,6 +1784,16 @@ void PurpleTdClient::requestMessageReactions(ChatId chatId, MessageId messageId,
     });
 }
 
+// What a menu item does: the action, on the account's client, if it is still connected when picked
+static std::function<void()> onClient(const std::string &accountName, std::function<void(PurpleTdClient &)> action)
+{
+    return [accountName, action]() {
+        PurpleTdClient *client = PurpleTdClient::findConnected(accountName.c_str());
+        if (client)
+            action(*client);
+    };
+}
+
 void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId, const MessageMenu &menu,
                                              const OpenMenuRef &openMenu, TdObjectPtr object)
 {
@@ -1796,11 +1806,9 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
         if (emoji == PAID_REACTION) {
             // TRANSLATOR: Tooltip of the paid reaction in a message's menu.
             item.tooltip = _("Spend Telegram Stars on a reaction");
-            item.action  = [accountName, chatId, messageId]() {
-                PurpleTdClient *client = findConnected(accountName.c_str());
-                if (client)
-                    client->askPaidReaction(chatId, messageId);
-            };
+            item.action  = onClient(accountName, [chatId, messageId](PurpleTdClient &client) {
+                client.askPaidReaction(chatId, messageId);
+            });
             return item;
         }
         item.checkable = true;
@@ -1903,33 +1911,28 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
                       // TRANSLATOR: Item of a message's menu, and of a file's link: the file goes on the clipboard, for a file manager to paste, downloaded first, if need be.
                       _("Copy the file");
         item.copiesFile = !menu.picture;
-        item.action = [accountName, chatId, messageId]() {
-            PurpleTdClient *client = findConnected(accountName.c_str());
-            if (client)
-                client->openMessageFile(chatId, messageId, std::string(), FileUse::Copy);
-        };
+        item.action = onClient(accountName, [chatId, messageId](PurpleTdClient &client) {
+            client.openMessageFile(chatId, messageId, std::string(), FileUse::Copy);
+        });
         items.push_back(std::move(item));
     }
     if (isEntryEditing(conv, messageId)) {
         MenuItem item;
         // TRANSLATOR: Item of a message's menu, while the message is being edited in the input field.
         item.label  = _("Cancel editing");
-        item.action = [accountName, chatId]() {
-            PurpleTdClient *client = findConnected(accountName.c_str());
-            if (client)
-                client->cancelEntryEdit(chatId);
-        };
+        item.action = onClient(accountName, [chatId](PurpleTdClient &client) {
+            client.cancelEntryEdit(chatId);
+        });
         items.push_back(std::move(item));
     } else if (menu.canEdit) {
         MenuItem item;
         // TRANSLATOR: Item of a message's menu; it opens a dialog.
         item.label  = _("Edit…");
-        item.action = [accountName, chatId, messageId, text = menu.text, html = menu.html,
-                       isCaption = menu.isCaption, date = menu.date, media = menu.media]() {
-            PurpleTdClient *client = findConnected(accountName.c_str());
-            if (client)
-                client->askEditMessage(chatId, messageId, text, html, isCaption, date, media);
-        };
+        item.action = onClient(accountName, [chatId, messageId, text = menu.text, html = menu.html,
+                                             isCaption = menu.isCaption, date = menu.date,
+                                             media = menu.media](PurpleTdClient &client) {
+            client.askEditMessage(chatId, messageId, text, html, isCaption, date, media);
+        });
         items.push_back(std::move(item));
     }
     for (bool forAll: {false, true})
@@ -1939,44 +1942,36 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
             item.label  = forAll ? _("Delete for everyone…") :
                                    // TRANSLATOR: Item of a message's menu; it asks for confirmation.
                                    _("Delete for me…");
-            item.action = [accountName, chatId, messageId, forAll]() {
-                PurpleTdClient *client = findConnected(accountName.c_str());
-                if (client)
-                    client->askDeleteMessage(chatId, messageId, forAll);
-            };
+            item.action = onClient(accountName, [chatId, messageId, forAll](PurpleTdClient &client) {
+                client.askDeleteMessage(chatId, messageId, forAll);
+            });
             items.push_back(std::move(item));
         }
     if (menu.canForward) {
         MenuItem item;
         // TRANSLATOR: Item of a message's menu; it asks where to, in a dialog.
         item.label  = _("Forward…");
-        item.action = [accountName, chatId, messageId]() {
-            PurpleTdClient *client = findConnected(accountName.c_str());
-            if (client)
-                client->askForwardMessage(chatId, messageId);
-        };
+        item.action = onClient(accountName, [chatId, messageId](PurpleTdClient &client) {
+            client.askForwardMessage(chatId, messageId);
+        });
         items.push_back(std::move(item));
     }
     if (menu.canGetLink) {
         MenuItem item;
         // TRANSLATOR: Item of a message's menu, in a public group or channel: its https://t.me/ link goes on the clipboard, as text.
         item.label  = _("Copy the message's link");
-        item.action = [accountName, chatId, messageId]() {
-            PurpleTdClient *client = findConnected(accountName.c_str());
-            if (client)
-                client->copyMessageLink(chatId, messageId);
-        };
+        item.action = onClient(accountName, [chatId, messageId](PurpleTdClient &client) {
+            client.copyMessageLink(chatId, messageId);
+        });
         items.push_back(std::move(item));
     }
     if (menu.canReport) {
         MenuItem item;
         // TRANSLATOR: Item of a message's menu; it asks why, in a dialog or more.
         item.label  = _("Report the message…");
-        item.action = [accountName, chatId, messageId]() {
-            PurpleTdClient *client = findConnected(accountName.c_str());
-            if (client)
-                client->reportChat(chatId, {messageId});
-        };
+        item.action = onClient(accountName, [chatId, messageId](PurpleTdClient &client) {
+            client.reportChat(chatId, {messageId});
+        });
         items.push_back(std::move(item));
     }
     // In a group, its member, by themselves; in a private chat, the chat, where Telegram takes it.
@@ -1990,20 +1985,16 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
         UserId   userId = menu.sender;
         // TRANSLATOR: Item of a message's menu in a group; it asks why, in a dialog or more. Argument is the name of the message's sender.
         item.label  = formatMessage(_("Report {}…"), m_data.getDisplayName(userId));
-        item.action = [accountName, chatId, userId]() {
-            PurpleTdClient *client = findConnected(accountName.c_str());
-            if (client)
-                client->reportSender(chatId, userId);
-        };
+        item.action = onClient(accountName, [chatId, userId](PurpleTdClient &client) {
+            client.reportSender(chatId, userId);
+        });
         items.push_back(std::move(item));
     } else if (menu.sender.valid() && reportedIn && isPrivateChat(*reportedIn) && canReportChat(chatId)) {
         MenuItem item;
         item.label  = formatMessage(_("Report {}…"), m_data.getDisplayName(menu.sender));
-        item.action = [accountName, chatId]() {
-            PurpleTdClient *client = findConnected(accountName.c_str());
-            if (client)
-                client->reportChat(chatId, {});
-        };
+        item.action = onClient(accountName, [chatId](PurpleTdClient &client) {
+            client.reportChat(chatId, {});
+        });
         items.push_back(std::move(item));
     }
     if (menu.sender.valid()) {
@@ -2022,11 +2013,9 @@ void PurpleTdClient::showMessageMenuResponse(ChatId chatId, MessageId messageId,
         } else {
             // TRANSLATOR: Item of a message's menu; it asks for confirmation. Argument is the name of the message's sender.
             item.label  = formatMessage(_("Block {}…"), name);
-            item.action = [accountName, userId]() {
-                PurpleTdClient *client = findConnected(accountName.c_str());
-                if (client)
-                    client->askBlockUser(userId);
-            };
+            item.action = onClient(accountName, [userId](PurpleTdClient &client) {
+                client.askBlockUser(userId);
+            });
         }
         items.push_back(std::move(item));
     }
