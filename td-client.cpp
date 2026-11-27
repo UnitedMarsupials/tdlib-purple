@@ -3422,11 +3422,8 @@ int PurpleTdClient::sendMessage(const char *buddyName, const char *message)
     if (chat) {
         // Into a tab that ends where its chat does, not after a gap
         ::showNewestMessages(m_data, getId(*chat));
-        int ret = transmitMessage(getId(*chat), message, m_transceiver, m_data, &PurpleTdClient::sendMessageResponse);
-        if (ret < 0)
-            return ret;
         // Message shall not be echoed: tdlib will shortly present it as a new message and it will be displayed then
-        return 0;
+        return transmitMessage(getId(*chat), message, m_transceiver, m_data, &PurpleTdClient::sendMessageResponse);
     }
     if (privateUser) {
         purpleDebug("Requesting private chat for user id {}", privateUser->id_);
@@ -4138,10 +4135,7 @@ int PurpleTdClient::sendGroupMessage(int purpleChatId, const char *message)
     else {
         // Into a tab that ends where its chat does, not after a gap
         ::showNewestMessages(m_data, getId(*chat));
-        int ret = transmitMessage(getId(*chat), message, m_transceiver, m_data, &PurpleTdClient::sendMessageResponse);
-        if (ret < 0)
-            return ret;
-        return 0;
+        return transmitMessage(getId(*chat), message, m_transceiver, m_data, &PurpleTdClient::sendMessageResponse);
     }
 
     return -1;
@@ -4569,7 +4563,7 @@ void PurpleTdClient::createGroup(const char *name, int type,
 BasicGroupMembership PurpleTdClient::getBasicGroupMembership(const char *purpleChatName)
 {
     ChatId                        chatId     = getTdlibChatId(purpleChatName);
-    const td::td_api::chat       *chat       = chatId.valid() ? m_data.getChat(chatId) : nullptr;
+    const td::td_api::chat       *chat       = m_data.getChat(chatId);
     BasicGroupId                  groupId    = chat ? getBasicGroupId(*chat) : BasicGroupId::invalid;
     const td::td_api::basicGroup *basicGroup = groupId.valid() ? m_data.getBasicGroup(groupId) : nullptr;
 
@@ -4584,7 +4578,7 @@ BasicGroupMembership PurpleTdClient::getBasicGroupMembership(const char *purpleC
 bool PurpleTdClient::canDeleteForOthers(const char *purpleChatName)
 {
     ChatId                        chatId     = getTdlibChatId(purpleChatName);
-    const td::td_api::chat       *chat       = chatId.valid() ? m_data.getChat(chatId) : nullptr;
+    const td::td_api::chat       *chat       = m_data.getChat(chatId);
     if (!chat || !chat->can_be_deleted_for_all_users_)
         return false;
     BasicGroupId                  basicId    = getBasicGroupId(*chat);
@@ -4599,36 +4593,29 @@ bool PurpleTdClient::canDeleteForOthers(const char *purpleChatName)
 void PurpleTdClient::leaveGroup(const std::string &purpleChatName, bool deleteSupergroup, bool forOthers)
 {
     ChatId                  chatId = getTdlibChatId(purpleChatName.c_str());
-    const td::td_api::chat *chat   = chatId.valid() ? m_data.getChat(chatId) : nullptr;
+    const td::td_api::chat *chat   = m_data.getChat(chatId);
     if (!chat) return;
 
     bool member = m_data.isGroupChatWithMembership(*chat);
-    bool forAll = member && chat->can_be_deleted_for_all_users_ && forOthers;
+    bool forAll = deleteSupergroup && member && chat->can_be_deleted_for_all_users_ && forOthers;
     if (deleteSupergroup) {
         deleteLocalChat(chatId);
         wipeChatTraces(m_account, chatId, purpleChatName, PURPLE_CONV_TYPE_CHAT);
-        // One not joined is left as it is on Telegram; one someone else owns, or kept for the others,
-        // is left
+        // One not joined is left as it is on Telegram
         if (!member)
             return;
-        if (!forAll) {
-            auto leave = td::td_api::make_object<td::td_api::leaveChat>();
-            leave->chat_id_ = chatId.value();
-            m_transceiver.sendQuery(std::move(leave), nullptr);
-            return;
-        }
     }
-    if (deleteSupergroup && forAll) {
+    if (forAll) {
         auto deletion = td::td_api::make_object<td::td_api::deleteChat>();
         deletion->chat_id_ = chatId.value();
-        m_transceiver.sendQuery(std::move(deletion),
-                                &PurpleTdClient::deleteSupergroupResponse);
-    } else {
-        // Only left: what we saw of it stays, as deleting it would not
-        auto leave = td::td_api::make_object<td::td_api::leaveChat>();
-        leave->chat_id_ = chatId.value();
-        m_transceiver.sendQuery(std::move(leave), nullptr);
+        m_transceiver.sendQuery(std::move(deletion), &PurpleTdClient::deleteSupergroupResponse);
+        return;
     }
+    // Only left, as one someone else owns, or kept for the others: what we saw of it stays, as deleting
+    // it would not
+    auto leave = td::td_api::make_object<td::td_api::leaveChat>();
+    leave->chat_id_ = chatId.value();
+    m_transceiver.sendQuery(std::move(leave), nullptr);
 }
 
 void PurpleTdClient::deleteSupergroupResponse(uint64_t, td::td_api::object_ptr<td::td_api::Object> object)
@@ -4771,7 +4758,7 @@ void PurpleTdClient::addUserToChat(int purpleChatId, const char *name)
 void PurpleTdClient::showInviteLink(const std::string& purpleChatName)
 {
     ChatId                  chatId = getTdlibChatId(purpleChatName.c_str());
-    const td::td_api::chat *chat   = chatId.valid() ? m_data.getChat(chatId) : nullptr;
+    const td::td_api::chat *chat   = m_data.getChat(chatId);
     if (!chat) {
         purple_debug_warning(config::pluginId, "chat %s not found\n", purpleChatName.c_str());
         return;
