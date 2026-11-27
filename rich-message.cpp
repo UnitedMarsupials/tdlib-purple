@@ -31,10 +31,54 @@ static std::string linkTo(const std::string &url, const td::td_api::RichText *te
     return linkTo(url, formatRichText(text));
 }
 
+// The rich text inside one of type T
+template<typename T>
+static const td::td_api::RichText *getInnerText(const td::td_api::RichText &text)
+{
+    return static_cast<const T &>(text).text_.get();
+}
+
+// Those that are their text, in tags or as it is
+namespace {
+struct RichTextWrap {
+    int32_t                       id;
+    const td::td_api::RichText *(*inner)(const td::td_api::RichText &);
+    const char                   *open;
+    const char                   *close;
+};
+}
+static const RichTextWrap RichTextWraps[] = {
+    {td::td_api::richTextBold::ID,           getInnerText<td::td_api::richTextBold>,           "<b>",   "</b>"},
+    {td::td_api::richTextItalic::ID,         getInnerText<td::td_api::richTextItalic>,         "<i>",   "</i>"},
+    {td::td_api::richTextUnderline::ID,      getInnerText<td::td_api::richTextUnderline>,      "<u>",   "</u>"},
+    {td::td_api::richTextStrikethrough::ID,  getInnerText<td::td_api::richTextStrikethrough>,  "<s>",   "</s>"},
+    {td::td_api::richTextSubscript::ID,      getInnerText<td::td_api::richTextSubscript>,      "<sub>", "</sub>"},
+    {td::td_api::richTextSuperscript::ID,    getInnerText<td::td_api::richTextSuperscript>,    "<sup>", "</sup>"},
+    {td::td_api::richTextFixed::ID, getInnerText<td::td_api::richTextFixed>, "<font face=\"monospace\">", "</font>"},
+    // Underlined: a background color of our choosing could be unreadable in the user's theme
+    {td::td_api::richTextMarked::ID,         getInnerText<td::td_api::richTextMarked>,         "<u>",   "</u>"},
+    // Hidden until selected, as a spoiler in an ordinary message is
+    {td::td_api::richTextSpoiler::ID, getInnerText<td::td_api::richTextSpoiler>,
+     "<font color=\"#808080\" back=\"#808080\">", "</font>"},
+    {td::td_api::richTextDateTime::ID,       getInnerText<td::td_api::richTextDateTime>,       "", ""},
+    {td::td_api::richTextMentionName::ID,    getInnerText<td::td_api::richTextMentionName>,    "", ""},
+    {td::td_api::richTextHashtag::ID,        getInnerText<td::td_api::richTextHashtag>,        "", ""},
+    {td::td_api::richTextCashtag::ID,        getInnerText<td::td_api::richTextCashtag>,        "", ""},
+    {td::td_api::richTextBankCardNumber::ID, getInnerText<td::td_api::richTextBankCardNumber>, "", ""},
+    {td::td_api::richTextBotCommand::ID,     getInnerText<td::td_api::richTextBotCommand>,     "", ""},
+    {td::td_api::richTextReference::ID,      getInnerText<td::td_api::richTextReference>,      "", ""},
+    {td::td_api::richTextReferenceLink::ID,  getInnerText<td::td_api::richTextReferenceLink>,  "", ""},
+    {td::td_api::richTextAnchorLink::ID,     getInnerText<td::td_api::richTextAnchorLink>,     "", ""},
+};
+
 static std::string formatRichText(const td::td_api::RichText *text)
 {
     if (!text)
         return std::string();
+    for (const RichTextWrap &wrapped: RichTextWraps)
+        if (wrapped.id == text->get_id())
+            return wrap(wrapped.open, wrapped.inner(*text), wrapped.close);
+
     switch (text->get_id()) {
     case td::td_api::richTextPlain::ID:
         return escapeForDisplay(static_cast<const td::td_api::richTextPlain &>(*text).text_);
@@ -44,43 +88,10 @@ static std::string formatRichText(const td::td_api::RichText *text)
             result += formatRichText(part.get());
         return result;
     }
-    case td::td_api::richTextBold::ID:
-        return wrap("<b>", static_cast<const td::td_api::richTextBold &>(*text).text_.get(), "</b>");
-    case td::td_api::richTextItalic::ID:
-        return wrap("<i>", static_cast<const td::td_api::richTextItalic &>(*text).text_.get(), "</i>");
-    case td::td_api::richTextUnderline::ID:
-        return wrap("<u>", static_cast<const td::td_api::richTextUnderline &>(*text).text_.get(), "</u>");
-    case td::td_api::richTextStrikethrough::ID:
-        return wrap("<s>", static_cast<const td::td_api::richTextStrikethrough &>(*text).text_.get(), "</s>");
-    case td::td_api::richTextSubscript::ID:
-        return wrap("<sub>", static_cast<const td::td_api::richTextSubscript &>(*text).text_.get(), "</sub>");
-    case td::td_api::richTextSuperscript::ID:
-        return wrap("<sup>", static_cast<const td::td_api::richTextSuperscript &>(*text).text_.get(), "</sup>");
-    case td::td_api::richTextFixed::ID:
-        return wrap("<font face=\"monospace\">", static_cast<const td::td_api::richTextFixed &>(*text).text_.get(),
-                    "</font>");
-    case td::td_api::richTextMarked::ID:
-        return wrap("<u>", static_cast<const td::td_api::richTextMarked &>(*text).text_.get(), "</u>");
-    case td::td_api::richTextSpoiler::ID:
-        // Hidden until selected, as a spoiler in an ordinary message is
-        return wrap("<font color=\"#808080\" back=\"#808080\">",
-                    static_cast<const td::td_api::richTextSpoiler &>(*text).text_.get(), "</font>");
-    case td::td_api::richTextDateTime::ID:
-        return formatRichText(static_cast<const td::td_api::richTextDateTime &>(*text).text_.get());
     case td::td_api::richTextMention::ID: {
         const auto &mention = static_cast<const td::td_api::richTextMention &>(*text);
         return linkTo("https://t.me/" + mention.username_, mention.text_.get());
     }
-    case td::td_api::richTextMentionName::ID:
-        return formatRichText(static_cast<const td::td_api::richTextMentionName &>(*text).text_.get());
-    case td::td_api::richTextHashtag::ID:
-        return formatRichText(static_cast<const td::td_api::richTextHashtag &>(*text).text_.get());
-    case td::td_api::richTextCashtag::ID:
-        return formatRichText(static_cast<const td::td_api::richTextCashtag &>(*text).text_.get());
-    case td::td_api::richTextBankCardNumber::ID:
-        return formatRichText(static_cast<const td::td_api::richTextBankCardNumber &>(*text).text_.get());
-    case td::td_api::richTextBotCommand::ID:
-        return formatRichText(static_cast<const td::td_api::richTextBotCommand &>(*text).text_.get());
     case td::td_api::richTextUrl::ID: {
         const auto &url = static_cast<const td::td_api::richTextUrl &>(*text);
         return linkTo(url.url_, url.text_.get());
@@ -99,17 +110,14 @@ static std::string formatRichText(const td::td_api::RichText *text)
         return "<font face=\"monospace\">" +
                escapeForDisplay(static_cast<const td::td_api::richTextMathematicalExpression &>(*text).expression_) +
                "</font>";
-    case td::td_api::richTextReference::ID:
-        return formatRichText(static_cast<const td::td_api::richTextReference &>(*text).text_.get());
-    case td::td_api::richTextReferenceLink::ID:
-        return formatRichText(static_cast<const td::td_api::richTextReferenceLink &>(*text).text_.get());
-    case td::td_api::richTextAnchorLink::ID:
-        return formatRichText(static_cast<const td::td_api::richTextAnchorLink &>(*text).text_.get());
     default:
         // An anchor or an icon, which show as nothing; or a kind newer than this
         return std::string();
     }
 }
+
+// Before a line within a list item, a quote or the like
+static const char INDENT[] = "&nbsp;&nbsp;&nbsp;&nbsp;";
 
 // In brackets, as in a quote of such a message
 static std::string mediaPlaceholder(const char *kind)
@@ -228,7 +236,7 @@ static void formatBlock(const td::td_api::PageBlock &block, std::vector<std::str
             std::string label = item->has_checkbox_ ? (item->is_checked_ ? "\xe2\x98\x91" : "\xe2\x98\x90")
                                                     : escapeForDisplay(item->label_);
             for (size_t i = 0; i < itemLines.size(); i++)
-                lines.push_back((i == 0) ? label + " " + itemLines[i] : "&nbsp;&nbsp;&nbsp;&nbsp;" + itemLines[i]);
+                lines.push_back((i == 0) ? label + " " + itemLines[i] : INDENT + itemLines[i]);
         }
         break;
     case td::td_api::pageBlockBlockQuote::ID: {
@@ -236,18 +244,18 @@ static void formatBlock(const td::td_api::PageBlock &block, std::vector<std::str
         std::vector<std::string> quoted;
         formatBlocks(quote.blocks_, quoted, links);
         for (const std::string &line: quoted)
-            lines.push_back("&nbsp;&nbsp;&nbsp;&nbsp;<i>" + line + "</i>");
+            lines.push_back(std::string(INDENT) + "<i>" + line + "</i>");
         std::string credit = formatRichText(quote.credit_.get());
         if (!credit.empty())
-            lines.push_back("&nbsp;&nbsp;&nbsp;&nbsp;\xe2\x80\x94 " + credit);
+            lines.push_back(std::string(INDENT) + "\xe2\x80\x94 " + credit);
         break;
     }
     case td::td_api::pageBlockPullQuote::ID: {
         const auto &quote = static_cast<const td::td_api::pageBlockPullQuote &>(block);
-        lines.push_back("&nbsp;&nbsp;&nbsp;&nbsp;<i>" + formatRichText(quote.text_.get()) + "</i>");
+        lines.push_back(std::string(INDENT) + "<i>" + formatRichText(quote.text_.get()) + "</i>");
         std::string credit = formatRichText(quote.credit_.get());
         if (!credit.empty())
-            lines.push_back("&nbsp;&nbsp;&nbsp;&nbsp;\xe2\x80\x94 " + credit);
+            lines.push_back(std::string(INDENT) + "\xe2\x80\x94 " + credit);
         break;
     }
     case td::td_api::pageBlockPhoto::ID: {
@@ -315,14 +323,16 @@ static void formatBlock(const td::td_api::PageBlock &block, std::vector<std::str
         std::vector<std::string> posted;
         formatBlocks(post.blocks_, posted, links);
         for (const std::string &line: posted)
-            lines.push_back("&nbsp;&nbsp;&nbsp;&nbsp;" + line);
+            lines.push_back(INDENT + line);
         std::string caption = formatCaption(post.caption_.get());
         if (!caption.empty())
             lines.push_back(caption);
         break;
     }
     case td::td_api::pageBlockMap::ID:
-        lines.push_back(withCaption(escapeForDisplay(_("[location]")), static_cast<const td::td_api::pageBlockMap &>(block).caption_.get()));
+        // TRANSLATOR: What a message is, as in "reacted with 👍 to location from 12:00".
+        lines.push_back(withCaption(mediaPlaceholder(_("location")),
+                                    static_cast<const td::td_api::pageBlockMap &>(block).caption_.get()));
         break;
     case td::td_api::pageBlockChatLink::ID: {
         const auto &chatLink = static_cast<const td::td_api::pageBlockChatLink &>(block);
