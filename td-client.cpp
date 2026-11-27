@@ -299,7 +299,7 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
         purple_debug_misc(config::pluginId, "Incoming update: file update, id %d\n",
                           fileUpdate.file_ ? fileUpdate.file_->id_ : 0);
         if (fileUpdate.file_)
-            updateFileTransferProgress(*fileUpdate.file_, m_transceiver, m_data,
+            updateFileTransferProgress(*fileUpdate.file_, m_data,
                                        &PurpleTdClient::sendMessageResponse);
         break;
     }
@@ -320,7 +320,7 @@ void PurpleTdClient::processUpdate(td::td_api::Object &update)
                         std::to_string(callUpdate.call_->user_id_),
                         std::to_string((int)callUpdate.call_->is_outgoing_),
                         std::to_string(callUpdate.call_->state_ ? callUpdate.call_->state_->get_id() : 0)});
-            updateCall(*callUpdate.call_, m_data, m_transceiver);
+            updateCall(*callUpdate.call_, m_data);
         }
         break;
     }
@@ -3405,7 +3405,7 @@ int PurpleTdClient::sendMessage(const char *buddyName, const char *message)
         // Into a tab that ends where its chat does, not after a gap
         ::showNewestMessages(m_data, getId(*chat));
         // Message shall not be echoed: tdlib will shortly present it as a new message and it will be displayed then
-        return transmitMessage(getId(*chat), message, m_transceiver, m_data, &PurpleTdClient::sendMessageResponse);
+        return transmitMessage(getId(*chat), message, m_data, &PurpleTdClient::sendMessageResponse);
     }
     if (privateUser) {
         purpleDebug("Requesting private chat for user id {}", privateUser->id_);
@@ -4117,7 +4117,7 @@ int PurpleTdClient::sendGroupMessage(int purpleChatId, const char *message)
     else {
         // Into a tab that ends where its chat does, not after a gap
         ::showNewestMessages(m_data, getId(*chat));
-        return transmitMessage(getId(*chat), message, m_transceiver, m_data, &PurpleTdClient::sendMessageResponse);
+        return transmitMessage(getId(*chat), message, m_data, &PurpleTdClient::sendMessageResponse);
     }
 
     return -1;
@@ -4603,7 +4603,7 @@ void PurpleTdClient::leaveGroup(const std::string &purpleChatName, bool deleteSu
 void PurpleTdClient::deleteSupergroupResponse(uint64_t, td::td_api::object_ptr<td::td_api::Object> object)
 {
     if (!object || (object->get_id() != td::td_api::ok::ID)) {
-        std::string errorMessage = getDisplayedError(object).c_str();
+        std::string errorMessage = getDisplayedError(object);
         purple_notify_error(m_account,
                             // TRANSLATOR: Error dialog, title
                             _("Failed to delete group or channel"),
@@ -5005,7 +5005,7 @@ void PurpleTdClient::sendFileToChat(PurpleXfer *xfer, const char *purpleName,
         chat = m_data.getChatByPurpleId(purpleChatId);
 
     if (filename && chat)
-        startDocumentUpload(getId(*chat), filename, xfer, m_transceiver, m_data, &PurpleTdClient::uploadResponse);
+        startDocumentUpload(getId(*chat), filename, xfer, m_data, &PurpleTdClient::uploadResponse);
     else if (filename && privateUser) {
         purple_debug_misc(config::pluginId, "Requesting private chat for user id %d\n", (int)privateUser->id_);
         auto createChat = makeCreatePrivateChat(privateUser->id_);
@@ -5034,7 +5034,7 @@ void PurpleTdClient::sendMessageCreatePrivateChatResponse(uint64_t requestId, td
         } else if (chat) {
             const char *filename = purple_xfer_get_local_filename(request->fileUpload);
             if (filename)
-                startDocumentUpload(getId(*chat), filename, request->fileUpload, m_transceiver, m_data,
+                startDocumentUpload(getId(*chat), filename, request->fileUpload, m_data,
                                     &PurpleTdClient::uploadResponse);
             else
                 purple_xfer_cancel_local(request->fileUpload);
@@ -5052,7 +5052,7 @@ void PurpleTdClient::sendMessageCreatePrivateChatResponse(uint64_t requestId, td
         if (chat) {
             // Into a tab that ends where its chat does, not after a gap
             ::showNewestMessages(m_data, getId(*chat));
-            int ret = transmitMessage(getId(*chat), request->message.c_str(), m_transceiver, m_data,
+            int ret = transmitMessage(getId(*chat), request->message.c_str(), m_data,
                                       &PurpleTdClient::sendMessageResponse);
             // Messages copied from libpurple
             if (ret == -E2BIG) {
@@ -5081,7 +5081,7 @@ void PurpleTdClient::uploadResponse(uint64_t requestId, td::td_api::object_ptr<t
 
     if (request) {
         if (file)
-            startDocumentUploadProgress(request->chatId, request->xfer, request->kind, *file, m_transceiver, m_data,
+            startDocumentUploadProgress(request->chatId, request->xfer, request->kind, *file, m_data,
                                         &PurpleTdClient::sendMessageResponse);
         else
             uploadResponseError(request->xfer, getDisplayedError(object), m_data);
@@ -5120,7 +5120,7 @@ bool PurpleTdClient::startVoiceCall(const char *buddyName)
         return false;
     }
 
-    return initiateCall(users.front()->id_, m_data, m_transceiver);
+    return initiateCall(users.front()->id_, m_data);
 }
 
 bool PurpleTdClient::terminateCall(PurpleConversation *)
@@ -5128,7 +5128,7 @@ bool PurpleTdClient::terminateCall(PurpleConversation *)
     if (!m_data.hasActiveCall())
         return false;
 
-    discardCurrentCall(m_data, m_transceiver);
+    discardCurrentCall(m_data);
     return true;
 }
 

@@ -1725,8 +1725,7 @@ static size_t getAlbumSize(const std::vector<MessagePart> &parts, size_t first)
     return size;
 }
 
-int transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiver,
-                    TdAccountData &account, TdTransceiver::ResponseCb response)
+int transmitMessage(ChatId chatId, const char *message, TdAccountData &account, TdTransceiver::ResponseCb response)
 {
     std::vector<MessagePart> parts;
     parseMessage(message, parts, account);
@@ -1759,13 +1758,13 @@ int transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiv
                 auto sendMessageRequest = td::td_api::make_object<td::td_api::sendMessage>();
                 sendMessageRequest->chat_id_ = chatId.value();
                 sendMessageRequest->input_message_content_ = makeAttachment(input);
-                requestId = transceiver.sendQuery(std::move(sendMessageRequest), response);
+                requestId = account.transceiver.sendQuery(std::move(sendMessageRequest), response);
             } else {
                 auto sendAlbumRequest = td::td_api::make_object<td::td_api::sendMessageAlbum>();
                 sendAlbumRequest->chat_id_ = chatId.value();
                 for (size_t j = i; j < i + albumSize; j++)
                     sendAlbumRequest->input_message_contents_.push_back(makeAttachment(parts[j]));
-                requestId = transceiver.sendQuery(std::move(sendAlbumRequest), response);
+                requestId = account.transceiver.sendQuery(std::move(sendAlbumRequest), response);
             }
             account.addPendingRequest<SendMessageRequest>(requestId, chatId, nullptr);
             i += albumSize - 1;
@@ -1791,7 +1790,7 @@ int transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiv
             sendMessageRequest->input_message_content_ = std::move(content);
         }
 
-        uint64_t requestId = transceiver.sendQuery(std::move(sendMessageRequest), response);
+        uint64_t requestId = account.transceiver.sendQuery(std::move(sendMessageRequest), response);
         account.addPendingRequest<SendMessageRequest>(requestId, chatId, tempFileName);
         if (tempFileName)
             g_free(tempFileName);

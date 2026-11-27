@@ -16,8 +16,7 @@ static td::td_api::object_ptr<td::td_api::callProtocol> getCallProtocol()
     return protocol;
 }
 
-bool initiateCall([[maybe_unused]] int64_t userId, [[maybe_unused]] TdAccountData &account,
-                  [[maybe_unused]] TdTransceiver &transceiver)
+bool initiateCall([[maybe_unused]] int64_t userId, [[maybe_unused]] TdAccountData &account)
 {
 #ifndef NoVoip
     if (!account.hasActiveCall()) {
@@ -49,7 +48,6 @@ static void discardCall(int32_t callId, TdTransceiver &transceiver)
 
 struct CallRequestData {
     int            callId;
-    TdTransceiver *transceiver;
     TdAccountData *account;
 };
 
@@ -60,13 +58,13 @@ static void acceptCallCb(CallRequestData *data, int)
     td::td_api::object_ptr<td::td_api::acceptCall> acceptReq = td::td_api::make_object<td::td_api::acceptCall>();
     acceptReq->call_id_ = request->callId;
     acceptReq->protocol_ = getCallProtocol();
-    request->transceiver->sendQuery(std::move(acceptReq), nullptr);
+    request->account->transceiver.sendQuery(std::move(acceptReq), nullptr);
 }
 
 static void discardCallCb(CallRequestData *data, int)
 {
     std::unique_ptr<CallRequestData> request(data);
-    discardCall(request->callId, *request->transceiver);
+    discardCall(request->callId, request->account->transceiver);
     request->account->removeActiveCall();
 }
 
@@ -190,7 +188,7 @@ static bool canTakeCalls()
 #endif
 }
 
-void updateCall(const td::td_api::call &call, TdAccountData &account, TdTransceiver &transceiver)
+void updateCall(const td::td_api::call &call, TdAccountData &account)
 {
     std::string buddyName = getPurpleUserName(getUserId(call), account);
 
@@ -203,7 +201,7 @@ void updateCall(const td::td_api::call &call, TdAccountData &account, TdTranscei
                                   _("Received incoming call, but calls are not supported"),
                                   time(nullptr), PURPLE_MESSAGE_SYSTEM);
 
-            discardCall(call.id_, transceiver);
+            discardCall(call.id_, account.transceiver);
         }
         return;
     }
@@ -219,7 +217,6 @@ void updateCall(const td::td_api::call &call, TdAccountData &account, TdTranscei
                                                 account.getDisplayName(getUserId(call)));
             CallRequestData *request = new CallRequestData;
             request->callId = call.id_;
-            request->transceiver = &transceiver;
             request->account = &account;
             purple_request_action(purple_account_get_connection(account.purpleAccount),
                                   // TRANSLATOR: Dialog title, asking about an incoming telephone call (OK/Cancel)
@@ -237,7 +234,7 @@ void updateCall(const td::td_api::call &call, TdAccountData &account, TdTranscei
                                 _("Received incoming call while already in another call"),
                                 time(nullptr), PURPLE_MESSAGE_SYSTEM);
 
-            discardCall(call.id_, transceiver);
+            discardCall(call.id_, account.transceiver);
         }
     } else if (call.is_outgoing_ && (state == td::td_api::callStatePending::ID)) {
         if (!account.hasActiveCall()) {
@@ -251,11 +248,11 @@ void updateCall(const td::td_api::call &call, TdAccountData &account, TdTranscei
             // This would happen if there was no active call when sending createCall, but there is one
             // a millisecond later when asynchronous response is received. Possible if two calls are
             // started at the same time, or one is started an another received at the same time.
-            discardCall(call.id_, transceiver);
+            discardCall(call.id_, account.transceiver);
         }
     } else if (state == td::td_api::callStateReady::ID) {
         if (! activateCall(call, buddyName, account)) {
-            discardCall(call.id_, transceiver);
+            discardCall(call.id_, account.transceiver);
             account.removeActiveCall();
         }
     }
@@ -272,10 +269,10 @@ void updateCall(const td::td_api::call &call, TdAccountData &account, TdTranscei
     }
 }
 
-void discardCurrentCall(TdAccountData &account, TdTransceiver &transceiver)
+void discardCurrentCall(TdAccountData &account)
 {
     if (account.hasActiveCall())
-        discardCall(account.getActiveCallId(), transceiver);
+        discardCall(account.getActiveCallId(), account.transceiver);
 }
 
 void showCallMessage(const td::td_api::chat &chat, const TgMessageInfo &message,

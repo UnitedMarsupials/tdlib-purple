@@ -45,11 +45,11 @@ void showDownloadedFileInline(ChatId chatId, TgMessageInfo &message,
                               const std::string &fileDescription,
                               td::td_api::object_ptr<td::td_api::file> thumbnail,
                               const std::string &preview,
-                              TdTransceiver &transceiver, TdAccountData &account);
+                              TdAccountData &account);
 bool isStickerAnimated(const std::string &filePath);
 bool shouldConvertAnimatedSticker(const TgMessageInfo &message, const PurpleAccount *purpleAccount);
 void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
-                 TdTransceiver &transceiver, TdAccountData &account);
+                 TdAccountData &account);
 void showMessages(std::vector<IncomingMessage>& messages, TdAccountData &account);
 
 struct FileInfo {
@@ -69,10 +69,9 @@ void getMessageFileKind(const td::td_api::MessageContent &content, bool &hasFile
 void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td_api::message> message,
                      IncomingMessage &fullMessage, const TdAccountData &account);
 bool isMessageReady(const IncomingMessage &fullMessage, const TdAccountData &account);
-void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAccountData &account,
+void fetchExtras(IncomingMessage &fullMessage, TdAccountData &account,
                  TdTransceiver::ResponseCb2 onFetchReply);
-void checkMessageReady(const IncomingMessage *message, TdTransceiver &transceiver,
-                       TdAccountData &account, std::vector<IncomingMessage> *rvReadyMessages = nullptr);
+void checkMessageReady(const IncomingMessage *message, TdAccountData &account, std::vector<IncomingMessage> *rvReadyMessages = nullptr);
 
 void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
                            td::td_api::object_ptr<td::td_api::message> message,

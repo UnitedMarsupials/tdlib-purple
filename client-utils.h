@@ -168,8 +168,7 @@ struct ParsedEdit {
 };
 ParsedEdit parseEdit(const char *message, const TdAccountData &account);
 bool isSameFormattedText(const td::td_api::formattedText &a, const td::td_api::formattedText &b);
-int  transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiver,
-                     TdAccountData &account, TdTransceiver::ResponseCb response);
+int  transmitMessage(ChatId chatId, const char *message, TdAccountData &account, TdTransceiver::ResponseCb response);
 
 void requestRecoveryEmailConfirmation(PurpleConnection *gc, const char *emailInfo);
 
