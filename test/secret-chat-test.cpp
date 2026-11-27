@@ -28,7 +28,7 @@ void SecretChatTest::loginWithSecretChat()
     )));
     tgl.update(make_object<updateNewChat>(makeChatForSecret(userIds[0])));
     prpl.verifyEvents(
-        AddBuddyEvent(secretChatBuddyName, secretChatBuddyAlias, account, NULL, NULL, NULL),
+        AddBuddyEvent(secretChatBuddyName, secretChatBuddyAlias, account, nullptr, nullptr, nullptr),
         UserStatusEvent(account, secretChatBuddyName, PURPLE_STATUS_OFFLINE)
     );
 
@@ -69,7 +69,7 @@ TEST_F(SecretChatTest, CreateSecretChat_Lifecycle)
     )));
     tgl.update(make_object<updateNewChat>(makeChatForSecret(userIds[0])));
     prpl.verifyEvents(
-        AddBuddyEvent(secretChatBuddyName, secretChatBuddyAlias, account, NULL, NULL, NULL),
+        AddBuddyEvent(secretChatBuddyName, secretChatBuddyAlias, account, nullptr, nullptr, nullptr),
         NewConversationEvent(PURPLE_CONV_TYPE_IM, account, secretChatBuddyName),
         ConversationWriteEvent(
             secretChatBuddyName, secretChatBuddyName,
@@ -92,7 +92,7 @@ TEST_F(SecretChatTest, CreateSecretChat_Lifecycle)
     prpl.discardEvents();
     PurpleBuddy *dup = purple_buddy_new(account, secretChatBuddyName.c_str(),
                                         secretChatBuddyAlias.c_str());
-    pluginInfo().remove_buddy(connection, dup, NULL);
+    pluginInfo().remove_buddy(connection, dup, nullptr);
     purple_buddy_destroy(dup);
     {
         auto files = make_object<optimizeStorage>();
@@ -168,16 +168,16 @@ TEST_F(SecretChatTest, TypingNotification)
     loginWithSecretChat();
 
     pluginInfo().send_typing(connection, secretChatBuddyName.c_str(), PURPLE_TYPING);
-    tgl.verifyRequest(sendChatAction(secretChatChatId, 0, "", make_object<chatActionTyping>()));
+    tgl.verifyRequest(sendChatAction(secretChatChatId, {}, "", make_object<chatActionTyping>()));
 
     pluginInfo().send_typing(connection, secretChatBuddyName.c_str(), PURPLE_TYPED);
-    tgl.verifyRequest(sendChatAction(secretChatChatId, 0, "", make_object<chatActionCancel>()));
+    tgl.verifyRequest(sendChatAction(secretChatChatId, {}, "", make_object<chatActionCancel>()));
 
     pluginInfo().send_typing(connection, secretChatBuddyName.c_str(), PURPLE_TYPING);
-    tgl.verifyRequest(sendChatAction(secretChatChatId, 0, "", make_object<chatActionTyping>()));
+    tgl.verifyRequest(sendChatAction(secretChatChatId, {}, "", make_object<chatActionTyping>()));
 
     pluginInfo().send_typing(connection, secretChatBuddyName.c_str(), PURPLE_NOT_TYPING);
-    tgl.verifyRequest(sendChatAction(secretChatChatId, 0, "", make_object<chatActionCancel>()));
+    tgl.verifyRequest(sendChatAction(secretChatChatId, {}, "", make_object<chatActionCancel>()));
 }
 
 TEST_F(SecretChatTest, SendFile)
@@ -360,8 +360,8 @@ TEST_F(SecretChatTest, Download_StandardTransfer)
 
     tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
 
-    char *tdlibFileName = NULL;
-    int fd = g_file_open_tmp("tdlib_test_XXXXXX", &tdlibFileName, NULL);
+    char *tdlibFileName = nullptr;
+    int fd = g_file_open_tmp("tdlib_test_XXXXXX", &tdlibFileName, nullptr);
     ASSERT_TRUE(fd >= 0);
     ASSERT_EQ((ssize_t)sizeof(data), write(fd, data, sizeof(data)));
     ::close(fd);

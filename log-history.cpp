@@ -118,12 +118,12 @@ static void loadLoggedImages(LoggedLine &line, const std::string &directory)
         if (nameEnd == std::string::npos)
             break;
         std::string name = line.html.substr(nameStart + 1, nameEnd - nameStart - 1);
-        gchar      *path = (name.find('/') == std::string::npos) ? g_build_filename(directory.c_str(), name.c_str(), NULL)
+        gchar      *path = (name.find('/') == std::string::npos) ? g_build_filename(directory.c_str(), name.c_str(), nullptr)
                                                                    : nullptr;
         gchar      *data = nullptr;
         gsize       size = 0;
         std::string replacement;
-        if (path && g_file_get_contents(path, &data, &size, NULL)) {
+        if (path && g_file_get_contents(path, &data, &size, nullptr)) {
             // The store takes the data
             int id = purple_imgstore_add_with_id(data, size, name.c_str());
             line.imageIds.push_back(id);

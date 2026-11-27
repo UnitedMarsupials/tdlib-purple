@@ -40,11 +40,11 @@ public:
 
     ~PurpleEventReceiver() {
         // facilitate non-still-reachable memory leaks in valgrind
-        inputUserData = NULL;
-        inputOkCb = NULL;
-        inputCancelCb = NULL;
-        lastXfer = NULL;
-        actionUserData = NULL;
+        inputUserData = nullptr;
+        inputOkCb = nullptr;
+        inputCancelCb = nullptr;
+        lastXfer = nullptr;
+        actionUserData = nullptr;
     }
 private:
     void verifyEvent(const PurpleEvent &event);
@@ -54,13 +54,13 @@ private:
     }
 
     std::queue<std::unique_ptr<PurpleEvent>> m_events;
-    void      *inputUserData = NULL;
-    GCallback  inputOkCb     = NULL;
-    GCallback  inputCancelCb = NULL;
-    PurpleXfer *lastXfer     = NULL;
+    void      *inputUserData = nullptr;
+    GCallback  inputOkCb     = nullptr;
+    GCallback  inputCancelCb = nullptr;
+    PurpleXfer *lastXfer     = nullptr;
 
     std::vector<std::pair<std::string, PurpleRequestActionCb>> actionCallbacks;
-    void *actionUserData = NULL;
+    void *actionUserData = nullptr;
     std::map<std::string, std::pair<PurpleCmdFunc, void *>> commands;
 };
 
@@ -327,8 +327,8 @@ struct RequestInputEvent: PurpleEvent {
 
     RequestInputEvent(void *handle, const char *title, const char *primary,
                       const char *secondary, const char *default_value,
-                      const char *ok_text, GCallback ok_cb,
-                      const char *cancel_text, GCallback cancel_cb,
+                      const char *, GCallback ok_cb,
+                      const char *, GCallback cancel_cb,
                       PurpleAccount *account, const char *who, PurpleConversation *conv,
                       void *user_data)
     : PurpleEvent(PurpleEventType::RequestInput),
@@ -490,15 +490,15 @@ struct ChatSetTopicEvent: PurpleEvent {
     std::string newTopic;
     std::string who;
 
-    ChatSetTopicEvent(const std::string &chatName, const std::string &newTopic, const std::string &who)
+    ChatSetTopicEvent(const std::string &, const std::string &newTopic, const std::string &who)
     : PurpleEvent(PurpleEventType::ChatSetTopic), newTopic(newTopic), who(who) {}
 };
 
 struct XferAcceptedEvent: PurpleEvent {
-    PurpleXfer *xfer = NULL;
+    PurpleXfer *xfer = nullptr;
     std::string who;
     std::string filename;
-    std::string *getFileName = NULL;
+    std::string *getFileName = nullptr;
 
     XferAcceptedEvent(PurpleXfer *xfer, const std::string &filename)
     : PurpleEvent(PurpleEventType::XferAccepted), xfer(xfer), who(xfer->who), filename(filename) {}
@@ -565,7 +565,7 @@ struct XferRequestEvent: PurpleEvent {
     std::string     who;
     std::string     filename;
 
-    XferRequestEvent(PurpleXferType type, const char *who, const char *filename, PurpleXfer *xfer = NULL)
+    XferRequestEvent(PurpleXferType type, const char *who, const char *filename, PurpleXfer *xfer = nullptr)
     : PurpleEvent(PurpleEventType::XferRequest), xfer(xfer), type(type), who(who),
       filename(filename ? filename : "") {}
 };
@@ -587,7 +587,7 @@ struct SetUserPhotoEvent: PurpleEvent {
     std::string    username;
     std::vector<uint8_t> data;
 
-    SetUserPhotoEvent(PurpleAccount *account, const std::string &username, const void *data, size_t datalen)
+    SetUserPhotoEvent(PurpleAccount *, const std::string &username, const void *data, size_t datalen)
     : PurpleEvent(PurpleEventType::SetUserPhoto), username(username)
     {
         this->data.resize(datalen);
@@ -606,8 +606,8 @@ struct RoomlistInProgressEvent: PurpleEvent {
 struct RoomlistAddRoomEvent: PurpleEvent {
     PurpleRoomlist *roomlist;
     std::vector<std::string> fieldValues;
-    const char *fieldToCheck = NULL;
-    const char *valueToCheck = NULL;
+    const char *fieldToCheck = nullptr;
+    const char *valueToCheck = nullptr;
 
     RoomlistAddRoomEvent(PurpleRoomlist *roomlist, const std::vector<std::string> &values)
     : PurpleEvent(PurpleEventType::RoomlistAddRoom), roomlist(roomlist), fieldValues(values) {}

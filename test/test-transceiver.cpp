@@ -1277,7 +1277,7 @@ object_ptr<addContact> makeAddContact(int64_t userId, const std::string &phoneNu
     return result;
 }
 
-object_ptr<Object> makeChatJoined(int64_t chatId, object_ptr<Object> &&olderReply)
+object_ptr<Object> makeChatJoined([[maybe_unused]] int64_t chatId, [[maybe_unused]] object_ptr<Object> &&olderReply)
 {
 #if TDLIB_API_CHAT_JOIN_RESULT
     auto result = make_object<chatJoinResultSuccess>();
@@ -1612,7 +1612,7 @@ object_ptr<messageCall> makeMessageCall(bool is_video_, object_ptr<CallDiscardRe
     return result;
 }
 
-object_ptr<chatMemberStatusCreator> makeChatMemberStatusCreator(std::string const &custom_title_,
+object_ptr<chatMemberStatusCreator> makeChatMemberStatusCreator(std::string const &,
                                                                 bool is_anonymous_, bool is_member_)
 {
     // custom_title_ is gone from TDLib; the tests leave it empty anyway.
@@ -1622,7 +1622,7 @@ object_ptr<chatMemberStatusCreator> makeChatMemberStatusCreator(std::string cons
     return result;
 }
 
-object_ptr<sendMessage> makeSendMessage(std::int64_t chat_id_, std::int64_t message_thread_id_,
+object_ptr<sendMessage> makeSendMessage(std::int64_t chat_id_, std::int64_t,
                                         object_ptr<InputMessageReplyTo> &&reply_to_,
                                         object_ptr<messageSendOptions> &&options_,
                                         object_ptr<ReplyMarkup> &&reply_markup_,

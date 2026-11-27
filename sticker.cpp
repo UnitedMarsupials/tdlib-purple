@@ -18,19 +18,19 @@ void showStickerFile(const td::td_api::chat &chat, const TgMessageInfo &message,
                      const std::string &filePath, const std::string &fileDescription,
                      TdAccountData &account)
 {
-    gchar *data = NULL;
+    gchar *data = nullptr;
     gsize  size = 0;
     ImageSupport support = probeImageFile(filePath);
-    if ((support == ImageSupport::Supported) && g_file_get_contents(filePath.c_str(), &data, &size, NULL)) {
+    if ((support == ImageSupport::Supported) && g_file_get_contents(filePath.c_str(), &data, &size, nullptr)) {
         // The imgstore takes the data
         int id = addImageFile(data, size, filePath);
         std::string text = makeInlineImageText(id);
-        showMessageText(account, chat, message, text.c_str(), NULL, PURPLE_MESSAGE_IMAGES);
+        showMessageText(account, chat, message, text.c_str(), nullptr, PURPLE_MESSAGE_IMAGES);
     } else {
         if (support == ImageSupport::Unrecognized)
             warnMissingImageLoader(filePath);
         // The emoji it goes with, where it has one
-        showGenericFileInline(chat, message, filePath, NULL,
+        showGenericFileInline(chat, message, filePath, nullptr,
                               message.altText.empty() ? fileDescription : message.altText, std::string(), account);
     }
 }
@@ -160,9 +160,9 @@ private:
 
 void StickerConversionThread::run()
 {
-    gchar  *compressedData = NULL;
+    gchar  *compressedData = nullptr;
     gsize   compressedSize = 0;
-    GError *error = NULL;
+    GError *error = nullptr;
 
     g_file_get_contents(inputFileName.c_str(), &compressedData, &compressedSize, &error);
     if (error) {
@@ -184,8 +184,8 @@ void StickerConversionThread::run()
         return;
     }
 
-    char *tempFileName = NULL;
-    int fd = g_file_open_tmp("tdlib_sticker_XXXXXX", &tempFileName, NULL);
+    char *tempFileName = nullptr;
+    int fd = g_file_open_tmp("tdlib_sticker_XXXXXX", &tempFileName, nullptr);
     if (fd < 0) {
         // Unlikely error message not worth translating
         m_errorMessage = "Could not create temporary file";

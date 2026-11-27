@@ -314,7 +314,7 @@ static void insertAtMark(GtkIMHtml *imhtml, GtkTextMark *mark, const char *html,
     GtkTextIter    where;
     p_gtk_text_buffer_get_iter_at_mark(buffer, &where, mark);
     // Right gravity: it stays after what is inserted
-    GtkTextMark *after = p_gtk_text_buffer_create_mark(buffer, NULL, &where, FALSE);
+    GtkTextMark *after = p_gtk_text_buffer_create_mark(buffer, nullptr, &where, FALSE);
     p_gtk_imhtml_insert_html_at_iter(imhtml, html, options, &where);
     p_gtk_text_buffer_get_iter_at_mark(buffer, &where, after);
     p_gtk_text_buffer_move_mark(buffer, mark, &where);
@@ -428,7 +428,7 @@ static void removeEditNotice(PurpleConversation *conv, const char *name);
 
 // Emitted by Pidgin just before it writes into a tab, for IM and chat messages alike; returning
 // TRUE stops it from writing
-static gboolean displayingMessage(PurpleAccount *account, const char *who, char **message,
+static gboolean displayingMessage(PurpleAccount *account, const char *, char **message,
                                   PurpleConversation *conv, PurpleMessageFlags flags)
 {
     // For the log only, which has it by now; nothing is shown if that was all
@@ -516,7 +516,7 @@ static gboolean displayingMessage(PurpleAccount *account, const char *who, char 
         return TRUE;
     }
     if (!g_messageBeingWritten->bodyMarked) {
-        gchar *marked = g_strconcat(BODY_MARKER, *message, NULL);
+        gchar *marked = g_strconcat(BODY_MARKER, *message, nullptr);
         g_free(*message);
         *message = marked;
     }
@@ -528,8 +528,8 @@ static bool isMessageHidden(PurpleConversation *conv, MessageId messageId);
 
 // Emitted by Pidgin once it has written into a tab; not if another plugin stopped the writing.
 // The marks are set (again) after each part of the message, while the conversation surely exists.
-static void displayedMessage(PurpleAccount *account, const char *who, char *message,
-                             PurpleConversation *conv, PurpleMessageFlags flags)
+static void displayedMessage(PurpleAccount *, const char *, char *,
+                             PurpleConversation *conv, PurpleMessageFlags)
 {
     GtkTextBuffer *buffer = (g_messageBeingWritten && (g_messageBeingWritten->conv == conv))
                             ? getTextBuffer(conv) : nullptr;
@@ -575,10 +575,10 @@ void setBuddyMarkHandler(BuddyMarkHandler handler, const char *mark)
 static char *drawingBuddy(PurpleBuddy *buddy)
 {
     if (!g_buddyMarkHandler || !g_buddyMarkHandler(buddy))
-        return NULL;
+        return nullptr;
     const char *name    = purple_buddy_get_contact_alias(buddy);
     gchar      *escaped = g_markup_escape_text(name ? name : purple_buddy_get_name(buddy), -1);
-    gchar      *marked  = g_strconcat(g_buddyMark.c_str(), escaped, NULL);
+    gchar      *marked  = g_strconcat(g_buddyMark.c_str(), escaped, nullptr);
     g_free(escaped);
     return marked;
 }
@@ -627,17 +627,17 @@ static gboolean connectSignals(gpointer plugin)
     void *handle    = p_pidgin_conversations_get_handle();
     bool  connected = true;
     for (const char *signal: {"displaying-im-msg", "displaying-chat-msg"})
-        connected = purple_signal_connect(handle, signal, plugin, PURPLE_CALLBACK(displayingMessage), NULL) &&
+        connected = purple_signal_connect(handle, signal, plugin, PURPLE_CALLBACK(displayingMessage), nullptr) &&
                     connected;
     for (const char *signal: {"displayed-im-msg", "displayed-chat-msg"})
-        connected = purple_signal_connect(handle, signal, plugin, PURPLE_CALLBACK(displayedMessage), NULL) &&
+        connected = purple_signal_connect(handle, signal, plugin, PURPLE_CALLBACK(displayedMessage), nullptr) &&
                     connected;
     connected = purple_signal_connect(purple_conversations_get_handle(), "cleared-message-history", plugin,
-                                      PURPLE_CALLBACK(historyCleared), NULL) && connected;
+                                      PURPLE_CALLBACK(historyCleared), nullptr) && connected;
     if (!connected)
         purple_debug_warning(config::pluginId, "Cannot follow Pidgin's conversation window\n");
     if (!LOOK_UP(pidgin_blist_get_handle) ||
-        !purple_signal_connect(p_pidgin_blist_get_handle(), "drawing-buddy", plugin, PURPLE_CALLBACK(drawingBuddy), NULL))
+        !purple_signal_connect(p_pidgin_blist_get_handle(), "drawing-buddy", plugin, PURPLE_CALLBACK(drawingBuddy), nullptr))
         purple_debug_warning(config::pluginId, "Cannot mark contacts in Pidgin's buddy list\n");
     connectPaste(plugin);
     connectPopup();
@@ -774,7 +774,7 @@ static GtkTextTag *getReactionTag(GtkTextBuffer *buffer, const std::string &key)
 {
     std::string name = REACTION_TAG_PREFIX + key;
     GtkTextTag *tag  = p_gtk_text_tag_table_lookup(p_gtk_text_buffer_get_tag_table(buffer), name.c_str());
-    return tag ? tag : p_gtk_text_buffer_create_tag(buffer, name.c_str(), NULL);
+    return tag ? tag : p_gtk_text_buffer_create_tag(buffer, name.c_str(), nullptr);
 }
 
 // The buttons go right after the message, the reactions after them; each from the end of what is
@@ -811,7 +811,7 @@ static void showMessageArea(PurpleConversation *conv, MessageId messageId, MarkK
     }
     // Right gravity only while the line goes in: kept so, at the end of the tab, the mark would go
     // past the next message too, which a change of reactions would then take away
-    GtkTextMark *after = p_gtk_text_buffer_create_mark(buffer, NULL, &end, FALSE);
+    GtkTextMark *after = p_gtk_text_buffer_create_mark(buffer, nullptr, &end, FALSE);
     // Into the tab only, not the log; each reaction in turn, to be tagged as such
     bool tagged = p_gtk_text_buffer_get_tag_table && p_gtk_text_tag_table_lookup && p_gtk_text_buffer_create_tag &&
                   p_gtk_text_buffer_apply_tag;
@@ -1033,7 +1033,7 @@ void runAfterDrawing(std::function<void()> then)
 {
     // Of lower priority than GTK's laying out and drawing of what changed
     if (g_pidginUi)
-        g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, drawn, new AfterDrawing{std::move(then)}, NULL);
+        g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, drawn, new AfterDrawing{std::move(then)}, nullptr);
     else
         then();
 }
@@ -1107,7 +1107,7 @@ static int storeClipboardPicture(GtkWidget *widget)
     gsize      size   = 0;
     GError    *error  = nullptr;
     int        id     = 0;
-    if (pixbuf && p_gdk_pixbuf_save_to_buffer(pixbuf, &data, &size, "png", &error, NULL)) {
+    if (pixbuf && p_gdk_pixbuf_save_to_buffer(pixbuf, &data, &size, "png", &error, nullptr)) {
         // The store takes the data
         id = purple_imgstore_add_with_id(data, size, "clipboard.png");
         purple_debug_misc(config::pluginId, "Pasted a picture of %zu bytes\n", size_t(size));
@@ -1288,7 +1288,7 @@ int makeStandInPicture(const std::string &lowGrade, int width, int height, bool 
     const char *name;
     if (pixbuf) {
         // Blurred as it is, JPEG keeps it small, and is quick to make
-        saved = p_gdk_pixbuf_save_to_buffer(pixbuf, &data, &size, "jpeg", nullptr, "quality", "60", NULL);
+        saved = p_gdk_pixbuf_save_to_buffer(pixbuf, &data, &size, "jpeg", nullptr, "quality", "60", nullptr);
         name  = "preview.jpg";
     } else {
         pixbuf = p_gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, width, height);
@@ -1296,7 +1296,7 @@ int makeStandInPicture(const std::string &lowGrade, int width, int height, bool 
             return 0;
         p_gdk_pixbuf_fill(pixbuf, clear ? 0 : 0xC0C0C0FF);
         // One colour, which PNG makes next to nothing of
-        saved = p_gdk_pixbuf_save_to_buffer(pixbuf, &data, &size, "png", nullptr, NULL);
+        saved = p_gdk_pixbuf_save_to_buffer(pixbuf, &data, &size, "png", nullptr, nullptr);
         name  = "preview.png";
     }
     p_g_object_unref(pixbuf);
@@ -1802,7 +1802,7 @@ static void connectPaste(gpointer plugin)
         purple_debug_warning(config::pluginId, "Cannot show thumbnails of pasted files: some of GTK is not found\n");
     }
     purple_signal_connect(p_pidgin_conversations_get_handle(), "conversation-displayed", plugin,
-                          PURPLE_CALLBACK(watchConversation), NULL);
+                          PURPLE_CALLBACK(watchConversation), nullptr);
     for (GList *item = purple_get_conversations(); item; item = item->next) {
         PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
         if (getIMHtml(conv))
@@ -1828,9 +1828,9 @@ static void disconnectPaste()
 
 static void setEntryText(GtkWidget *entry, const char *html)
 {
-    p_gtk_imhtml_delete(reinterpret_cast<GtkIMHtml *>(entry), NULL, NULL);
+    p_gtk_imhtml_delete(reinterpret_cast<GtkIMHtml *>(entry), nullptr, nullptr);
     if (html && *html)
-        p_gtk_imhtml_append_text_with_images(reinterpret_cast<GtkIMHtml *>(entry), html, GtkIMHtmlOptions(0), NULL);
+        p_gtk_imhtml_append_text_with_images(reinterpret_cast<GtkIMHtml *>(entry), html, GtkIMHtmlOptions(0), nullptr);
     thumbnailPlaceholders(entry);
 }
 
@@ -1838,7 +1838,7 @@ static void setEntryText(GtkWidget *entry, const char *html)
 static void tintEntry(GtkWidget *entry, bool tint)
 {
     if (!tint) {
-        p_gtk_widget_modify_base(entry, GTK_STATE_NORMAL, NULL);
+        p_gtk_widget_modify_base(entry, GTK_STATE_NORMAL, nullptr);
         return;
     }
     GdkColor base   = entry->style->base[GTK_STATE_NORMAL];
@@ -1896,7 +1896,7 @@ void showEditOutcome(PurpleConversation *conv, const std::string &html)
     showEditNotice(conv, html, EDIT_OUTCOME);
 }
 
-static gboolean entryKeyPressed(GtkWidget *entry, GdkEventKey *event, gpointer conv)
+static gboolean entryKeyPressed(GtkWidget *, GdkEventKey *event, gpointer conv)
 {
     auto *state = static_cast<EntryEditState *>(purple_conversation_get_data(static_cast<PurpleConversation *>(conv),
                                                                             ENTRY_EDIT_KEY));
@@ -1923,7 +1923,7 @@ bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::
         state->draft = draft ? draft : "";
         g_free(draft);
         state->keyHandler = p_g_signal_connect_data(entry, "key-press-event", G_CALLBACK(entryKeyPressed), conv,
-                                                    NULL, GConnectFlags(0));
+                                                    nullptr, GConnectFlags(0));
         purple_conversation_set_data(conv, ENTRY_EDIT_KEY, state);
     }
     state->edit      = edit;
@@ -1975,7 +1975,7 @@ bool endEntryEdit(PurpleConversation *conv, EntryEdit *edit)
         return false;
     if (edit)
         *edit = state->edit;
-    purple_conversation_set_data(conv, ENTRY_EDIT_KEY, NULL);
+    purple_conversation_set_data(conv, ENTRY_EDIT_KEY, nullptr);
     removeEditNotice(conv, EDIT_NOTICE);
     GtkWidget *entry = getEntry(conv);
     if (entry) {
@@ -2122,12 +2122,12 @@ bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId)
     return true;
 }
 
-static void itemActivated(GtkWidget *item, gpointer data)
+static void itemActivated(GtkWidget *, gpointer data)
 {
     (*static_cast<std::function<void()> *>(data))();
 }
 
-static void deleteAction(gpointer data, GClosure *closure)
+static void deleteAction(gpointer data, GClosure *)
 {
     delete static_cast<std::function<void()> *>(data);
 }
@@ -3315,7 +3315,7 @@ void scrollToMessageLater(PurpleConversation *conv, MessageId messageId)
 {
     if (getIMHtml(conv))
         g_timeout_add_full(G_PRIORITY_LOW, SCROLLED_CHECK_MS, scrollToMessageTop,
-                           new ScrollToMessage{conv, messageId}, NULL);
+                           new ScrollToMessage{conv, messageId}, nullptr);
 }
 
 namespace {
@@ -3373,7 +3373,7 @@ static gboolean tabsPressed(GSignalInvocationHint *, guint paramCount, const GVa
         if (!menu)
             break;
         PidginConversation *gtkconv = p_pidgin_conv_window_get_gtkconv_at_index(
-            win, p_pidgin_conv_get_tab_at_xy(win, event->x_root, event->y_root, NULL));
+            win, p_pidgin_conv_get_tab_at_xy(win, event->x_root, event->y_root, nullptr));
         PurpleConversation *conv    = gtkconv ? gtkconv->active_conv : nullptr;
         bool show = conv && !strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)),
                                     config::pluginId) && getTabEnd(conv).valid();
@@ -3384,7 +3384,7 @@ static gboolean tabsPressed(GSignalInvocationHint *, guint paramCount, const GVa
             p_gtk_menu_shell_append(reinterpret_cast<GtkMenuShell *>(menu), separator);
             latest = p_gtk_menu_item_new_with_label(g_latestLabel.c_str());
             p_gtk_menu_shell_append(reinterpret_cast<GtkMenuShell *>(menu), latest);
-            p_g_signal_connect_data(latest, "activate", G_CALLBACK(latestChosen), menu, NULL, GConnectFlags(0));
+            p_g_signal_connect_data(latest, "activate", G_CALLBACK(latestChosen), menu, nullptr, GConnectFlags(0));
             p_g_object_set_data(G_OBJECT(menu), LATEST_ITEM_KEY, latest);
             p_g_object_set_data(G_OBJECT(menu), LATEST_SEPARATOR_KEY, separator);
         }
@@ -3474,9 +3474,9 @@ void keepViewLater(PurpleConversation *conv)
     GtkTextIter  top;
     p_gtk_text_view_get_visible_rect(view, &rect);
     p_gtk_text_view_get_iter_at_location(view, &top, rect.x, rect.y);
-    GtkTextMark *mark = p_gtk_text_buffer_create_mark(imhtml->text_buffer, NULL, &top, TRUE);
+    GtkTextMark *mark = p_gtk_text_buffer_create_mark(imhtml->text_buffer, nullptr, &top, TRUE);
     purple_conversation_set_data(conv, KEEPING_VIEW_KEY, conv);
-    g_timeout_add_full(G_PRIORITY_LOW, SCROLLED_CHECK_MS, keptViewBack, new KeptView{conv, mark}, NULL);
+    g_timeout_add_full(G_PRIORITY_LOW, SCROLLED_CHECK_MS, keptViewBack, new KeptView{conv, mark}, nullptr);
 }
 
 // A tab's text scrolled to its top: not again until it is scrolled down from there, nor while it
@@ -4025,11 +4025,11 @@ static void connectShown(gpointer plugin)
         return;
     }
     purple_signal_connect(p_pidgin_conversations_get_handle(), "conversation-switched", plugin,
-                          PURPLE_CALLBACK(conversationSwitched), NULL);
+                          PURPLE_CALLBACK(conversationSwitched), nullptr);
     purple_signal_connect(p_pidgin_conversations_get_handle(), "conversation-displayed", plugin,
-                          PURPLE_CALLBACK(conversationSwitched), NULL);
+                          PURPLE_CALLBACK(conversationSwitched), nullptr);
     purple_signal_connect(purple_conversations_get_handle(), "deleting-conversation", plugin,
-                          PURPLE_CALLBACK(deletingConversation), NULL);
+                          PURPLE_CALLBACK(deletingConversation), nullptr);
     // Those that have been taken to be shown so far, which most are not
     for (GList *item = purple_get_conversations(); item; item = item->next) {
         PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
@@ -4281,12 +4281,12 @@ bool chooseFromList(const std::string &title, const std::string &prompt, const s
 
 #else
 
-void pidginUiLoad(PurplePlugin *plugin)
+void pidginUiLoad(PurplePlugin *)
 {
 }
 
-bool chooseFromList(const std::string &title, const std::string &prompt, const std::vector<std::string> &labels,
-                    std::function<void(const std::vector<int> &indices)> chosen)
+bool chooseFromList(const std::string &, const std::string &, const std::vector<std::string> &,
+                    std::function<void(const std::vector<int> &indices)>)
 {
     return false;
 }
@@ -4295,7 +4295,7 @@ void pidginUiUnload()
 {
 }
 
-void setReactionClickHandler(ReactionClickHandler handler)
+void setReactionClickHandler(ReactionClickHandler)
 {
 }
 
@@ -4309,12 +4309,12 @@ unsigned getTextLineHeight()
     return 0;
 }
 
-int makeStandInPicture(const std::string &lowGrade, int width, int height, bool clear)
+int makeStandInPicture(const std::string &, int, int, bool)
 {
     return 0;
 }
 
-MessageMarkScope::MessageMarkScope(MessageId messageId, const char *editNote, bool anew, bool markChanges)
+MessageMarkScope::MessageMarkScope(MessageId, const char *, bool, bool)
 {
 }
 
@@ -4322,57 +4322,57 @@ MessageMarkScope::~MessageMarkScope()
 {
 }
 
-void showMessageReactions(PurpleConversation *conv, MessageId messageId, const std::vector<ShownReaction> &reactions)
+void showMessageReactions(PurpleConversation *, MessageId, const std::vector<ShownReaction> &)
 {
 }
 
-void showMessageButtons(PurpleConversation *conv, MessageId messageId, const std::vector<ShownReaction> &buttons)
+void showMessageButtons(PurpleConversation *, MessageId, const std::vector<ShownReaction> &)
 {
 }
 
-void setReactionTipHandler(ReactionTipHandler handler)
+void setReactionTipHandler(ReactionTipHandler)
 {
 }
 
-void refreshReactionTip(PurpleConversation *conv)
+void refreshReactionTip(PurpleConversation *)
 {
 }
 
-bool readPidginClipboard(PurpleConversation *conv, ClipboardContent &content)
-{
-    return false;
-}
-
-void setPastedHandler(PastedHandler handler)
-{
-}
-
-void pasteIntoEntryLater(PurpleConversation *conv, const std::vector<PastedPlaceholder> &placeholders)
-{
-}
-
-
-bool beginEntryEdit(PurpleConversation *conv, const EntryEdit &edit, const std::string &text,
-                    const std::string &notice, std::function<void()> cancelled)
+bool readPidginClipboard(PurpleConversation *, ClipboardContent &)
 {
     return false;
 }
 
-bool endEntryEdit(PurpleConversation *conv, EntryEdit *edit)
+void setPastedHandler(PastedHandler)
+{
+}
+
+void pasteIntoEntryLater(PurpleConversation *, const std::vector<PastedPlaceholder> &)
+{
+}
+
+
+bool beginEntryEdit(PurpleConversation *, const EntryEdit &, const std::string &,
+                    const std::string &, std::function<void()>)
 {
     return false;
 }
 
-void showEditOutcome(PurpleConversation *conv, const std::string &html)
-{
-}
-
-bool isEntryEditing(PurpleConversation *conv, MessageId messageId)
+bool endEntryEdit(PurpleConversation *, EntryEdit *)
 {
     return false;
 }
 
-bool canRedrawConversation(PurpleConversation *conv)
+void showEditOutcome(PurpleConversation *, const std::string &)
+{
+}
+
+bool isEntryEditing(PurpleConversation *, MessageId)
+{
+    return false;
+}
+
+bool canRedrawConversation(PurpleConversation *)
 {
     return false;
 }
@@ -4382,11 +4382,11 @@ void presentConversation(PurpleConversation *conv)
     purple_conversation_present(conv);
 }
 
-void appendTabLine(PurpleConversation *conv, const std::string &html, MessageId messageId)
+void appendTabLine(PurpleConversation *, const std::string &, MessageId)
 {
 }
 
-void startProgress(PurpleConversation *conv, const std::string &html, bool atTop)
+void startProgress(PurpleConversation *, const std::string &, bool)
 {
 }
 
@@ -4395,153 +4395,153 @@ void runAfterDrawing(std::function<void()> then)
     then();
 }
 
-void stopProgress(PurpleConversation *conv)
+void stopProgress(PurpleConversation *)
 {
 }
 
-void updateProgress(PurpleConversation *conv, const std::string &html)
+void updateProgress(PurpleConversation *, const std::string &)
 {
 }
 
-bool canReplaceMessage(PurpleConversation *conv, MessageId messageId)
-{
-    return false;
-}
-
-bool canMarkChanges(PurpleConversation *conv, MessageId messageId, bool &marked)
+bool canReplaceMessage(PurpleConversation *, MessageId)
 {
     return false;
 }
 
-void setChangesMarked(PurpleConversation *conv, MessageId messageId, bool marked)
+bool canMarkChanges(PurpleConversation *, MessageId, bool &)
+{
+    return false;
+}
+
+void setChangesMarked(PurpleConversation *, MessageId, bool)
 {
 }
 
-void strikeOutMessage(PurpleConversation *conv, MessageId messageId)
+void strikeOutMessage(PurpleConversation *, MessageId)
 {
 }
 
-void removeMessage(PurpleConversation *conv, MessageId messageId)
+void removeMessage(PurpleConversation *, MessageId)
 {
 }
 
-MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId)
+MessageMarks findMessageMarks(PurpleConversation *, MessageId)
 {
     return MessageMarks();
 }
 
-void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId)
+void renameMessageMarks(PurpleAccount *, MessageId, MessageId)
 {
 }
 
-bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId)
+bool scrollToMessage(PidginIMHtml *, MessageId)
 {
     return false;
 }
 
-void setMessagePopupHandler(MessagePopupHandler handler)
+void setMessagePopupHandler(MessagePopupHandler)
 {
 }
 
-void setBuddyMarkHandler(BuddyMarkHandler handler, const char *mark)
+void setBuddyMarkHandler(BuddyMarkHandler, const char *)
 {
 }
 
-MessageId findFirstMessage(PurpleConversation *conv)
+MessageId findFirstMessage(PurpleConversation *)
 {
     return MessageId();
 }
 
-void scrollToMessageLater(PurpleConversation *conv, MessageId messageId)
+void scrollToMessageLater(PurpleConversation *, MessageId)
 {
 }
 
-void setTopReachedHandler(TopReachedHandler handler)
+void setTopReachedHandler(TopReachedHandler)
 {
 }
 
-unsigned countTabLines(PurpleConversation *conv)
+unsigned countTabLines(PurpleConversation *)
 {
     return 0;
 }
 
-MessageId findMessageAfter(PurpleConversation *conv, MessageId messageId)
+MessageId findMessageAfter(PurpleConversation *, MessageId)
 {
     return MessageId();
 }
 
-MessageId findLastMessage(PurpleConversation *conv)
+MessageId findLastMessage(PurpleConversation *)
 {
     return MessageId();
 }
 
-bool trimTab(PurpleConversation *conv, unsigned maxLines, bool fromTop, MessageId keep)
+bool trimTab(PurpleConversation *, unsigned, bool, MessageId)
 {
     return false;
 }
 
-void setTabEnd(PurpleConversation *conv, MessageId messageId)
+void setTabEnd(PurpleConversation *, MessageId)
 {
 }
 
-MessageId getTabEnd(PurpleConversation *conv)
+MessageId getTabEnd(PurpleConversation *)
 {
     return MessageId();
 }
 
-void hideMessage(PurpleConversation *conv, MessageId messageId)
+void hideMessage(PurpleConversation *, MessageId)
 {
 }
 
-void keepViewLater(PurpleConversation *conv)
+void keepViewLater(PurpleConversation *)
 {
 }
 
-void setBottomReachedHandler(BottomReachedHandler handler)
+void setBottomReachedHandler(BottomReachedHandler)
 {
 }
 
-void setLatestAskedHandler(LatestAskedHandler handler, const std::string &label)
+void setLatestAskedHandler(LatestAskedHandler, const std::string &)
 {
 }
 
-void fillOpenMenu(const OpenMenuRef &menu, const std::vector<MenuItem> &items)
+void fillOpenMenu(const OpenMenuRef &, const std::vector<MenuItem> &)
 {
 }
 
-void setPlaceholderHandler(PlaceholderHandler handler)
+void setPlaceholderHandler(PlaceholderHandler)
 {
 }
 
-void addLinkMenuItems(PidginWidget *menu, const std::vector<MenuItem> &items)
+void addLinkMenuItems(PidginWidget *, const std::vector<MenuItem> &)
 {
 }
 
-bool addLinkMessageMenu(PidginIMHtml *imhtml, PidginWidget *menu, MessageId messageId, bool fileGiven)
+bool addLinkMessageMenu(PidginIMHtml *, PidginWidget *, MessageId, bool)
 {
     return false;
 }
 
-PurpleConversation *getTabConversation(PidginIMHtml *imhtml)
+PurpleConversation *getTabConversation(PidginIMHtml *)
 {
     return nullptr;
 }
 
-bool copyFileToClipboard(const std::string &path, bool picture)
+bool copyFileToClipboard(const std::string &, bool)
 {
     return false;
 }
 
-bool copyTextToClipboard(const std::string &text)
+bool copyTextToClipboard(const std::string &)
 {
     return false;
 }
 
-void setDraggedFileHandler(DraggedFileHandler handler)
+void setDraggedFileHandler(DraggedFileHandler)
 {
 }
 
-bool clearUnseen(PurpleConversation *conv)
+bool clearUnseen(PurpleConversation *)
 {
     return false;
 }
@@ -4551,25 +4551,25 @@ bool tracksShownConversations()
     return false;
 }
 
-bool isConversationShown(PurpleConversation *conv)
+bool isConversationShown(PurpleConversation *)
 {
     return true;
 }
 
-void setShownHandler(ShownHandler handler)
+void setShownHandler(ShownHandler)
 {
 }
 
-bool viewsMessages(PurpleConversation *conv)
+bool viewsMessages(PurpleConversation *)
 {
     return false;
 }
 
-void setViewedHandler(ViewedHandler handler)
+void setViewedHandler(ViewedHandler)
 {
 }
 
-void checkViewedLater(PurpleConversation *conv)
+void checkViewedLater(PurpleConversation *)
 {
 }
 

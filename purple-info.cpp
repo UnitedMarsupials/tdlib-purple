@@ -23,7 +23,7 @@ GList *getChatJoinInfo()
     pce->label = _("Chat ID (don't change):");
     pce->identifier = chatNameComponent;
     pce->required = FALSE;
-    GList *info = g_list_append (NULL, pce);
+    GList *info = g_list_append (nullptr, pce);
 
     pce = g_new0 (struct proto_chat_entry, 1);
     // TRANSLATOR: Info item *and* dialog item.
@@ -64,7 +64,7 @@ GHashTable *getChatComponents(const td::td_api::chat &chat)
     snprintf(name, sizeof(name)-1, "chat%" G_GINT64_FORMAT "", chat.id_);
     name[sizeof(name)-1] = '\0';
 
-    GHashTable *table = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *table = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(table, chatNameComponent, g_strdup(name));
     // The keys are not freed with this table
     for (char *key: {joinStringKey, nameKey, typeKey})
@@ -140,7 +140,7 @@ unsigned getAutoDownloadLimitKb(PurpleAccount *account)
         // TRANSLATOR: Buddy-window error message, argument will be a "number".
         std::string message = formatMessage(_("Invalid auto-download limit '{}', resetting to default"), dlLimitStr);
         // TRANSLATOR: Title of a buddy-window error message
-        purple_notify_warning(account, _("Download limit"), message.c_str(), NULL);
+        purple_notify_warning(account, _("Download limit"), message.c_str(), nullptr);
         purple_account_set_string(account, AccountOptions::AutoDownloadLimit,
                                   AccountOptions::AutoDownloadLimitDefault);
         dlLimit = atof(AccountOptions::AutoDownloadLimitDefault);
@@ -169,14 +169,13 @@ PurpleTdClient *getTdClient(PurpleAccount *account)
     PurpleConnection *connection = purple_account_get_connection(account);
     if (connection)
         return static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(connection));
-    else
-        return NULL;
+    return nullptr;
 }
 
 const char *getUiName()
 {
     GHashTable *ui_info = purple_core_get_ui_info();
-    if (ui_info == NULL)
+    if (ui_info == nullptr)
         return "";
     const char *name = static_cast<const char *>(g_hash_table_lookup(ui_info, "name"));
     return name ? name : "";
@@ -186,8 +185,7 @@ const char *AccountOptions::DownloadBehaviourDefault()
 {
     if (!strcasecmp(getUiName(), "pidgin"))
         return AccountOptions::DownloadBehaviourHyperlink;
-    else
-        return AccountOptions::DownloadBehaviourStandard;
+    return AccountOptions::DownloadBehaviourStandard;
 }
 
 bool canDisableReadReceipts()
@@ -201,6 +199,5 @@ bool isReadReceiptsEnabled(PurpleAccount *account)
     if (canDisableReadReceipts())
         return (purple_account_get_bool(account, AccountOptions::ReadReceipts,
                                         AccountOptions::ReadReceiptsDefault) != FALSE);
-    else
-        return true;
+    return true;
 }

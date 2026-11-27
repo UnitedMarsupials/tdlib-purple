@@ -114,7 +114,7 @@ TEST_F(SupergroupTest, AddSupergroupChatAtLogin_WithMemberList_OpenChatAfterFull
     admins->members_.push_back(nullptr);
     loginWithSupergroup(std::move(fullInfo), std::move(members), std::move(admins));
 
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
     pluginInfo().join_chat(connection, components);
     g_hash_table_destroy(components);
@@ -148,9 +148,9 @@ TEST_F(SupergroupTest, AddSupergroupChatAtLogin_WithMemberList_OpenChatAfterFull
 
 TEST_F(SupergroupTest, ExistingSupergroupChatAtLogin)
 {
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
-    purple_blist_add_chat(purple_chat_new(account, groupChatTitle.c_str(), components), NULL, NULL);
+    purple_blist_add_chat(purple_chat_new(account, groupChatTitle.c_str(), components), nullptr, nullptr);
     prpl.discardEvents();
 
     auto chat = makeChat(
@@ -184,9 +184,9 @@ TEST_F(SupergroupTest, ExistingSupergroupReceiveMessageAtLogin_WithMemberList_Op
     constexpr int32_t date         = 12345;
     constexpr int     purpleChatId = 1;
 
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
-    purple_blist_add_chat(purple_chat_new(account, groupChatTitle.c_str(), components), NULL, NULL);
+    purple_blist_add_chat(purple_chat_new(account, groupChatTitle.c_str(), components), nullptr, nullptr);
     prpl.discardEvents();
 
     auto chat = makeChat(
@@ -314,13 +314,13 @@ TEST_F(SupergroupTest, DeleteSupergroup_Fail)
 
     // With others in it: for everyone, or only for us, is asked
     nodeMenuAction(&chat->node, actions, "Delete group");
-    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 3));
+    prpl.verifyEvents(RequestActionEvent(connection, account, nullptr, nullptr, 3));
     prpl.requestedAction("_Cancel");
     tgl.verifyNoRequests();
     prpl.verifyNoEvents();
 
     nodeMenuAction(&chat->node, actions, "Delete group");
-    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 3));
+    prpl.verifyEvents(RequestActionEvent(connection, account, nullptr, nullptr, 3));
     prpl.requestedAction("For _everyone");
     {
         auto files = make_object<optimizeStorage>();
@@ -354,7 +354,7 @@ TEST_F(SupergroupTest, DeleteOwnSupergroupForSelf)
 
     // Kept for the others: we leave it, with nothing of it kept here
     nodeMenuAction(&chat->node, actions, "Delete group");
-    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 3));
+    prpl.verifyEvents(RequestActionEvent(connection, account, nullptr, nullptr, 3));
     prpl.requestedAction("For _me only");
     {
         auto files = make_object<optimizeStorage>();
@@ -382,13 +382,13 @@ TEST_F(SupergroupTest, LeaveSupergroup)
     GList *actions = pluginInfo().blist_node_menu(&chat->node);
 
     nodeMenuAction(&chat->node, actions, "Leave group");
-    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
+    prpl.verifyEvents(RequestActionEvent(connection, account, nullptr, nullptr, 2));
     prpl.requestedAction("_No");
     tgl.verifyNoRequests();
     prpl.verifyNoEvents();
 
     nodeMenuAction(&chat->node, actions, "Leave group");
-    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
+    prpl.verifyEvents(RequestActionEvent(connection, account, nullptr, nullptr, 2));
     prpl.requestedAction("_Yes");
     // Only left, nothing of it deleted
     tgl.verifyRequest(leaveChat(groupChatId));
@@ -413,7 +413,7 @@ TEST_F(SupergroupTest, LeaveSupergroup)
     ));
     tgl.verifyRequest(viewMessages(groupChatId, {messageId}, nullptr, true));
     prpl.verifyEvents(
-        AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), NULL),
+        AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), nullptr),
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
         ConvSetTitleEvent(groupChatPurpleName, groupChatTitle),
         ChatSetTopicEvent(groupChatPurpleName, "", ""),
@@ -531,7 +531,7 @@ TEST_F(SupergroupTest, JoinByLink_InvalidLink1)
 {
     login();
 
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup(""));
     g_hash_table_insert(components, (char *)"link", g_strdup("http://example.com"));
 
@@ -546,7 +546,7 @@ TEST_F(SupergroupTest, JoinByLink_InvalidLink2)
 {
     login();
 
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup(""));
     g_hash_table_insert(components, (char *)"link", g_strdup("https://t.me/invalid/link"));
 
@@ -566,12 +566,12 @@ TEST_F(SupergroupTest, JoinByPublicLink1)
     login();
 
     // As if "Add chat" function in pidgin was used
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup(""));
     g_hash_table_insert(components, (char *)"link", g_strdup(LINK));
 
     PurpleChat *chat = purple_chat_new(account, "old chat", components);
-    purple_blist_add_chat(chat, NULL, NULL);
+    purple_blist_add_chat(chat, nullptr, nullptr);
     prpl.discardEvents();
 
     // And now that chat is being joined
@@ -594,7 +594,7 @@ TEST_F(SupergroupTest, JoinByPublicLink1)
     tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusMember>(), 2)));
     tgl.update(makeUpdateChatList(groupChatId, make_object<chatListMain>()));
     prpl.verifyEvents(AddChatEvent(
-        groupChatPurpleName, groupChatTitle, account, NULL, NULL
+        groupChatPurpleName, groupChatTitle, account, nullptr, nullptr
     ));
     tgl.verifyRequests({
         make_object<getSupergroupFullInfo>(groupId),
@@ -619,7 +619,7 @@ TEST_F(SupergroupTest, JoinByPublicLink2)
 {
     login();
 
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup(""));
     g_hash_table_insert(components, (char *)"link", g_strdup("https://t.me/s/groupname"));
 
@@ -632,7 +632,7 @@ TEST_F(SupergroupTest, JoinByPublicLink_SearchFail)
 {
     login();
 
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup(""));
     g_hash_table_insert(components, (char *)"link", g_strdup("https://t.me/s/groupname"));
 
@@ -649,7 +649,7 @@ TEST_F(SupergroupTest, JoinByPublicLink_NotGroupChat)
 {
     login();
 
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup(""));
     g_hash_table_insert(components, (char *)"link", g_strdup("https://t.me/s/groupname"));
 
@@ -675,7 +675,7 @@ TEST_F(SupergroupTest, JoinByPublicLink_JoinFail)
 {
     login();
 
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup(""));
     g_hash_table_insert(components, (char *)"link", g_strdup("https://t.me/s/groupname"));
 
@@ -847,7 +847,7 @@ TEST_F(SupergroupTest, ForeignChannel)
     // ...until we join it
     tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusMember>(), 2)));
     tgl.update(makeUpdateChatListMain(groupChatId));
-    prpl.verifyEvents(AddChatEvent(groupChatPurpleName, groupChatTitle, account, NULL, NULL));
+    prpl.verifyEvents(AddChatEvent(groupChatPurpleName, groupChatTitle, account, nullptr, nullptr));
     tgl.verifyRequests({
         make_object<getSupergroupFullInfo>(groupId),
         make_object<getSupergroupMembers>(groupId, make_object<supergroupMembersFilterRecent>(), 0, 200),
@@ -908,7 +908,7 @@ TEST_F(SupergroupTest, UnjoinedChannelPhotoNotDownloaded)
     tgl.update(make_object<updateNewMessage>(std::move(message)));
     tgl.verifyRequest(viewMessages(groupChatId, {messageId}, nullptr, true));
     prpl.verifyEvents(
-        AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), NULL),
+        AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), nullptr),
         ServGotJoinedChatEvent(connection, 1, groupChatPurpleName, groupChatTitle),
         ConvSetTitleEvent(groupChatPurpleName, groupChatTitle),
 #ifndef NoPidgin
@@ -925,13 +925,13 @@ TEST_F(SupergroupTest, UnjoinedChannelPhotoNotDownloaded)
 TEST_F(SupergroupTest, LoggedUnjoinedChannel)
 {
     gchar *logDir = g_build_filename(purple_user_dir(), "logs", "telegram", ("+" + selfPhoneNumber).c_str(),
-                                     (groupChatPurpleName + ".chat").c_str(), NULL);
+                                     (groupChatPurpleName + ".chat").c_str(), nullptr);
     ASSERT_EQ(0, g_mkdir_with_parents(logDir, 0700));
-    gchar *logFile = g_build_filename(logDir, "2026-11-24.120000-0500EST.html", NULL);
-    ASSERT_TRUE(g_file_set_contents(logFile, "<html></html>", -1, NULL));
+    gchar *logFile = g_build_filename(logDir, "2026-11-24.120000-0500EST.html", nullptr);
+    ASSERT_TRUE(g_file_set_contents(logFile, "<html></html>", -1, nullptr));
     // An older version's, named by a title that begins like the chat's name: not the chat's
     gchar *titledDir = g_build_filename(purple_user_dir(), "logs", "telegram", ("+" + selfPhoneNumber).c_str(),
-                                        (groupChatPurpleName + "-notes.chat").c_str(), NULL);
+                                        (groupChatPurpleName + "-notes.chat").c_str(), nullptr);
     ASSERT_EQ(0, g_mkdir_with_parents(titledDir, 0700));
     login();
     tgl.verifyRequest(getChat(groupChatId));
@@ -945,13 +945,13 @@ TEST_F(SupergroupTest, LoggedUnjoinedChannel)
     )));
     prpl.verifyNoEvents();
     tgl.reply(makeChat(groupChatId, make_object<chatTypeSupergroup>(groupId, true), groupChatTitle, nullptr, 0, 0, 0));
-    prpl.verifyEvents(AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), NULL));
+    prpl.verifyEvents(AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), nullptr));
     PurpleChat *purpleChat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
     ASSERT_NE(nullptr, purpleChat);
     ASSERT_TRUE(purple_blist_node_get_flags(&purpleChat->node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
 
     // Opened from it, the channel is shown, to be read
-    GHashTable *components = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full(g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup(groupChatPurpleName.c_str()));
     pluginInfo().join_chat(connection, components);
     g_hash_table_destroy(components);
@@ -963,7 +963,7 @@ TEST_F(SupergroupTest, LoggedUnjoinedChannel)
     GList *actions = pluginInfo().blist_node_menu(&purpleChat->node);
     nodeMenuAction(&purpleChat->node, actions, "Delete group");
     g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
-    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
+    prpl.verifyEvents(RequestActionEvent(connection, account, nullptr, nullptr, 2));
     prpl.requestedAction("_Yes");
     {
         auto files = make_object<optimizeStorage>();
@@ -1008,7 +1008,7 @@ TEST_F(SupergroupTest, UnjoinedChannelShownOnRequest)
     ASSERT_NE(nullptr, notJoined);
     ASSERT_TRUE(purple_blist_node_get_flags(&notJoined->node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
     prpl.verifyEvents(
-        AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), NULL),
+        AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), nullptr),
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
         ConvSetTitleEvent(groupChatPurpleName, groupChatTitle),
         ServGotChatEvent(connection, purpleChatId, "Channel post", "Hello", PURPLE_MESSAGE_RECV, date)
@@ -1035,7 +1035,7 @@ TEST_F(SupergroupTest, UnjoinedChannelShownOnRequest)
     // Joined, it is ours to keep, and moves to where joined chats are
     tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusMember>(), 2)));
     ASSERT_FALSE(purple_blist_node_get_flags(&purpleChat->node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
-    prpl.verifyEvents(AddChatEvent(groupChatPurpleName, newTitle, account, NULL, NULL));
+    prpl.verifyEvents(AddChatEvent(groupChatPurpleName, newTitle, account, nullptr, nullptr));
 }
 
 // Moved out of "Telegram: not joined" into a group of ours, a channel is joined, and kept there
@@ -1057,7 +1057,7 @@ TEST_F(SupergroupTest, UnjoinedChannelMovedJoined)
     tgl.update(make_object<updateNewMessage>(std::move(message)));
     tgl.verifyRequest(viewMessages(groupChatId, {messageId}, nullptr, true));
     prpl.verifyEvents(
-        AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), NULL),
+        AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), nullptr),
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
         ConvSetTitleEvent(groupChatPurpleName, groupChatTitle),
         ServGotChatEvent(connection, purpleChatId, "Channel post", "Hello", PURPLE_MESSAGE_RECV, date)
@@ -1065,8 +1065,8 @@ TEST_F(SupergroupTest, UnjoinedChannelMovedJoined)
     PurpleChat *purpleChat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
     ASSERT_NE(nullptr, purpleChat);
 
-    purple_blist_add_chat(purpleChat, &standardPurpleGroup, NULL);
-    prpl.verifyEvents(AddChatEvent(groupChatPurpleName, groupChatTitle, account, &standardPurpleGroup, NULL));
+    purple_blist_add_chat(purpleChat, &standardPurpleGroup, nullptr);
+    prpl.verifyEvents(AddChatEvent(groupChatPurpleName, groupChatTitle, account, &standardPurpleGroup, nullptr));
     tgl.verifyRequest(joinChat(groupChatId));
     // Not kept until joined, which may be refused
     EXPECT_TRUE(purple_blist_node_get_flags(&purpleChat->node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
@@ -1103,7 +1103,7 @@ TEST_F(SupergroupTest, UnjoinedChannelMovedAsked)
     PurpleChat *purpleChat = purple_blist_find_chat(account, groupChatPurpleName.c_str());
     ASSERT_NE(nullptr, purpleChat);
 
-    purple_blist_add_chat(purpleChat, &standardPurpleGroup, NULL);
+    purple_blist_add_chat(purpleChat, &standardPurpleGroup, nullptr);
     prpl.discardEvents();
     tgl.verifyRequest(joinChat(groupChatId));
     tgl.reply(make_object<chatJoinResultRequestSent>());
@@ -1135,11 +1135,11 @@ TEST_F(SupergroupTest, UnjoinedChannelMovedRefused)
     ASSERT_NE(nullptr, purpleChat);
     PurpleGroup *notJoined = purple_chat_get_group(purpleChat);
 
-    purple_blist_add_chat(purpleChat, &standardPurpleGroup, NULL);
+    purple_blist_add_chat(purpleChat, &standardPurpleGroup, nullptr);
     prpl.discardEvents();
     tgl.verifyRequest(joinChat(groupChatId));
     tgl.reply(makeError(400, "Can't return to kicked from chat"));
-    prpl.verifyEvents(AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), NULL));
+    prpl.verifyEvents(AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), nullptr));
     tgl.verifyNoRequests();
     EXPECT_EQ(notJoined, purple_chat_get_group(purpleChat));
     EXPECT_TRUE(purple_blist_node_get_flags(&purpleChat->node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE);
@@ -1153,7 +1153,7 @@ TEST_F(SupergroupTest, UnjoinedChannelInSavedGroupNotJoined)
     constexpr int     purpleChatId = 1;
     login();
     purple_account_set_bool(account, "show-unjoined-chats", TRUE);
-    purple_blist_add_group(purple_group_new(notJoinedGroup()->name), NULL);
+    purple_blist_add_group(purple_group_new(notJoinedGroup()->name), nullptr);
 
     tgl.update(make_object<updateSupergroup>(makeSupergroup(groupId, make_object<chatMemberStatusLeft>(), 2)));
     tgl.update(make_object<updateNewChat>(makeChat(
@@ -1165,7 +1165,7 @@ TEST_F(SupergroupTest, UnjoinedChannelInSavedGroupNotJoined)
     tgl.update(make_object<updateNewMessage>(std::move(message)));
     tgl.verifyRequest(viewMessages(groupChatId, {messageId}, nullptr, true));
     prpl.verifyEvents(
-        AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), NULL),
+        AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), nullptr),
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
         ConvSetTitleEvent(groupChatPurpleName, groupChatTitle),
         ServGotChatEvent(connection, purpleChatId, "Channel post", "Hello", PURPLE_MESSAGE_RECV, date)
@@ -1252,15 +1252,15 @@ TEST_F(SupergroupTest, PublicNameSaved)
 TEST_F(SupergroupTest, UnknownChatLookedUp)
 {
     // In the buddy list from before, but not told of by TDLib
-    GHashTable *components = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full(g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup(groupChatPurpleName.c_str()));
     PurpleChat *purpleChat = purple_chat_new(account, groupChatTitle.c_str(), components);
-    purple_blist_add_chat(purpleChat, NULL, NULL);
+    purple_blist_add_chat(purpleChat, nullptr, nullptr);
     purple_blist_node_set_string(&purpleChat->node, "tdlib-public-name", "somechannel");
     prpl.discardEvents();
     login();
 
-    components = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
+    components = g_hash_table_new_full(g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup(groupChatPurpleName.c_str()));
     pluginInfo().join_chat(connection, components);
     g_hash_table_destroy(components);
@@ -1286,15 +1286,15 @@ TEST_F(SupergroupTest, UnknownChatLookedUp)
 
 TEST_F(SupergroupTest, UnknownChatTakenName)
 {
-    GHashTable *components = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full(g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup(groupChatPurpleName.c_str()));
     PurpleChat *purpleChat = purple_chat_new(account, groupChatTitle.c_str(), components);
-    purple_blist_add_chat(purpleChat, NULL, NULL);
+    purple_blist_add_chat(purpleChat, nullptr, nullptr);
     purple_blist_node_set_string(&purpleChat->node, "tdlib-public-name", "somechannel");
     prpl.discardEvents();
     login();
 
-    components = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
+    components = g_hash_table_new_full(g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup(groupChatPurpleName.c_str()));
     pluginInfo().join_chat(connection, components);
     g_hash_table_destroy(components);

@@ -89,7 +89,7 @@ TdTransceiver::TdTransceiver(PurpleTdClient *owner, PurpleAccount *account, Upda
         // For earlier versions, it have to be initialized before calling any
         // Glib or GTK+ functions.
         if (!g_thread_supported())
-            g_thread_init(NULL);
+            g_thread_init(nullptr);
 #endif
 
         m_pollThread = std::thread([this]() { pollThreadLoop(); });

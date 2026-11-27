@@ -294,8 +294,8 @@ protected:
 // Nothing that would play, but it starts the way WebM does
 std::string CustomEmojiReactionTest::makeWebmFile()
 {
-    char *path = NULL;
-    int   fd   = g_file_open_tmp("tdlib_test_XXXXXX", &path, NULL);
+    char *path = nullptr;
+    int   fd   = g_file_open_tmp("tdlib_test_XXXXXX", &path, nullptr);
     EXPECT_TRUE(fd >= 0);
     EXPECT_EQ(8, write(fd, "\x1A\x45\xDF\xA3webm", 8));
     ::close(fd);
@@ -345,9 +345,9 @@ TEST_F(CustomEmojiReactionTest, Webp)
     reactWithCustomEmoji();
     replyWithSticker(make_object<stickerFormatWebp>(), TEST_SOURCE_DIR "/test.webp");
     verifyReaction(linked(TEST_SOURCE_DIR "/test.webp", lastImage()), true);
-    gchar *data = NULL;
+    gchar *data = nullptr;
     gsize  size = 0;
-    ASSERT_TRUE(g_file_get_contents(TEST_SOURCE_DIR "/test.webp", &data, &size, NULL));
+    ASSERT_TRUE(g_file_get_contents(TEST_SOURCE_DIR "/test.webp", &data, &size, nullptr));
     g_free(data);
     ASSERT_EQ(size, lastImageSize());
 }
@@ -594,7 +594,7 @@ TEST_F(ReactionTest, ClickedOnLine)
 
     // The paid one is asked for, as from the menu, with nothing sent unless it is
     client->reactionClicked(conv, clicked, "p");
-    prpl.verifyEvents(RequestInputEvent(nullptr, account, NULL, NULL));
+    prpl.verifyEvents(RequestInputEvent(nullptr, account, nullptr, nullptr));
     prpl.inputCancel();
     tgl.verifyNoRequests();
 }

@@ -814,7 +814,7 @@ TEST_F(MessageLinkTest, ReportMessage)
     client->reportChat(chat, {message}, "spam");
     tgl.verifyRequest(reportChat(chatIds[0], "spam", {messageId}, ""));
     tgl.reply(makeReportTextRequired("spam2", true));
-    prpl.verifyEvents(RequestInputEvent(NULL, account, NULL, NULL));
+    prpl.verifyEvents(RequestInputEvent(nullptr, account, nullptr, nullptr));
     prpl.inputEnter("Sells things");
     tgl.verifyRequest(reportChat(chatIds[0], "spam2", {messageId}, "Sells things"));
     tgl.reply(make_object<reportChatResultOk>());
@@ -841,7 +841,7 @@ TEST(JumpLink, Parse)
 
 TEST(JumpLink, OnlyWhereEnabled)
 {
-    PurpleAccount *account = purple_account_new("+1234", NULL);
+    PurpleAccount *account = purple_account_new("+1234", nullptr);
     ASSERT_EQ(std::string("12:00"), linkToMessage(account, ChatId::fromString("-100"), MessageId::fromString("5"), "12:00"));
     setJumpLinksEnabled(true);
     ASSERT_EQ(std::string("<a href=\"tdlib-message://%2B1234/-100/5\">12:00</a>"),
@@ -1154,7 +1154,7 @@ TEST_F(MessageLinkTest, ForwardToAnotherAccount)
         purpleUserName(0), purpleUserName(0), "The message was not forwarded to Friend (other): the account is not connected",
         PURPLE_MESSAGE_ERROR, 0
     ));
-    other->gc = NULL;
+    other->gc = nullptr;
 }
 
 // Telegram's own links, handed to libpurple as by a web browser's handler for tg: links

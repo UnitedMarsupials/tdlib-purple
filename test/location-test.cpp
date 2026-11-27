@@ -33,7 +33,7 @@ TEST_F(LocationTest, Location)
     loginWithOneContact();
 
     // A decimal comma, as some locales would have it, would break the URI
-    std::string oldLocale = setlocale(LC_NUMERIC, NULL);
+    std::string oldLocale = setlocale(LC_NUMERIC, nullptr);
     if (!setlocale(LC_NUMERIC, "uk_UA.UTF-8"))
         GTEST_SKIP() << "No uk_UA.UTF-8 locale here";
     // For Pidgin, behind "file://", which its handler strips before passing the rest on

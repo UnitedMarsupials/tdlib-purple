@@ -5,7 +5,7 @@
 #include "receiving.h"
 #include "config.h"
 
-void updateKnownSecretChat(SecretChatId secretChatId, TdTransceiver &transceiver,
+void updateKnownSecretChat(SecretChatId secretChatId, TdTransceiver &,
                            TdAccountData &account)
 {
     const td::td_api::secretChat *secretChat = account.getSecretChat(secretChatId);
@@ -20,18 +20,18 @@ void updateKnownSecretChat(SecretChatId secretChatId, TdTransceiver &transceiver
     std::string alias = formatMessage(_("Secret chat: {}"), chat->title_);
 
     PurpleBuddy *buddy = purple_find_buddy(account.purpleAccount, purpleBuddyName.c_str());
-    if (buddy == NULL) {
+    if (buddy == nullptr) {
         purple_debug_misc(config::pluginId, "Adding buddy '%s' for secret chat %d with %s\n",
                           alias.c_str(), secretChatId.value(), chat->title_.c_str());
         buddy = purple_buddy_new(account.purpleAccount, purpleBuddyName.c_str(), alias.c_str());
-        purple_blist_add_buddy(buddy, NULL, NULL, NULL);
+        purple_blist_add_buddy(buddy, nullptr, nullptr, nullptr);
 
         // Don't bother updating the photo - only set it when creating secret chat
         const td::td_api::file *photo = chat->photo_ ? chat->photo_->small_.get() : nullptr;
         if (photo && photo->local_ && photo->local_->is_downloading_completed_) {
-            gchar  *img = NULL;
+            gchar  *img = nullptr;
             size_t  len;
-            GError *err = NULL;
+            GError *err = nullptr;
             g_file_get_contents(photo->local_->path_.c_str(), &img, &len, &err);
             if (err) {
                 purple_debug_warning(config::pluginId, "Failed to load photo %s for %s: %s\n",
@@ -40,7 +40,7 @@ void updateKnownSecretChat(SecretChatId secretChatId, TdTransceiver &transceiver
             } else {
                 purple_debug_info(config::pluginId, "Using downloaded photo for %s\n", purpleBuddyName.c_str());
                 purple_buddy_icons_set_for_user(account.purpleAccount, purpleBuddyName.c_str(),
-                                                img, len, NULL);
+                                                img, len, nullptr);
             }
         }
 
@@ -59,10 +59,10 @@ void updateKnownSecretChat(SecretChatId secretChatId, TdTransceiver &transceiver
 
     if (state == td::td_api::secretChatStateReady::ID)
         purple_prpl_got_user_status(account.purpleAccount, purpleBuddyName.c_str(),
-                                    purple_primitive_get_id_from_type(PURPLE_STATUS_AVAILABLE), NULL);
+                                    purple_primitive_get_id_from_type(PURPLE_STATUS_AVAILABLE), nullptr);
     else
         purple_prpl_got_user_status(account.purpleAccount, purpleBuddyName.c_str(),
-                                    purple_primitive_get_id_from_type(PURPLE_STATUS_OFFLINE), NULL);
+                                    purple_primitive_get_id_from_type(PURPLE_STATUS_OFFLINE), nullptr);
 }
 
 void updateSecretChat(td::td_api::object_ptr<td::td_api::secretChat> secretChat,

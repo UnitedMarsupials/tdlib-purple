@@ -31,8 +31,7 @@ const char *getCanonicalPhoneNumber(const char *s)
 {
     if (*s == '+')
         return s+1;
-    else
-        return s;
+    return s;
 }
 
 // The prefix, then digits and nothing else, as the plugin writes them
@@ -133,19 +132,19 @@ bool isGroupMember(const td::td_api::object_ptr<td::td_api::ChatMemberStatus> &s
 {
     if (!status)
         return false;
-    else if ((status->get_id() == td::td_api::chatMemberStatusLeft::ID) ||
-             (status->get_id() == td::td_api::chatMemberStatusBanned::ID))
+    if ((status->get_id() == td::td_api::chatMemberStatusLeft::ID) ||
+        (status->get_id() == td::td_api::chatMemberStatusBanned::ID))
         return false;
-    else if (status->get_id() == td::td_api::chatMemberStatusRestricted::ID)
+    if (status->get_id() == td::td_api::chatMemberStatusRestricted::ID)
         return static_cast<const td::td_api::chatMemberStatusRestricted &>(*status).is_member_;
-    else if (status->get_id() == td::td_api::chatMemberStatusCreator::ID)
+    if (status->get_id() == td::td_api::chatMemberStatusCreator::ID)
         return static_cast<const td::td_api::chatMemberStatusCreator &>(*status).is_member_;
-    else if (status->get_id() == td::td_api::chatMemberStatusMember::ID)
+    if (status->get_id() == td::td_api::chatMemberStatusMember::ID)
         return true;
     // An administrator is a member and has no flag saying otherwise -- only the creator and a
     // restricted member can be in a group's administration without belonging to it. These six
     // are every ChatMemberStatus TDLib defines.
-    else if (status->get_id() == td::td_api::chatMemberStatusAdministrator::ID)
+    if (status->get_id() == td::td_api::chatMemberStatusAdministrator::ID)
         return true;
 
     return false;
@@ -176,10 +175,9 @@ PendingMessageQueue::Message &PendingMessageQueue::addMessage(ChatQueue &queue, 
     if (action == MessageAction::Append) {
         queue.messages.emplace_back();
         return queue.messages.back();
-    } else {
-        queue.messages.emplace_front();
-        return queue.messages.front();
     }
+    queue.messages.emplace_front();
+    return queue.messages.front();
 }
 
 IncomingMessage &PendingMessageQueue::addPendingMessage(IncomingMessage &&message,
@@ -325,8 +323,7 @@ bool PendingMessageQueue::isChatReady(ChatId chatId)
     auto pQueue = getChatQueue(chatId);
     if (pQueue != m_queues.end())
         return pQueue->ready;
-    else
-        return true;
+    return true;
 }
 
 void TdAccountData::updateUser(TdUserPtr userPtr)
@@ -554,8 +551,7 @@ const td::td_api::chat *TdAccountData::getChat(ChatId chatId) const
     auto pChatInfo = m_chatInfo.find(chatId);
     if (pChatInfo == m_chatInfo.end())
         return nullptr;
-    else
-        return pChatInfo->second.chat.get();
+    return pChatInfo->second.chat.get();
 }
 
 int TdAccountData::getPurpleChatId(ChatId tdChatId)
@@ -563,8 +559,7 @@ int TdAccountData::getPurpleChatId(ChatId tdChatId)
     auto pChatInfo = m_chatInfo.find(tdChatId);
     if (pChatInfo == m_chatInfo.end())
         return 0;
-    else
-        return pChatInfo->second.purpleId;
+    return pChatInfo->second.purpleId;
 }
 
 const td::td_api::chat *TdAccountData::getChatByPurpleId(int32_t purpleChatId) const
@@ -576,8 +571,7 @@ const td::td_api::chat *TdAccountData::getChatByPurpleId(int32_t purpleChatId) c
 
     if (pChatInfo != m_chatInfo.end())
         return pChatInfo->second.chat.get();
-    else
-        return nullptr;
+    return nullptr;
 }
 
 static bool isPrivateChat(const td::td_api::chat &chat, UserId userId)
@@ -597,8 +591,7 @@ const td::td_api::chat *TdAccountData::getPrivateChatByUserId(UserId userId) con
                                   });
     if (pChatInfo == m_chatInfo.end())
         return nullptr;
-    else
-        return pChatInfo->second.chat.get();
+    return pChatInfo->second.chat.get();
 }
 
 const td::td_api::user *TdAccountData::getUser(UserId userId) const
@@ -606,8 +599,7 @@ const td::td_api::user *TdAccountData::getUser(UserId userId) const
     auto pUser = m_userInfo.find(userId);
     if (pUser == m_userInfo.end())
         return nullptr;
-    else
-        return pUser->second.user.get();
+    return pUser->second.user.get();
 }
 
 const td::td_api::user *TdAccountData::getUserByPhone(const char *phoneNumber) const
@@ -618,8 +610,7 @@ const td::td_api::user *TdAccountData::getUserByPhone(const char *phoneNumber) c
                               });
     if (pUser == m_userInfo.end())
         return nullptr;
-    else
-        return pUser->second.user.get();
+    return pUser->second.user.get();
 }
 
 const td::td_api::user *TdAccountData::getUserByPrivateChat(const td::td_api::chat &chat) const
@@ -640,8 +631,7 @@ std::string TdAccountData::getDisplayName(UserId userId) const
     auto it = m_userInfo.find(userId);
     if (it != m_userInfo.end())
         return it->second.displayName;
-    else
-        return std::string();
+    return std::string();
 }
 
 void TdAccountData::getUsersByDisplayName(const char *displayName,
@@ -695,8 +685,7 @@ const td::td_api::basicGroup *TdAccountData::getBasicGroup(BasicGroupId groupId)
     auto it = m_groups.find(groupId);
     if (it != m_groups.end())
         return it->second.group.get();
-    else
-        return nullptr;
+    return nullptr;
 }
 
 const td::td_api::basicGroupFullInfo *TdAccountData::getBasicGroupInfo(BasicGroupId groupId) const
@@ -704,8 +693,7 @@ const td::td_api::basicGroupFullInfo *TdAccountData::getBasicGroupInfo(BasicGrou
     auto it = m_groups.find(groupId);
     if (it != m_groups.end())
         return it->second.fullInfo.get();
-    else
-        return nullptr;
+    return nullptr;
 }
 
 const td::td_api::supergroup *TdAccountData::getSupergroup(SupergroupId groupId) const
@@ -713,8 +701,7 @@ const td::td_api::supergroup *TdAccountData::getSupergroup(SupergroupId groupId)
     auto it = m_supergroups.find(groupId);
     if (it != m_supergroups.end())
         return it->second.group.get();
-    else
-        return nullptr;
+    return nullptr;
 }
 
 const td::td_api::supergroupFullInfo *TdAccountData::getSupergroupInfo(SupergroupId groupId) const
@@ -722,8 +709,7 @@ const td::td_api::supergroupFullInfo *TdAccountData::getSupergroupInfo(Supergrou
     auto it = m_supergroups.find(groupId);
     if (it != m_supergroups.end())
         return it->second.fullInfo.get();
-    else
-        return nullptr;
+    return nullptr;
 }
 
 const td::td_api::chatMembers *TdAccountData::getSupergroupMembers(SupergroupId groupId) const
@@ -731,8 +717,7 @@ const td::td_api::chatMembers *TdAccountData::getSupergroupMembers(SupergroupId 
     auto it = m_supergroups.find(groupId);
     if (it != m_supergroups.end())
         return it->second.members.get();
-    else
-        return nullptr;
+    return nullptr;
 }
 
 const td::td_api::chat *TdAccountData::getBasicGroupChatByGroup(BasicGroupId groupId) const
@@ -747,8 +732,7 @@ const td::td_api::chat *TdAccountData::getBasicGroupChatByGroup(BasicGroupId gro
 
     if (it != m_chatInfo.end())
         return it->second.chat.get();
-    else
-        return nullptr;
+    return nullptr;
 }
 
 const td::td_api::chat *TdAccountData::getSupergroupChatByGroup(SupergroupId groupId) const
@@ -763,8 +747,7 @@ const td::td_api::chat *TdAccountData::getSupergroupChatByGroup(SupergroupId gro
 
     if (it != m_chatInfo.end())
         return it->second.chat.get();
-    else
-        return nullptr;
+    return nullptr;
 }
 
 bool TdAccountData::isGroupChatWithMembership(const td::td_api::chat &chat) const
@@ -791,8 +774,7 @@ const td::td_api::chat *TdAccountData::getChatBySecretChat(SecretChatId secretCh
 
     if (it != m_chatInfo.end())
         return it->second.chat.get();
-    else
-        return nullptr;
+    return nullptr;
 }
 
 void TdAccountData::getChats(std::vector<const td::td_api::chat *> &chats) const
@@ -906,7 +888,7 @@ void TdAccountData::extractFileTransferRequests(std::vector<PurpleXfer *> &trans
     for (unsigned i = 0; i < m_requests.size(); ) {
         UploadRequest *uploadReq = dynamic_cast<UploadRequest *>(m_requests[i].get());
         NewPrivateChatForMessage *newChatReq = dynamic_cast<NewPrivateChatForMessage *>(m_requests[i].get());
-        PurpleXfer *xfer = NULL;
+        PurpleXfer *xfer = nullptr;
         if (uploadReq)
             xfer = uploadReq->xfer;
         else if (newChatReq)
@@ -967,7 +949,7 @@ void TdAccountData::saveTempFileUploads()
 
 void TdAccountData::loadTempFileUploads()
 {
-    const char *value = purple_account_get_string(purpleAccount, TempFileUploadsSetting, NULL);
+    const char *value = purple_account_get_string(purpleAccount, TempFileUploadsSetting, nullptr);
     if (!value)
         return;
 
@@ -977,7 +959,7 @@ void TdAccountData::loadTempFileUploads()
         if (fields[0] && fields[1] && fields[2] && *fields[2]) {
             m_sentMessages.emplace_back();
             m_sentMessages.back().chatId = ChatId::fromString(fields[0]);
-            m_sentMessages.back().messageId = g_ascii_strtoll(fields[1], NULL, 10);
+            m_sentMessages.back().messageId = g_ascii_strtoll(fields[1], nullptr, 10);
             m_sentMessages.back().tempFile = fields[2];
         }
         g_strfreev(fields);
@@ -1027,8 +1009,8 @@ bool TdAccountData::getFileIdForTransfer(PurpleXfer *xfer, int &fileId)
     if (it != m_fileTransfers.end()) {
         fileId = it->fileId;
         return true;
-    } else
-        return false;
+    }
+    return false;
 }
 
 void TdAccountData::removeFileTransfer(int32_t fileId)
@@ -1089,7 +1071,7 @@ bool TdAccountData::hasActiveCall()
     return (m_callData != nullptr);
 }
 
-void TdAccountData::setActiveCall(int32_t callId)
+void TdAccountData::setActiveCall([[maybe_unused]] int32_t callId)
 {
 #ifndef NoVoip
     if (!m_callData) {

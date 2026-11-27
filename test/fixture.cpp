@@ -29,7 +29,7 @@ void CommTest::SetUp()
     connection = new PurpleConnection();
     connection->state = PURPLE_DISCONNECTED;
     connection->account = account;
-    purple_connection_set_protocol_data(connection, NULL);
+    purple_connection_set_protocol_data(connection, nullptr);
     account->gc = connection;
     prpl.discardEvents();
     setUiName("Pidgin");
@@ -44,10 +44,10 @@ void CommTest::TearDown()
     tgl.removeTempFiles();
 
     delete connection;
-    account->gc = NULL;
+    account->gc = nullptr;
     tgl.runTimeouts();
     purple_account_destroy(account);
-    account = NULL;
+    account = nullptr;
     clearFakeFiles();
     clearGroups();
 }
@@ -236,7 +236,7 @@ void checkFile(const char *filename, void *content, unsigned size)
 {
     gchar *actualContent;
     gsize  actualSize;
-    ASSERT_TRUE(g_file_get_contents(filename, &actualContent, &actualSize, NULL)) << filename << " does not exist";
+    ASSERT_TRUE(g_file_get_contents(filename, &actualContent, &actualSize, nullptr)) << filename << " does not exist";
     ASSERT_EQ(actualSize, size) << "Wrong file size for " << filename;
     ASSERT_EQ(0, memcmp(content, actualContent, size)) << "Wrong content for " << filename;
     g_free(actualContent);

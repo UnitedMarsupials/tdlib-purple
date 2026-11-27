@@ -462,18 +462,18 @@ void PurpleEventReceiver::inputEnter(const gchar *value)
 {
     ASSERT_NE(nullptr, inputOkCb);
     ((void (*)(void *, const char *))(inputOkCb))(inputUserData, value);
-    inputOkCb = NULL;
-    inputCancelCb = NULL;
-    inputUserData = NULL;
+    inputOkCb = nullptr;
+    inputCancelCb = nullptr;
+    inputUserData = nullptr;
 }
 
 void PurpleEventReceiver::inputCancel()
 {
     ASSERT_NE(nullptr, inputCancelCb);
     ((void (*)(void *))(inputCancelCb))(inputUserData);
-    inputOkCb = NULL;
-    inputCancelCb = NULL;
-    inputUserData = NULL;
+    inputOkCb = nullptr;
+    inputCancelCb = nullptr;
+    inputUserData = nullptr;
 }
 
 void PurpleEventReceiver::requestedAction(const char *button)
@@ -488,7 +488,7 @@ void PurpleEventReceiver::requestedAction(const char *button)
         "two '" << button << "' buttons";
     it->second(actionUserData, it - actionCallbacks.begin());
     actionCallbacks.clear();
-    actionUserData = NULL;
+    actionUserData = nullptr;
 }
 
 void PurpleEventReceiver::addCommand(const char* command, PurpleCmdFunc handler, void* data)
@@ -502,10 +502,10 @@ void PurpleEventReceiver::runCommand(const char* command, PurpleConversation *co
     std::vector<char *>purpleArgs;
     for (const std::string &arg: arguments)
         purpleArgs.push_back(const_cast<char *>(arg.c_str()));
-    purpleArgs.push_back(NULL);
+    purpleArgs.push_back(nullptr);
 
     std::pair<PurpleCmdFunc, void *> cmdData = commands.at(command);
-    cmdData.first(conv, command, purpleArgs.data(), NULL, cmdData.second);
+    cmdData.first(conv, command, purpleArgs.data(), nullptr, cmdData.second);
 }
 
 

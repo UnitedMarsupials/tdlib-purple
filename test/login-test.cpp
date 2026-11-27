@@ -101,7 +101,7 @@ TEST_F(LoginTest, RegisterNewAccount_WithAlias_ConnectionReadyBeforeAuthReady)
         )
     ));
 
-    prpl.verifyEvents(RequestInputEvent(connection, account, NULL, NULL));
+    prpl.verifyEvents(RequestInputEvent(connection, account, nullptr, nullptr));
     prpl.inputEnter("12345");
     tgl.verifyRequest(checkAuthenticationCode("12345"));
 
@@ -185,7 +185,7 @@ TEST_F(LoginTest, RegisterNewAccount_NoAlias)
         )
     ));
 
-    prpl.verifyEvents(RequestInputEvent(connection, account, NULL, NULL));
+    prpl.verifyEvents(RequestInputEvent(connection, account, nullptr, nullptr));
     prpl.inputEnter("12345");
     tgl.verifyRequest(checkAuthenticationCode("12345"));
 
@@ -203,7 +203,7 @@ TEST_F(LoginTest, RegisterNewAccount_NoAlias)
     tgl.reply(make_object<ok>());
 
     tgl.verifyNoRequests();
-    prpl.verifyEvents(RequestInputEvent(connection, account, NULL, NULL));
+    prpl.verifyEvents(RequestInputEvent(connection, account, nullptr, nullptr));
 
     prpl.inputEnter((selfFirstName + "     " + selfLastName).c_str());
     tgl.verifyRequest(registerUser(selfFirstName, selfLastName, false));
@@ -253,7 +253,7 @@ TEST_F(LoginTest, TwoFactorAuthentication)
         )
     ));
 
-    prpl.verifyEvents(RequestInputEvent(connection, account, NULL, NULL));
+    prpl.verifyEvents(RequestInputEvent(connection, account, nullptr, nullptr));
     prpl.inputEnter("12345");
     tgl.verifyRequest(checkAuthenticationCode("12345"));
 
@@ -266,7 +266,7 @@ TEST_F(LoginTest, TwoFactorAuthentication)
     )));
     tgl.reply(make_object<ok>());
 
-    prpl.verifyEvents(RequestInputEvent(connection, account, NULL, NULL));
+    prpl.verifyEvents(RequestInputEvent(connection, account, nullptr, nullptr));
     prpl.inputEnter("password");
     tgl.verifyRequest(checkAuthenticationPassword("password"));
 
@@ -278,8 +278,8 @@ TEST_F(LoginTest, TwoFactorAuthentication)
 
 TEST_F(LoginTest, RenameBuddyAtConnect)
 {
-    purple_blist_add_buddy(purple_buddy_new(account, purpleUserName(0).c_str(), "whatever"), NULL,
-                           &standardPurpleGroup, NULL);
+    purple_blist_add_buddy(purple_buddy_new(account, purpleUserName(0).c_str(), "whatever"), nullptr,
+                           &standardPurpleGroup, nullptr);
     prpl.discardEvents();
 
     login(
@@ -548,9 +548,9 @@ TEST_F(LoginTest, IncomingGroupChatMessageAtLoginWhileChatListStillNull)
     constexpr int32_t date         = 123456;
     constexpr int     purpleChatId = 1;
 
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
-    purple_blist_add_chat(purple_chat_new(account, groupChatTitle.c_str(), components), NULL, NULL);
+    purple_blist_add_chat(purple_chat_new(account, groupChatTitle.c_str(), components), nullptr, nullptr);
     prpl.discardEvents();
 
     chatsOpenedAtLogin = {groupChatId};
@@ -690,7 +690,7 @@ TEST_F(LoginThroughChatTest, AnswersOnlyFromTelegramChat)
 {
     loginUntilCode();
     prpl.verifyEvents(
-        AddBuddyEvent(authBuddy, "Telegram", account, NULL, NULL, NULL),
+        AddBuddyEvent(authBuddy, "Telegram", account, nullptr, nullptr, nullptr),
         NewConversationEvent(PURPLE_CONV_TYPE_IM, account, authBuddy),
         ServGotImEvent(connection, authBuddy, codePrompt, PURPLE_MESSAGE_RECV, 0)
     );
@@ -734,7 +734,7 @@ TEST_F(LoginThroughChatTest, AnswerOnlyToChatId)
 {
     loginUntilCode();
     prpl.verifyEvents(
-        AddBuddyEvent(authBuddy, "Telegram", account, NULL, NULL, NULL),
+        AddBuddyEvent(authBuddy, "Telegram", account, nullptr, nullptr, nullptr),
         NewConversationEvent(PURPLE_CONV_TYPE_IM, account, authBuddy),
         ServGotImEvent(connection, authBuddy, codePrompt, PURPLE_MESSAGE_RECV, 0)
     );
@@ -757,7 +757,7 @@ TEST_F(LoginThroughChatTest, NobodyAfterLogin)
 {
     loginUntilCode();
     prpl.verifyEvents(
-        AddBuddyEvent(authBuddy, "Telegram", account, NULL, NULL, NULL),
+        AddBuddyEvent(authBuddy, "Telegram", account, nullptr, nullptr, nullptr),
         NewConversationEvent(PURPLE_CONV_TYPE_IM, account, authBuddy),
         ServGotImEvent(connection, authBuddy, codePrompt, PURPLE_MESSAGE_RECV, 0)
     );
@@ -776,7 +776,7 @@ TEST_F(LoginThroughChatTest, NotLoggedWhileWaiting)
 {
     loginUntilCode();
     prpl.verifyEvents(
-        AddBuddyEvent(authBuddy, "Telegram", account, NULL, NULL, NULL),
+        AddBuddyEvent(authBuddy, "Telegram", account, nullptr, nullptr, nullptr),
         NewConversationEvent(PURPLE_CONV_TYPE_IM, account, authBuddy),
         ServGotImEvent(connection, authBuddy, codePrompt, PURPLE_MESSAGE_RECV, 0)
     );
@@ -812,7 +812,7 @@ TEST_F(LoginThroughChatTest, LoggingLeftOffWhenItWasOff)
     PurpleConversation *conv = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, authBuddy);
     purple_conversation_set_logging(conv, FALSE);
     loginUntilCode();
-    prpl.verifyEvents(AddBuddyEvent(authBuddy, "Telegram", account, NULL, NULL, NULL),
+    prpl.verifyEvents(AddBuddyEvent(authBuddy, "Telegram", account, nullptr, nullptr, nullptr),
                       ServGotImEvent(connection, authBuddy, codePrompt, PURPLE_MESSAGE_RECV, 0));
 
     ASSERT_LT(0, send(authBuddy, "12345"));
@@ -825,7 +825,7 @@ TEST_F(LoginThroughChatTest, LoggedAgainAfterDisconnectWhileWaiting)
 {
     loginUntilCode();
     prpl.verifyEvents(
-        AddBuddyEvent(authBuddy, "Telegram", account, NULL, NULL, NULL),
+        AddBuddyEvent(authBuddy, "Telegram", account, nullptr, nullptr, nullptr),
         NewConversationEvent(PURPLE_CONV_TYPE_IM, account, authBuddy),
         ServGotImEvent(connection, authBuddy, codePrompt, PURPLE_MESSAGE_RECV, 0)
     );
@@ -847,7 +847,7 @@ TEST_F(LoginThroughChatTest, Registration)
 {
     loginUntilCode(false);
     prpl.verifyEvents(
-        AddBuddyEvent(authBuddy, "Telegram", account, NULL, NULL, NULL),
+        AddBuddyEvent(authBuddy, "Telegram", account, nullptr, nullptr, nullptr),
         NewConversationEvent(PURPLE_CONV_TYPE_IM, account, authBuddy),
         ServGotImEvent(connection, authBuddy, codePrompt, PURPLE_MESSAGE_RECV, 0)
     );
@@ -1005,14 +1005,14 @@ TEST_F(DatabasePasswordTest, Decrypted)
 
 TEST(DatabaseFileTest, PlainSqlite)
 {
-    char *dir = g_dir_make_tmp("tdlib-purple-test-XXXXXX", NULL);
+    char *dir = g_dir_make_tmp("tdlib-purple-test-XXXXXX", nullptr);
     ASSERT_NE(nullptr, dir);
     std::string plain     = std::string(dir) + G_DIR_SEPARATOR_S + "plain";
     std::string encrypted = std::string(dir) + G_DIR_SEPARATOR_S + "encrypted";
     std::string shorter   = std::string(dir) + G_DIR_SEPARATOR_S + "short";
-    ASSERT_TRUE(g_file_set_contents(plain.c_str(), "SQLite format 3\0\x10\0\1\1", 20, NULL));
-    ASSERT_TRUE(g_file_set_contents(encrypted.c_str(), "\x8e\x12\x55\xa0SQLite format 3\0", 20, NULL));
-    ASSERT_TRUE(g_file_set_contents(shorter.c_str(), "SQLite", 6, NULL));
+    ASSERT_TRUE(g_file_set_contents(plain.c_str(), "SQLite format 3\0\x10\0\1\1", 20, nullptr));
+    ASSERT_TRUE(g_file_set_contents(encrypted.c_str(), "\x8e\x12\x55\xa0SQLite format 3\0", 20, nullptr));
+    ASSERT_TRUE(g_file_set_contents(shorter.c_str(), "SQLite", 6, nullptr));
     EXPECT_TRUE(isPlainSqliteFile(plain));
     EXPECT_FALSE(isPlainSqliteFile(encrypted));
     EXPECT_FALSE(isPlainSqliteFile(shorter));

@@ -151,13 +151,12 @@ std::string getDisplayedError(const td::td_api::object_ptr<td::td_api::Object> &
         // was used, but it isn't used in a way that can lead to this message
         return "No response received";
     }
-    else if (object->get_id() == td::td_api::error::ID) {
+    if (object->get_id() == td::td_api::error::ID) {
         const td::td_api::error &error = static_cast<const td::td_api::error &>(*object);
         return formatMessage(errorCodeMessage(), {std::to_string(error.code_), error.message_});
-    } else {
-        // Should not be possible
-        return "Unexpected response";
     }
+    // Should not be possible
+    return "Unexpected response";
 }
 
 std::string proxyTypeToString(PurpleProxyType proxyType)
@@ -184,8 +183,7 @@ const char *getPurpleStatusId(const td::td_api::UserStatus &tdStatus)
 {
     if (tdStatus.get_id() == td::td_api::userStatusOnline::ID)
         return purple_primitive_get_id_from_type(PURPLE_STATUS_AVAILABLE);
-    else
-        return purple_primitive_get_id_from_type(PURPLE_STATUS_AWAY);
+    return purple_primitive_get_id_from_type(PURPLE_STATUS_AWAY);
 }
 
 PurpleBlistNode *findChatBlistNode(const TdAccountData &account, const td::td_api::chat &chat)
@@ -316,7 +314,7 @@ std::vector<const td::td_api::user *> getUsersByPurpleName(const char *buddyName
 PurpleConversation *getImConversation(PurpleAccount *account, const char *username)
 {
     PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, username, account);
-    if (conv == NULL)
+    if (conv == nullptr)
         conv = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, username);
 
     return conv;
@@ -344,7 +342,7 @@ static PurpleGroup *getTransientGroup(const char *groupName)
     if (!group) {
         group = purple_group_new(groupName);
         purple_blist_node_set_flags(PURPLE_BLIST_NODE(group), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
-        purple_blist_add_group(group, NULL);
+        purple_blist_add_group(group, nullptr);
     }
     return group;
 }
@@ -357,7 +355,7 @@ void addTransientChat(TdAccountData &account, const td::td_api::chat &chat)
                       chat.title_.c_str());
     PurpleChat *purpleChat = purple_chat_new(account.purpleAccount, chat.title_.c_str(), getChatComponents(chat));
     purple_blist_node_set_flags(PURPLE_BLIST_NODE(purpleChat), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
-    purple_blist_add_chat(purpleChat, group, NULL);
+    purple_blist_add_chat(purpleChat, group, nullptr);
 }
 
 
@@ -378,7 +376,7 @@ PurpleConvChat *getChatConversation(TdAccountData &account, const td::td_api::ch
     // purple_conv_chat_has_left returns true) and if that's the case, serv_got_joined_chat must
     // still be called to make them active and thus able to send or receive messages, because that's
     // the kind of thing we were called for here.
-    if ((conv == NULL) || purple_conv_chat_has_left(purple_conversation_get_chat_data(conv))) {
+    if ((conv == nullptr) || purple_conv_chat_has_left(purple_conversation_get_chat_data(conv))) {
         if (chatPurpleId != 0) {
             purple_debug_misc(config::pluginId, "Creating conversation for chat %s (purple id %d)\n",
                               chat.title_.c_str(), chatPurpleId);
@@ -388,7 +386,7 @@ PurpleConvChat *getChatConversation(TdAccountData &account, const td::td_api::ch
             serv_got_joined_chat(purple_account_get_connection(account.purpleAccount), chatPurpleId, chatName.c_str());
             conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_CHAT, chatName.c_str(),
                                                          account.purpleAccount);
-            if (conv == NULL)
+            if (conv == nullptr)
                 purple_debug_warning(config::pluginId, "Did not create conversation for chat %s\n", chat.title_.c_str());
             else {
                 // The conversation was named before it could know of the entry, which Pidgin will
@@ -427,7 +425,7 @@ PurpleConvChat *getChatConversation(TdAccountData &account, const td::td_api::ch
         return purpleChat;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 PurpleConvChat *findChatConversation(PurpleAccount *account, const td::td_api::chat &chat)
@@ -437,7 +435,7 @@ PurpleConvChat *findChatConversation(PurpleAccount *account, const td::td_api::c
                                                                      name.c_str(), account);
     if (conv)
         return purple_conversation_get_chat_data(conv);
-    return NULL;
+    return nullptr;
 }
 
 bool conversationHasFocus(PurpleConversation *conv)
@@ -446,10 +444,9 @@ bool conversationHasFocus(PurpleConversation *conv)
 
     // purple_conversation_has_focus return false if this callback is not set, as is the case with
     // bitlbee, but we want to default to sending read receipts
-    if ((ops == NULL) || (ops->has_focus == NULL))
+    if ((ops == nullptr) || (ops->has_focus == nullptr))
         return true;
-    else
-        return purple_conversation_has_focus(conv);
+    return purple_conversation_has_focus(conv);
 }
 
 bool isDeletedUser(const td::td_api::user &user)
@@ -469,7 +466,7 @@ static PurpleGroup *findDeletedAccountsGroup(PurpleBlistNode *node)
                 return group;
         }
     }
-    return NULL;
+    return nullptr;
 }
 
 // Deleted accounts of every Telegram account go to one group. It is found by the setting we gave
@@ -493,7 +490,7 @@ PurpleGroup *getDeletedAccountsGroup(bool create)
         group = purple_find_group(name);
         if (!group) {
             group = purple_group_new(name);
-            purple_blist_add_group(group, NULL);
+            purple_blist_add_group(group, nullptr);
         }
         purple_blist_node_set_string(PURPLE_BLIST_NODE(group), GroupOptions::DeletedAccounts, name);
     }
@@ -508,7 +505,7 @@ static void writeBuddyNotice(TdAccountData &account, PurpleBuddy *buddy, const c
                                                                       account.purpleAccount);
     if (conv)
         purple_conv_im_write(purple_conversation_get_im_data(conv), "", notice,
-                             PURPLE_MESSAGE_SYSTEM, time(NULL));
+                             PURPLE_MESSAGE_SYSTEM, time(nullptr));
 }
 
 // The buddy is kept, with the name it had, for its conversations' log
@@ -531,9 +528,9 @@ void markBuddyDeleted(TdAccountData &account, const td::td_api::user &user)
 
     // TRANSLATOR: Buddy's name, of an account that was deleted. The argument is the name it had.
     purple_blist_alias_buddy(buddy, formatMessage(_("{} (deleted)"), alias).c_str());
-    purple_blist_add_buddy(buddy, NULL, getDeletedAccountsGroup(true), NULL);
+    purple_blist_add_buddy(buddy, nullptr, getDeletedAccountsGroup(true), nullptr);
     purple_prpl_got_user_status(account.purpleAccount, purpleUserName.c_str(),
-                                purple_primitive_get_id_from_type(PURPLE_STATUS_OFFLINE), NULL);
+                                purple_primitive_get_id_from_type(PURPLE_STATUS_OFFLINE), nullptr);
     // TRANSLATOR: In-chat status update. The owner may have deleted it, or Telegram.
     writeBuddyNotice(account, buddy, _("This account has been deleted."));
 }
@@ -544,13 +541,13 @@ void restoreDeletedBuddy(TdAccountData &account, const td::td_api::user &user)
     std::string  purpleUserName = getPurpleBuddyName(user);
     PurpleBuddy *buddy          = purple_find_buddy(account.purpleAccount, purpleUserName.c_str());
     const char  *oldGroupName   = buddy ? purple_blist_node_get_string(PURPLE_BLIST_NODE(buddy),
-                                                                       BuddyOptions::GroupBeforeDeletion) : NULL;
+                                                                       BuddyOptions::GroupBeforeDeletion) : nullptr;
     if (!oldGroupName)
         return;
 
     purple_debug_info(config::pluginId, "Account of buddy %s has been restored\n", purple_buddy_get_name(buddy));
-    PurpleGroup *oldGroup = *oldGroupName ? purple_find_group(oldGroupName) : NULL;
-    purple_blist_add_buddy(buddy, NULL, oldGroup, NULL);
+    PurpleGroup *oldGroup = *oldGroupName ? purple_find_group(oldGroupName) : nullptr;
+    purple_blist_add_buddy(buddy, nullptr, oldGroup, nullptr);
     purple_blist_node_remove_setting(PURPLE_BLIST_NODE(buddy), BuddyOptions::GroupBeforeDeletion);
     // TRANSLATOR: In-chat status update, of an account that had been deleted.
     writeBuddyNotice(account, buddy, _("This account has been restored."));
@@ -581,9 +578,9 @@ void returnToTransientGroup(PurpleBlistNode *node)
     if (!node || !(purple_blist_node_get_flags(node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE))
         return;
     if (PURPLE_BLIST_NODE_IS_CHAT(node))
-        purple_blist_add_chat(PURPLE_CHAT(node), getTransientGroup(getTransientChatGroupName()), NULL);
+        purple_blist_add_chat(PURPLE_CHAT(node), getTransientGroup(getTransientChatGroupName()), nullptr);
     else if (PURPLE_BLIST_NODE_IS_BUDDY(node))
-        purple_blist_add_buddy(PURPLE_BUDDY(node), NULL, getTransientGroup(getTransientBuddyGroupName()), NULL);
+        purple_blist_add_buddy(PURPLE_BUDDY(node), nullptr, getTransientGroup(getTransientBuddyGroupName()), nullptr);
 }
 
 void keepInBuddyList(PurpleBlistNode *node)
@@ -615,9 +612,9 @@ std::string addTransientBuddy(TdAccountData &account, const td::td_api::user &us
     }
     PurpleGroup *group = getTransientGroup(getTransientBuddyGroupName());
     purple_debug_misc(config::pluginId, "Adding %s to the buddy list until the program quits\n", buddyName.c_str());
-    buddy = purple_buddy_new(account.purpleAccount, buddyName.c_str(), alias.empty() ? NULL : alias.c_str());
+    buddy = purple_buddy_new(account.purpleAccount, buddyName.c_str(), alias.empty() ? nullptr : alias.c_str());
     purple_blist_node_set_flags(PURPLE_BLIST_NODE(buddy), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
-    purple_blist_add_buddy(buddy, NULL, group, NULL);
+    purple_blist_add_buddy(buddy, nullptr, group, nullptr);
     return buddyName;
 }
 
@@ -632,13 +629,13 @@ void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, con
     std::string alias          = chat ? chat->title_ : makeBasicDisplayName(user);
 
     PurpleBuddy *buddy = purple_find_buddy(account.purpleAccount, purpleUserName.c_str());
-    if ((buddy == NULL) || isTransientBuddy(buddy)) {
+    if ((buddy == nullptr) || isTransientBuddy(buddy)) {
         purple_debug_misc(config::pluginId, "Adding new buddy %s for user %s\n",
                           alias.c_str(), purpleUserName.c_str());
 
         const ContactRequest *contactReq = account.findContactRequest(getId(user));
         PurpleGroup          *group      = (contactReq && !contactReq->groupName.empty()) ?
-                                           purple_find_group(contactReq->groupName.c_str()) : NULL;
+                                           purple_find_group(contactReq->groupName.c_str()) : nullptr;
         // Moved out of "Telegram: not in contacts" by the user (PurpleTdClient::buddyMoved), it stays
         if (buddy && isMovedOutOfTransient(PURPLE_BLIST_NODE(buddy), purple_buddy_get_group(buddy)))
             group = purple_buddy_get_group(buddy);
@@ -653,7 +650,7 @@ void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, con
                 purple_blist_alias_buddy(buddy, alias.c_str());
         } else
             buddy = purple_buddy_new(account.purpleAccount, purpleUserName.c_str(), alias.c_str());
-        purple_blist_add_buddy(buddy, NULL, group, NULL);
+        purple_blist_add_buddy(buddy, nullptr, group, nullptr);
         // If a new buddy has been added here, it means that there was updateNewChat with the private
         // chat. This means either we added them to contacts or started messaging them, or they
         // messaged us. Either way, there is no need to for any extra notification about new contact
@@ -673,9 +670,9 @@ void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, con
             if (photo.local_ && photo.local_->is_downloading_completed_ &&
                 (user.profile_photo_->id_ != oldPhotoId))
             {
-                gchar  *img = NULL;
+                gchar  *img = nullptr;
                 size_t  len;
-                GError *err = NULL;
+                GError *err = nullptr;
                 g_file_get_contents(photo.local_->path_.c_str(), &img, &len, &err);
                 if (err) {
                     purple_debug_warning(config::pluginId, "Failed to load profile photo %s for %s: %s\n",
@@ -688,13 +685,13 @@ void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, con
                     purple_debug_info(config::pluginId, "Loaded new profile photo for %s (id %s)\n",
                                       purpleUserName.c_str(), newPhotoIdStr.c_str());
                     purple_buddy_icons_set_for_user(account.purpleAccount, purpleUserName.c_str(),
-                                                    img, len, NULL);
+                                                    img, len, nullptr);
                 }
             }
         } else if (oldPhotoId) {
             purple_debug_info(config::pluginId, "Removing profile photo from %s\n", purpleUserName.c_str());
             purple_blist_node_remove_setting(PURPLE_BLIST_NODE(buddy), BuddyOptions::ProfilePhotoId);
-            purple_buddy_icons_set_for_user(account.purpleAccount, purpleUserName.c_str(), NULL, 0, NULL);
+            purple_buddy_icons_set_for_user(account.purpleAccount, purpleUserName.c_str(), nullptr, 0, nullptr);
         }
     }
 }
@@ -713,7 +710,7 @@ static void updateGroupChat(TdAccountData &account, const td::td_api::chat &chat
     if (!purpleChat) {
         purpleDebug("Adding new chat for {} {} ({})", {std::string(groupType), groupId, chat.title_});
         purpleChat = purple_chat_new(account.purpleAccount, chat.title_.c_str(), getChatComponents(chat));
-        purple_blist_add_chat(purpleChat, NULL, NULL);
+        purple_blist_add_chat(purpleChat, nullptr, nullptr);
     } else {
         // Shown before we joined, it is ours now, and to be kept
         PurpleBlistNode *node = PURPLE_BLIST_NODE(purpleChat);
@@ -723,7 +720,7 @@ static void updateGroupChat(TdAccountData &account, const td::td_api::chat &chat
             bool moved = isMovedOutOfTransient(node, purple_chat_get_group(purpleChat));
             keepInBuddyList(node);
             if (!moved)
-                purple_blist_add_chat(purpleChat, NULL, NULL);
+                purple_blist_add_chat(purpleChat, nullptr, nullptr);
         }
         // As saved by an earlier version
         completeChatComponents(purpleChat);
@@ -752,9 +749,9 @@ static void updateGroupChat(TdAccountData &account, const td::td_api::chat &chat
         if (photo.local_ && photo.local_->is_downloading_completed_ && photo.remote_ &&
             !photo.remote_->unique_id_.empty() && (!oldPhotoId || (photo.remote_->unique_id_ != oldPhotoId)))
         {
-            gchar  *img = NULL;
+            gchar  *img = nullptr;
             size_t  len;
-            GError *err = NULL;
+            GError *err = nullptr;
             g_file_get_contents(photo.local_->path_.c_str(), &img, &len, &err);
             if (err) {
                 purple_debug_warning(config::pluginId, "Failed to load chat photo %s for %s: %s\n",
@@ -772,7 +769,7 @@ static void updateGroupChat(TdAccountData &account, const td::td_api::chat &chat
     } else if (oldPhotoId) {
         purple_debug_info(config::pluginId, "Removing chat photo from %s\n", chat.title_.c_str());
         purple_blist_node_remove_setting(PURPLE_BLIST_NODE(purpleChat), BuddyOptions::ProfilePhotoId);
-        purple_buddy_icons_node_set_custom_icon(PURPLE_BLIST_NODE(purpleChat), NULL, 0);
+        purple_buddy_icons_node_set_custom_icon(PURPLE_BLIST_NODE(purpleChat), nullptr, 0);
     }
 }
 
@@ -816,7 +813,7 @@ bool isInviteLinkActive(const td::td_api::chatInviteLink &linkInfo)
 {
     return !linkInfo.is_revoked_ &&
         ((linkInfo.member_limit_ == 0) || (linkInfo.member_count_ < linkInfo.member_limit_)) &&
-        ((linkInfo.expiration_date_ == 0) || (std::time(NULL) < static_cast<time_t>(linkInfo.expiration_date_)));
+        ((linkInfo.expiration_date_ == 0) || (std::time(nullptr) < static_cast<time_t>(linkInfo.expiration_date_)));
 }
 
 static std::string lastMessageSetting(ChatId chatId)
@@ -844,10 +841,10 @@ void wipeChatTraces(PurpleAccount *purpleAccount, ChatId chatId, const std::stri
 
     gchar      *logDir = purple_log_get_log_dir((type == PURPLE_CONV_TYPE_CHAT) ? PURPLE_LOG_CHAT : PURPLE_LOG_IM,
                                                 convName.c_str(), purpleAccount);
-    GDir       *dir    = logDir ? g_dir_open(logDir, 0, NULL) : nullptr;
+    GDir       *dir    = logDir ? g_dir_open(logDir, 0, nullptr) : nullptr;
     const char *entry;
     while (dir && (entry = g_dir_read_name(dir))) {
-        gchar *path = g_build_filename(logDir, entry, NULL);
+        gchar *path = g_build_filename(logDir, entry, nullptr);
         if (g_remove(path) != 0)
             purple_debug_warning(config::pluginId, "Cannot remove %s from the log\n", path);
         g_free(path);
@@ -882,7 +879,7 @@ void removeGroupChat(PurpleAccount *purpleAccount, const td::td_api::chat &chat)
     //purple_account_remove_setting(purpleAccount, setting.c_str());
 }
 
-void removePrivateChat(TdAccountData &account, const td::td_api::chat &chat)
+void removePrivateChat(TdAccountData &, const td::td_api::chat &)
 {
     // TODO: uncomment when updateNewChat(chat_list=NULL) + updateChatChatList(non-NULL) at login
     // no longer removes chat
@@ -900,7 +897,7 @@ void saveChatLastMessage(TdAccountData &account, ChatId chatId, MessageId messag
 MessageId getChatLastMessage(TdAccountData &account, ChatId chatId)
 {
     std::string setting = lastMessageSetting(chatId);
-    const char *value = purple_account_get_string(account.purpleAccount, setting.c_str(), NULL);
+    const char *value = purple_account_get_string(account.purpleAccount, setting.c_str(), nullptr);
 
     return value ? MessageId::fromString(value) : MessageId();
 }
@@ -929,12 +926,13 @@ std::string getIncomingGroupchatSenderPurpleName(const td::td_api::chat &chat, c
         UserId senderId = getSenderUserId(message);
         if (senderId.valid())
             return account.getDisplayName(senderId);
-        else if (!message.author_signature_.empty())
+        if (!message.author_signature_.empty())
             return message.author_signature_;
-        else if (message.is_channel_post_) {
+        if (message.is_channel_post_) {
             // TRANSLATOR: The "sender" of a message that was posted to a channel. Will be used like a username.
             return _("Channel post");
-        } else if (message.forward_info_ && message.forward_info_->origin_)
+        }
+        if (message.forward_info_ && message.forward_info_->origin_)
             switch (message.forward_info_->origin_->get_id()) {
             case td::td_api::messageOriginUser::ID:
                 return account.getDisplayName(getSenderUserId(static_cast<const td::td_api::messageOriginUser &>(*message.forward_info_->origin_)));
@@ -1050,7 +1048,7 @@ static void setChatMembers(PurpleConvChat *purpleChat,
                            const std::vector<td::td_api::object_ptr<td::td_api::chatMember>> &members,
                            const TdAccountData &account)
 {
-    GList *flags = NULL;
+    GList *flags = nullptr;
     std::vector<std::string> nameData;
 
     for (const auto &member: members) {
@@ -1080,12 +1078,12 @@ static void setChatMembers(PurpleConvChat *purpleChat,
         flags = g_list_append(flags, GINT_TO_POINTER(flag));
     }
 
-    GList *names = NULL;
+    GList *names = nullptr;
     for (const std::string &name: nameData)
         names = g_list_append(names, const_cast<char *>(name.c_str()));
 
     purple_conv_chat_clear_users(purpleChat);
-    purple_conv_chat_add_users(purpleChat, names, NULL, flags, false);
+    purple_conv_chat_add_users(purpleChat, names, nullptr, flags, false);
     g_list_free(names);
     g_list_free(flags);
 }
@@ -1093,14 +1091,14 @@ static void setChatMembers(PurpleConvChat *purpleChat,
 void updateChatConversation(PurpleConvChat *purpleChat, const td::td_api::basicGroupFullInfo &groupInfo,
                     const TdAccountData &account)
 {
-    purple_conv_chat_set_topic(purpleChat, NULL, groupInfo.description_.c_str());
+    purple_conv_chat_set_topic(purpleChat, nullptr, groupInfo.description_.c_str());
     setChatMembers(purpleChat, groupInfo.members_, account);
 }
 
 void updateChatConversation(PurpleConvChat *purpleChat, const td::td_api::supergroupFullInfo &groupInfo,
-                    const TdAccountData &account)
+                    const TdAccountData &)
 {
-    purple_conv_chat_set_topic(purpleChat, NULL, groupInfo.description_.c_str());
+    purple_conv_chat_set_topic(purpleChat, nullptr, groupInfo.description_.c_str());
 }
 
 void updateSupergroupChatMembers(PurpleConvChat* purpleChat, const td::td_api::chatMembers& members,
@@ -1343,8 +1341,8 @@ static size_t splitTextChunk(MessagePart &part, const char *text, size_t length,
     // Try to truncate to a whole number of utf-8 characters
     size_t      chunkLen;
     const char *pos = g_utf8_find_prev_char(text, text+lengthLimit);
-    if (pos != NULL) {
-        const char *next = g_utf8_find_next_char(pos, NULL);
+    if (pos != nullptr) {
+        const char *next = g_utf8_find_next_char(pos, nullptr);
         if (next == text+lengthLimit)
             chunkLen = lengthLimit;
         else
@@ -1410,7 +1408,7 @@ static void parseMessage(const char *message, std::vector<MessagePart> &parts, T
     while (*s) {
         bool  isImage = false;
         long  imageId;
-        char *pastImage = NULL;
+        char *pastImage = nullptr;
 
         PlaceholderUse attachment;
         size_t         placeholderLength = 0;
@@ -1748,7 +1746,7 @@ int transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiv
 
         td::td_api::object_ptr<td::td_api::sendMessage> sendMessageRequest = td::td_api::make_object<td::td_api::sendMessage>();
         sendMessageRequest->chat_id_ = chatId.value();
-        char *tempFileName = NULL;
+        char *tempFileName = nullptr;
         bool  hasImage     = false;
 
         if (input.isImage)
@@ -1786,10 +1784,9 @@ std::string getSenderDisplayName(const td::td_api::chat &chat, const TgMessageIn
 {
     if (message.outgoing)
         return purple_account_get_name_for_display(account);
-    else if (isPrivateChat(chat) || getSecretChatId(chat).valid())
+    if (isPrivateChat(chat) || getSecretChatId(chat).valid())
         return chat.title_;
-    else
-        return message.incomingGroupchatSender;
+    return message.incomingGroupchatSender;
 }
 
 static bool g_messageLinksEnabled = false;
@@ -1807,7 +1804,7 @@ void setMessageLinksEnabled(bool enabled)
 // <scheme><account>/<chat id>/<message id>
 static std::string makeLink(const char *scheme, PurpleAccount *account, ChatId chatId, MessageId messageId)
 {
-    gchar *accountName = g_uri_escape_string(purple_account_get_username(account), NULL, FALSE);
+    gchar *accountName = g_uri_escape_string(purple_account_get_username(account), nullptr, FALSE);
     std::string result = std::string(scheme) + accountName + '/' +
                          std::to_string(chatId.value()) + '/' + std::to_string(messageId.value());
     g_free(accountName);
@@ -1849,8 +1846,8 @@ static bool parseLink(const char *scheme, const char *link, std::string &account
     bool    valid = (count == 3) || ((count == 4) && *parts[3]);
     variant = (count == 4) ? parts[3] : "";
     if (valid) {
-        gchar *name = g_uri_unescape_string(parts[0], NULL);
-        valid = (name != NULL);
+        gchar *name = g_uri_unescape_string(parts[0], nullptr);
+        valid = (name != nullptr);
         if (name)
             accountName = name;
         g_free(name);
@@ -2141,7 +2138,7 @@ void populateGroupChatList(PurpleRoomlist *roomlist, const std::vector<const td:
     for (const td::td_api::chat *chat: chats)
         if (account.isGroupChatWithMembership(*chat)) {
             PurpleRoomlistRoom *room = purple_roomlist_room_new(PURPLE_ROOMLIST_ROOMTYPE_ROOM,
-                                                                chat->title_.c_str(), NULL);
+                                                                chat->title_.c_str(), nullptr);
             purple_roomlist_room_add_field (roomlist, room, getPurpleChatName(*chat).c_str());
             BasicGroupId groupId = getBasicGroupId(*chat);
             if (groupId.valid()) {
@@ -2232,11 +2229,11 @@ void AccountThread::finishAll()
 
 void *findFrontEndSymbol(const char *name)
 {
-    gpointer symbol = NULL;
-    GModule *program = g_module_open(NULL, (GModuleFlags)0);
+    gpointer symbol = nullptr;
+    GModule *program = g_module_open(nullptr, (GModuleFlags)0);
     if (program) {
         if (!g_module_symbol(program, name, &symbol))
-            symbol = NULL;
+            symbol = nullptr;
         g_module_close(program);
     }
     return symbol;

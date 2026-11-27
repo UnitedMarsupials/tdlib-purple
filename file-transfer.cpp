@@ -14,15 +14,15 @@ enum {
 
 bool saveImage(int id, char **fileName)
 {
-    *fileName = NULL;
-    char *tempFileName = NULL;
+    *fileName = nullptr;
+    char *tempFileName = nullptr;
 
     PurpleStoredImage *psi = purple_imgstore_find_by_id (id);
     if (!psi) {
         purple_debug_misc(config::pluginId, "Failed to send image: id %d not found\n", id);
         return false;
     }
-    int fd = g_file_open_tmp("tdlib_upload_XXXXXX", &tempFileName, NULL);
+    int fd = g_file_open_tmp("tdlib_upload_XXXXXX", &tempFileName, nullptr);
     if (fd < 0) {
         purple_debug_misc(config::pluginId, "Failed to send image: could not create temporary file\n");
         return false;
@@ -115,7 +115,7 @@ static void updateDocumentUploadProgress(const td::td_api::file &file, PurpleXfe
         if (file.remote_->is_uploading_active_) {
             if (purple_xfer_get_status(upload) != PURPLE_XFER_STATUS_STARTED) {
                 purple_debug_misc(config::pluginId, "Started uploading %s\n", purple_xfer_get_local_filename(upload));
-                purple_xfer_start(upload, -1, NULL, 0);
+                purple_xfer_start(upload, -1, nullptr, 0);
             }
             size_t bytesSent = std::max((td::td_api::int53)0, file.remote_->uploaded_size_);
             purple_xfer_set_bytes_sent(upload, std::min(fileSize, bytesSent));
@@ -155,14 +155,14 @@ struct DownloadData {
     : account(&account), transceiver(&transceiver) {}
 };
 
-static void nop(PurpleXfer *xfer)
+static void nop(PurpleXfer *)
 {
 }
 
 static void cancelDownload(PurpleXfer *xfer)
 {
     std::unique_ptr<DownloadData> data(static_cast<DownloadData *>(xfer->data));
-    xfer->data = NULL;
+    xfer->data = nullptr;
     if (!data) return;
 
     int32_t fileId;
@@ -184,7 +184,7 @@ static void finishInlineDownloadProgress(DownloadRequest &downloadReq, TdAccount
 
     if (account.getFileTransfer(downloadReq.fileId, download, chatId)) {
         std::unique_ptr<DownloadData> data(static_cast<DownloadData *>(download->data));
-        download->data = NULL;
+        download->data = nullptr;
         purple_xfer_set_bytes_sent(download, downloadReq.fileSize);
         purple_xfer_set_completed(download, TRUE);
         purple_xfer_end(download);
@@ -236,7 +236,7 @@ static void inlineDownloadResponse(uint64_t requestId,
             // Message no longer in PendingMessageQueue
             if (!path.empty())
                 // No thumbnail here: the message left PendingMessageQueue, taking it along
-                showDownloadedFileInline(request->chatId, request->message, path, NULL,
+                showDownloadedFileInline(request->chatId, request->message, path, nullptr,
                                          request->fileDescription, std::move(request->thumbnail),
                                          std::string(), transceiver, account);
         }
@@ -249,8 +249,8 @@ static void startInlineDownloadProgress(DownloadRequest &request, TdTransceiver 
     purple_debug_misc(config::pluginId, "Tracking download progress of file id %d: downloaded %d/%d\n",
         (int)request.fileId, (int)request.downloadedSize, (int)request.fileSize);
 
-    char *tempFileName = NULL;
-    int fd = g_file_open_tmp("tdlib_download_XXXXXX", &tempFileName, NULL);
+    char *tempFileName = nullptr;
+    int fd = g_file_open_tmp("tdlib_download_XXXXXX", &tempFileName, nullptr);
     if (fd < 0)
         return;
 
@@ -272,7 +272,7 @@ static void startInlineDownloadProgress(DownloadRequest &request, TdTransceiver 
         // transfer if could not be created. Thus we do our best to give it path to a temporary file
         // that it will be able to create. If it somehow does fail then cancel handler isn't set yet
         // so the actual download won't be cancelled.
-        purple_xfer_start(xfer, -1, NULL, 0);
+        purple_xfer_start(xfer, -1, nullptr, 0);
     } else
         request.tempFd = fd;
 
@@ -380,7 +380,7 @@ static void updateDownloadProgress(const td::td_api::file &file, PurpleXfer *xfe
                 close(downloadReq->tempFd);
             downloadReq->tempFd = -1;
             if (purple_xfer_get_status(xfer) != PURPLE_XFER_STATUS_STARTED)
-                purple_xfer_start(xfer, -1, NULL, 0);
+                purple_xfer_start(xfer, -1, nullptr, 0);
         }
 
         purple_xfer_set_bytes_sent(xfer, downloadedSize);
@@ -394,7 +394,7 @@ static void updateDownloadProgress(const td::td_api::file &file, PurpleXfer *xfe
 void updateFileTransferProgress(const td::td_api::file &file, TdTransceiver &transceiver,
                                 TdAccountData &account, TdTransceiver::ResponseCb sendMessageResponse)
 {
-    PurpleXfer    *xfer = NULL;
+    PurpleXfer    *xfer = nullptr;
     ChatId         chatId;
     AttachmentKind kind = AttachmentKind::Document;
     if (account.getFileTransfer(file.id_, xfer, chatId, &kind)) {
@@ -470,8 +470,8 @@ static gboolean wrapupDownload(void *data)
         fclose(wrapupData->tdlibFile);
         delete wrapupData;
         return G_SOURCE_REMOVE;
-    } else
-        return G_SOURCE_CONTINUE;
+    }
+    return G_SOURCE_CONTINUE;
 }
 
 static void standardDownloadResponse(TdAccountData *account, uint64_t requestId,
@@ -486,10 +486,10 @@ static void standardDownloadResponse(TdAccountData *account, uint64_t requestId,
 
     if (account->getFileTransfer(request->fileId, download, chatId)) {
         std::unique_ptr<DownloadData> data(static_cast<DownloadData *>(download->data));
-        download->data = NULL;
+        download->data = nullptr;
         account->removeFileTransfer(request->fileId);
 
-        FILE *f = NULL;
+        FILE *f = nullptr;
         if (!path.empty())
             f = fopen(path.c_str(), "r");
 
@@ -553,7 +553,7 @@ static void startStandardDownload(PurpleXfer *xfer)
         data->account->addPendingRequest<DownloadRequest>(requestId, std::move(request));
         // Start immediately, because standardDownloadResponse will call purple_xfer_write_file, which
         // will fail if purple_xfer_start hasn't been called
-        purple_xfer_start(xfer, -1, NULL, 0);
+        purple_xfer_start(xfer, -1, nullptr, 0);
     }
 }
 
@@ -579,8 +579,7 @@ unsigned getFileSize(const td::td_api::file &file)
 
     if (size <= 0)
         return 0;
-    else
-        return size;
+    return size;
 }
 
 unsigned getFileSizeKb(const td::td_api::file &file)
@@ -639,7 +638,7 @@ std::string getFileName(const td::td_api::voiceNote* document)
     return _("voiceNote");
 }
 
-std::string getFileName(const td::td_api::videoNote *document)
+std::string getFileName(const td::td_api::videoNote *)
 {
     // TRANSLATOR: Filename. Keep it short, and as few special characters as possible.
     return std::string(_("videoNote")) + ".avi";

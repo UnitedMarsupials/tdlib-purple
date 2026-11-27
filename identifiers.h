@@ -29,7 +29,7 @@ IntType Identifier<IntType>::convertFromString(const char *s)
     long long x;
     static_assert(sizeof(x) >= sizeof(IntType), "long long must hold identifier type");
 	errno = 0;
-    x = strtoll(s, NULL, 10);
+    x = strtoll(s, nullptr, 10);
     if (errno || (x < std::numeric_limits<IntType>::min()) || (x > std::numeric_limits<IntType>::max()))
         return 0;
 

@@ -16,7 +16,8 @@ static td::td_api::object_ptr<td::td_api::callProtocol> getCallProtocol()
     return protocol;
 }
 
-bool initiateCall(int64_t userId, TdAccountData &account, TdTransceiver &transceiver)
+bool initiateCall([[maybe_unused]] int64_t userId, [[maybe_unused]] TdAccountData &account,
+                  [[maybe_unused]] TdTransceiver &transceiver)
 {
 #ifndef NoVoip
     if (!account.hasActiveCall()) {
@@ -28,7 +29,7 @@ bool initiateCall(int64_t userId, TdAccountData &account, TdTransceiver &transce
         // TRANSLATOR: Dialog title of an error message.
         purple_notify_warning(account.purpleAccount, _("Voice call"),
                               // TRANSLATOR: Dialog content of an error message.
-                              _("Cannot start new call, already in another call"), NULL);
+                              _("Cannot start new call, already in another call"), nullptr);
 #endif
 
     return false;
@@ -50,7 +51,7 @@ struct CallRequestData {
     TdAccountData *account;
 };
 
-static void acceptCallCb(CallRequestData *data, int action)
+static void acceptCallCb(CallRequestData *data, int)
 {
     std::unique_ptr<CallRequestData> request(data);
 
@@ -60,7 +61,7 @@ static void acceptCallCb(CallRequestData *data, int action)
     request->transceiver->sendQuery(std::move(acceptReq), nullptr);
 }
 
-static void discardCallCb(CallRequestData *data, int action)
+static void discardCallCb(CallRequestData *data, int)
 {
     std::unique_ptr<CallRequestData> request(data);
     discardCall(request->callId, *request->transceiver);
@@ -74,14 +75,13 @@ static std::string getPurpleUserName(UserId userId, TdAccountData &account)
         const td::td_api::chat *privateChat = account.getPrivateChatByUserId(userId);
         if (privateChat && isChatInContactList(account, *privateChat, user))
             return getPurpleBuddyName(*user);
-        else
-            return account.getDisplayName(*user);
-    } else
-        return std::string();
+        return account.getDisplayName(*user);
+    }
+    return std::string();
 }
 
-static bool activateCall(const td::td_api::call &call, const std::string &buddyName,
-                         TdAccountData &account, TdTransceiver &transceiver)
+static bool activateCall([[maybe_unused]] const td::td_api::call &call, [[maybe_unused]] const std::string &buddyName,
+                         [[maybe_unused]] TdAccountData &account, TdTransceiver &)
 {
 #ifndef NoVoip
     if (call.state_->get_id() != td::td_api::callStateReady::ID)
@@ -93,9 +93,9 @@ static bool activateCall(const td::td_api::call &call, const std::string &buddyN
         // of VoIPController::ProcessIncomingPacket
         // Unlikely error message not worth translating
         if (!buddyName.empty())
-            showMessageTextIm(account, buddyName.c_str(), NULL,
+            showMessageTextIm(account, buddyName.c_str(), nullptr,
                               "Discarding call due to low protocol layer",
-                              time(NULL), PURPLE_MESSAGE_SYSTEM);
+                              time(nullptr), PURPLE_MESSAGE_SYSTEM);
 
         return false;
     }
@@ -139,15 +139,15 @@ static bool activateCall(const td::td_api::call &call, const std::string &buddyN
         const char *message = call.is_outgoing_ ? _("Call active") :
                                                   // TRANSLATOR: In-chat status message. Please keep '/hangup' verbatim!
                                                   _("Call active, type /hangup to terminate");
-        showMessageTextIm(account, buddyName.c_str(), NULL, message,
-                          time(NULL), PURPLE_MESSAGE_SYSTEM);
+        showMessageTextIm(account, buddyName.c_str(), nullptr, message,
+                          time(nullptr), PURPLE_MESSAGE_SYSTEM);
     }
 
 #endif
     return true;
 }
 
-static void deactivateCall(TdAccountData &account)
+static void deactivateCall([[maybe_unused]] TdAccountData &account)
 {
 #ifndef NoVoip
     tgvoip::VoIPController *voip = account.getCallData();
@@ -169,8 +169,8 @@ static void notifyCallError(const td::td_api::callStateError &error, const std::
     // TRANSLATOR: In-chat error message, argument is text
     message = formatMessage(_("Call failed: {}"), message);
     if (!buddyName.empty())
-        showMessageTextIm(account, buddyName.c_str(), NULL, message.c_str(),
-                          time(NULL), PURPLE_MESSAGE_SYSTEM);
+        showMessageTextIm(account, buddyName.c_str(), nullptr, message.c_str(),
+                          time(nullptr), PURPLE_MESSAGE_SYSTEM);
 }
 
 void updateCall(const td::td_api::call &call, TdAccountData &account, TdTransceiver &transceiver)
@@ -189,10 +189,10 @@ void updateCall(const td::td_api::call &call, TdAccountData &account, TdTranscei
         purple_debug_misc(config::pluginId, "Ignoring incoming call: no audio capability\n");
         if (call.state_ && (call.state_->get_id() == td::td_api::callStatePending::ID)) {
             if (!buddyName.empty())
-                showMessageTextIm(account, buddyName.c_str(), NULL,
+                showMessageTextIm(account, buddyName.c_str(), nullptr,
                                   // TRANSLATOR: In-chat error message
                                   _("Received incoming call, but calls are not supported"),
-                                  time(NULL), PURPLE_MESSAGE_SYSTEM);
+                                  time(nullptr), PURPLE_MESSAGE_SYSTEM);
 
             discardCall(call.id_, transceiver);
         }
@@ -213,19 +213,19 @@ void updateCall(const td::td_api::call &call, TdAccountData &account, TdTranscei
             request->account = &account;
             purple_request_action(purple_account_get_connection(account.purpleAccount),
                                   // TRANSLATOR: Dialog title, asking about an incoming telephone call (OK/Cancel)
-                                  _("Voice call"), message.c_str(), NULL,
+                                  _("Voice call"), message.c_str(), nullptr,
                                   PURPLE_DEFAULT_ACTION_NONE,
-                                  account.purpleAccount, !buddyName.empty() ? buddyName.c_str() : NULL, NULL,
+                                  account.purpleAccount, !buddyName.empty() ? buddyName.c_str() : nullptr, nullptr,
                                   // TRANSLATOR: Dialog option, regarding a phone call; the alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
                                   request, 2, _("_OK"), acceptCallCb,
                                   // TRANSLATOR: Dialog option, regarding a phone call; the alternative is "_OK". The underscore marks accelerator keys, they must be different!
                                   _("_Cancel"), discardCallCb);
         } else if (call.id_ != account.getActiveCallId()) {
             if (!buddyName.empty())
-                showMessageTextIm(account, buddyName.c_str(), NULL,
+                showMessageTextIm(account, buddyName.c_str(), nullptr,
                                 // TRANSLATOR: In-chat error message
                                 _("Received incoming call while already in another call"),
-                                time(NULL), PURPLE_MESSAGE_SYSTEM);
+                                time(nullptr), PURPLE_MESSAGE_SYSTEM);
 
             discardCall(call.id_, transceiver);
         }
@@ -233,10 +233,10 @@ void updateCall(const td::td_api::call &call, TdAccountData &account, TdTranscei
         if (!account.hasActiveCall()) {
             account.setActiveCall(call.id_);
             if (!buddyName.empty())
-                showMessageTextIm(account, buddyName.c_str(), NULL,
+                showMessageTextIm(account, buddyName.c_str(), nullptr,
                                 // TRANSLATOR: In-chat status message. Please keep '/hangup' verbatim!
                                 _("Call pending, type /hangup to terminate"),
-                                time(NULL), PURPLE_MESSAGE_SYSTEM);
+                                time(nullptr), PURPLE_MESSAGE_SYSTEM);
         } else if (call.id_ != account.getActiveCallId()) {
             // This would happen if there was no active call when sending createCall, but there is one
             // a millisecond later when asynchronous response is received. Possible if two calls are
@@ -299,5 +299,5 @@ void showCallMessage(const td::td_api::chat &chat, const TgMessageInfo &message,
 
     // TRANSLATOR: In-chat message, arguments will be a duration and a few words (like "hung up")
     notification = formatMessage(_("Call ended ({0}): {1}"), {formatDuration(callEnded.duration_), notification});
-    showMessageText(account, chat, message, NULL, notification.c_str());
+    showMessageText(account, chat, message, nullptr, notification.c_str());
 }

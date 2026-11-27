@@ -91,13 +91,13 @@ static void finishSmiley(const SmileyTarget &target, const gchar *data, gsize si
 
 static void finishSmileyFromFile(const SmileyTarget &target, const std::string &path)
 {
-    gchar *data = NULL;
+    gchar *data = nullptr;
     gsize  size = 0;
-    if (!path.empty() && g_file_get_contents(path.c_str(), &data, &size, NULL)) {
+    if (!path.empty() && g_file_get_contents(path.c_str(), &data, &size, nullptr)) {
         finishSmiley(target, data, size);
         g_free(data);
     } else
-        finishSmiley(target, NULL, 0);
+        finishSmiley(target, nullptr, 0);
 }
 
 using FileReady = std::function<void(TdAccountData &account, const std::string &path)>;
@@ -165,7 +165,7 @@ static void fetchSmileyPicture(TdAccountData &account, const td::td_api::sticker
             }
             ReactionStickerThread *thread = new ReactionStickerThread(account.purpleAccount, path,
                 [target, useThumbnail](TdAccountData &account, int imageId) {
-                    PurpleStoredImage *image = imageId ? purple_imgstore_find_by_id(imageId) : NULL;
+                    PurpleStoredImage *image = imageId ? purple_imgstore_find_by_id(imageId) : nullptr;
                     if (image) {
                         finishSmiley(target, static_cast<const gchar *>(purple_imgstore_get_data(image)),
                                      purple_imgstore_get_size(image));
@@ -268,7 +268,7 @@ std::map<int64_t, std::string> addCustomEmojiSmileys(TdAccountData &account, Pur
                         }
                 // Those Telegram did not know
                 for (const auto &item: *targets)
-                    finishSmiley(item.second, NULL, 0);
+                    finishSmiley(item.second, nullptr, 0);
             });
     }
 
