@@ -587,6 +587,28 @@ static guint g_connectSource = 0;
 
 static const char MESSAGE_MARK_PREFIX[] = "tdlib-message-";
 
+// The plugin's marks at the iterator whose names start with the prefix
+static std::vector<GtkTextMark *> getMarksAt(const GtkTextIter &iter, const char *prefix)
+{
+    std::vector<GtkTextMark *> found;
+    GSList                    *marks = p_gtk_text_iter_get_marks(&iter);
+    for (GSList *item = marks; item; item = item->next) {
+        const char *name = p_gtk_text_mark_get_name(static_cast<GtkTextMark *>(item->data));
+        if (name && g_str_has_prefix(name, prefix))
+            found.push_back(static_cast<GtkTextMark *>(item->data));
+    }
+    g_slist_free(marks);
+    return found;
+}
+
+// The message whose start the mark is
+static MessageId getStartMarkMessage(GtkTextMark *mark)
+{
+    return MessageId::fromString(p_gtk_text_mark_get_name(mark) + strlen(START_MARK_PREFIX));
+}
+
+static MessageId findMessageStart(const GtkTextIter &iter);
+
 // Emptied, as by /clear or to be filled anew: what comes is shown again. The marks of the messages
 // that were in it go too, which GTK would keep, all at its start, for reaction lines to be written
 // at and messages to be taken to be there still.
@@ -600,13 +622,8 @@ static void historyCleared(PurpleConversation *conv)
     GtkTextIter                iter;
     p_gtk_text_buffer_get_iter_at_offset(buffer, &iter, 0);
     do {
-        GSList *marks = p_gtk_text_iter_get_marks(&iter);
-        for (GSList *item = marks; item; item = item->next) {
-            const char *name = p_gtk_text_mark_get_name(static_cast<GtkTextMark *>(item->data));
-            if (name && g_str_has_prefix(name, MESSAGE_MARK_PREFIX))
-                gone.push_back(static_cast<GtkTextMark *>(item->data));
-        }
-        g_slist_free(marks);
+        std::vector<GtkTextMark *> marks = getMarksAt(iter, MESSAGE_MARK_PREFIX);
+        gone.insert(gone.end(), marks.begin(), marks.end());
     } while (p_gtk_text_iter_forward_char(&iter));
     for (GtkTextMark *mark: gone)
         p_gtk_text_buffer_delete_mark(buffer, mark);
@@ -2382,14 +2399,7 @@ static MessageId findMessageAt(GtkTextBuffer *buffer, const GtkTextIter &where)
 {
     GtkTextIter iter = where;
     do {
-        MessageId messageId;
-        GSList   *marks = p_gtk_text_iter_get_marks(&iter);
-        for (GSList *item = marks; item && !messageId.valid(); item = item->next) {
-            const char *name = p_gtk_text_mark_get_name(static_cast<GtkTextMark *>(item->data));
-            if (name && g_str_has_prefix(name, START_MARK_PREFIX))
-                messageId = MessageId::fromString(name + strlen(START_MARK_PREFIX));
-        }
-        g_slist_free(marks);
+        MessageId messageId = findMessageStart(iter);
         if (!messageId.valid())
             continue;
         // Its text, its buttons or its reactions, whichever ends later: an edit's text goes in after
@@ -3052,15 +3062,8 @@ void refreshReactionTip(PurpleConversation *conv)
 // The message that starts where the iterator is, if one does
 static MessageId findMessageStart(const GtkTextIter &iter)
 {
-    GSList   *marks = p_gtk_text_iter_get_marks(&iter);
-    MessageId messageId;
-    for (GSList *item = marks; item && !messageId.valid(); item = item->next) {
-        const char *name = p_gtk_text_mark_get_name(static_cast<GtkTextMark *>(item->data));
-        if (name && g_str_has_prefix(name, START_MARK_PREFIX))
-            messageId = MessageId::fromString(name + strlen(START_MARK_PREFIX));
-    }
-    g_slist_free(marks);
-    return messageId;
+    std::vector<GtkTextMark *> marks = getMarksAt(iter, START_MARK_PREFIX);
+    return marks.empty() ? MessageId() : getStartMarkMessage(marks.front());
 }
 
 MessageId findFirstMessage(PurpleConversation *conv)
@@ -3262,13 +3265,8 @@ bool trimTab(PurpleConversation *conv, unsigned maxLines, bool fromTop, MessageI
     for (bool more = true; more; more = p_gtk_text_iter_forward_char(&iter)) {
         if (fromTop && (p_gtk_text_iter_compare(&iter, &to) >= 0))
             break;
-        GSList *marks = p_gtk_text_iter_get_marks(&iter);
-        for (GSList *item = marks; item; item = item->next) {
-            const char *name = p_gtk_text_mark_get_name(static_cast<GtkTextMark *>(item->data));
-            if (name && g_str_has_prefix(name, MESSAGE_MARK_PREFIX))
-                gone.push_back(static_cast<GtkTextMark *>(item->data));
-        }
-        g_slist_free(marks);
+        std::vector<GtkTextMark *> marks = getMarksAt(iter, MESSAGE_MARK_PREFIX);
+        gone.insert(gone.end(), marks.begin(), marks.end());
     }
     purple_debug_misc(config::pluginId, "Taking lines %s %d out of %d in the tab\n", fromTop ? "up to" : "from",
                       line, lines);
@@ -3833,15 +3831,11 @@ static std::vector<MessageId> findViewedMessages(GtkIMHtml *imhtml)
     if (first.valid())
         messageIds.push_back(first);
     do {
-        GSList *marks = p_gtk_text_iter_get_marks(&iter);
-        for (GSList *item = marks; item; item = item->next) {
-            const char *name = p_gtk_text_mark_get_name(static_cast<GtkTextMark *>(item->data));
-            MessageId   messageId = (name && g_str_has_prefix(name, START_MARK_PREFIX))
-                                    ? MessageId::fromString(name + strlen(START_MARK_PREFIX)) : MessageId();
+        for (GtkTextMark *mark: getMarksAt(iter, START_MARK_PREFIX)) {
+            MessageId messageId = getStartMarkMessage(mark);
             if (messageId.valid() && (messageIds.empty() || !(messageIds.back() == messageId)))
                 messageIds.push_back(messageId);
         }
-        g_slist_free(marks);
     } while ((p_gtk_text_iter_compare(&iter, &last) < 0) && p_gtk_text_iter_forward_char(&iter));
     return messageIds;
 }
