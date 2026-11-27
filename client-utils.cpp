@@ -252,11 +252,21 @@ PurpleBlistNode *findChatBlistNode(const TdAccountData &account, const td::td_ap
 
 static const char DELETED_MESSAGES_SETTING[] = "tdlib-deleted-messages";
 
+// What a buddy or chat chose for itself, if it did: whether its setting is the value saying yes
+static bool getNodeChoice(PurpleBlistNode *node, const char *setting, const char *yes, bool &chosen)
+{
+    const char *value = node ? purple_blist_node_get_string(node, setting) : nullptr;
+    if (!value || !*value)
+        return false;
+    chosen = !strcmp(value, yes);
+    return true;
+}
+
 bool keepsDeletedMessages(PurpleAccount *account, PurpleBlistNode *node)
 {
-    const char *chosen = node ? purple_blist_node_get_string(node, DELETED_MESSAGES_SETTING) : nullptr;
-    if (chosen && *chosen)
-        return !strcmp(chosen, "keep");
+    bool keep;
+    if (getNodeChoice(node, DELETED_MESSAGES_SETTING, "keep", keep))
+        return keep;
     return purple_account_get_bool(account, AccountOptions::StrikeOutDeleted, AccountOptions::StrikeOutDeletedDefault);
 }
 
@@ -269,9 +279,9 @@ static const char DOWNLOAD_MEDIA_SETTING[] = "tdlib-download-media";
 
 bool downloadsMedia(PurpleAccount *account, PurpleBlistNode *node)
 {
-    const char *chosen = node ? purple_blist_node_get_string(node, DOWNLOAD_MEDIA_SETTING) : nullptr;
-    if (chosen && *chosen)
-        return !strcmp(chosen, "yes");
+    bool download;
+    if (getNodeChoice(node, DOWNLOAD_MEDIA_SETTING, "yes", download))
+        return download;
     // Under "Telegram: not joined" or "Telegram: not in contacts", which are not saved
     if (node && (purple_blist_node_get_flags(node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE))
         return false;
@@ -455,7 +465,7 @@ PurpleConvChat *getChatConversation(TdAccountData &account, const td::td_api::ch
 
         if (purpleChat && newChatCreated) {
             BasicGroupId                          basicGroupId = getBasicGroupId(chat);
-            const td::td_api::basicGroupFullInfo *groupInfo    = basicGroupId.valid() ? account.getBasicGroupInfo(basicGroupId) : nullptr;
+            const td::td_api::basicGroupFullInfo *groupInfo    = account.getBasicGroupInfo(basicGroupId);
             if (groupInfo)
                 updateChatConversation(purpleChat, *groupInfo, account);
 
@@ -945,6 +955,27 @@ bool isAnonymousChannelPost(const td::td_api::chat &chat, const td::td_api::mess
            !getSenderUserId(message).valid() && message.author_signature_.empty() && message.is_channel_post_;
 }
 
+// Who a forwarded message came from: a user, one who hides, or a channel -- as its sender, by its
+// author's signature, as its source, by the channel's title
+static std::string getForwardOriginName(const td::td_api::MessageOrigin &origin, const TdAccountData &account,
+                                        bool channelAuthor)
+{
+    switch (origin.get_id()) {
+    case td::td_api::messageOriginUser::ID:
+        return account.getDisplayName(getSenderUserId(static_cast<const td::td_api::messageOriginUser &>(origin)));
+    case td::td_api::messageOriginHiddenUser::ID:
+        return static_cast<const td::td_api::messageOriginHiddenUser &>(origin).sender_name_;
+    case td::td_api::messageOriginChannel::ID: {
+        const auto &channel = static_cast<const td::td_api::messageOriginChannel &>(origin);
+        if (channelAuthor)
+            return channel.author_signature_;
+        const td::td_api::chat *chat = account.getChat(getChatId(channel));
+        return chat ? chat->title_ : std::string();
+    }
+    }
+    return "";
+}
+
 std::string getIncomingGroupchatSenderPurpleName(const td::td_api::chat &chat, const td::td_api::message &message,
                                                  const TdAccountData &account)
 {
@@ -959,14 +990,7 @@ std::string getIncomingGroupchatSenderPurpleName(const td::td_api::chat &chat, c
             return _("Channel post");
         }
         if (message.forward_info_ && message.forward_info_->origin_)
-            switch (message.forward_info_->origin_->get_id()) {
-            case td::td_api::messageOriginUser::ID:
-                return account.getDisplayName(getSenderUserId(static_cast<const td::td_api::messageOriginUser &>(*message.forward_info_->origin_)));
-            case td::td_api::messageOriginHiddenUser::ID:
-                return static_cast<const td::td_api::messageOriginHiddenUser &>(*message.forward_info_->origin_).sender_name_;
-            case td::td_api::messageOriginChannel::ID:
-                return static_cast<const td::td_api::messageOriginChannel&>(*message.forward_info_->origin_).author_signature_;
-            }
+            return getForwardOriginName(*message.forward_info_->origin_, account, true);
     }
 
     // For outgoing messages, our name will be used instead
@@ -978,22 +1002,7 @@ std::string getIncomingGroupchatSenderPurpleName(const td::td_api::chat &chat, c
 std::string getForwardSource(const td::td_api::messageForwardInfo &forwardInfo,
                              const TdAccountData &account)
 {
-    if (!forwardInfo.origin_)
-        return "";
-
-    switch (forwardInfo.origin_->get_id()) {
-        case td::td_api::messageOriginUser::ID:
-            return account.getDisplayName(getSenderUserId(static_cast<const td::td_api::messageOriginUser &>(*forwardInfo.origin_)));
-        case td::td_api::messageOriginHiddenUser::ID:
-            return static_cast<const td::td_api::messageOriginHiddenUser &>(*forwardInfo.origin_).sender_name_;
-        case td::td_api::messageOriginChannel::ID: {
-            const td::td_api::chat *chat = account.getChat(getChatId(static_cast<const td::td_api::messageOriginChannel&>(*forwardInfo.origin_)));
-            if (chat)
-                return chat->title_;
-        }
-    }
-
-    return "";
+    return forwardInfo.origin_ ? getForwardOriginName(*forwardInfo.origin_, account, false) : std::string();
 }
 
 void getNamesFromAlias(const char *alias, std::string &firstName, std::string &lastName)
@@ -1044,30 +1053,22 @@ static void findChatsByComponents(PurpleBlistNode *node,
     }
 }
 
-std::vector<PurpleChat *>findChatsByJoinString(const std::string &joinString)
+static std::vector<PurpleChat *> findChats(const char *joinString, const char *name, int type)
 {
     std::vector<PurpleChat *> result;
-
-    for (PurpleBlistNode *root = purple_blist_get_root(); root;
-         root = purple_blist_node_get_sibling_next(root)) // LOL
-    {
-        findChatsByComponents(root, joinString.c_str(), "", 0, result);
-    }
-
+    for (PurpleBlistNode *root = purple_blist_get_root(); root; root = purple_blist_node_get_sibling_next(root))
+        findChatsByComponents(root, joinString, name, type, result);
     return result;
+}
+
+std::vector<PurpleChat *>findChatsByJoinString(const std::string &joinString)
+{
+    return findChats(joinString.c_str(), "", 0);
 }
 
 std::vector<PurpleChat *> findChatsByNewGroup(const char *name, int type)
 {
-    std::vector<PurpleChat *> result;
-
-    for (PurpleBlistNode *root = purple_blist_get_root(); root;
-         root = purple_blist_node_get_sibling_next(root)) // LOL
-    {
-        findChatsByComponents(root, "", name, type, result);
-    }
-
-    return result;
+    return findChats("", name, type);
 }
 
 static void setChatMembers(PurpleConvChat *purpleChat,
@@ -1838,8 +1839,6 @@ static std::string makeLink(const char *scheme, PurpleAccount *account, ChatId c
     return result;
 }
 
-// tdlib://<account>/<chat id>/<message id>: the message, rather than its file, which may not be
-// there yet, and whose path would not outlive TDLib's file cache
 bool isLinkSchemeAllowed(const std::string &url)
 {
     gchar *scheme  = g_uri_parse_scheme(url.c_str());
@@ -1852,6 +1851,8 @@ bool isLinkSchemeAllowed(const std::string &url)
     return allowed;
 }
 
+// tdlib://<account>/<chat id>/<message id>: the message, rather than its file, which may not be
+// there yet, and whose path would not outlive TDLib's file cache
 std::string makeMessageLink(PurpleAccount *account, ChatId chatId, MessageId messageId,
                             const std::string &variant)
 {
