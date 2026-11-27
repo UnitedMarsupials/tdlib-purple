@@ -64,6 +64,10 @@ group for it.
 * C++14 (`CMakeLists.txt`), four spaces, no TABs, camelCase; members of
   classes start with `m_`. Braces as in the code around: a function's on a
   line of its own.
+* `nullptr`, not `NULL`; no `else` after `return` (or `continue`, `break`);
+  unused parameters left unnamed, `[[maybe_unused]]` if used in some builds
+  only. CI checks these with `.clang-tidy` (`clang-tidy -p <build> file.cpp`,
+  on a build configured with `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON`).
 * Comments say why, briefly, in plain sentences. Match the density and the
   idiom of the surrounding code.
 * What the user sees is translated: wrap it in `_()` (`translate.h`), and

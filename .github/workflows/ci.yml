@@ -110,6 +110,7 @@ jobs:
             experimental: false
             sanitize: false
             valgrind: true
+            tidy: true
           - name: Alpine x86_64 (g++, NoTranslations)
             runner: ubuntu-24.04
             platform: linux/amd64
@@ -185,7 +186,8 @@ jobs:
               cmake samurai pkgconf gettext gettext-dev g++ ${{ matrix.compiler }} \
               pidgin-dev telegram-tdlib-dev telegram-tdlib-static openssl-dev zlib-dev \
               fmt-dev rlottie-dev gtest-dev shared-mime-info ${{ matrix.valgrind && 'valgrind' || '' }} \
-              ${{ matrix.sanitize && 'clang compiler-rt' || '' }}
+              ${{ matrix.sanitize && 'clang compiler-rt' || '' }} \
+              ${{ matrix.tidy && 'clang22-extra-tools' || '' }}
           apk info -v telegram-tdlib-dev
 
       - name: Configure
@@ -194,7 +196,7 @@ jobs:
           sh .github/annotate.sh Configure
           env CXX=${{ matrix.cxx }}
           cmake -G Ninja -S . -B build -DNoVoip=1 ${{ matrix.options }}
-          -DCMAKE_CXX_FLAGS="${{ env.WARNINGS }}"
+          -DCMAKE_CXX_FLAGS="${{ env.WARNINGS }}" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Build
         id: build
@@ -205,6 +207,16 @@ jobs:
       - name: Test
         id: test
         run: sh .github/annotate.sh Test cmake --build build --target run-tests
+
+      # The style .clang-tidy keeps, over the sources and the tests, with the
+      # clang-tidy it was last checked with.
+      - name: Style
+        id: style
+        if: matrix.tidy
+        run: >-
+          find . -maxdepth 2 -name '*.cpp' ! -path './build*' |
+          sh .github/annotate.sh Style xargs -P "$(nproc)" -n 1
+          /usr/lib/llvm22/bin/clang-tidy -p build --quiet
 
       # The same tests again, under Valgrind: it finds reads of uninitialised
       # memory, use after free and invalid accesses, as well as definite leaks,
@@ -260,6 +272,7 @@ jobs:
           INSTALL: ${{ steps.destdir.outcome }}
           VALGRIND: ${{ steps.valgrind.outcome }}
           SANITIZE: ${{ steps.sanitize.outcome }}
+          STYLE: ${{ matrix.tidy && steps.style.outcome || 'n/a' }}
         run: sh .github/record.sh
 
       - uses: actions/upload-artifact@v7
