@@ -11,6 +11,9 @@ std::string         getUnsupportedMessageDescription(const td::td_api::MessageCo
 std::string         describeUnsupportedContent(const td::td_api::MessageContent &content);
 std::string         getDisplayedError(const td::td_api::object_ptr<td::td_api::Object> &object);
 
+// A text field of a dialog, masked for a password
+PurpleRequestField *addStringField(PurpleRequestFieldGroup *group, const char *id, const char *label,
+                                   const char *value = nullptr, bool masked = false);
 // A photo's file, for libpurple to keep as a buddy's or chat's icon; null if it cannot be read, logged
 gchar *readPhoto(const std::string &path, const std::string &whose, gsize &size);
 // Why a name is not of one user, as getUsersByPurpleName found: none, or several

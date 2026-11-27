@@ -728,6 +728,7 @@ void PurpleTdClient::askDatabasePassword(DatabaseKeyUse use)
     // TRANSLATOR: Database password dialog, label of the field
     PurpleRequestField      *field  = purple_request_field_string_new("password", _("Password"), nullptr, FALSE);
     purple_request_field_string_set_masked(field, TRUE);
+    // Required before it is added, as libpurple notes the required fields as they are added
     purple_request_field_set_required(field, TRUE);
     purple_request_field_group_add_field(group, field);
     purple_request_fields_add_group(fields, group);
@@ -1576,7 +1577,7 @@ PurpleTdClient *PurpleTdClient::findConnected(const char *accountName)
     PurpleConnection *gc      = account ? purple_account_get_connection(account) : nullptr;
     if (!gc || !PURPLE_CONNECTION_IS_CONNECTED(gc))
         return nullptr;
-    return static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    return getTdClient(gc);
 }
 
 // As many to a row in the menu as TDLib is asked to place in its top row

@@ -14,43 +14,32 @@ const char *getChatNameComponent()
     return chatNameComponent;
 }
 
+static proto_chat_entry *makeChatEntry(const char *label, const char *identifier)
+{
+    proto_chat_entry *entry = g_new0(proto_chat_entry, 1);
+    entry->label      = label;
+    entry->identifier = identifier;
+    entry->required   = FALSE;
+    return entry;
+}
+
 GList *getChatJoinInfo()
 {
     // First entry is the internal chat name used to look up conversations
-    struct proto_chat_entry *pce;
-    pce = g_new0 (struct proto_chat_entry, 1);
     // TRANSLATOR: Info item *and* dialog item.
-    pce->label = _("Chat ID (don't change):");
-    pce->identifier = chatNameComponent;
-    pce->required = FALSE;
-    GList *info = g_list_append (nullptr, pce);
+    GList *info = g_list_append(nullptr, makeChatEntry(_("Chat ID (don't change):"), chatNameComponent));
+    // TRANSLATOR: Info item *and* dialog item.
+    info = g_list_append(info, makeChatEntry(_("Join URL or name (empty if creating new):"), joinStringKey));
+    // TRANSLATOR: Info item *and* dialog item.
+    info = g_list_append(info, makeChatEntry(_("Group name (if creating a group):"), nameKey));
 
-    pce = g_new0 (struct proto_chat_entry, 1);
     // TRANSLATOR: Info item *and* dialog item.
-    pce->label = _("Join URL or name (empty if creating new):");
-    pce->identifier = joinStringKey;
-    pce->required = FALSE;
-    info = g_list_append (info, pce);
-
-    pce = g_new0 (struct proto_chat_entry, 1);
-    // TRANSLATOR: Info item *and* dialog item.
-    pce->label = _("Group name (if creating a group):");
-    pce->identifier = nameKey;
-    pce->required = FALSE;
-    info = g_list_append (info, pce);
-
-    pce = g_new0 (struct proto_chat_entry, 1);
-    // TRANSLATOR: Info item *and* dialog item.
-    pce->label = _("Group to create: 1=small 2=big 3=channel");
-    pce->identifier = typeKey;
-    pce->required = FALSE;
-    pce->is_int = TRUE;
+    proto_chat_entry *type = makeChatEntry(_("Group to create: 1=small 2=big 3=channel"), typeKey);
+    type->is_int = TRUE;
     static_assert((GROUP_TYPE_BASIC > 0) && (GROUP_TYPE_SUPER > 0) && (GROUP_TYPE_CHANNEL > 0), "positive please");
-    pce->min = std::min({GROUP_TYPE_BASIC, GROUP_TYPE_SUPER, GROUP_TYPE_CHANNEL});
-    pce->max = std::max({GROUP_TYPE_BASIC, GROUP_TYPE_SUPER, GROUP_TYPE_CHANNEL});
-    info = g_list_append (info, pce);
-
-    return info;
+    type->min = std::min({GROUP_TYPE_BASIC, GROUP_TYPE_SUPER, GROUP_TYPE_CHANNEL});
+    type->max = std::max({GROUP_TYPE_BASIC, GROUP_TYPE_SUPER, GROUP_TYPE_CHANNEL});
+    return g_list_append(info, type);
 }
 
 std::string getPurpleChatName(const td::td_api::chat &chat)
@@ -164,12 +153,19 @@ bool ignoreBigDownloads(PurpleAccount *account)
                    AccountOptions::BigDownloadHandlingDiscard);
 }
 
+PurpleTdClient *getTdClient(PurpleConnection *gc)
+{
+    return gc ? static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc)) : nullptr;
+}
+
 PurpleTdClient *getTdClient(PurpleAccount *account)
 {
-    PurpleConnection *connection = purple_account_get_connection(account);
-    if (connection)
-        return static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(connection));
-    return nullptr;
+    return getTdClient(purple_account_get_connection(account));
+}
+
+PurpleTdClient *getTdClient(PurpleConversation *conv)
+{
+    return getTdClient(purple_conversation_get_account(conv));
 }
 
 const char *getUiName()

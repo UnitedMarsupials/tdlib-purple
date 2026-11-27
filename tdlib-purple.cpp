@@ -241,18 +241,22 @@ static void createSecretChat(PurpleBlistNode *node, gpointer)
 }
 
 // Shown in Pidgin's conversation window's Conversation > More menu as well
+static PurpleAccount *getBlistNodeAccount(PurpleBlistNode *node)
+{
+    return PURPLE_BLIST_NODE_IS_CHAT(node) ? purple_chat_get_account(PURPLE_CHAT(node))
+                                           : purple_buddy_get_account(PURPLE_BUDDY(node));
+}
+
 static void toggleDeletedMessages(PurpleBlistNode *node, gpointer)
 {
-    PurpleAccount *account = PURPLE_BLIST_NODE_IS_CHAT(node) ? purple_chat_get_account(PURPLE_CHAT(node))
-                                                             : purple_buddy_get_account(PURPLE_BUDDY(node));
+    PurpleAccount *account = getBlistNodeAccount(node);
     setKeepsDeletedMessages(node, !keepsDeletedMessages(account, node));
 }
 
 // Shown in Pidgin's conversation window's Conversation > More menu as well
 static void toggleDownloadMedia(PurpleBlistNode *node, gpointer)
 {
-    PurpleAccount  *account  = PURPLE_BLIST_NODE_IS_CHAT(node) ? purple_chat_get_account(PURPLE_CHAT(node))
-                                                               : purple_buddy_get_account(PURPLE_BUDDY(node));
+    PurpleAccount  *account  = getBlistNodeAccount(node);
     bool            download = !downloadsMedia(account, node);
     setDownloadsMedia(node, download);
     PurpleTdClient *tdClient = getTdClient(account);
@@ -286,7 +290,7 @@ static PurpleMenuAction *makeDeletedMessagesAction(PurpleBlistNode *node, Purple
 // display name are told apart: shown by the contact's alias, or failing that, by this
 static char *tgprpl_get_cb_alias(PurpleConnection *gc, int, const char *who)
 {
-    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    PurpleTdClient *tdClient = getTdClient(gc);
     std::string     alias    = (tdClient && who) ? tdClient->getChatMemberAlias(who) : std::string();
     return alias.empty() ? nullptr : g_strdup(alias.c_str());
 }
@@ -295,7 +299,7 @@ static char *tgprpl_get_cb_alias(PurpleConnection *gc, int, const char *who)
 // with them the plugin writes to; Pidgin uses the member's name if there is none
 static char *tgprpl_get_cb_real_name(PurpleConnection *gc, int, const char *who)
 {
-    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    PurpleTdClient *tdClient = getTdClient(gc);
     std::string     name     = (tdClient && who) ? tdClient->getChatMemberImName(who) : std::string();
     return name.empty() ? nullptr : g_strdup(name.c_str());
 }
@@ -303,7 +307,7 @@ static char *tgprpl_get_cb_real_name(PurpleConnection *gc, int, const char *who)
 // Pidgin's list of blocked users is Telegram's
 static void setBlocked(PurpleConnection *gc, const char *name, bool blocked)
 {
-    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    PurpleTdClient *tdClient = getTdClient(gc);
     UserId          userId   = purpleBuddyNameToUserId(name);
     if (tdClient && userId.valid())
         tdClient->setUserBlocked(userId, blocked);
@@ -327,12 +331,6 @@ static ChatId getBlistNodeChatId(PurpleTdClient *tdClient, PurpleBlistNode *node
     if (PURPLE_BLIST_NODE_IS_BUDDY(node))
         return tdClient->getPrivateChatId(purpleBuddyNameToUserId(purple_buddy_get_name(PURPLE_BUDDY(node))));
     return ChatId();
-}
-
-static PurpleAccount *getBlistNodeAccount(PurpleBlistNode *node)
-{
-    return PURPLE_BLIST_NODE_IS_CHAT(node) ? purple_chat_get_account(PURPLE_CHAT(node))
-                                           : purple_buddy_get_account(PURPLE_BUDDY(node));
 }
 
 static void reportBlistNode(PurpleBlistNode *node, gpointer)
@@ -545,6 +543,22 @@ static void deletingConversation(PurpleConversation *conv, void *data)
         tdClient->conversationShown(conv, false);
 }
 
+// Listened to by each account while it is connected, with the account as their handle; those
+// withAccount are given it too
+struct AccountSignal {
+    void          *(*handle)();
+    const char     *name;
+    PurpleCallback  callback;
+    bool            withAccount;
+};
+static const AccountSignal AccountSignals[] = {
+    {purple_conversations_get_handle, "conversation-updated",  PURPLE_CALLBACK(conversation_updated_cb), false},
+    {purple_conversations_get_handle, "conversation-created",  PURPLE_CALLBACK(conversationCreated),     true},
+    {purple_conversations_get_handle, "chat-joined",           PURPLE_CALLBACK(conversationCreated),     true},
+    {purple_conversations_get_handle, "deleting-conversation", PURPLE_CALLBACK(deletingConversation),    true},
+    {purple_blist_get_handle,         "blist-node-added",      PURPLE_CALLBACK(blistNodeAdded),          true},
+};
+
 static void tgprpl_login (PurpleAccount *acct)
 {
     purple_debug_misc(config::pluginId, "version %s\n", config::versionString);
@@ -560,33 +574,18 @@ static void tgprpl_login (PurpleAccount *acct)
     gc->flags = static_cast<PurpleConnectionFlags>(gc->flags | PURPLE_CONNECTION_HTML |
                                                    PURPLE_CONNECTION_NO_BGCOLOR | PURPLE_CONNECTION_NO_FONTSIZE);
 
-    purple_signal_connect(purple_conversations_get_handle(), "conversation-updated",
-                          acct, PURPLE_CALLBACK(conversation_updated_cb), nullptr);
-    purple_signal_connect(purple_conversations_get_handle(), "conversation-created",
-                          acct, PURPLE_CALLBACK(conversationCreated), acct);
-    purple_signal_connect(purple_conversations_get_handle(), "chat-joined",
-                          acct, PURPLE_CALLBACK(conversationCreated), acct);
-    purple_signal_connect(purple_conversations_get_handle(), "deleting-conversation",
-                          acct, PURPLE_CALLBACK(deletingConversation), acct);
-    purple_signal_connect(purple_blist_get_handle(), "blist-node-added",
-                          acct, PURPLE_CALLBACK(blistNodeAdded), acct);
+    for (const AccountSignal &signal: AccountSignals)
+        purple_signal_connect(signal.handle(), signal.name, acct, signal.callback,
+                              signal.withAccount ? acct : nullptr);
 }
 
 static void tgprpl_close (PurpleConnection *gc)
 {
     // Connected again at the next login
     PurpleAccount *account = purple_connection_get_account(gc);
-    purple_signal_disconnect(purple_conversations_get_handle(), "conversation-updated",
-                             account, PURPLE_CALLBACK(conversation_updated_cb));
-    purple_signal_disconnect(purple_conversations_get_handle(), "conversation-created",
-                             account, PURPLE_CALLBACK(conversationCreated));
-    purple_signal_disconnect(purple_conversations_get_handle(), "chat-joined",
-                             account, PURPLE_CALLBACK(conversationCreated));
-    purple_signal_disconnect(purple_conversations_get_handle(), "deleting-conversation",
-                             account, PURPLE_CALLBACK(deletingConversation));
-    purple_signal_disconnect(purple_blist_get_handle(), "blist-node-added",
-                             account, PURPLE_CALLBACK(blistNodeAdded));
-    delete static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    for (const AccountSignal &signal: AccountSignals)
+        purple_signal_disconnect(signal.handle(), signal.name, account, signal.callback);
+    delete getTdClient(gc);
     purple_connection_set_protocol_data(gc, nullptr);
 }
 
@@ -608,7 +607,7 @@ static bool sendEdit(PurpleTdClient *tdClient, PurpleConversation *conv, const c
 
 static int tgprpl_send_im (PurpleConnection *gc, const char *who, const char *message, PurpleMessageFlags flags)
 {
-    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    PurpleTdClient *tdClient = getTdClient(gc);
     purple_debug_misc(config::pluginId, "tgprpl_send_im to '%s' flags=0x%x\n", who, (unsigned)flags);
     PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, who,
                                                                      purple_connection_get_account(gc));
@@ -619,14 +618,14 @@ static int tgprpl_send_im (PurpleConnection *gc, const char *who, const char *me
 
 static unsigned int tgprpl_send_typing (PurpleConnection *gc, const char *who, PurpleTypingState typing)
 {
-    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    PurpleTdClient *tdClient = getTdClient(gc);
     tdClient->sendTyping(who, typing == PURPLE_TYPING);
     return 0;
 }
 
 static void tgprpl_info_show (PurpleConnection *gc, const char *who)
 {
-    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    PurpleTdClient *tdClient = getTdClient(gc);
     std::vector<const td::td_api::user *> users;
     tdClient->getUsers(who, users);
 
@@ -671,7 +670,7 @@ static void tgprpl_set_status (PurpleAccount *, PurpleStatus *)
 // Told by libpurple, by Pidgin's setting of when the user is idle; never, if told not to report it
 static void tgprpl_set_idle (PurpleConnection *gc, int idleTime)
 {
-    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    PurpleTdClient *tdClient = getTdClient(gc);
     if (tdClient)
         tdClient->setIdle(idleTime != 0);
 }
@@ -689,7 +688,7 @@ static void tgprpl_add_buddy (PurpleConnection *gc, PurpleBuddy *buddy, PurpleGr
     purple_blist_remove_buddy(buddy);
     // Now original C strings are gone
 
-    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    PurpleTdClient *tdClient = getTdClient(gc);
     tdClient->addContact(phoneNumberStr, aliasStr, groupName ? groupName : "");
 }
 
@@ -724,9 +723,9 @@ static std::array<const char *, 2> groupLinkPrefixes {
 
 static bool isValidInviteLink(const char *link)
 {
-    return !strncmp(link, invitePrefixes[0], strlen(invitePrefixes[0])) ||
-           !strncmp(link, invitePrefixes[1], strlen(invitePrefixes[1])) ||
-           !strncmp(link, invitePrefixes[2], strlen(invitePrefixes[2]));
+    return std::any_of(std::begin(invitePrefixes), std::end(invitePrefixes), [link](const char *prefix) {
+        return !strncmp(link, prefix, strlen(prefix));
+    });
 }
 
 static std::string getGroupUsernameFromLink(const char *link)
@@ -765,18 +764,9 @@ static void requestCreateBasicGroup(PurpleConnection *gc, const char *name)
         // TRANSLATOR: Group creation dialog, secondary content
         _("Invite at least one additional user by specifying their full name (autocompletion available)."));
 
-    // TRANSLATOR: Group creation dialog, label
-    PurpleRequestField *field = purple_request_field_string_new ("user1", _("Username"), nullptr, FALSE);
-    purple_request_field_set_type_hint (field, "screenname");
-    purple_request_field_group_add_field (group, field);
-
-    field = purple_request_field_string_new ("user2", _("Username"), nullptr, FALSE);
-    purple_request_field_set_type_hint (field, "screenname");
-    purple_request_field_group_add_field (group, field);
-
-    field = purple_request_field_string_new ("user3", _("Username"), nullptr, FALSE);
-    purple_request_field_set_type_hint (field, "screenname");
-    purple_request_field_group_add_field (group, field);
+    for (const char *id: {"user1", "user2", "user3"})
+        // TRANSLATOR: Group creation dialog, label
+        purple_request_field_set_type_hint(addStringField(group, id, _("Username")), "screenname");
 
     purple_request_fields_add_group (fields, group);
 
@@ -795,7 +785,7 @@ static void requestCreateBasicGroup(PurpleConnection *gc, const char *name)
 
 static void tgprpl_chat_join (PurpleConnection *gc, GHashTable *data)
 {
-    PurpleTdClient *tdClient   = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    PurpleTdClient *tdClient   = getTdClient(gc);
     const char     *name       = getChatName(data);
     const char     *joinString = getChatJoinString(data);
 
@@ -852,7 +842,7 @@ static char *tgprpl_get_chat_name (GHashTable * data)
 
 static void tgprpl_chat_invite (PurpleConnection *gc, int id, const char *, const char *who)
 {
-    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    PurpleTdClient *tdClient = getTdClient(gc);
     if (tdClient)
         tdClient->addUserToChat(id, who);
 }
@@ -861,7 +851,7 @@ static int tgprpl_send_chat (PurpleConnection *gc, int id, const char *message, 
 {
     purple_debug_misc(config::pluginId, "Sending group chat message: purple chat id %d, flags=0x%x\n",
                       id, (unsigned)flags);
-    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    PurpleTdClient *tdClient = getTdClient(gc);
     if (sendEdit(tdClient, purple_find_chat(gc, id), message))
         return 0;
     return tdClient->sendGroupMessage(id, message);
@@ -869,7 +859,7 @@ static int tgprpl_send_chat (PurpleConnection *gc, int id, const char *message, 
 
 static void tgprpl_rename_buddy(PurpleConnection *gc, const char *who, const char *alias)
 {
-    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    PurpleTdClient *tdClient = getTdClient(gc);
     tdClient->renameContact(who, alias);
 }
 
@@ -884,7 +874,7 @@ static void renameGroup(PurpleConnection *, const char *,
 
 static PurpleRoomlist *tgprpl_roomlist_get_list (PurpleConnection *gc)
 {
-    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    PurpleTdClient *tdClient = getTdClient(gc);
     PurpleRoomlist *roomlist = purple_roomlist_new(purple_connection_get_account(gc));
 
     if (tdClient)
@@ -1008,13 +998,13 @@ static GHashTable *tgprpl_get_account_text_table (PurpleAccount *)
 
 static void tgprpl_set_chat_topic(PurpleConnection *gc, int id, const char *topic)
 {
-    PurpleTdClient *tdClient = static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+    PurpleTdClient *tdClient = getTdClient(gc);
     tdClient->setGroupDescription(id, topic);
 }
 
 static PurpleCmdRet tgprpl_cmd_kick(PurpleConversation *conv, const gchar *, gchar **args, gchar **, void *)
 {
-    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    PurpleTdClient *tdClient = getTdClient(conv);
 
     if (!*args || !tdClient)
         return PURPLE_CMD_RET_FAILED;
@@ -1062,7 +1052,7 @@ static PurpleCmdRet cancelEditCommand(PurpleConversation *conv, const gchar *, g
 
 static PurpleCmdRet hangupCommand(PurpleConversation *conv, const gchar *, gchar **, gchar **, void *)
 {
-    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    PurpleTdClient *tdClient = getTdClient(conv);
 
     if (!tdClient)
         return PURPLE_CMD_RET_FAILED;
@@ -1083,7 +1073,7 @@ static std::vector<PastedPlaceholder> getPlaceholders(const std::vector<const Pa
 // Placeholders for the files or picture, typed into the input field where they are pasted or dropped
 static std::vector<PastedPlaceholder> pasted(PurpleConversation *conv, const ClipboardContent &content)
 {
-    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    PurpleTdClient *tdClient = getTdClient(conv);
     if (tdClient)
         return getPlaceholders(tdClient->addPasted(content));
     if (content.imageId)
@@ -1093,7 +1083,7 @@ static std::vector<PastedPlaceholder> pasted(PurpleConversation *conv, const Cli
 
 static bool placeholderClicked(PurpleConversation *conv, const std::string &placeholder, PastedForms &forms)
 {
-    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    PurpleTdClient *tdClient = getTdClient(conv);
     PlaceholderUse  use      = tdClient ? tdClient->findPasted(placeholder) : PlaceholderUse();
     if (!use.attachment)
         return false;
@@ -1133,7 +1123,7 @@ static std::string joinPlaceholders(const std::vector<std::string> &placeholders
 // the conversation.
 static PurpleCmdRet pasteCommand(PurpleConversation *conv, const gchar *, gchar **, gchar **error, void *)
 {
-    PurpleTdClient  *tdClient = getTdClient(purple_conversation_get_account(conv));
+    PurpleTdClient  *tdClient = getTdClient(conv);
     ClipboardContent content;
     std::string      problem;
     bool             inPidgin = readPidginClipboard(conv, content);
@@ -1421,7 +1411,7 @@ static bool buddyMarked(PurpleBuddy *buddy)
 // Scrolled to the top of its tab, or that having no more than fits
 static void topReached(PurpleConversation *conv, double filling)
 {
-    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    PurpleTdClient *tdClient = getTdClient(conv);
     if (tdClient)
         tdClient->showEarlierMessages(conv, filling);
 }
@@ -1429,7 +1419,7 @@ static void topReached(PurpleConversation *conv, double filling)
 // Scrolled to the end of a tab that stops short of its chat's newest message
 static void bottomReached(PurpleConversation *conv)
 {
-    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    PurpleTdClient *tdClient = getTdClient(conv);
     if (tdClient)
         tdClient->showLaterMessages(conv);
 }
@@ -1437,7 +1427,7 @@ static void bottomReached(PurpleConversation *conv)
 // The newest messages asked for, from the menu of the tabs, in a tab that stops short of them
 static void latestAsked(PurpleConversation *conv)
 {
-    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    PurpleTdClient *tdClient = getTdClient(conv);
     if (tdClient)
         tdClient->showNewestMessages(conv);
 }
@@ -1445,7 +1435,7 @@ static void latestAsked(PurpleConversation *conv)
 // A tab shown or no longer shown, in Pidgin
 static void conversationShown(PurpleConversation *conv, bool shown)
 {
-    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    PurpleTdClient *tdClient = getTdClient(conv);
     if (!tdClient)
         return;
     tdClient->conversationShown(conv, shown);
@@ -1458,7 +1448,7 @@ static void conversationShown(PurpleConversation *conv, bool shown)
 // The messages on screen in a tab shown, in Pidgin
 static void messagesViewed(PurpleConversation *conv, const std::vector<MessageId> &messageIds)
 {
-    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    PurpleTdClient *tdClient = getTdClient(conv);
     if (tdClient)
         tdClient->messagesViewed(conv, messageIds);
 }
@@ -1466,14 +1456,14 @@ static void messagesViewed(PurpleConversation *conv, const std::vector<MessageId
 // A reaction to a message, under the pointer
 static bool reactionTipAsked(PurpleConversation *conv, MessageId messageId, const std::string &key, std::string &tip)
 {
-    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    PurpleTdClient *tdClient = getTdClient(conv);
     return tdClient && tdClient->getReactionTip(conv, messageId, key, tip);
 }
 
 // A reaction to a message clicked
 static void reactionClicked(PurpleConversation *conv, MessageId messageId, const std::string &key)
 {
-    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    PurpleTdClient *tdClient = getTdClient(conv);
     if (tdClient)
         tdClient->reactionClicked(conv, messageId, key);
 }
@@ -1481,7 +1471,7 @@ static void reactionClicked(PurpleConversation *conv, MessageId messageId, const
 // The menu of a tab's text, opened on a message
 static bool messagePopupOpened(PurpleConversation *conv, MessageId messageId, const OpenMenuRef &menu)
 {
-    PurpleTdClient *tdClient = getTdClient(purple_conversation_get_account(conv));
+    PurpleTdClient *tdClient = getTdClient(conv);
     return tdClient && tdClient->showMessagePopup(conv, messageId, menu);
 }
 
@@ -1501,7 +1491,7 @@ static void fileDragged(PurpleConversation *conv, MessageId messageId, const std
             found(std::string());
         return;
     }
-    PurpleTdClient *client = getTdClient(purple_conversation_get_account(conv));
+    PurpleTdClient *client = getTdClient(conv);
     if (client)
         client->dragConversationFile(conv, messageId, foundFile);
     else
@@ -1578,7 +1568,7 @@ static PurpleTdClient *findAnyConnected()
         PurpleAccount    *account = purple_connection_get_account(gc);
         if (account && !strcmp(purple_account_get_protocol_id(account), config::pluginId) &&
             PURPLE_CONNECTION_IS_CONNECTED(gc))
-            return static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc));
+            return getTdClient(gc);
     }
     return nullptr;
 }
@@ -1781,6 +1771,12 @@ static void tdlibLogCallback(int level, const char *message)
     }
 }
 
+// In the account's settings, after those added before
+static void addOption(PurpleAccountOption *option)
+{
+    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, option);
+}
+
 static void tgprpl_init (PurplePlugin *)
 {
 #ifndef NoTranslations
@@ -1822,18 +1818,18 @@ static void tgprpl_init (PurplePlugin *)
     // TRANSLATOR: Account settings, key (choice)
     PurpleAccountOption *opt = purple_account_option_list_new (_("File downloads"),
                                                                AccountOptions::DownloadBehaviour, choices);
-    prpl_info.protocol_options = g_list_append (prpl_info.protocol_options, opt);
+    addOption(opt);
 
     // TRANSLATOR: Account settings, key (boolean)
     opt = purple_account_option_bool_new(_("Download media automatically (each conversation can override this)"),
                                          AccountOptions::DownloadMedia, AccountOptions::DownloadMediaDefault);
-    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+    addOption(opt);
 
     // TRANSLATOR: Account settings, key (choice)
     opt = purple_account_option_string_new (_("Inline auto-download size limit, MB (0 for unlimited)"),
                                             AccountOptions::AutoDownloadLimit,
                                             AccountOptions::AutoDownloadLimitDefault);
-    prpl_info.protocol_options = g_list_append (prpl_info.protocol_options, opt);
+    addOption(opt);
 
     // Telegram may have a video in several sizes, of which one can be downloaded beforehand, to be
     // played as soon as clicked; the default first
@@ -1849,7 +1845,13 @@ static void tgprpl_init (PurplePlugin *)
     addChoice(choices, _("Don't prefetch"), AccountOptions::PrefetchVideosNone);
     // TRANSLATOR: Account settings, key (choice). Videos are downloaded beforehand, so that they play as soon as clicked.
     opt = purple_account_option_list_new(_("Prefetch videos"), AccountOptions::PrefetchVideos, choices);
-    prpl_info.protocol_options = g_list_append (prpl_info.protocol_options, opt);
+    addOption(opt);
+
+    // TRANSLATOR: Account settings, check box label
+    opt = purple_account_option_bool_new(_("Do not clean up inline downloads"),
+                                         AccountOptions::KeepInlineDownloads,
+                                         AccountOptions::KeepInlineDownloadsDefault);
+    addOption(opt);
 
     static_assert(AccountOptions::BigDownloadHandlingDefault == AccountOptions::BigDownloadHandlingAsk,
                   "default choice must be first");
@@ -1859,68 +1861,62 @@ static void tgprpl_init (PurplePlugin *)
     // TRANSLATOR: Account settings, value for large file downloads
     addChoice(choices, _("Discard"), AccountOptions::BigDownloadHandlingDiscard);
 
-    // TRANSLATOR: Account settings, check box label
-    opt = purple_account_option_bool_new(_("Do not clean up inline downloads"),
-                                         AccountOptions::KeepInlineDownloads,
-                                         AccountOptions::KeepInlineDownloadsDefault);
-    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
-
     // TRANSLATOR: Account settings, key (choice)
     opt = purple_account_option_list_new (_("Bigger inline file downloads"), AccountOptions::BigDownloadHandling, choices);
-    prpl_info.protocol_options = g_list_append (prpl_info.protocol_options, opt);
+    addOption(opt);
 
     // TRANSLATOR: Account settings, key (boolean). The password is the one of the account's settings, not Telegram's two-step verification password.
     opt = purple_account_option_bool_new(_("Encrypt the local database with the password (takes effect at reconnect)"),
                                          AccountOptions::EncryptDatabase, AccountOptions::EncryptDatabaseDefault);
-    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+    addOption(opt);
 
     // TRANSLATOR: Account settings, key (boolean)
     opt = purple_account_option_bool_new (_("Enable secret chats (takes effect at reconnect)"),
                                           AccountOptions::EnableSecretChats,
                                           AccountOptions::EnableSecretChatsDefault);
-    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+    addOption(opt);
 
 #ifndef NoLottie
     // TRANSLATOR: Account settings, key (boolean)
     opt = purple_account_option_bool_new(_("Show animated stickers"), AccountOptions::AnimatedStickers,
                                          AccountOptions::AnimatedStickersDefault);
-    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+    addOption(opt);
 #endif
 
     // TRANSLATOR: Account settings, key (boolean)
     opt = purple_account_option_bool_new(_("Show self-destructing messages anyway"), AccountOptions::ShowSelfDestruct,
                                          AccountOptions::ShowSelfDestructDefault);
-    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+    addOption(opt);
 
     // TRANSLATOR: Account settings, key (boolean)
     opt = purple_account_option_bool_new(_("Strike out deleted messages in Pidgin, rather than remove them"),
                                          AccountOptions::StrikeOutDeleted, AccountOptions::StrikeOutDeletedDefault);
-    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+    addOption(opt);
 
     // TRANSLATOR: Account settings, key (boolean)
     opt = purple_account_option_bool_new(_("Show messages from channels and groups you have not joined"),
                                          AccountOptions::ShowUnjoinedChats,
                                          AccountOptions::ShowUnjoinedChatsDefault);
-    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+    addOption(opt);
 
     // TRANSLATOR: Account settings, key (boolean). Of a file sent by file transfer ("Send File..."): told by its content, as a pasted one is; otherwise it goes as a file.
     opt = purple_account_option_bool_new(_("Send a file as a picture, video or voice message when it is one"),
                                          AccountOptions::SendFilesByContent,
                                          AccountOptions::SendFilesByContentDefault);
-    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+    addOption(opt);
 
     // TRANSLATOR: Account settings, key (boolean). Custom emoji are pictures of their own, each standing for an ordinary emoji.
     opt = purple_account_option_bool_new(_("Show custom emoji in reactions as ordinary emoji"),
                                          AccountOptions::FoldCustomEmoji,
                                          AccountOptions::FoldCustomEmojiDefault);
-    prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+    addOption(opt);
 
     if (canDisableReadReceipts()) {
         // TRANSLATOR: Account settings, key (boolean)
         opt = purple_account_option_bool_new (_("Send read receipts"),
                                               AccountOptions::ReadReceipts,
                                               AccountOptions::ReadReceiptsDefault);
-        prpl_info.protocol_options = g_list_append(prpl_info.protocol_options, opt);
+        addOption(opt);
     }
 }
 
@@ -1932,32 +1928,19 @@ static void requestTwoFactorAuth(PurpleConnection *gc, const char *primaryText, 
     PurpleRequestFieldGroup *group   = purple_request_field_group_new(nullptr);
 
     // TRANSLATOR: 2FA settings, key
-    PurpleRequestField *field = purple_request_field_string_new ("oldpw", _("Current password"), nullptr, FALSE);
-    purple_request_field_string_set_masked(field, TRUE);
-    purple_request_field_group_add_field (group, field);
-
+    addStringField(group, "oldpw", _("Current password"), nullptr, true);
     // TRANSLATOR: 2FA settings, key
-    field = purple_request_field_string_new ("pw1", _("New password"), nullptr, FALSE);
-    purple_request_field_string_set_masked(field, TRUE);
-    purple_request_field_group_add_field (group, field);
-
+    addStringField(group, "pw1", _("New password"), nullptr, true);
     // TRANSLATOR: 2FA settings, key
-    field = purple_request_field_string_new ("pw2", _("Repeat password"), nullptr, FALSE);
-    purple_request_field_string_set_masked(field, TRUE);
-    purple_request_field_group_add_field (group, field);
-
+    addStringField(group, "pw2", _("Repeat password"), nullptr, true);
     // TRANSLATOR: 2FA settings, key
-    field = purple_request_field_string_new ("hint", _("Password hint"), nullptr, FALSE);
-    purple_request_field_group_add_field (group, field);
-
+    addStringField(group, "hint", _("Password hint"));
     // TRANSLATOR: 2FA settings, key
-    field = purple_request_field_string_new ("email", _("Recovery e-mail"), email, FALSE);
-    purple_request_field_group_add_field (group, field);
+    addStringField(group, "email", _("Recovery e-mail"), email);
 
     purple_request_fields_add_group (fields, group);
 
     RequestData *data = new RequestData(purple_connection_get_account(gc));
-    data->account = purple_connection_get_account(gc);
     // TRANSLATOR: 2FA settings, title
     purple_request_fields (gc, _("Two-factor authentication"), primaryText, nullptr, fields,
                            // TRANSLATOR: 2FA settings, alternative is "_Cancel". The underscore marks accelerator keys, they must be different!
@@ -1994,7 +1977,7 @@ static void setTwoFactorAuth(RequestData *data, PurpleRequestFields* fields)
             if (email)
                 newRequest->stringData = email;
             g_idle_add(reRequestTwoFactorAuth, newRequest);
-        } else if (tdClient)
+        } else
             tdClient->setTwoFactorAuth(oldPass, password1, hint, email);
     }
 }
@@ -2038,13 +2021,9 @@ static void requestDatabasePassword(PurpleConnection *gc, const char *primary)
     PurpleRequestFields     *fields = purple_request_fields_new();
     PurpleRequestFieldGroup *group  = purple_request_field_group_new(nullptr);
     // TRANSLATOR: Database password dialog, key
-    PurpleRequestField      *field  = purple_request_field_string_new("pw1", _("New password"), nullptr, FALSE);
-    purple_request_field_string_set_masked(field, TRUE);
-    purple_request_field_group_add_field(group, field);
+    addStringField(group, "pw1", _("New password"), nullptr, true);
     // TRANSLATOR: Database password dialog, key
-    field = purple_request_field_string_new("pw2", _("Confirm password"), nullptr, FALSE);
-    purple_request_field_string_set_masked(field, TRUE);
-    purple_request_field_group_add_field(group, field);
+    addStringField(group, "pw2", _("Confirm password"), nullptr, true);
     purple_request_fields_add_group(fields, group);
 
     RequestData    *data      = new RequestData(purple_connection_get_account(gc));

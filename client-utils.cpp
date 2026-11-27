@@ -144,6 +144,16 @@ std::string describeUnsupportedContent(const td::td_api::MessageContent &content
     return result;
 }
 
+PurpleRequestField *addStringField(PurpleRequestFieldGroup *group, const char *id, const char *label,
+                                   const char *value, bool masked)
+{
+    PurpleRequestField *field = purple_request_field_string_new(id, label, value, FALSE);
+    if (masked)
+        purple_request_field_string_set_masked(field, TRUE);
+    purple_request_field_group_add_field(group, field);
+    return field;
+}
+
 gchar *readPhoto(const std::string &path, const std::string &whose, gsize &size)
 {
     gchar  *data  = nullptr;
