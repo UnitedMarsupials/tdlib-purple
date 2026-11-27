@@ -1153,12 +1153,17 @@ static void addFormat(std::vector<TextFormat> &formats, size_t start, size_t end
         formats.push_back({start, end, kind, url});
 }
 
+static std::string asciiLower(std::string text)
+{
+    for (char &c: text)
+        c = g_ascii_tolower(c);
+    return text;
+}
+
 // The value of an attribute of a tag, unescaped; empty if it has none
 static std::string getAttribute(const std::string &tag, const char *name)
 {
-    std::string lowered = tag;
-    for (char &c: lowered)
-        c = g_ascii_tolower(c);
+    std::string lowered = asciiLower(tag);
     std::string key = std::string(" ") + name + "=";
     size_t      at  = lowered.find(key);
     if (at == std::string::npos)
@@ -1206,9 +1211,8 @@ static void parseMarkup(const std::string &html, std::string &text, std::vector<
         bool        closing = (tag.size() > 1) && (tag[1] == '/');
         size_t      nameAt  = closing ? 2 : 1;
         size_t      nameEnd = tag.find_first_of(" />", nameAt);
-        std::string name    = tag.substr(nameAt, (nameEnd == std::string::npos) ? std::string::npos : nameEnd - nameAt);
-        for (char &c: name)
-            c = g_ascii_tolower(c);
+        std::string name    = asciiLower(tag.substr(nameAt, (nameEnd == std::string::npos) ? std::string::npos
+                                                                                           : nameEnd - nameAt));
 
         if (name == "br") {
             text += '\n';
@@ -1243,9 +1247,7 @@ static void parseMarkup(const std::string &html, std::string &text, std::vector<
             if (!item.url.empty())
                 item.kinds.push_back(TextFormat::Kind::Link);
         } else if (name == "span") {
-            std::string style = getAttribute(tag, "style");
-            for (char &c: style)
-                c = g_ascii_tolower(c);
+            std::string style = asciiLower(getAttribute(tag, "style"));
             if (style.find("bold") != std::string::npos)
                 item.kinds.push_back(TextFormat::Kind::Bold);
             if (style.find("italic") != std::string::npos)
@@ -1424,6 +1426,20 @@ static void appendText(std::vector<MessagePart> &parts, const char *s, size_t le
     }
 }
 
+// A placeholder of a pasted thing at s, bracketed within a line, as written: unescaped from the
+// message's HTML. Where it ends, with use set to it, or null.
+static const char *findPlaceholderAt(const char *s, const PastedAttachments &attachments, PlaceholderUse &use)
+{
+    const char *close = (*s == '[') ? strpbrk(s + 1, "[]\n<") : nullptr;
+    if (!close || (*close != ']'))
+        return nullptr;
+    std::string bracketed(s, close + 1);
+    char       *written = purple_unescape_html(bracketed.c_str());
+    use = findPasted(attachments, written ? written : bracketed);
+    g_free(written);
+    return use.attachment ? close + 1 : nullptr;
+}
+
 static void parseMessage(const char *message, std::vector<MessagePart> &parts, TdAccountData &account)
 {
     parts.clear();
@@ -1440,14 +1456,9 @@ static void parseMessage(const char *message, std::vector<MessagePart> &parts, T
 
         PlaceholderUse attachment;
         size_t         placeholderLength = 0;
-        // Bracketed, within a line, its text as written, unescaped from the message's HTML
-        const char *close = (*s == '[') ? strpbrk(s + 1, "[]\n<") : nullptr;
-        if (close && (*close == ']') && !account.pastedAttachments.items.empty()) {
-            std::string bracketed(s, close + 1);
-            char       *written = purple_unescape_html(bracketed.c_str());
-            attachment = findPasted(account.pastedAttachments, written ? written : bracketed);
-            g_free(written);
-            placeholderLength = bracketed.size();
+        if (!account.pastedAttachments.items.empty()) {
+            const char *end = findPlaceholderAt(s, account.pastedAttachments, attachment);
+            placeholderLength = end ? end - s : 0;
         }
 
         if (attachment.attachment) {
@@ -1515,6 +1526,20 @@ struct OggPage {
 };
 }
 
+// Of an Ogg page's header at p
+static uint64_t getOggGranule(const unsigned char *p)
+{
+    uint64_t granule = 0;
+    for (int b = 7; b >= 0; b--)
+        granule = (granule << 8) | p[6 + b];
+    return granule;
+}
+
+static uint32_t getOggSerial(const unsigned char *p)
+{
+    return p[14] | (p[15] << 8) | (p[16] << 16) | (uint32_t(p[17]) << 24);
+}
+
 static bool readOggPage(const std::vector<unsigned char> &data, size_t offset, OggPage &page)
 {
     enum { HEADER = 27 };
@@ -1522,10 +1547,8 @@ static bool readOggPage(const std::vector<unsigned char> &data, size_t offset, O
         return false;
     const unsigned char *p = &data[offset];
     page.offset    = offset;
-    page.granule   = 0;
-    for (int b = 7; b >= 0; b--)
-        page.granule = (page.granule << 8) | p[6 + b];
-    page.serial    = p[14] | (p[15] << 8) | (p[16] << 16) | (uint32_t(p[17]) << 24);
+    page.granule   = getOggGranule(p);
+    page.serial    = getOggSerial(p);
     page.continued = p[5] & 1;
     page.segments  = p[26];
     if (offset + HEADER + page.segments > data.size())
@@ -1593,12 +1616,9 @@ static int getOpusDuration(const std::string &path)
     // The last page of the stream with a position: a capture pattern, version 0, the same serial number
     for (size_t i = (tail.size() >= HEADER) ? tail.size() - HEADER + 1 : 0; i-- > 0;) {
         const unsigned char *last = &tail[i];
-        if (memcmp(last, "OggS", 4) || last[4] ||
-            ((last[14] | (last[15] << 8) | (last[16] << 16) | (uint32_t(last[17]) << 24)) != first.serial))
+        if (memcmp(last, "OggS", 4) || last[4] || (getOggSerial(last) != first.serial))
             continue;
-        uint64_t granule = 0;
-        for (int b = 7; b >= 0; b--)
-            granule = (granule << 8) | last[6 + b];
+        uint64_t granule = getOggGranule(last);
         if ((granule == UINT64_MAX) || (granule <= start + preSkip))
             continue;
         uint64_t samples = granule - start - preSkip;
@@ -1684,19 +1704,14 @@ ParsedEdit parseEdit(const char *message, const TdAccountData &account)
     ParsedEdit  edit;
     std::string html;
     for (const char *s = message ? message : ""; *s;) {
-        const char *close = (*s == '[') ? strpbrk(s + 1, "[]\n<") : nullptr;
-        if (close && (*close == ']')) {
-            std::string    bracketed(s, close + 1);
-            char          *written = purple_unescape_html(bracketed.c_str());
-            PlaceholderUse use     = findPasted(account.pastedAttachments, written ? written : bracketed);
-            g_free(written);
-            if (use.attachment) {
-                edit.attachments.push_back(use);
-                // With the space or line break after it, as when sending
-                for (s = close + 1; *s == ' ' || *s == '\n' || !g_ascii_strncasecmp(s, "<br>", 4);)
-                    s += (*s == '<') ? 4 : 1;
-                continue;
-            }
+        PlaceholderUse use;
+        const char    *end = findPlaceholderAt(s, account.pastedAttachments, use);
+        if (use.attachment) {
+            edit.attachments.push_back(use);
+            // With the space or line break after it, as when sending
+            for (s = end; *s == ' ' || *s == '\n' || !g_ascii_strncasecmp(s, "<br>", 4);)
+                s += (*s == '<') ? 4 : 1;
+            continue;
         }
         html += *s++;
     }
