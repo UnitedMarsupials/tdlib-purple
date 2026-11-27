@@ -3007,10 +3007,44 @@ static std::string getSenderKey(const td::td_api::MessageSender &sender)
     return "";
 }
 
-// Who gave which: the sender's key and the reaction's, in that order, with a space between
+// Who gave which: the sender's key and the reaction's, in that order, with a space between. A
+// sender's key, "u" or "c" and an id, has no space in it.
 static std::string getReactionKey(const std::string &senderKey, const td::td_api::ReactionType &type)
 {
     return senderKey + ' ' + getReactionTypeKey(type);
+}
+
+static std::string getReactionKeySender(const std::string &reactionKey)
+{
+    return reactionKey.substr(0, reactionKey.find(' '));
+}
+
+static std::string getReactionKeyType(const std::string &reactionKey)
+{
+    size_t space = reactionKey.find(' ');
+    return (space != std::string::npos) ? reactionKey.substr(space + 1) : std::string();
+}
+
+// The user or the chat a sender's key is of; invalid if it is of the other
+static UserId getSenderKeyUser(const std::string &senderKey)
+{
+    return ((senderKey.size() > 1) && (senderKey[0] == 'u')) ? UserId::fromString(senderKey.c_str() + 1) : UserId();
+}
+
+static ChatId getSenderKeyChat(const std::string &senderKey)
+{
+    return ((senderKey.size() > 1) && (senderKey[0] == 'c')) ? ChatId::fromString(senderKey.c_str() + 1) : ChatId();
+}
+
+// Each reaction to a message, but tags in Saved Messages, which are reactions too to TDLib
+static void forEachReaction(const td::td_api::messageInteractionInfo *info,
+                            const std::function<void(const td::td_api::messageReaction &)> &visit)
+{
+    if (!info || !info->reactions_ || info->reactions_->are_tags_)
+        return;
+    for (const auto &reaction: info->reactions_->reactions_)
+        if (reaction && reaction->type_)
+            visit(*reaction);
 }
 
 // The reactions to a message whose givers are named, our own first so that it is known as such.
@@ -3019,26 +3053,21 @@ static std::string getReactionKey(const std::string &senderKey, const td::td_api
 static void getGivenReactions(const td::td_api::messageInteractionInfo *info, std::vector<GivenReaction> &given,
                               std::set<std::string> *incompleteTypes)
 {
-    // Tags in Saved Messages are reactions too, as far as TDLib is concerned
-    if (!info || !info->reactions_ || info->reactions_->are_tags_)
-        return;
-    for (const auto &reaction: info->reactions_->reactions_) {
-        if (!reaction || !reaction->type_)
-            continue;
+    forEachReaction(info, [&given, incompleteTypes](const td::td_api::messageReaction &reaction) {
         std::set<std::string> senders;
         auto add = [&](const td::td_api::MessageSender &sender, bool self) {
             std::string senderKey = getSenderKey(sender);
             if (senders.insert(senderKey).second)
-                given.push_back({getReactionKey(senderKey, *reaction->type_), reaction->type_.get(), self});
+                given.push_back({getReactionKey(senderKey, *reaction.type_), reaction.type_.get(), self});
         };
-        if (reaction->is_chosen_ && reaction->used_sender_id_)
-            add(*reaction->used_sender_id_, true);
-        for (const auto &sender: reaction->recent_sender_ids_)
+        if (reaction.is_chosen_ && reaction.used_sender_id_)
+            add(*reaction.used_sender_id_, true);
+        for (const auto &sender: reaction.recent_sender_ids_)
             if (sender)
                 add(*sender, false);
-        if (incompleteTypes && (reaction->total_count_ > (int32_t)senders.size()))
-            incompleteTypes->insert(getReactionTypeKey(*reaction->type_));
-    }
+        if (incompleteTypes && (reaction.total_count_ > (int32_t)senders.size()))
+            incompleteTypes->insert(getReactionTypeKey(*reaction.type_));
+    });
 }
 
 
@@ -3046,37 +3075,30 @@ static void getGivenReactions(const td::td_api::messageInteractionInfo *info, st
 static std::map<std::string, ShownMessage::Givers> getReactionGivers(const td::td_api::messageInteractionInfo *info)
 {
     std::map<std::string, ShownMessage::Givers> givers;
-    if (!info || !info->reactions_ || info->reactions_->are_tags_)
-        return givers;
-    for (const auto &reaction: info->reactions_->reactions_) {
-        if (!reaction || !reaction->type_)
-            continue;
-        ShownMessage::Givers &item = givers[getReactionTypeKey(*reaction->type_)];
-        item.total = reaction->total_count_;
-        for (const auto &sender: reaction->recent_sender_ids_)
+    forEachReaction(info, [&givers](const td::td_api::messageReaction &reaction) {
+        ShownMessage::Givers &item = givers[getReactionTypeKey(*reaction.type_)];
+        item.total = reaction.total_count_;
+        for (const auto &sender: reaction.recent_sender_ids_)
             if (sender)
                 item.senders.push_back(getSenderKey(*sender));
         // Ours is not always among the latest
-        if (reaction->is_chosen_ && reaction->used_sender_id_) {
-            std::string self = getSenderKey(*reaction->used_sender_id_);
+        if (reaction.is_chosen_ && reaction.used_sender_id_) {
+            std::string self = getSenderKey(*reaction.used_sender_id_);
             if (std::find(item.senders.begin(), item.senders.end(), self) == item.senders.end())
                 item.senders.insert(item.senders.begin(), self);
         }
-    }
+    });
     return givers;
 }
 
 static std::string getReactionSenderName(TdAccountData &account, const std::string &reactionKey)
 {
-    std::string senderKey = reactionKey.substr(0, reactionKey.find(' '));
-    if ((senderKey.size() > 1) && (senderKey[0] == 'u'))
-        return account.getDisplayName(UserId::fromString(senderKey.c_str() + 1));
-    if ((senderKey.size() > 1) && (senderKey[0] == 'c')) {
-        const td::td_api::chat *chat = account.getChat(ChatId::fromString(senderKey.c_str() + 1));
-        if (chat)
-            return chat->title_;
-    }
-    return "";
+    std::string senderKey = getReactionKeySender(reactionKey);
+    UserId      userId    = getSenderKeyUser(senderKey);
+    if (userId.valid())
+        return account.getDisplayName(userId);
+    const td::td_api::chat *chat = account.getChat(getSenderKeyChat(senderKey));
+    return chat ? chat->title_ : std::string();
 }
 
 // Shown as a message from whoever reacted, as purple-gowhatsapp has it, which names the message by
@@ -3126,9 +3148,7 @@ static void showReactionText(TdAccountData &account, const td::td_api::chat &cha
     messageInfo.timestamp               = time(nullptr);
     messageInfo.outgoing                = self;
     messageInfo.incomingGroupchatSender = getReactionSenderName(account, reactionKey);
-    std::string senderKey = reactionKey.substr(0, reactionKey.find(' '));
-    const td::td_api::user *reactor = ((senderKey.size() > 1) && (senderKey[0] == 'u')) ?
-                                      account.getUser(UserId::fromString(senderKey.c_str() + 1)) : nullptr;
+    const td::td_api::user *reactor = account.getUser(getSenderKeyUser(getReactionKeySender(reactionKey)));
     if (reactor)
         messageInfo.incomingGroupchatSenderName = getPurpleBuddyName(*reactor);
     showMessageText(account, chat, messageInfo, text.c_str(), nullptr, image ? PURPLE_MESSAGE_IMAGES : 0);
@@ -4335,7 +4355,7 @@ void updateMessageReactions(TdAccountData &account, ChatId chatId, MessageId mes
     for (const GivenReaction &reaction: reactions) {
         present.insert(reaction.key);
         if (shownMessage->reactions.emplace(reaction.key, reaction.self).second) {
-            changedBy.insert(reaction.key.substr(0, reaction.key.find(' ')));
+            changedBy.insert(getReactionKeySender(reaction.key));
             if (show)
                 showReaction(account, *chat, messageId, *shownMessage, reaction.key, reaction.self, reaction.type);
         }
@@ -4344,13 +4364,11 @@ void updateMessageReactions(TdAccountData &account, ChatId chatId, MessageId mes
     // Gone, as far as can be told: where everyone who gave that reaction is named, and they are not
     // among them any more. Exchanging one reaction for another is not taking it back.
     for (auto it = shownMessage->reactions.begin(); it != shownMessage->reactions.end(); ) {
-        size_t      space   = it->first.find(' ');
-        std::string typeKey = it->first.substr(space + 1);
-        if (present.count(it->first) || incompleteTypes.count(typeKey)) {
+        if (present.count(it->first) || incompleteTypes.count(getReactionKeyType(it->first))) {
             ++it;
             continue;
         }
-        if (show && !changedBy.count(it->first.substr(0, space)))
+        if (show && !changedBy.count(getReactionKeySender(it->first)))
             showReaction(account, *chat, messageId, *shownMessage, it->first, it->second, nullptr);
         it = shownMessage->reactions.erase(it);
     }
