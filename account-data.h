@@ -441,6 +441,13 @@ public:
         int64_t  myUserId         = 0;
     } options;
 
+    // As tabs are filled anew, for this session: messages found too far back for their tab once,
+    // which they are no nearer to since; chats whose tabs show their first message; and how many
+    // messages a tab was last filled with, for those that would fill it to be reckoned
+    std::set<std::pair<int64_t, int64_t>> redrawTooFar;
+    std::set<int64_t>                     historyComplete;
+    std::map<int64_t, size_t>             redrawnCounts;
+
     PurpleAccount *const  purpleAccount;
     TdTransceiver        &transceiver;
     TdAccountData(PurpleAccount *purpleAccount, TdTransceiver &transceiver)

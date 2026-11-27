@@ -3797,12 +3797,6 @@ static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earlies
 // least; a tab is filled with more if they still fit
 enum { EARLIER_BATCH = 50 };
 
-// Messages found too far back for their tab once, which they are no nearer to since
-static std::set<std::pair<int64_t, int64_t>> g_redrawTooFar;
-// Chats whose tabs show their first message
-static std::set<int64_t> g_historyComplete;
-// Messages its tab was last filled with, for those that would fill it to be reckoned
-static std::map<int64_t, size_t> g_redrawnCounts;
 
 static void stopRedrawProgress(TdAccountData &account, ChatId chatId)
 {
@@ -3926,8 +3920,8 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
         purple_conversation_clear_message_history(conv);
         setTabEnd(conv, (stopsShort && redraw.messages.front()) ? getId(*redraw.messages.front()) : MessageId());
         // Its first message is shown only if gone back to it again, below
-        g_historyComplete.erase(redraw.chatId.value());
-        g_redrawnCounts[redraw.chatId.value()] = redraw.messages.size();
+        account.historyComplete.erase(redraw.chatId.value());
+        account.redrawnCounts[redraw.chatId.value()] = redraw.messages.size();
         std::vector<LoggedLine> lines = getLoggedLines(account, *chat, conv, redraw.messages, stopsShort);
         // A chat never logged, as a channel only looked at, is logged as it is shown: else nothing
         // of it would be kept, nor bring it back to the buddy list after a restart
@@ -3962,7 +3956,7 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
         trimmedTop = trimTab(conv, windowLines, true);
     // Its first message shown, scrolling up looks for none before it, nor refills the tab with less
     if (redraw.start && !trimmedTop)
-        g_historyComplete.insert(redraw.chatId.value());
+        account.historyComplete.insert(redraw.chatId.value());
     // Shown again, the messages already read are no news, as Pidgin takes them to be
     if (conv && chat && !chat->unread_count_)
         clearUnseen(conv);
@@ -3973,7 +3967,7 @@ static void redrawShow(TdAccountData &account, Redraw &redraw)
             scrollToMessageLater(conv, redraw.firstUnread);
     } else if (redraw.extra) {
         if (!redraw.beyond)
-            g_historyComplete.insert(redraw.chatId.value());
+            account.historyComplete.insert(redraw.chatId.value());
         if (conv)
             scrollToMessageLater(conv, redraw.filling ? MessageId() : redraw.earliest);
     }
@@ -4039,7 +4033,7 @@ static void redrawResponse(TdAccountData &account, std::shared_ptr<Redraw> redra
         } else {
             purple_debug_misc(config::pluginId, "Message %" G_GINT64_FORMAT " is further back than the tab holds\n",
                               redraw->earliest.value());
-            g_redrawTooFar.insert({redraw->chatId.value(), redraw->earliest.value()});
+            account.redrawTooFar.insert({redraw->chatId.value(), redraw->earliest.value()});
         }
     } else
         purple_debug_warning(config::pluginId, "Cannot fetch chat %" G_GINT64_FORMAT " to redraw it: %s\n",
@@ -4131,7 +4125,7 @@ static bool startRedraw(TdAccountData &account, ChatId chatId, MessageId earlies
 
 void redrawChat(TdAccountData &account, ChatId chatId, MessageId earliest)
 {
-    if (!g_redrawTooFar.count({chatId.value(), earliest.value()}))
+    if (!account.redrawTooFar.count({chatId.value(), earliest.value()}))
         startRedraw(account, chatId, earliest, false);
 }
 
@@ -4139,16 +4133,16 @@ void showEarlierMessages(TdAccountData &account, PurpleConversation *conv, doubl
 {
     const td::td_api::chat *chat     = findConversationChat(account, conv);
     MessageId               earliest = chat ? findFirstMessage(conv) : MessageId();
-    if (!earliest.valid() || g_historyComplete.count(getId(*chat).value()) ||
-        g_redrawTooFar.count({getId(*chat).value(), earliest.value()}))
+    if (!earliest.valid() || account.historyComplete.count(getId(*chat).value()) ||
+        account.redrawTooFar.count({getId(*chat).value(), earliest.value()}))
         return;
     purple_debug_misc(config::pluginId, "Showing messages before %" G_GINT64_FORMAT " in chat %" G_GINT64_FORMAT "\n",
                       earliest.value(), getId(*chat).value());
     // As many again as it has for each time it would go into the window, and one more
     unsigned extra = EARLIER_BATCH;
     if (filling) {
-        auto   it    = g_redrawnCounts.find(getId(*chat).value());
-        size_t shown = (it != g_redrawnCounts.end()) ? it->second : 0;
+        auto   it    = account.redrawnCounts.find(getId(*chat).value());
+        size_t shown = (it != account.redrawnCounts.end()) ? it->second : 0;
         extra        = unsigned(std::ceil(shown * std::max(filling - 1, 0.0))) + 1;
     }
     // Filling a tab that fits goes on at its end, which is what shows
@@ -4263,7 +4257,7 @@ static void showFetchedLater(TdAccountData &account, ChatId chatId, MessageId en
     unsigned windowLines = conv ? getWindowLines(conv) : 0;
     // Its first message taken away, it is to be gone back to again
     if (windowLines && trimTab(conv, windowLines, true, end))
-        g_historyComplete.erase(chatId.value());
+        account.historyComplete.erase(chatId.value());
 }
 
 static void laterMessagesResponse(TdAccountData &account, ChatId chatId, MessageId end,
