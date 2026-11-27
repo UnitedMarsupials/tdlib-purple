@@ -1781,16 +1781,9 @@ int transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiv
             hasImage = saveImage(input.imageId, &tempFileName);
 
         if (hasImage) {
-            td::td_api::object_ptr<td::td_api::inputMessagePhoto> content = td::td_api::make_object<td::td_api::inputMessagePhoto>();
-#if TDLIB_API_INPUT_PHOTO
-            content->photo_ = td::td_api::make_object<td::td_api::inputPhoto>();
-            content->photo_->photo_ = td::td_api::make_object<td::td_api::inputFileLocal>(tempFileName);
-#else
-            content->photo_ = td::td_api::make_object<td::td_api::inputFileLocal>(tempFileName);
-#endif
-            content->caption_ = makeFormattedText(input.text, input.formats, 0, input.text.size());
-
-            sendMessageRequest->input_message_content_ = std::move(content);
+            sendMessageRequest->input_message_content_ =
+                makeMediaContent(AttachmentKind::Photo, td::td_api::make_object<td::td_api::inputFileLocal>(tempFileName),
+                                 tempFileName, makeFormattedText(input.text, input.formats, 0, input.text.size()));
             purple_debug_misc(config::pluginId, "Sending photo %s\n", tempFileName);
         } else {
             td::td_api::object_ptr<td::td_api::inputMessageText> content = td::td_api::make_object<td::td_api::inputMessageText>();

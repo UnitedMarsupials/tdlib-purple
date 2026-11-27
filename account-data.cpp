@@ -179,7 +179,7 @@ bool isSameUser(const td::td_api::MessageSender &member1, const td::td_api::Mess
     return false;
 }
 
-auto PendingMessageQueue::getChatQueue(ChatId chatId) -> std::vector<ChatQueue>::iterator 
+auto PendingMessageQueue::getChatQueue(ChatId chatId) -> std::vector<ChatQueue>::iterator
 {
     return std::find_if(m_queues.begin(), m_queues.end(), [chatId](const ChatQueue &queue) {
         return (queue.chatId == chatId);

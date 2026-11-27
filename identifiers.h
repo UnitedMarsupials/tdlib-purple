@@ -133,7 +133,7 @@ UserId       getUserId(const td::td_api::updateUserStatus &update);
 UserId       getUserId(const td::td_api::updateChatAction &update);
 UserId       getUserId(const td::td_api::importedContacts &contacts, unsigned index);
 UserId       getUserId(const td::td_api::users &users, unsigned index);
-UserId 	     getUserId(const td::td_api::object_ptr<td::td_api::MessageSender>& sender);
+UserId       getUserId(const td::td_api::object_ptr<td::td_api::MessageSender>& sender);
 
 ChatId       getChatId(const td::td_api::updateChatPosition &update);
 ChatId       getChatId(const td::td_api::updateChatTitle &update);
