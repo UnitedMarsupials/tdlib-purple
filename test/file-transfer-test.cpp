@@ -24,7 +24,7 @@ void FileTransferTest::sendFile(const std::string &path, object_ptr<FileType> up
     tgl.verifyRequest(preliminaryUploadFile(make_object<inputFileLocal>(path), std::move(uploadedAs), 1));
 
     // Here whole, and being uploaded: just begun, or all of it
-    auto uploading = [&path, fileId](bool active, int64_t uploaded) {
+    auto uploading = [&path](bool active, int64_t uploaded) {
         auto local = make_object<localFile>();
         local->path_                     = path;
         local->is_downloading_completed_ = true;

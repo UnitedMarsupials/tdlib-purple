@@ -1689,7 +1689,12 @@ static void pictureFetched(PurpleUtilFetchUrlData *, gpointer data, const gchar 
                            const gchar *error)
 {
     std::unique_ptr<PictureFetch> fetch(static_cast<PictureFetch *>(data));
-    if (g_pastedHandler && content && length && isPicture(reinterpret_cast<const guchar *>(content), length)) {
+    if (!g_pastedHandler) {
+        purple_debug_misc(config::pluginId, "Dropped %s, fetched after the paste handler was cleared\n",
+                          fetch->url.c_str());
+        return;
+    }
+    if (content && length && isPicture(reinterpret_cast<const guchar *>(content), length)) {
         gchar *name = g_path_get_basename(fetch->url.c_str());
         // The store takes the copy
         gpointer copy = g_malloc(length);

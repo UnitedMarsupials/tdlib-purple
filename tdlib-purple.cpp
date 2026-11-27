@@ -1570,8 +1570,7 @@ static PurpleTdClient *findAnyConnected()
     for (GList *item = purple_connections_get_all(); item; item = item->next) {
         PurpleConnection *gc      = static_cast<PurpleConnection *>(item->data);
         PurpleAccount    *account = purple_connection_get_account(gc);
-        if (account && isOurAccount(account) &&
-            PURPLE_CONNECTION_IS_CONNECTED(gc))
+        if (isOurAccount(account) && PURPLE_CONNECTION_IS_CONNECTED(gc))
             return getTdClient(gc);
     }
     return nullptr;
