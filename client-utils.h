@@ -155,6 +155,8 @@ void updateSupergroupChatMembers(PurpleConvChat *purpleChat, const td::td_api::c
 // the rest of it dropped
 td::td_api::object_ptr<td::td_api::formattedText> parseFormattedText(const std::string &html);
 
+// What TDLib uploads a file as, for a kind
+td::td_api::object_ptr<td::td_api::FileType> makeFileType(AttachmentKind kind);
 // A file going as the kind given, with its caption; the local file at the path is read for what the
 // kind needs of it, a recording's length
 td::td_api::object_ptr<td::td_api::InputMessageContent>

@@ -69,20 +69,7 @@ void startDocumentUpload(ChatId chatId, const std::string &filename, PurpleXfer 
     AttachmentKind kind          = getSentFileKind(account.purpleAccount, filename);
     auto           uploadRequest = td::td_api::make_object<td::td_api::preliminaryUploadFile>();
     uploadRequest->file_ = td::td_api::make_object<td::td_api::inputFileLocal>(filename);
-    switch (kind) {
-    case AttachmentKind::Photo:
-        uploadRequest->file_type_ = td::td_api::make_object<td::td_api::fileTypePhoto>();
-        break;
-    case AttachmentKind::Video:
-        uploadRequest->file_type_ = td::td_api::make_object<td::td_api::fileTypeVideo>();
-        break;
-    case AttachmentKind::Voice:
-        uploadRequest->file_type_ = td::td_api::make_object<td::td_api::fileTypeVoiceNote>();
-        break;
-    case AttachmentKind::Document:
-        uploadRequest->file_type_ = td::td_api::make_object<td::td_api::fileTypeDocument>();
-        break;
-    }
+    uploadRequest->file_type_ = makeFileType(kind);
     uploadRequest->priority_ = FILE_UPLOAD_PRIORITY;
     purple_xfer_ref(xfer);
     uint64_t requestId = account.transceiver.sendQuery(std::move(uploadRequest), response);

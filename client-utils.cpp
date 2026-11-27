@@ -1627,6 +1627,21 @@ static int getOpusDuration(const std::string &path)
     return 0;
 }
 
+td::td_api::object_ptr<td::td_api::FileType> makeFileType(AttachmentKind kind)
+{
+    switch (kind) {
+    case AttachmentKind::Photo:
+        return td::td_api::make_object<td::td_api::fileTypePhoto>();
+    case AttachmentKind::Video:
+        return td::td_api::make_object<td::td_api::fileTypeVideo>();
+    case AttachmentKind::Voice:
+        return td::td_api::make_object<td::td_api::fileTypeVoiceNote>();
+    case AttachmentKind::Document:
+        break;
+    }
+    return td::td_api::make_object<td::td_api::fileTypeDocument>();
+}
+
 td::td_api::object_ptr<td::td_api::InputMessageContent>
 makeMediaContent(AttachmentKind kind, td::td_api::object_ptr<td::td_api::InputFile> file, const std::string &path,
                  td::td_api::object_ptr<td::td_api::formattedText> caption)
