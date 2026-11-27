@@ -3525,15 +3525,20 @@ static bool shouldDownloadAvatar(const td::td_api::file &file)
             file.local_->can_be_downloaded_);
 }
 
+// A user's or chat's small photo, if it is not here yet; owner is the user or the chat
+template<typename Owner>
+void PurpleTdClient::downloadAvatar(const td::td_api::file *photo, const Owner &owner)
+{
+    if (photo && shouldDownloadAvatar(*photo)) {
+        auto downloadReq = makeDownloadFile(photo->id_, FILE_DOWNLOAD_PRIORITY, true);
+        uint64_t queryId = m_transceiver.sendQuery(std::move(downloadReq), &PurpleTdClient::avatarDownloadResponse);
+        m_data.addPendingRequest<AvatarDownloadRequest>(queryId, &owner);
+    }
+}
+
 void PurpleTdClient::downloadProfilePhoto(const td::td_api::user &user)
 {
-    if (user.profile_photo_ && user.profile_photo_->small_ &&
-        shouldDownloadAvatar(*user.profile_photo_->small_))
-    {
-        auto downloadReq = makeDownloadFile(user.profile_photo_->small_->id_, FILE_DOWNLOAD_PRIORITY, true);
-        uint64_t queryId = m_transceiver.sendQuery(std::move(downloadReq), &PurpleTdClient::avatarDownloadResponse);
-        m_data.addPendingRequest<AvatarDownloadRequest>(queryId, &user);
-    }
+    downloadAvatar(user.profile_photo_ ? user.profile_photo_->small_.get() : nullptr, user);
 }
 
 void PurpleTdClient::avatarDownloadResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object)
@@ -3684,11 +3689,7 @@ void PurpleTdClient::updateUserInfo(const td::td_api::user &user, const td::td_a
 
 void PurpleTdClient::downloadChatPhoto(const td::td_api::chat &chat)
 {
-    if (chat.photo_ && chat.photo_->small_ && shouldDownloadAvatar(*chat.photo_->small_)) {
-        auto downloadReq = makeDownloadFile(chat.photo_->small_->id_, FILE_DOWNLOAD_PRIORITY, true);
-        uint64_t queryId = m_transceiver.sendQuery(std::move(downloadReq), &PurpleTdClient::avatarDownloadResponse);
-        m_data.addPendingRequest<AvatarDownloadRequest>(queryId, &chat);
-    }
+    downloadAvatar(chat.photo_ ? chat.photo_->small_.get() : nullptr, chat);
 }
 
 void PurpleTdClient::addChat(td::td_api::object_ptr<td::td_api::chat> chat)

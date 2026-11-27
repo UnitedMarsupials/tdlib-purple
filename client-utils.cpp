@@ -144,6 +144,18 @@ std::string describeUnsupportedContent(const td::td_api::MessageContent &content
     return result;
 }
 
+gchar *readPhoto(const std::string &path, const std::string &whose, gsize &size)
+{
+    gchar  *data  = nullptr;
+    GError *error = nullptr;
+    if (g_file_get_contents(path.c_str(), &data, &size, &error))
+        return data;
+    purple_debug_warning(config::pluginId, "Failed to load photo %s for %s: %s\n", path.c_str(), whose.c_str(),
+                         error->message);
+    g_error_free(error);
+    return nullptr;
+}
+
 std::string getUserLookupError(const std::vector<const td::td_api::user *> &users, const std::string &name)
 {
     if (users.empty())
@@ -696,15 +708,9 @@ void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, con
             if (photo.local_ && photo.local_->is_downloading_completed_ &&
                 (user.profile_photo_->id_ != oldPhotoId))
             {
-                gchar  *img = nullptr;
-                size_t  len;
-                GError *err = nullptr;
-                g_file_get_contents(photo.local_->path_.c_str(), &img, &len, &err);
-                if (err) {
-                    purple_debug_warning(config::pluginId, "Failed to load profile photo %s for %s: %s\n",
-                                         photo.local_->path_.c_str(), purpleUserName.c_str(),  err->message);
-                    g_error_free(err);
-                } else {
+                gsize  len;
+                gchar *img = readPhoto(photo.local_->path_, purpleUserName, len);
+                if (img) {
                     std::string newPhotoIdStr = std::to_string(user.profile_photo_->id_);
                     purple_blist_node_set_string(PURPLE_BLIST_NODE(buddy), BuddyOptions::ProfilePhotoId,
                                                  newPhotoIdStr.c_str());
@@ -775,15 +781,9 @@ static void updateGroupChat(TdAccountData &account, const td::td_api::chat &chat
         if (photo.local_ && photo.local_->is_downloading_completed_ && photo.remote_ &&
             !photo.remote_->unique_id_.empty() && (!oldPhotoId || (photo.remote_->unique_id_ != oldPhotoId)))
         {
-            gchar  *img = nullptr;
-            size_t  len;
-            GError *err = nullptr;
-            g_file_get_contents(photo.local_->path_.c_str(), &img, &len, &err);
-            if (err) {
-                purple_debug_warning(config::pluginId, "Failed to load chat photo %s for %s: %s\n",
-                                        photo.local_->path_.c_str(), chat.title_.c_str(),  err->message);
-                g_error_free(err);
-            } else {
+            gsize  len;
+            gchar *img = readPhoto(photo.local_->path_, chat.title_, len);
+            if (img) {
                 purple_blist_node_set_string(PURPLE_BLIST_NODE(purpleChat), BuddyOptions::ProfilePhotoId,
                                              photo.remote_->unique_id_.c_str());
                 purple_debug_info(config::pluginId, "Loaded new chat photo for %s (id %s)\n",

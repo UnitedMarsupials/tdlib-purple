@@ -28,15 +28,9 @@ void updateKnownSecretChat(SecretChatId secretChatId, TdAccountData &account)
         // Don't bother updating the photo - only set it when creating secret chat
         const td::td_api::file *photo = chat->photo_ ? chat->photo_->small_.get() : nullptr;
         if (photo && photo->local_ && photo->local_->is_downloading_completed_) {
-            gchar  *img = nullptr;
-            size_t  len;
-            GError *err = nullptr;
-            g_file_get_contents(photo->local_->path_.c_str(), &img, &len, &err);
-            if (err) {
-                purple_debug_warning(config::pluginId, "Failed to load photo %s for %s: %s\n",
-                                     photo->local_->path_.c_str(), purpleBuddyName.c_str(),  err->message);
-                g_error_free(err);
-            } else {
+            gsize  len;
+            gchar *img = readPhoto(photo->local_->path_, purpleBuddyName, len);
+            if (img) {
                 purple_debug_info(config::pluginId, "Using downloaded photo for %s\n", purpleBuddyName.c_str());
                 purple_buddy_icons_set_for_user(account.purpleAccount, purpleBuddyName.c_str(),
                                                 img, len, nullptr);

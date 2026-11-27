@@ -267,6 +267,8 @@ private:
 
     void       updateUserStatus(UserId userId, td::td_api::object_ptr<td::td_api::UserStatus> status);
     void       updateUser(td::td_api::object_ptr<td::td_api::user> user);
+    template<typename Owner>
+    void       downloadAvatar(const td::td_api::file *photo, const Owner &owner);
     void       downloadProfilePhoto(const td::td_api::user &user);
     void       avatarDownloadResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void       updateGroup(td::td_api::object_ptr<td::td_api::basicGroup> group);
