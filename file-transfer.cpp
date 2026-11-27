@@ -312,16 +312,12 @@ static void handleLongInlineDownload(uint64_t requestId, TdAccountData &account)
             // pendingMessage leaves the queue now, if it is ready
             checkMessageReady(pendingMessage, account, &readyMessages);
 
-            // Now after "Downloading..." notification has been displayed (which may have been
-            // accompanied by file caption, if any, in which case it needs reply source if it was a
-            // reply), we can move reply source from no-longer-pending IncomingMessage onto
-            // DownloadRequest, so that citation can be displayed again when displaying hyperlink.
-            // If the message is a reply but fetching reply source hasn't produced a response yet
-            // at this point, a successful such response may technically yet come in which case we
-            // will lose the reply source. But this is extremely unlikely, and not even a problem.
+            // The message replied to, if it came after the download began, and the thumbnail go
+            // with the DownloadRequest, for the hyperlink shown once the file is here. A reply
+            // source fetched later still is lost: unlikely, and not a problem.
             for (IncomingMessage &readyMessage: readyMessages)
                 if (readyMessage.message && (getId(*readyMessage.message) == pRequest->message.id)) {
-                    pRequest->message.repliedMessage = std::move(readyMessage.repliedMessage);
+                    pRequest->message.repliedMessage = readyMessage.messageInfo.repliedMessage;
                     pRequest->thumbnail = std::move(readyMessage.thumbnail);
                 }
         }

@@ -2217,7 +2217,6 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
     account.forgetStandIns(getId(chat), getId(message));
 
     TgMessageInfo &messageInfo = fullMessage.messageInfo;
-    messageInfo.repliedMessage = std::move(fullMessage.repliedMessage);
 
     if (fullMessage.editedMessageTime && showEditNotice(chat, fullMessage, account)) {
         // The notice holds all of the edit; the tab gets the message over its earlier version
@@ -2363,9 +2362,6 @@ void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
     for (int id: g_shownStandIns)
         purple_imgstore_unref_by_id(id);
     g_shownStandIns.clear();
-
-    // Put it back - may be needed if long download is in progress
-    fullMessage.repliedMessage = std::move(messageInfo.repliedMessage);
 
     showPendingEdit(account, getChatId(message), getId(message));
 }
@@ -2542,7 +2538,7 @@ void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td
         return;
     }
 
-    fullMessage.repliedMessage = nullptr;
+    fullMessage.messageInfo.repliedMessage = nullptr;
     fullMessage.selectedPhotoSizeId = 0;
     fullMessage.repliedMessageFetchDoneOrFailed = false;
     fullMessage.previewPath.clear();
@@ -2979,7 +2975,7 @@ static void findMessageResponse(TdAccountData &account, ChatId chatId, MessageId
 
     pendingMessage->repliedMessageFetchDoneOrFailed = true;
     if (object && (object->get_id() == td::td_api::message::ID))
-        pendingMessage->repliedMessage = RepliedMessage(td::move_tl_object_as<td::td_api::message>(object).release());
+        pendingMessage->messageInfo.repliedMessage = RepliedMessage(td::move_tl_object_as<td::td_api::message>(object).release());
     else
         purple_debug_misc(config::pluginId, "Failed to fetch reply source for message %" G_GINT64_FORMAT "\n",
                           pendingMessageId.value());

@@ -219,9 +219,8 @@ public:
       fileSize(fileSize), downloadedSize(0), fileDescription(fileDescription),
       thumbnail(thumbnail)
     {
-        // If download is started while the message is in PendingMessageQueue, repliedMessage will
-        // be on IncomingMessage, and the one here empty: it is given to the DownloadRequest if the
-        // message leaves PendingMessageQueue before the download is complete (handleLongInlineDownload)
+        // The message replied to is shared, if it is here yet; one fetched later is copied in when
+        // the message leaves PendingMessageQueue before the download is complete (handleLongInlineDownload)
         this->message.assign(message);
     }
     // An inline download still in progress, as at logout, leaves its temporary file behind otherwise
@@ -268,7 +267,6 @@ public:
 
 struct IncomingMessage {
     td::td_api::object_ptr<td::td_api::message> message;
-    RepliedMessage                              repliedMessage;
     td::td_api::object_ptr<td::td_api::file>    thumbnail;
     std::string inlineDownloadedFilePath;
     // Thumbnail the sender attached to a video, shown along with the video's own link or notice
