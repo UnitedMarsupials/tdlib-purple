@@ -360,25 +360,39 @@ static const char QUOTE_BAR[] = "<font color=\"#808080\">\xe2\x96\x8e</font> ";
 
 // Telegram's formatting as the markup Pidgin's conversation window draws; what it has no markup
 // for is left plain: mentions, hashtags, addresses (which Pidgin links itself) and the like
+// The plain tags of an entity, and whether one can be sent from Pidgin that way, as the rest cannot
+namespace {
+struct EntityTags {
+    int32_t     id;
+    const char *open;
+    const char *close;
+    bool        sendable;
+};
+}
+static const EntityTags EntityTagList[] = {
+    {td::td_api::textEntityTypeBold::ID,          "<b>",                    "</b>",    true},
+    {td::td_api::textEntityTypeItalic::ID,        "<i>",                    "</i>",    true},
+    {td::td_api::textEntityTypeUnderline::ID,     "<u>",                    "</u>",    true},
+    {td::td_api::textEntityTypeStrikethrough::ID, "<s>",                    "</s>",    true},
+    {td::td_api::textEntityTypeCode::ID,          "<font face=\"monospace\">", "</font>", false},
+    {td::td_api::textEntityTypePre::ID,           "<pre>",                  "</pre>",  false},
+    {td::td_api::textEntityTypePreCode::ID,       "<pre>",                  "</pre>",  false},
+    // Hidden until selected, which shows it in the selection's colors
+    {td::td_api::textEntityTypeSpoiler::ID, "<font color=\"#808080\" back=\"#808080\">", "</font>", false},
+};
+
 static bool getEntityMarkup(const td::td_api::TextEntityType &type, TextMarkup &markup, bool sendable)
 {
+    for (const EntityTags &tags: EntityTagList)
+        if (tags.id == type.get_id()) {
+            if (sendable && !tags.sendable)
+                return false;
+            markup.open  = tags.open;
+            markup.close = tags.close;
+            return true;
+        }
+
     switch (type.get_id()) {
-    case td::td_api::textEntityTypeBold::ID:
-        markup.open = "<b>";
-        markup.close = "</b>";
-        return true;
-    case td::td_api::textEntityTypeItalic::ID:
-        markup.open = "<i>";
-        markup.close = "</i>";
-        return true;
-    case td::td_api::textEntityTypeUnderline::ID:
-        markup.open = "<u>";
-        markup.close = "</u>";
-        return true;
-    case td::td_api::textEntityTypeStrikethrough::ID:
-        markup.open = "<s>";
-        markup.close = "</s>";
-        return true;
     case td::td_api::textEntityTypeTextUrl::ID: {
         // A link to where it may not go is shown as its text alone
         const std::string &url = static_cast<const td::td_api::textEntityTypeTextUrl &>(type).url_;
@@ -388,28 +402,12 @@ static bool getEntityMarkup(const td::td_api::TextEntityType &type, TextMarkup &
         }
         return true;
     }
-    }
-    // The rest, there being no sending them from Pidgin
-    if (sendable)
-        return false;
-    switch (type.get_id()) {
-    case td::td_api::textEntityTypeCode::ID:
-        markup.open = "<font face=\"monospace\">";
-        markup.close = "</font>";
-        return true;
-    case td::td_api::textEntityTypePre::ID:
-    case td::td_api::textEntityTypePreCode::ID:
-        markup.open = "<pre>";
-        markup.close = "</pre>";
-        return true;
-    case td::td_api::textEntityTypeSpoiler::ID:
-        // Hidden until selected, which shows it in the selection's colors
-        markup.open = "<font color=\"#808080\" back=\"#808080\">";
-        markup.close = "</font>";
-        return true;
     case td::td_api::textEntityTypeBlockQuote::ID:
     case td::td_api::textEntityTypeExpandableBlockQuote::ID:
-        markup.open = QUOTE_BAR;
+        // Not sent from Pidgin
+        if (sendable)
+            return false;
+        markup.open  = QUOTE_BAR;
         markup.quote = true;
         return true;
     default:
