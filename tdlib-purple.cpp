@@ -1541,6 +1541,8 @@ static void unregisterMessageLinks()
     setLogMarkersEnabled(false);
     setMessagePopupHandler(nullptr);
     setDraggedFileHandler(nullptr);
+    setPastedHandler(nullptr);
+    setPlaceholderHandler(nullptr);
     setBuddyMarkHandler(nullptr, nullptr);
     setTopReachedHandler(nullptr);
     setBottomReachedHandler(nullptr);

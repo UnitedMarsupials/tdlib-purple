@@ -548,11 +548,13 @@ static bool isMessageHidden(PurpleConversation *conv, MessageId messageId);
 static void displayedMessage(PurpleAccount *, const char *, char *,
                              PurpleConversation *conv, PurpleMessageFlags)
 {
-    GtkTextBuffer *buffer = (g_messageBeingWritten && (g_messageBeingWritten->conv == conv))
-                            ? getTextBuffer(conv) : nullptr;
-    if (buffer) {
-        GtkTextMark *startMark = getMessageMark(buffer, g_messageBeingWritten->messageId, MarkKind::Start);
-        GtkTextIter  start, end;
+    GtkTextBuffer *buffer    = (g_messageBeingWritten && (g_messageBeingWritten->conv == conv))
+                               ? getTextBuffer(conv) : nullptr;
+    // Set as the message began, written anew or extended
+    GtkTextMark   *startMark = buffer ? getMessageMark(buffer, g_messageBeingWritten->messageId, MarkKind::Start)
+                                      : nullptr;
+    if (startMark) {
+        GtkTextIter start, end;
         p_gtk_text_buffer_get_iter_at_mark(buffer, &start, startMark);
         // Pidgin ends the previous line only after saying a message is coming
         if (p_gtk_text_iter_get_char(&start) == '\n')
@@ -910,7 +912,7 @@ struct Progress {
     unsigned            step  = 0;
 };
 
-// Back and forth through the frames, as Claude Code's
+// Back and forth through the frames
 static const char *getSpinnerFrame(unsigned step)
 {
     unsigned position = step % (2 * SPINNER_FRAME_COUNT - 2);
@@ -1687,7 +1689,7 @@ static void pictureFetched(PurpleUtilFetchUrlData *, gpointer data, const gchar 
                            const gchar *error)
 {
     std::unique_ptr<PictureFetch> fetch(static_cast<PictureFetch *>(data));
-    if (content && length && isPicture(reinterpret_cast<const guchar *>(content), length)) {
+    if (g_pastedHandler && content && length && isPicture(reinterpret_cast<const guchar *>(content), length)) {
         gchar *name = g_path_get_basename(fetch->url.c_str());
         // The store takes the copy
         gpointer copy = g_malloc(length);
@@ -1801,12 +1803,34 @@ static void watchConversation(PidginConversation *gtkconv)
     }
 }
 
+// The menus of the input field's thumbnails go with the plugin, whose handler would be gone
+static void disconnectThumbnails(GtkWidget *entry)
+{
+    if (!p_gtk_text_iter_get_child_anchor || !p_gtk_text_child_anchor_get_widgets || !p_g_signal_handler_find ||
+        !p_g_signal_handler_disconnect || !p_gtk_text_buffer_get_iter_at_offset || !p_gtk_text_iter_forward_char)
+        return;
+    GtkTextIter iter;
+    p_gtk_text_buffer_get_iter_at_offset(reinterpret_cast<GtkIMHtml *>(entry)->text_buffer, &iter, 0);
+    do {
+        GtkTextChildAnchor *anchor  = p_gtk_text_iter_get_child_anchor(&iter);
+        GList              *widgets = anchor ? p_gtk_text_child_anchor_get_widgets(anchor) : nullptr;
+        for (GList *item = widgets; item; item = item->next) {
+            gulong handler = p_g_signal_handler_find(item->data, G_SIGNAL_MATCH_FUNC, 0, 0, nullptr,
+                                                     reinterpret_cast<gpointer>(thumbnailClicked), nullptr);
+            if (handler)
+                p_g_signal_handler_disconnect(item->data, handler);
+        }
+        g_list_free(widgets);
+    } while (p_gtk_text_iter_forward_char(&iter));
+}
+
 static void unwatchConversation(PurpleConversation *conv)
 {
     GtkWidget *entry  = getEntry(conv);
     GtkWidget *imhtml = entry ? reinterpret_cast<GtkWidget *>(getIMHtml(conv)) : nullptr;
     if (!entry)
         return;
+    disconnectThumbnails(entry);
     unwatchSignal(entry, "paste-clipboard");
     unwatchDrags(imhtml);
     unwatchSignal(entry, "drag-data-received");
@@ -2504,7 +2528,7 @@ static GdkPixbuf *makeDragIcon(GtkWidget *image)
 }
 
 // The reaction the character is part of, on its message's line, if any
-static std::string getReactionKey(const GtkTextIter &where)
+static std::string getReactionKeyAt(const GtkTextIter &where)
 {
     std::string key;
     GSList     *tags = p_gtk_text_iter_get_tags(&where);
@@ -2544,7 +2568,7 @@ static bool findPointedReaction(GtkWidget *view, PurpleConversation *conv, std::
     getPointerPosition(textView, x, y);
     if (!getCharAt(textView, x, y, where))
         return false;
-    key       = getReactionKey(where);
+    key       = getReactionKeyAt(where);
     messageId = key.empty() ? MessageId() : findMessageAt(getTextBuffer(conv), where);
     return messageId.valid();
 }
@@ -2620,7 +2644,7 @@ static gboolean pressingTab(GtkWidget *view, GdkEventButton *event, gpointer)
     g_slist_free(tags);
     if (pressed->link.empty()) {
         // A reaction's custom emoji is not the message's picture
-        pressed->messageId = (box && getReactionKey(where).empty()) ? findMessageAt(getTextBuffer(conv), where)
+        pressed->messageId = (box && getReactionKeyAt(where).empty()) ? findMessageAt(getTextBuffer(conv), where)
                                                                      : MessageId();
         if (!pressed->messageId.valid())
             return FALSE;
@@ -3013,7 +3037,7 @@ static gboolean queryingTooltip(GtkWidget *view, gint x, gint y, gboolean keyboa
     p_gtk_text_view_window_to_buffer_coords(textView, GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
     if (!getCharAt(textView, x, y, where))
         return FALSE;
-    std::string key = getReactionKey(where);
+    std::string key = getReactionKeyAt(where);
     MessageId   messageId = key.empty() ? MessageId() : findMessageAt(getTextBuffer(conv), where);
     std::string tip;
     if (!messageId.valid() || !g_reactionTipHandler(conv, messageId, key, tip) || tip.empty())
