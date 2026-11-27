@@ -114,12 +114,7 @@ static void getFile(TdAccountData &account, const FileRef &file, FileReady ready
     }
 
     // Shown already, in the conversation, so someone is waiting for it
-    auto request = td::td_api::make_object<td::td_api::downloadFile>();
-    request->file_id_     = file.id;
-    request->priority_    = OPEN_DOWNLOAD_PRIORITY;
-    request->offset_      = 0;
-    request->limit_       = 0;
-    request->synchronous_ = true;
+    auto request = makeDownloadFile(file.id, OPEN_DOWNLOAD_PRIORITY, true);
     account.transceiver.sendQuery(std::move(request),
         [&account, ready](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
             const td::td_api::file *file = objectAs<td::td_api::file>(object);

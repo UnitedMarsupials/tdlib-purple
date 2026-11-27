@@ -8,6 +8,18 @@
 #include "purple-info.h"
 #include <unistd.h>
 
+td::td_api::object_ptr<td::td_api::downloadFile> makeDownloadFile(int32_t fileId, int32_t priority,
+                                                                   bool synchronous)
+{
+    auto request = td::td_api::make_object<td::td_api::downloadFile>();
+    request->file_id_     = fileId;
+    request->priority_    = priority;
+    request->offset_      = 0;
+    request->limit_       = 0;
+    request->synchronous_ = synchronous;
+    return request;
+}
+
 enum {
     FILE_UPLOAD_PRIORITY = 1,
 };
@@ -331,13 +343,7 @@ void downloadFileInline(int32_t fileId, ChatId chatId, TgMessageInfo &message,
                         td::td_api::object_ptr<td::td_api::file> thumbnail,
                         TdTransceiver &transceiver, TdAccountData &account)
 {
-    td::td_api::object_ptr<td::td_api::downloadFile> downloadReq =
-        td::td_api::make_object<td::td_api::downloadFile>();
-    downloadReq->file_id_     = fileId;
-    downloadReq->priority_    = FILE_DOWNLOAD_PRIORITY;
-    downloadReq->offset_      = 0;
-    downloadReq->limit_       = 0;
-    downloadReq->synchronous_ = true;
+    auto downloadReq = makeDownloadFile(fileId, FILE_DOWNLOAD_PRIORITY, true);
 
     uint64_t requestId = transceiver.sendQuery(
         std::move(downloadReq),
@@ -534,13 +540,7 @@ static void startStandardDownload(PurpleXfer *xfer)
 
     int32_t fileId;
     if (data->account->getFileIdForTransfer(xfer, fileId)) {
-        td::td_api::object_ptr<td::td_api::downloadFile> downloadReq =
-            td::td_api::make_object<td::td_api::downloadFile>();
-        downloadReq->file_id_     = fileId;
-        downloadReq->priority_    = FILE_DOWNLOAD_PRIORITY;
-        downloadReq->offset_      = 0;
-        downloadReq->limit_       = 0;
-        downloadReq->synchronous_ = true;
+        auto downloadReq = makeDownloadFile(fileId, FILE_DOWNLOAD_PRIORITY, true);
 
         uint64_t requestId = data->transceiver->sendQuery(std::move(downloadReq),
                                                           [account=data->account](uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object) {

@@ -11,6 +11,9 @@ std::string         getUnsupportedMessageDescription(const td::td_api::MessageCo
 std::string         describeUnsupportedContent(const td::td_api::MessageContent &content);
 std::string         getDisplayedError(const td::td_api::object_ptr<td::td_api::Object> &object);
 
+td::td_api::object_ptr<td::td_api::getMessage>        makeGetMessage(ChatId chatId, MessageId messageId);
+td::td_api::object_ptr<td::td_api::createPrivateChat> makeCreatePrivateChat(int64_t userId);
+
 // The object as a T, if it is one: a response, or a member of a type with subclasses
 template<typename T, typename Base>
 const T *objectAs(const td::td_api::object_ptr<Base> &object)

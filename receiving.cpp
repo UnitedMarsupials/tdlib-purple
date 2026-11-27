@@ -1389,12 +1389,7 @@ static void fetchPicture(TdAccountData &account, ChatId chatId, MessageId messag
         return;
     purple_debug_misc(config::pluginId, "Fetching picture (file id %d) of message %" G_GINT64_FORMAT "\n",
                       (int)fileId, messageId.value());
-    auto request = td::td_api::make_object<td::td_api::downloadFile>();
-    request->file_id_     = fileId;
-    request->priority_    = FILE_DOWNLOAD_PRIORITY;
-    request->offset_      = 0;
-    request->limit_       = 0;
-    request->synchronous_ = true;
+    auto request = makeDownloadFile(fileId, FILE_DOWNLOAD_PRIORITY, true);
     account.transceiver.sendQuery(std::move(request),
         [&account, chatId, messageId, fileId](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
             account.endPictureFetch(chatId, messageId, fileId);
@@ -1617,12 +1612,7 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
         {
             purple_debug_misc(config::pluginId, "Fetching %s (file id %d) in the background\n",
                               fileDesc.c_str(), (int)prefetch->id_);
-            auto request = td::td_api::make_object<td::td_api::downloadFile>();
-            request->file_id_     = prefetch->id_;
-            request->priority_    = BACKGROUND_DOWNLOAD_PRIORITY;
-            request->offset_      = 0;
-            request->limit_       = 0;
-            request->synchronous_ = false;
+            auto request = makeDownloadFile(prefetch->id_, BACKGROUND_DOWNLOAD_PRIORITY, false);
             transceiver.sendQuery(std::move(request), nullptr);
         }
         return;
@@ -2862,9 +2852,7 @@ static void queueMessage(TdAccountData &account, const td::td_api::chat &chat,
 // Pidgin's tab shows it, not logged again, not said to be edited
 static void refreshShownMessage(TdAccountData &account, ChatId chatId, MessageId messageId)
 {
-    auto request = td::td_api::make_object<td::td_api::getMessage>();
-    request->chat_id_    = chatId.value();
-    request->message_id_ = messageId.value();
+    auto request = makeGetMessage(chatId, messageId);
     account.transceiver.sendQuery(std::move(request),
         [&account, chatId, messageId](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
             const td::td_api::chat *chat = account.getChat(chatId);
@@ -2920,9 +2908,7 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
     if (replyMessageId.valid()) {
         purple_debug_misc(config::pluginId, "Fetching message %" G_GINT64_FORMAT " which message %" G_GINT64_FORMAT " replies to\n",
                         replyMessageId.value(), messageId.value());
-        auto getMessageReq = td::td_api::make_object<td::td_api::getMessage>();
-        getMessageReq->chat_id_    = chatId.value();
-        getMessageReq->message_id_ = replyMessageId.value();
+        auto getMessageReq = makeGetMessage(chatId, replyMessageId);
         transceiver.sendQueryWithTimeout(std::move(getMessageReq), onFetchReply,
                                          getMessageWaitSeconds(fullMessage.messageInfo));
     }
@@ -2930,12 +2916,7 @@ void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAcc
     if (fullMessage.previewWaited && !fullMessage.previewFetchDone) {
         purple_debug_misc(config::pluginId, "Fetching video thumbnail for message %" G_GINT64_FORMAT "\n",
                           messageId.value());
-        auto downloadReq = td::td_api::make_object<td::td_api::downloadFile>();
-        downloadReq->file_id_     = fullMessage.previewFileId;
-        downloadReq->priority_    = FILE_DOWNLOAD_PRIORITY;
-        downloadReq->offset_      = 0;
-        downloadReq->limit_       = 0;
-        downloadReq->synchronous_ = true;
+        auto downloadReq = makeDownloadFile(fullMessage.previewFileId, FILE_DOWNLOAD_PRIORITY, true);
         // Past the timeout the video is shown without it; a late thumbnail is then discarded
         transceiver.sendQueryWithTimeout(std::move(downloadReq),
             [&account, chatId, messageId](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
@@ -3266,12 +3247,7 @@ static void customEmojiResponse(TdAccountData &account, ChatId chatId,
         return;
     }
 
-    auto downloadReq = td::td_api::make_object<td::td_api::downloadFile>();
-    downloadReq->file_id_     = file.id_;
-    downloadReq->priority_    = 1;
-    downloadReq->offset_      = 0;
-    downloadReq->limit_       = 0;
-    downloadReq->synchronous_ = true;
+    auto downloadReq = makeDownloadFile(file.id_, FILE_DOWNLOAD_PRIORITY, true);
     account.transceiver.sendQuery(std::move(downloadReq),
         [&account, format, fallback, shown](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
             const td::td_api::file *file = objectAs<td::td_api::file>(object);
@@ -3436,9 +3412,7 @@ static void requestEditedMessage(TdAccountData &account, const PendingEdit &edit
 {
     purple_debug_misc(config::pluginId, "Fetching edited message %" G_GINT64_FORMAT "\n",
                       edit.messageId.value());
-    auto request = td::td_api::make_object<td::td_api::getMessage>();
-    request->chat_id_    = edit.chatId.value();
-    request->message_id_ = edit.messageId.value();
+    auto request = makeGetMessage(edit.chatId, edit.messageId);
     account.transceiver.sendQuery(std::move(request),
         [&account, edit](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
             editedMessageResponse(account, edit, std::move(object));
@@ -4551,9 +4525,7 @@ void updateUnreadReactions(TdAccountData &account, td::td_api::updateMessageUnre
     // One of our messages from before this session: fetch it, to say which
     purple_debug_misc(config::pluginId, "Fetching message %" G_GINT64_FORMAT " reacted to\n", messageId.value());
     auto reactions = std::make_shared<UnreadReactions>(std::move(update.unread_reactions_));
-    auto request   = td::td_api::make_object<td::td_api::getMessage>();
-    request->chat_id_    = chatId.value();
-    request->message_id_ = messageId.value();
+    auto request = makeGetMessage(chatId, messageId);
     account.transceiver.sendQuery(std::move(request),
         [&account, chatId, messageId, reactions](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
             unreadReactionsMessageResponse(account, chatId, messageId, *reactions, std::move(object));

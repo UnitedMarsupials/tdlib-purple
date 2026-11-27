@@ -249,6 +249,8 @@ private:
     void       onLoggedIn();
     void       getContactsResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void       getChatsResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
+    void       requestMoreChats();
+    void       setBooleanOption(const char *name, bool value);
     void       requestMissingPrivateChats();
     void       loginCreatePrivateChatResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     // List of chats is requested after connection is ready, and when response is received,

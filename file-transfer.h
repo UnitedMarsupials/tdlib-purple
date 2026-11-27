@@ -11,6 +11,9 @@ enum {
     OPEN_DOWNLOAD_PRIORITY       = 32,
 };
 
+// A request for the whole of a file; synchronous, its answer is the file once it is here
+td::td_api::object_ptr<td::td_api::downloadFile> makeDownloadFile(int32_t fileId, int32_t priority,
+                                                                   bool synchronous);
 bool saveImage(int id, char **fileName);
 // What a file sent by file transfer goes as: a document, or, if the account sends files by their
 // content, what that is, as for a pasted one

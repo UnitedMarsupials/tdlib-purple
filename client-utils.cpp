@@ -144,6 +144,23 @@ std::string describeUnsupportedContent(const td::td_api::MessageContent &content
     return result;
 }
 
+td::td_api::object_ptr<td::td_api::getMessage> makeGetMessage(ChatId chatId, MessageId messageId)
+{
+    auto request = td::td_api::make_object<td::td_api::getMessage>();
+    request->chat_id_    = chatId.value();
+    request->message_id_ = messageId.value();
+    return request;
+}
+
+// Not forced: TDLib may ask the server, so that what it says of the chat is right
+td::td_api::object_ptr<td::td_api::createPrivateChat> makeCreatePrivateChat(int64_t userId)
+{
+    auto request = td::td_api::make_object<td::td_api::createPrivateChat>();
+    request->user_id_ = userId;
+    request->force_   = false;
+    return request;
+}
+
 std::string getDisplayedError(const td::td_api::object_ptr<td::td_api::Object> &object)
 {
     if (!object) {

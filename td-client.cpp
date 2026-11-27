@@ -670,12 +670,7 @@ void PurpleTdClient::openDatabase(const std::string &key, DatabaseOpening openin
     m_storageOptimizerSet = true;
     bool useStorageOptimizer = (purple_account_get_bool(m_account, AccountOptions::KeepInlineDownloads,
                                                         AccountOptions::KeepInlineDownloadsDefault) == FALSE);
-    auto value      = td::td_api::make_object<td::td_api::optionValueBoolean>();
-    value->value_   = useStorageOptimizer;
-    auto option     = td::td_api::make_object<td::td_api::setOption>();
-    option->name_   = "use_storage_optimizer";
-    option->value_  = std::move(value);
-    m_transceiver.sendQuery(std::move(option), nullptr);
+    setBooleanOption("use_storage_optimizer", useStorageOptimizer);
 }
 
 // TDLib, told the wrong key, waits for the parameters again: tried, then, as it may have been
@@ -1196,15 +1191,32 @@ void PurpleTdClient::onLoggedIn()
                             &PurpleTdClient::getContactsResponse);
 }
 
+// The next of the main chat list's chats, as many as TDLib gives at once: getChatsResponse asks again
+// until there are no more
+void PurpleTdClient::requestMoreChats()
+{
+    auto request = td::td_api::make_object<td::td_api::loadChats>();
+    request->chat_list_ = td::td_api::make_object<td::td_api::chatListMain>();
+    request->limit_     = 200;
+    m_transceiver.sendQuery(std::move(request), &PurpleTdClient::getChatsResponse);
+}
+
+void PurpleTdClient::setBooleanOption(const char *name, bool value)
+{
+    auto optionValue    = td::td_api::make_object<td::td_api::optionValueBoolean>();
+    optionValue->value_ = value;
+    auto request        = td::td_api::make_object<td::td_api::setOption>();
+    request->name_      = name;
+    request->value_     = std::move(optionValue);
+    m_transceiver.sendQuery(std::move(request), nullptr);
+}
+
 void PurpleTdClient::getContactsResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object)
 {
     purple_debug_misc(config::pluginId, "getContacts response to request %" G_GUINT64_FORMAT "\n", requestId);
     if (object && (object->get_id() == td::td_api::users::ID)) {
         m_data.setContacts(*td::move_tl_object_as<td::td_api::users>(object));
-        auto getChatsRequest = td::td_api::make_object<td::td_api::loadChats>();
-        getChatsRequest->chat_list_ = td::td_api::make_object<td::td_api::chatListMain>();
-        getChatsRequest->limit_ = 200;
-        m_transceiver.sendQuery(std::move(getChatsRequest), &PurpleTdClient::getChatsResponse);
+        requestMoreChats();
     } else
         notifyAuthError(object);
 }
@@ -1213,10 +1225,7 @@ void PurpleTdClient::getChatsResponse(uint64_t requestId, td::td_api::object_ptr
 {
     purple_debug_misc(config::pluginId, "getChats response to request %" G_GUINT64_FORMAT "\n", requestId);
     if (object && (object->get_id() == td::td_api::ok::ID)) {
-        auto getChatsRequest = td::td_api::make_object<td::td_api::loadChats>();
-        getChatsRequest->chat_list_ = td::td_api::make_object<td::td_api::chatListMain>();
-        getChatsRequest->limit_ = 200;
-        m_transceiver.sendQuery(std::move(getChatsRequest), &PurpleTdClient::getChatsResponse);
+        requestMoreChats();
     } else {
         std::string message = getDisplayedError(object);
         purple_debug_misc(config::pluginId, "Got no more chats: %s\n", message.c_str());
@@ -1241,8 +1250,7 @@ void PurpleTdClient::requestMissingPrivateChats()
         m_usersForNewPrivateChats.pop_back();
         m_privateChatRequestsInFlight++;
         purpleDebug("Requesting private chat for user id {}", userId.value());
-        td::td_api::object_ptr<td::td_api::createPrivateChat> createChat =
-            td::td_api::make_object<td::td_api::createPrivateChat>(userId.value(), false);
+        auto createChat = makeCreatePrivateChat(userId.value());
         m_transceiver.sendQuery(std::move(createChat), &PurpleTdClient::loginCreatePrivateChatResponse);
     }
 
@@ -1555,9 +1563,7 @@ void PurpleTdClient::dragConversationFile(PurpleConversation *conv, MessageId me
 void PurpleTdClient::fetchMessageFile(ChatId chatId, MessageId messageId, const std::string &variant,
                                       FileFetched fetched)
 {
-    auto request = td::td_api::make_object<td::td_api::getMessage>();
-    request->chat_id_    = chatId.value();
-    request->message_id_ = messageId.value();
+    auto request = makeGetMessage(chatId, messageId);
     m_transceiver.sendQuery(std::move(request),
         [this, chatId, variant, fetched](uint64_t, TdObjectPtr object) {
             fetchMessageFileResponse(chatId, variant, fetched, std::move(object));
@@ -1695,9 +1701,7 @@ void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId, OpenMen
 {
     // The message for the reactions it has, then what may be done to it, then the reactions it
     // may have
-    auto request = td::td_api::make_object<td::td_api::getMessage>();
-    request->chat_id_    = chatId.value();
-    request->message_id_ = messageId.value();
+    auto request = makeGetMessage(chatId, messageId);
     m_transceiver.sendQuery(std::move(request), [this, chatId, messageId, openMenu](uint64_t, TdObjectPtr object) {
         if (!object || (object->get_id() != td::td_api::message::ID)) {
             // Deleted since, as far as TDLib knows, whatever the tab shows
@@ -2374,8 +2378,7 @@ void PurpleTdClient::replaceMedia(ChatId chatId, MessageId messageId, const Plac
     if (use.attachment->path.empty() && use.attachment->fileId) {
         purple_debug_misc(config::pluginId, "Fetching file %d, to replace the media of message %" G_GINT64_FORMAT "\n",
                           (int)use.attachment->fileId, messageId.value());
-        auto     download = td::td_api::make_object<td::td_api::downloadFile>(use.attachment->fileId,
-                                                                               OPEN_DOWNLOAD_PRIORITY, 0, 0, true);
+        auto     download = makeDownloadFile(use.attachment->fileId, OPEN_DOWNLOAD_PRIORITY, true);
         unsigned number   = use.attachment->number;
         PlaceholderUse fetched = use;
         m_transceiver.sendQuery(std::move(download), [this, chatId, messageId, number, fetched, caption]
@@ -2606,9 +2609,7 @@ void PurpleTdClient::forwardMessage(ChatId chatId, MessageId linkedId, const For
                       messageId.value(), to.name.c_str(), to.accountName.c_str());
     if ((to.accountName != purple_account_get_username(m_data.purpleAccount)) || (to.protocolId != config::pluginId)) {
         // The message as it is, to be re-told
-        auto request = td::td_api::make_object<td::td_api::getMessage>();
-        request->chat_id_    = chatId.value();
-        request->message_id_ = messageId.value();
+        auto request = makeGetMessage(chatId, messageId);
         m_transceiver.sendQuery(std::move(request), [this, chatId, messageId, to](uint64_t, TdObjectPtr object) {
             forwardElsewhere(chatId, messageId, to, std::move(object));
         });
@@ -2631,9 +2632,7 @@ void PurpleTdClient::forwardMessage(ChatId chatId, MessageId linkedId, const For
         return;
     }
     // Never written to: Telegram makes the chat first
-    auto createChat = td::td_api::make_object<td::td_api::createPrivateChat>();
-    createChat->user_id_ = users[0]->id_;
-    createChat->force_   = false;
+    auto createChat = makeCreatePrivateChat(users[0]->id_);
     m_transceiver.sendQuery(std::move(createChat), [this, chatId, messageId, label = to.label](uint64_t, TdObjectPtr object) {
         if (object && (object->get_id() == td::td_api::chat::ID))
             forwardToChat(chatId, messageId, getId(static_cast<const td::td_api::chat &>(*object)), label);
@@ -2849,12 +2848,7 @@ void PurpleTdClient::fetchMessageFileResponse(ChatId chatId, const std::string &
     showChatNotification(m_data, *chat, notice.c_str());
 
     std::string description = fileInfo.description;
-    auto downloadReq = td::td_api::make_object<td::td_api::downloadFile>();
-    downloadReq->file_id_     = fileInfo.file->id_;
-    downloadReq->priority_    = OPEN_DOWNLOAD_PRIORITY;
-    downloadReq->offset_      = 0;
-    downloadReq->limit_       = 0;
-    downloadReq->synchronous_ = true;
+    auto downloadReq = makeDownloadFile(fileInfo.file->id_, OPEN_DOWNLOAD_PRIORITY, true);
     m_transceiver.sendQuery(std::move(downloadReq),
         [fetched, description, picture](uint64_t, TdObjectPtr object) {
             const td::td_api::file *file = objectAs<td::td_api::file>(object);
@@ -3003,9 +2997,7 @@ void PurpleTdClient::buttonClicked(ChatId chatId, MessageId messageId, const std
     std::string url;
     if (!parseButtonKey(key, row, column, url))
         return;
-    auto request = td::td_api::make_object<td::td_api::getMessage>();
-    request->chat_id_    = chatId.value();
-    request->message_id_ = messageId.value();
+    auto request = makeGetMessage(chatId, messageId);
     m_transceiver.sendQuery(std::move(request), [this, chatId, messageId, row, column](uint64_t, TdObjectPtr object) {
         const td::td_api::message *message = objectAs<td::td_api::message>(object);
         const auto *keyboard = message ? objectAs<td::td_api::replyMarkupInlineKeyboard>(message->reply_markup_)
@@ -3043,9 +3035,7 @@ void PurpleTdClient::pressButton(ChatId chatId, MessageId messageId, const td::t
         break;
     case td::td_api::inlineKeyboardButtonTypeUser::ID: {
         // Their chat, opened
-        auto request = td::td_api::make_object<td::td_api::createPrivateChat>();
-        request->user_id_ = static_cast<const td::td_api::inlineKeyboardButtonTypeUser &>(*button.type_).user_id_;
-        request->force_   = false;
+        auto request = makeCreatePrivateChat(static_cast<const td::td_api::inlineKeyboardButtonTypeUser &>(*button.type_).user_id_);
         m_transceiver.sendQuery(std::move(request), [this, chatId](uint64_t, TdObjectPtr object) {
             const td::td_api::chat *chat = (object && (object->get_id() == td::td_api::chat::ID))
                 ? m_data.getChat(getId(static_cast<const td::td_api::chat &>(*object))) : nullptr;
@@ -3106,9 +3096,7 @@ void PurpleTdClient::reactionClicked(PurpleConversation *conv, MessageId message
         askPaidReaction(chatId, messageId);
         return;
     }
-    auto request = td::td_api::make_object<td::td_api::getMessage>();
-    request->chat_id_    = chatId.value();
-    request->message_id_ = messageId.value();
+    auto request = makeGetMessage(chatId, messageId);
     m_transceiver.sendQuery(std::move(request), [this, chatId, messageId, key](uint64_t, TdObjectPtr object) {
         if (!object || (object->get_id() != td::td_api::message::ID))
             return;
@@ -3227,12 +3215,7 @@ void PurpleTdClient::updateOnline()
         return;
     m_online = online;
     purple_debug_misc(config::pluginId, "Going %s\n", online ? "online" : "offline");
-    auto value     = td::td_api::make_object<td::td_api::optionValueBoolean>();
-    value->value_  = online;
-    auto request   = td::td_api::make_object<td::td_api::setOption>();
-    request->name_  = "online";
-    request->value_ = std::move(value);
-    m_transceiver.sendQuery(std::move(request), nullptr);
+    setBooleanOption("online", online);
 }
 
 bool PurpleTdClient::hasUnreadReactions(PurpleBuddy *buddy)
@@ -3266,9 +3249,7 @@ bool PurpleTdClient::requestBuddyChat(PurpleConversation *conv)
     m_buddyChatsRequested.insert(userId);
     purpleDebug("Requesting private chat for buddy {} opened", userId.value());
     std::string convName = purple_conversation_get_name(conv);
-    auto request = td::td_api::make_object<td::td_api::createPrivateChat>();
-    request->user_id_ = userId.value();
-    request->force_   = false;
+    auto request = makeCreatePrivateChat(userId.value());
     m_transceiver.sendQuery(std::move(request), [this, userId, convName](uint64_t, TdObjectPtr object) {
         m_buddyChatsRequested.erase(userId);
         PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, convName.c_str(),
@@ -3458,8 +3439,7 @@ int PurpleTdClient::sendMessage(const char *buddyName, const char *message)
     }
     if (privateUser) {
         purpleDebug("Requesting private chat for user id {}", privateUser->id_);
-        td::td_api::object_ptr<td::td_api::createPrivateChat> createChat =
-            td::td_api::make_object<td::td_api::createPrivateChat>(privateUser->id_, false);
+        auto createChat = makeCreatePrivateChat(privateUser->id_);
         uint64_t requestId = m_transceiver.sendQuery(std::move(createChat), &PurpleTdClient::sendMessageCreatePrivateChatResponse);
         m_data.addPendingRequest<NewPrivateChatForMessage>(requestId, buddyName, message);
         return 0;
@@ -3560,10 +3540,7 @@ void PurpleTdClient::downloadProfilePhoto(const td::td_api::user &user)
     if (user.profile_photo_ && user.profile_photo_->small_ &&
         shouldDownloadAvatar(*user.profile_photo_->small_))
     {
-        auto downloadReq = td::td_api::make_object<td::td_api::downloadFile>();
-        downloadReq->file_id_ = user.profile_photo_->small_->id_;
-        downloadReq->priority_ = FILE_DOWNLOAD_PRIORITY;
-        downloadReq->synchronous_ = true;
+        auto downloadReq = makeDownloadFile(user.profile_photo_->small_->id_, FILE_DOWNLOAD_PRIORITY, true);
         uint64_t queryId = m_transceiver.sendQuery(std::move(downloadReq), &PurpleTdClient::avatarDownloadResponse);
         m_data.addPendingRequest<AvatarDownloadRequest>(queryId, &user);
     }
@@ -3718,10 +3695,7 @@ void PurpleTdClient::updateUserInfo(const td::td_api::user &user, const td::td_a
 void PurpleTdClient::downloadChatPhoto(const td::td_api::chat &chat)
 {
     if (chat.photo_ && chat.photo_->small_ && shouldDownloadAvatar(*chat.photo_->small_)) {
-        auto downloadReq = td::td_api::make_object<td::td_api::downloadFile>();
-        downloadReq->file_id_ = chat.photo_->small_->id_;
-        downloadReq->priority_ = FILE_DOWNLOAD_PRIORITY;
-        downloadReq->synchronous_ = true;
+        auto downloadReq = makeDownloadFile(chat.photo_->small_->id_, FILE_DOWNLOAD_PRIORITY, true);
         uint64_t queryId = m_transceiver.sendQuery(std::move(downloadReq), &PurpleTdClient::avatarDownloadResponse);
         m_data.addPendingRequest<AvatarDownloadRequest>(queryId, &chat);
     }
@@ -3991,8 +3965,7 @@ void PurpleTdClient::addContactResponse(uint64_t requestId, td::td_api::object_p
         return;
 
     if (object && (object->get_id() == td::td_api::ok::ID)) {
-        td::td_api::object_ptr<td::td_api::createPrivateChat> createChat =
-            td::td_api::make_object<td::td_api::createPrivateChat>(request->userId.value(), false);
+        auto createChat = makeCreatePrivateChat(request->userId.value());
         uint64_t newRequestId = m_transceiver.sendQuery(std::move(createChat),
                                                         &PurpleTdClient::addContactCreatePrivateChatResponse);
         m_data.addPendingRequest(newRequestId, std::move(request));
@@ -5084,8 +5057,7 @@ void PurpleTdClient::sendFileToChat(PurpleXfer *xfer, const char *purpleName,
         startDocumentUpload(getId(*chat), filename, xfer, m_transceiver, m_data, &PurpleTdClient::uploadResponse);
     else if (filename && privateUser) {
         purple_debug_misc(config::pluginId, "Requesting private chat for user id %d\n", (int)privateUser->id_);
-        td::td_api::object_ptr<td::td_api::createPrivateChat> createChat =
-            td::td_api::make_object<td::td_api::createPrivateChat>(privateUser->id_, false);
+        auto createChat = makeCreatePrivateChat(privateUser->id_);
         uint64_t requestId = m_transceiver.sendQuery(std::move(createChat), &PurpleTdClient::sendMessageCreatePrivateChatResponse);
         purple_xfer_ref(xfer);
         m_data.addPendingRequest<NewPrivateChatForMessage>(requestId, purpleName, xfer);
@@ -5337,9 +5309,7 @@ void PurpleTdClient::reportChat(ChatId chatId, const std::vector<MessageId> &mes
 
 void PurpleTdClient::reportSender(ChatId groupChatId, UserId userId)
 {
-    auto request = td::td_api::make_object<td::td_api::createPrivateChat>();
-    request->user_id_ = userId.value();
-    request->force_   = false;
+    auto request = makeCreatePrivateChat(userId.value());
     m_transceiver.sendQuery(std::move(request), [this, groupChatId, userId](uint64_t, TdObjectPtr object) {
         if (!object || (object->get_id() != td::td_api::chat::ID)) {
             // TRANSLATOR: In-chat error, after a message's sender was to be reported; followed by the reason.
