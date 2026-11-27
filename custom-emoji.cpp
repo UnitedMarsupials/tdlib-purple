@@ -122,9 +122,7 @@ static void getFile(TdAccountData &account, const FileRef &file, FileReady ready
     request->synchronous_ = true;
     account.transceiver.sendQuery(std::move(request),
         [&account, ready](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
-            const td::td_api::file *file = nullptr;
-            if (object && (object->get_id() == td::td_api::file::ID))
-                file = static_cast<const td::td_api::file *>(object.get());
+            const td::td_api::file *file = objectAs<td::td_api::file>(object);
             ready(account, (file && file->local_ && file->local_->is_downloading_completed_) ?
                            file->local_->path_ : std::string());
         });

@@ -2380,8 +2380,7 @@ void PurpleTdClient::replaceMedia(ChatId chatId, MessageId messageId, const Plac
         PlaceholderUse fetched = use;
         m_transceiver.sendQuery(std::move(download), [this, chatId, messageId, number, fetched, caption]
                                                      (uint64_t, TdObjectPtr object) {
-            const td::td_api::file *file = (object && (object->get_id() == td::td_api::file::ID)) ?
-                                           static_cast<const td::td_api::file *>(object.get()) : nullptr;
+            const td::td_api::file *file = objectAs<td::td_api::file>(object);
             PastedAttachment *attachment = nullptr;
             for (PastedAttachment &pasted: m_data.pastedAttachments.items)
                 if (pasted.number == number)
@@ -2656,8 +2655,7 @@ void PurpleTdClient::forwardToChat(ChatId chatId, MessageId messageId, ChatId to
     request->message_ids_.push_back(messageId.value());
     m_transceiver.sendQuery(std::move(request), [this, chatId, label](uint64_t, TdObjectPtr object) {
         // A message that cannot be forwarded comes back as null
-        const auto *sent = (object && (object->get_id() == td::td_api::messages::ID))
-                           ? static_cast<const td::td_api::messages *>(object.get()) : nullptr;
+        const auto *sent = objectAs<td::td_api::messages>(object);
         if (!sent)
             showForwardFailure(chatId, label, getDisplayedError(object));
         else if ((sent->messages_.size() != 1) || !sent->messages_[0])
@@ -2859,9 +2857,7 @@ void PurpleTdClient::fetchMessageFileResponse(ChatId chatId, const std::string &
     downloadReq->synchronous_ = true;
     m_transceiver.sendQuery(std::move(downloadReq),
         [fetched, description, picture](uint64_t, TdObjectPtr object) {
-            const td::td_api::file *file = nullptr;
-            if (object && (object->get_id() == td::td_api::file::ID))
-                file = static_cast<const td::td_api::file *>(object.get());
+            const td::td_api::file *file = objectAs<td::td_api::file>(object);
             if (file && file->local_ && file->local_->is_downloading_completed_)
                 fetched(file->local_->path_, description, picture, std::string());
             else
@@ -3011,11 +3007,9 @@ void PurpleTdClient::buttonClicked(ChatId chatId, MessageId messageId, const std
     request->chat_id_    = chatId.value();
     request->message_id_ = messageId.value();
     m_transceiver.sendQuery(std::move(request), [this, chatId, messageId, row, column](uint64_t, TdObjectPtr object) {
-        const td::td_api::message *message = (object && (object->get_id() == td::td_api::message::ID))
-                                             ? static_cast<const td::td_api::message *>(object.get()) : nullptr;
-        const td::td_api::ReplyMarkup *markup = message ? message->reply_markup_.get() : nullptr;
-        const auto *keyboard = (markup && (markup->get_id() == td::td_api::replyMarkupInlineKeyboard::ID))
-                               ? static_cast<const td::td_api::replyMarkupInlineKeyboard *>(markup) : nullptr;
+        const td::td_api::message *message = objectAs<td::td_api::message>(object);
+        const auto *keyboard = message ? objectAs<td::td_api::replyMarkupInlineKeyboard>(message->reply_markup_)
+                                       : nullptr;
         if (keyboard && (row < keyboard->rows_.size()) && (column < keyboard->rows_[row].size()) &&
             keyboard->rows_[row][column] && keyboard->rows_[row][column]->type_)
             pressButton(chatId, messageId, *keyboard->rows_[row][column]);
@@ -5159,10 +5153,8 @@ void PurpleTdClient::sendMessageCreatePrivateChatResponse(uint64_t requestId, td
 void PurpleTdClient::uploadResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object)
 {
     std::unique_ptr<UploadRequest> request = m_data.getPendingRequest<UploadRequest>(requestId);
-    const td::td_api::file        *file    = nullptr;
+    const td::td_api::file        *file    = objectAs<td::td_api::file>(object);
 
-    if (object && (object->get_id() == td::td_api::file::ID))
-        file = static_cast<const td::td_api::file *>(object.get());
 
     if (request) {
         if (file)

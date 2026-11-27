@@ -2094,32 +2094,20 @@ void notifySendFailed(const td::td_api::updateMessageSendFailed &sendFailed, TdA
     }
 }
 
-template<typename T>
-T zeroIfNegative(T value)
-{
-    return (value >= 0) ? value : 0;
-}
-
 void updateOption(const td::td_api::updateOption &option, TdAccountData &account)
 {
-    if ((option.name_ == "version") && option.value_ &&
-        (option.value_->get_id() == td::td_api::optionValueString::ID))
-    {
-        purple_debug_misc(config::pluginId, "tdlib version: %s\n",
-                            static_cast<const td::td_api::optionValueString &>(*option.value_).value_.c_str());
-    } else if ((option.name_ == "message_caption_length_max") && option.value_ &&
-        (option.value_->get_id() == td::td_api::optionValueInteger::ID))
-    {
-        account.options.maxCaptionLength = zeroIfNegative(static_cast<const td::td_api::optionValueInteger &>(*option.value_).value_);
-    } else if ((option.name_ == "message_text_length_max") && option.value_ &&
-        (option.value_->get_id() == td::td_api::optionValueInteger::ID))
-    {
-        account.options.maxMessageLength = zeroIfNegative(static_cast<const td::td_api::optionValueInteger &>(*option.value_).value_);
-    } else if ((option.name_ == "my_id") && option.value_ &&
-        (option.value_->get_id() == td::td_api::optionValueInteger::ID))
-    {
-        account.options.myUserId = static_cast<const td::td_api::optionValueInteger &>(*option.value_).value_;
-    } else
+    const auto *string  = objectAs<td::td_api::optionValueString>(option.value_);
+    const auto *integer = objectAs<td::td_api::optionValueInteger>(option.value_);
+
+    if ((option.name_ == "version") && string)
+        purple_debug_misc(config::pluginId, "tdlib version: %s\n", string->value_.c_str());
+    else if ((option.name_ == "message_caption_length_max") && integer)
+        account.options.maxCaptionLength = std::max<int64_t>(integer->value_, 0);
+    else if ((option.name_ == "message_text_length_max") && integer)
+        account.options.maxMessageLength = std::max<int64_t>(integer->value_, 0);
+    else if ((option.name_ == "my_id") && integer)
+        account.options.myUserId = integer->value_;
+    else
         purple_debug_misc(config::pluginId, "Option update %s\n", option.name_.c_str());
 }
 
