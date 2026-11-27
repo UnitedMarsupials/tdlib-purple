@@ -20,7 +20,9 @@
 # 1.8.6) are left out until they have one.
 #
 # No -Werror: clang finds an unused private field (transceiver.h) that gcc
-# does not, and the warnings are in the log anyway.
+# does not, and the warnings are in the log anyway.  But for a function that
+# can only call itself: such a one in pidgin-ui.cpp, which the tests do not
+# reach, would only show in Pidgin, by crashing it.
 
 name: CI
 
@@ -39,7 +41,7 @@ concurrency:
 env:
   WARNINGS: >-
     -Wall -Wextra -Wformat=2 -Wformat-signedness
-    -Wno-unused-parameter -Wno-parentheses
+    -Wno-unused-parameter -Wno-parentheses -Werror=infinite-recursion
   SANITIZERS: >-
     -fsanitize=address,undefined -fno-sanitize=vptr,function
     -fno-sanitize-recover=undefined -fno-omit-frame-pointer
