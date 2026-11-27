@@ -3,6 +3,7 @@
 #include <gio/gio.h>
 #include "client-utils.h"
 #include "config.h"
+#include "purple-info.h"
 #include "translate.h"
 #include <algorithm>
 #include <set>
@@ -448,7 +449,7 @@ static gboolean displayingMessage(PurpleAccount *account, const char *, char **m
     // set too, where Pidgin sets its own, unless an earlier message is being written over
     bool           ownInChat  = (flags & PURPLE_MESSAGE_SEND) &&
                                 (purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_CHAT) &&
-                                !strcmp(purple_account_get_protocol_id(account), config::pluginId);
+                                isOurAccount(account);
     GtkTextBuffer *chatBuffer = ownInChat ? getTextBuffer(conv) : nullptr;
     if (chatBuffer && !(g_messageBeingWritten && g_messageBeingWritten->replacing)) {
         std::string name = std::string("user:") + purple_account_get_username(account);
@@ -1123,12 +1124,13 @@ struct EmissionHook {
 static EmissionHook g_pasteHook;
 static EmissionHook g_backspaceHook;
 
-static PurpleConversation *findEntryConversation(gpointer entry)
+// The conversation whose input field or tab's text the widget is
+static PurpleConversation *findWidgetConversation(gpointer widget)
 {
     for (GList *item = purple_get_conversations(); item; item = item->next) {
         PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
-        if (!strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId) &&
-            (getEntry(conv) == entry))
+        if (isOurConversation(conv) && getIMHtml(conv) &&
+            ((getEntry(conv) == widget) || (static_cast<gpointer>(getIMHtml(conv)) == widget)))
             return conv;
     }
     return nullptr;
@@ -1403,7 +1405,7 @@ static gboolean thumbnailClicked(GtkWidget *box, GdkEventButton *event, gpointer
         return FALSE;
     GtkTextChildAnchor *anchor = static_cast<GtkTextChildAnchor *>(data);
     GtkWidget          *entry  = p_gtk_widget_get_parent(box);
-    PurpleConversation *conv   = entry ? findEntryConversation(entry) : nullptr;
+    PurpleConversation *conv   = entry ? findWidgetConversation(entry) : nullptr;
     const char         *placeholder = static_cast<const char *>(
         p_g_object_get_data(reinterpret_cast<GObject *>(anchor), THUMBNAIL_KEY));
     PastedForms forms;
@@ -1485,7 +1487,7 @@ static bool findBracketed(const std::string &text, gint offset, std::string &bra
 // The placeholders written in the field, of things pasted that are here, become their thumbnails
 static void thumbnailPlaceholders(GtkWidget *entry)
 {
-    PurpleConversation *conv = findEntryConversation(entry);
+    PurpleConversation *conv = findWidgetConversation(entry);
     if (!conv || !g_placeholderHandler || !p_gtk_text_buffer_create_child_anchor)
         return;
     GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(entry)->text_buffer;
@@ -1524,7 +1526,7 @@ static void insertPlaceholders(GtkWidget *entry, const std::vector<PastedPlaceho
 static gboolean backspacing(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
 {
     GtkWidget *view = paramCount ? static_cast<GtkWidget *>(p_g_value_get_object(&params[0])) : nullptr;
-    if (!view || !findEntryConversation(view))
+    if (!view || !findWidgetConversation(view))
         return TRUE;
     GtkTextBuffer *buffer = reinterpret_cast<GtkIMHtml *>(view)->text_buffer;
     GtkTextIter    cursor;
@@ -1590,7 +1592,7 @@ static gboolean pastingClipboard(GSignalInvocationHint *, guint paramCount, cons
 {
     gpointer   instance = paramCount ? p_g_value_get_object(&params[0]) : nullptr;
     GtkWidget *entry    = static_cast<GtkWidget *>(instance);
-    PurpleConversation *conv = entry ? findEntryConversation(entry) : nullptr;
+    PurpleConversation *conv = entry ? findWidgetConversation(entry) : nullptr;
     if (!conv || !g_pastedHandler || pasteFiles(entry, conv))
         return TRUE;
     // A picture gets a placeholder too, rather than going into the field as Pidgin's own, which
@@ -1660,17 +1662,6 @@ static void pictureFetched(PurpleUtilFetchUrlData *, gpointer data, const gchar 
                           error ? error : "other content");
         pasteIntoEntry(new EntryPaste{fetch->conv, {}, fetch->url});
     }
-}
-
-static PurpleConversation *findWidgetConversation(GtkWidget *widget)
-{
-    for (GList *item = purple_get_conversations(); item; item = item->next) {
-        PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
-        if (!strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId) &&
-            getIMHtml(conv) && ((getEntry(conv) == widget) || (reinterpret_cast<GtkWidget *>(getIMHtml(conv)) == widget)))
-            return conv;
-    }
-    return nullptr;
 }
 
 // Files dropped get their placeholders in the input field, and pictures dropped from elsewhere,
@@ -1752,7 +1743,7 @@ static void watchConversation(PidginConversation *gtkconv)
 {
     PurpleConversation *conv = gtkconv ? gtkconv->active_conv : nullptr;
     if (!conv || !gtkconv->entry || !gtkconv->imhtml || !g_pasteHook || !p_gtk_clipboard_wait_for_uris ||
-        strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId))
+        !isOurConversation(conv))
         return;
     watchSignal(gtkconv->entry, g_pasteHook.signal, "paste-clipboard");
     watchDrags(gtkconv->imhtml);
@@ -2418,17 +2409,6 @@ static MessageId findMessageAt(GtkTextBuffer *buffer, const GtkTextIter &where)
     return MessageId();
 }
 
-static PurpleConversation *findTabConversation(gpointer imhtml)
-{
-    for (GList *item = purple_get_conversations(); item; item = item->next) {
-        PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
-        if (!strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId) &&
-            (getIMHtml(conv) == imhtml))
-            return conv;
-    }
-    return nullptr;
-}
-
 // The character at the point, in buffer coordinates, if the point is on it, not past the end of its
 // line or beside the text
 static bool getCharAt(GtkTextView *view, gint x, gint y, GtkTextIter &where)
@@ -2543,7 +2523,7 @@ static void pressingReaction(GtkWidget *view, GdkEventButton *event)
 {
     g_pressedReaction = PressedReaction();
     PurpleConversation *conv = (g_reactionClickHandler && (event->type == GDK_BUTTON_PRESS) && (event->button == 1))
-                               ? findTabConversation(view) : nullptr;
+                               ? findWidgetConversation(view) : nullptr;
     std::string         key;
     MessageId           messageId;
     if (conv && findPointedReaction(view, conv, key, messageId))
@@ -2564,7 +2544,7 @@ static void releasingReaction(GtkWidget *view, GdkEventButton *event)
     PressedReaction     pressed = g_pressedReaction;
     g_pressedReaction = PressedReaction();
     PurpleConversation *conv = ((pressed.view == view) && (event->button == 1) && g_reactionClickHandler)
-                               ? findTabConversation(view) : nullptr;
+                               ? findWidgetConversation(view) : nullptr;
     std::string         key;
     MessageId           messageId;
     if (conv && findPointedReaction(view, conv, key, messageId) && (key == pressed.key) &&
@@ -2577,7 +2557,7 @@ static gboolean pressingTab(GtkWidget *view, GdkEventButton *event, gpointer)
     pressingReaction(view, event);
     g_pressedFile.reset();
     PurpleConversation *conv = (g_draggedFileHandler && (event->type == GDK_BUTTON_PRESS) && (event->button == 1))
-                               ? findTabConversation(view) : nullptr;
+                               ? findWidgetConversation(view) : nullptr;
     if (!conv)
         return FALSE;
     GtkTextView *textView = reinterpret_cast<GtkTextView *>(view);
@@ -2639,7 +2619,7 @@ static gboolean movingOverTab(GtkWidget *view, GdkEventMotion *event, gpointer)
         !p_gtk_drag_check_threshold(view, pressed->x, pressed->y, event->x_root, event->y_root))
         return FALSE;
     g_pressedFile.reset();
-    PurpleConversation *conv = findTabConversation(view);
+    PurpleConversation *conv = findWidgetConversation(view);
     if (!conv)
         return FALSE;
     // Nothing selected on the way, as GTK's own drag of the text would take that
@@ -2863,8 +2843,8 @@ static gboolean populatingPopup(GSignalInvocationHint *, guint paramCount, const
 {
     GtkWidget          *view = (paramCount > 1) ? static_cast<GtkWidget *>(p_g_value_get_object(&params[0])) : nullptr;
     GtkWidget          *menu = view ? static_cast<GtkWidget *>(p_g_value_get_object(&params[1])) : nullptr;
-    PurpleConversation *conv = menu ? findTabConversation(view) : nullptr;
-    PurpleConversation *entryConv = (menu && !conv) ? findEntryConversation(view) : nullptr;
+    PurpleConversation *conv = menu ? findWidgetConversation(view) : nullptr;
+    PurpleConversation *entryConv = (menu && !conv) ? findWidgetConversation(view) : nullptr;
     if ((!conv || !g_messagePopupHandler) && !entryConv)
         return TRUE;
     gint x, y;
@@ -2916,12 +2896,12 @@ static void addMessageMenu(PurpleConversation *conv, GtkWidget *menu, MessageId 
 
 PurpleConversation *getTabConversation(GtkIMHtml *imhtml)
 {
-    return imhtml ? findTabConversation(imhtml) : nullptr;
+    return imhtml ? findWidgetConversation(imhtml) : nullptr;
 }
 
 bool addLinkMessageMenu(GtkIMHtml *imhtml, GtkWidget *menu, MessageId messageId, bool fileGiven)
 {
-    PurpleConversation *conv = (imhtml && menu && g_messagePopupHandler) ? findTabConversation(imhtml) : nullptr;
+    PurpleConversation *conv = (imhtml && menu && g_messagePopupHandler) ? findWidgetConversation(imhtml) : nullptr;
     if (!conv)
         return false;
     addMessageMenu(conv, menu, messageId, fileGiven);
@@ -2955,7 +2935,7 @@ static gboolean pictureClicked(GSignalInvocationHint *, guint paramCount, const 
         !p_g_object_get_data(G_OBJECT(box), IMAGE_SAVE_KEY))
         return TRUE;
     GtkWidget          *view = p_gtk_widget_get_parent(box);
-    PurpleConversation *conv = view ? findTabConversation(view) : nullptr;
+    PurpleConversation *conv = view ? findWidgetConversation(view) : nullptr;
     if (!conv)
         return TRUE;
     gint x, y;
@@ -3006,7 +2986,7 @@ void setReactionTipHandler(ReactionTipHandler handler)
 
 static gboolean queryingTooltip(GtkWidget *view, gint x, gint y, gboolean keyboard, GtkTooltip *tooltip, gpointer)
 {
-    PurpleConversation *conv = (g_reactionTipHandler && !keyboard) ? findTabConversation(view) : nullptr;
+    PurpleConversation *conv = (g_reactionTipHandler && !keyboard) ? findWidgetConversation(view) : nullptr;
     if (!conv)
         return FALSE;
     GtkTextView *textView = reinterpret_cast<GtkTextView *>(view);
@@ -3381,8 +3361,7 @@ static gboolean tabsPressed(GSignalInvocationHint *, guint paramCount, const GVa
         PidginConversation *gtkconv = p_pidgin_conv_window_get_gtkconv_at_index(
             win, p_pidgin_conv_get_tab_at_xy(win, event->x_root, event->y_root, nullptr));
         PurpleConversation *conv    = gtkconv ? gtkconv->active_conv : nullptr;
-        bool show = conv && !strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)),
-                                    config::pluginId) && getTabEnd(conv).valid();
+        bool show = isOurConversation(conv) && getTabEnd(conv).valid();
         GtkWidget *latest    = static_cast<GtkWidget *>(p_g_object_get_data(G_OBJECT(menu), LATEST_ITEM_KEY));
         GtkWidget *separator = static_cast<GtkWidget *>(p_g_object_get_data(G_OBJECT(menu), LATEST_SEPARATOR_KEY));
         if (!latest && show) {
@@ -3499,8 +3478,7 @@ static gboolean scrolled(GSignalInvocationHint *, guint paramCount, const GValue
         return TRUE;
     for (GList *item = purple_get_conversations(); item; item = item->next) {
         PurpleConversation *conv   = static_cast<PurpleConversation *>(item->data);
-        GtkIMHtml          *imhtml = strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)),
-                                            config::pluginId) ? nullptr : getIMHtml(conv);
+        GtkIMHtml          *imhtml = isOurConversation(conv) ? getIMHtml(conv) : nullptr;
         if (!imhtml || (reinterpret_cast<GtkTextView *>(imhtml)->vadjustment != adjustment))
             continue;
         scheduleViewCheck(conv);
@@ -3533,8 +3511,7 @@ static gboolean wheelTurned(GSignalInvocationHint *, guint paramCount, const GVa
     if (event && (event->direction == GDK_SCROLL_DOWN)) {
         for (GList *item = purple_get_conversations(); item; item = item->next) {
             PurpleConversation *conv   = static_cast<PurpleConversation *>(item->data);
-            GtkIMHtml          *imhtml = strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)),
-                                                config::pluginId) ? nullptr : getIMHtml(conv);
+            GtkIMHtml          *imhtml = isOurConversation(conv) ? getIMHtml(conv) : nullptr;
             if (imhtml && (reinterpret_cast<GtkWidget *>(imhtml) == widget)) {
                 checkBottomReached(conv, imhtml);
                 break;
@@ -3546,8 +3523,7 @@ static gboolean wheelTurned(GSignalInvocationHint *, guint paramCount, const GVa
         return TRUE;
     for (GList *item = purple_get_conversations(); item; item = item->next) {
         PurpleConversation *conv   = static_cast<PurpleConversation *>(item->data);
-        GtkIMHtml          *imhtml = strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)),
-                                            config::pluginId) ? nullptr : getIMHtml(conv);
+        GtkIMHtml          *imhtml = isOurConversation(conv) ? getIMHtml(conv) : nullptr;
         if (!imhtml || (reinterpret_cast<GtkWidget *>(imhtml) != widget))
             continue;
         GtkAdjustment *adjustment = reinterpret_cast<GtkTextView *>(imhtml)->vadjustment;
@@ -3636,11 +3612,6 @@ bool viewsMessages(PurpleConversation *conv)
 void setViewedHandler(ViewedHandler handler)
 {
     g_viewedHandler = handler;
-}
-
-static bool isOurConversation(PurpleConversation *conv)
-{
-    return !strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId);
 }
 
 static bool findShown(PurpleConversation *conv)

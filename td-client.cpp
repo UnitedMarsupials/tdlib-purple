@@ -2383,7 +2383,7 @@ std::vector<PurpleTdClient::ForwardDestination> PurpleTdClient::getForwardDestin
         {
             if (PURPLE_BLIST_NODE_IS_CHAT(node)) {
                 PurpleChat *chat = PURPLE_CHAT(node);
-                if (!strcmp(purple_account_get_protocol_id(purple_chat_get_account(chat)), config::pluginId))
+                if (isOurAccount(purple_chat_get_account(chat)))
                     add(purple_chat_get_account(chat), true, getChatName(purple_chat_get_components(chat)),
                         purple_chat_get_name(chat));
             } else if (PURPLE_BLIST_NODE_IS_CONTACT(node))
@@ -2397,7 +2397,7 @@ std::vector<PurpleTdClient::ForwardDestination> PurpleTdClient::getForwardDestin
         }
     for (GList *item = purple_get_chats(); item; item = item->next) {
         PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
-        if (strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId))
+        if (!isOurConversation(conv))
             add(purple_conversation_get_account(conv), true, purple_conversation_get_name(conv),
                 purple_conversation_get_title(conv));
     }

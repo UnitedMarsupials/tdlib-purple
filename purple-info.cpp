@@ -164,6 +164,16 @@ PurpleTdClient *getTdClient(PurpleConversation *conv)
     return getTdClient(purple_conversation_get_account(conv));
 }
 
+bool isOurAccount(PurpleAccount *account)
+{
+    return account && !strcmp(purple_account_get_protocol_id(account), config::pluginId);
+}
+
+bool isOurConversation(PurpleConversation *conv)
+{
+    return conv && isOurAccount(purple_conversation_get_account(conv));
+}
+
 const char *getUiName()
 {
     GHashTable *ui_info = purple_core_get_ui_info();

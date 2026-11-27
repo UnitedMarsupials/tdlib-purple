@@ -455,17 +455,15 @@ static void
 conversation_updated_cb(PurpleConversation *conv, PurpleConvUpdateType type)
 {
     PurpleAccount *account = purple_conversation_get_account(conv);
-    if (!strcmp(purple_account_get_protocol_id(account), config::pluginId) &&
-        (type == PURPLE_CONV_UPDATE_TITLE))
-    {
+    if (!isOurAccount(account))
+        return;
+    if (type == PURPLE_CONV_UPDATE_TITLE) {
         // Pidgin sets it anew, from an alias, without the mark
         PurpleTdClient *tdClient = getTdClient(account);
         if (tdClient)
             tdClient->markConversation(conv);
     }
-    if (!strcmp(purple_account_get_protocol_id(account), config::pluginId) &&
-        (type == PURPLE_CONV_UPDATE_UNSEEN))
-    {
+    if (type == PURPLE_CONV_UPDATE_UNSEEN) {
         // With pidgin, when this callback is triggered by conversation window coming into window
         // manager focus, purple_conversation_has_focus will still return false if called right now,
         // so postpone the rest by half a second to get a better value when
@@ -1407,7 +1405,7 @@ static gboolean jumpLinkContextMenu(PidginIMHtml *imhtml, PidginIMHtmlLink *link
 static bool buddyMarked(PurpleBuddy *buddy)
 {
     PurpleAccount  *account  = purple_buddy_get_account(buddy);
-    PurpleTdClient *tdClient = strcmp(purple_account_get_protocol_id(account), config::pluginId) ? nullptr
+    PurpleTdClient *tdClient = !isOurAccount(account) ? nullptr
                                                                                               : getTdClient(account);
     return tdClient && tdClient->hasUnreadReactions(buddy);
 }
@@ -1559,7 +1557,7 @@ static void quitting(void *)
 {
     for (GList *item = purple_get_chats(); item; item = item->next) {
         PurpleConversation *conv = static_cast<PurpleConversation *>(item->data);
-        if (!strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId))
+        if (isOurConversation(conv))
             purple_conversation_set_logging(conv, FALSE);
     }
 }
@@ -1570,7 +1568,7 @@ static PurpleTdClient *findAnyConnected()
     for (GList *item = purple_connections_get_all(); item; item = item->next) {
         PurpleConnection *gc      = static_cast<PurpleConnection *>(item->data);
         PurpleAccount    *account = purple_connection_get_account(gc);
-        if (account && !strcmp(purple_account_get_protocol_id(account), config::pluginId) &&
+        if (account && isOurAccount(account) &&
             PURPLE_CONNECTION_IS_CONNECTED(gc))
             return getTdClient(gc);
     }
