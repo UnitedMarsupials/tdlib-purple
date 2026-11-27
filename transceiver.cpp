@@ -2,6 +2,7 @@
 #include "config.h"
 #include "purple-info.h"
 #include <algorithm>
+#include <deque>
 #include <assert.h>
 
 struct TimerCallbackData {
@@ -33,7 +34,7 @@ public:
     // The mutex protects m_rxQueue and reference counters of all shared pointers to this object.
     // All other members are only used from the glib main thread
     std::mutex                          m_rxMutex;
-    std::vector<td::Client::Response>   m_rxQueue;
+    std::deque<td::Client::Response>    m_rxQueue;
 
     TdTransceiver::UpdateCb             m_updateCb;
     uint64_t                                            m_lastQueryId;
@@ -163,15 +164,16 @@ int TdTransceiverImpl::rxCallback(gpointer user_data)
             std::unique_lock<std::mutex> lock(self->m_rxMutex);
             if (self->m_rxQueue.empty())
                 break;
+            // One at a time, so that one taken in a handler's own main loop, if it runs one, is next
             response = std::move(self->m_rxQueue.front());
-            self->m_rxQueue.erase(self->m_rxQueue.begin());
+            self->m_rxQueue.pop_front();
         }
 
         self->cancelTimer(response.id);
 
         if (!response.object)
-            ; // impossible
-        else if (!self->m_owner)
+            continue; // impossible
+        if (!self->m_owner)
             // m_owner will be NULL if this callback is invoked after TdTransceiver destructor
             purple_debug_misc(config::pluginId,
                               "Ignoring response (object id %d) as transceiver is already destroyed\n",
@@ -217,15 +219,19 @@ uint64_t TdTransceiver::sendQuery(td::td_api::object_ptr<td::td_api::Function> f
     return queryId;
 }
 
-uint64_t TdTransceiver::sendQuery(td::td_api::object_ptr<td::td_api::Function> f, ResponseCb handler)
+// A PurpleTdClient's member as a handler
+static TdTransceiver::ResponseCb2 bindHandler(PurpleTdClient *owner, TdTransceiver::ResponseCb handler)
 {
     if (!handler)
-        return sendQuery(std::move(f), ResponseCb2());
+        return nullptr;
+    return [owner, handler](uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object) {
+        (owner->*handler)(requestId, std::move(object));
+    };
+}
 
-    return sendQuery(std::move(f),
-                     [tdClient=m_impl->m_owner, handler](uint64_t requestId, TdObjectPtr object) {
-                        (tdClient->*handler)(requestId, std::move(object));
-                     });
+uint64_t TdTransceiver::sendQuery(td::td_api::object_ptr<td::td_api::Function> f, ResponseCb handler)
+{
+    return sendQuery(std::move(f), bindHandler(m_impl->m_owner, handler));
 }
 
 uint64_t TdTransceiver::sendQueryWithTimeout(td::td_api::object_ptr<td::td_api::Function> f,
@@ -245,7 +251,7 @@ void TdTransceiver::setQueryTimer(uint64_t queryId, ResponseCb2 handler, unsigne
 
     data->m_transceiver   = this;
     data->requestId       = queryId;
-    data->callback        = handler;
+    data->callback        = std::move(handler);
     data->cancelResponse  = cancelNormalResponse;
 
     guint timerId;
@@ -261,10 +267,7 @@ void TdTransceiver::setQueryTimer(uint64_t queryId, ResponseCb2 handler, unsigne
 void TdTransceiver::setQueryTimer(uint64_t queryId, ResponseCb handler, unsigned timeoutSeconds,
                                   bool cancelNormalResponse)
 {
-    setQueryTimer(queryId,
-                  [tdClient=m_impl->m_owner, handler](uint64_t requestId, TdObjectPtr object) {
-                      (tdClient->*handler)(requestId, std::move(object));
-                  }, timeoutSeconds, cancelNormalResponse);
+    setQueryTimer(queryId, bindHandler(m_impl->m_owner, handler), timeoutSeconds, cancelNormalResponse);
 }
 
 gboolean TdTransceiver::timerCallback(gpointer userdata)
