@@ -48,7 +48,7 @@
 - **A buddy's "Last online" is written as the rest of Pidgin writes dates, on one line.** It was C's `ctime`, in English and ending in a line break.
 - **A video note that cannot be shown says it is a faulty video note, not a voice note.**
 - **A file over 2 GiB is asked about before it is downloaded, as any file over the auto-download limit is, and shows its size.** Its size was cut to 32 bits, came out negative, and was taken for 0: within any limit, so it was fetched unasked.
-- **In Pidgin, a tab scrolled back reaches its chat's earlier messages again after the account reconnects, and with two accounts in one chat, each goes back on its own.** What filling tabs anew had found -- which chats had shown their first message, which messages were too far back -- was kept by chat id alone, for as long as the program ran: shared by the accounts, and kept from one session to the next.
+- **In Pidgin, a tab scrolled back reaches its chat's earlier messages again after the account reconnects, and with two accounts in one chat, each goes back on its own.** What filling tabs anew had found -- which chats had shown their first message, which messages were too far back -- was kept by chat id alone, for as long as the program ran: shared by the accounts, and kept from one session to the next; so was which message a link had led to, which then filled a tab opened after a reconnect from it.
 
 ### Translations
 

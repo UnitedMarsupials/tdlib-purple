@@ -4146,23 +4146,14 @@ void showEarlierMessages(TdAccountData &account, PurpleConversation *conv, doubl
     startRedraw(account, getId(*chat), earliest, filling ? RedrawMode::Filling : RedrawMode::Back, extra);
 }
 
-// Chats whose tabs, being opened for a link to a message, are to be filled from that one; by
-// account, as every account has the same chat under the same id
-static std::map<std::pair<std::string, int64_t>, MessageId> g_linkedMessages;
-
-static std::pair<std::string, int64_t> getLinkedKey(TdAccountData &account, ChatId chatId)
-{
-    return {purple_account_get_username(account.purpleAccount), chatId.value()};
-}
-
 bool fillChat(TdAccountData &account, ChatId chatId)
 {
-    auto linked = g_linkedMessages.find(getLinkedKey(account, chatId));
-    if (linked == g_linkedMessages.end())
+    auto linked = account.linkedMessages.find(chatId.value());
+    if (linked == account.linkedMessages.end())
         return startRedraw(account, chatId, MessageId::invalid, RedrawMode::Opening, EARLIER_BATCH);
     if (!startRedraw(account, chatId, linked->second, RedrawMode::Linked, EARLIER_BATCH))
         return false;
-    g_linkedMessages.erase(linked);
+    account.linkedMessages.erase(linked);
     return true;
 }
 
@@ -4176,10 +4167,10 @@ LinkedMessageShown showLinkedMessage(TdAccountData &account, const td::td_api::c
     if (!open) {
         // Filled as it is opened, from the message rather than the first unread
         if (messageId.valid())
-            g_linkedMessages[getLinkedKey(account, chatId)] = messageId;
+            account.linkedMessages[chatId.value()] = messageId;
         conv = getMessageConversation(account, chat);
         if (!conv || !canRedrawConversation(conv))
-            g_linkedMessages.erase(getLinkedKey(account, chatId));
+            account.linkedMessages.erase(chatId.value());
         if (!conv)
             return LinkedMessageShown::NoConversation;
     } else if (messageId.valid()) {
@@ -4195,9 +4186,6 @@ LinkedMessageShown showLinkedMessage(TdAccountData &account, const td::td_api::c
     return LinkedMessageShown::Shown;
 }
 
-// Chats, by account, whose tabs are to be filled with the newest messages once not busy
-static std::set<std::pair<std::string, int64_t>> g_newestPending;
-
 void showNewestMessages(TdAccountData &account, ChatId chatId)
 {
     PurpleConversation *conv = findMessageConversation(account, chatId);
@@ -4205,12 +4193,12 @@ void showNewestMessages(TdAccountData &account, ChatId chatId)
     // past the end it comes to
     if (conv && getTabEnd(conv).valid() &&
         !startRedraw(account, chatId, MessageId::invalid, RedrawMode::Newest, EARLIER_BATCH))
-        g_newestPending.insert({purple_account_get_username(account.purpleAccount), chatId.value()});
+        account.newestPending.insert(chatId.value());
 }
 
 static void showPendingNewest(TdAccountData &account, ChatId chatId)
 {
-    if (g_newestPending.erase({purple_account_get_username(account.purpleAccount), chatId.value()}))
+    if (account.newestPending.erase(chatId.value()))
         showNewestMessages(account, chatId);
 }
 

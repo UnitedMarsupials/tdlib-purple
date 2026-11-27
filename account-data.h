@@ -441,6 +441,10 @@ public:
     std::set<std::pair<int64_t, int64_t>> redrawTooFar;
     std::set<int64_t>                     historyComplete;
     std::map<int64_t, size_t>             redrawnCounts;
+    // Chats whose tabs, being opened for a link to a message, are to be filled from that one; and
+    // those to be filled with the newest messages once not busy
+    std::map<int64_t, MessageId>          linkedMessages;
+    std::set<int64_t>                     newestPending;
 
     PurpleAccount *const  purpleAccount;
     TdTransceiver        &transceiver;
