@@ -169,6 +169,8 @@ TEST_F(FileTransferTest, HugeDocument_RequestDownload)
         RequestActionEvent(connection, account, nullptr, nullptr, 2)
     );
     tgl.verifyNoRequests();
+    prpl.requestedAction("_No");
+    tgl.verifyNoRequests();
 }
 
 TEST_F(FileTransferTest, BigDocument_Ignore)

@@ -452,6 +452,8 @@ purple_buddy_icons_set_for_user(PurpleAccount *account, const char *username,
                                 const char *)
 {
     EVENT(SetUserPhotoEvent, account, username, icon_data, icon_len);
+    // libpurple takes the data, and frees it
+    g_free(icon_data);
 }
 
 PurpleStoredImage *
@@ -460,6 +462,7 @@ purple_buddy_icons_node_set_custom_icon(PurpleBlistNode *node,
 {
     EXPECT_TRUE(PURPLE_BLIST_NODE_IS_CHAT(node));
     EVENT(SetUserPhotoEvent, PURPLE_CHAT(node)->account, getChatName(PURPLE_CHAT(node)), icon_data, icon_len);
+    g_free(icon_data);
     return nullptr;
 }
 
