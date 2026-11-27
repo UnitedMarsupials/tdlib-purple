@@ -238,7 +238,7 @@ uint64_t TdTransceiver::sendQueryWithTimeout(td::td_api::object_ptr<td::td_api::
                                              ResponseCb2 handler, unsigned timeoutSeconds)
 {
     uint64_t queryId = sendQuery(std::move(f), handler);
-    setQueryTimer(queryId, handler, timeoutSeconds, true);
+    setQueryTimer(queryId, std::move(handler), timeoutSeconds, true);
     return queryId;
 }
 

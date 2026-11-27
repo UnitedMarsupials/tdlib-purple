@@ -1559,7 +1559,7 @@ void PurpleTdClient::fetchMessageFile(ChatId chatId, MessageId messageId, const 
 {
     auto request = makeGetMessage(chatId, messageId);
     m_transceiver.sendQuery(std::move(request),
-        [this, chatId, variant, fetched](uint64_t, TdObjectPtr object) {
+        [this, chatId, variant, fetched = std::move(fetched)](uint64_t, TdObjectPtr object) {
             fetchMessageFileResponse(chatId, variant, fetched, std::move(object));
         });
 }
@@ -1654,7 +1654,8 @@ void PurpleTdClient::showMessageMenu(ChatId chatId, MessageId messageId, OpenMen
     // The message for the reactions it has, then what may be done to it, then the reactions it
     // may have
     auto request = makeGetMessage(chatId, messageId);
-    m_transceiver.sendQuery(std::move(request), [this, chatId, messageId, openMenu](uint64_t, TdObjectPtr object) {
+    m_transceiver.sendQuery(std::move(request), [this, chatId, messageId, openMenu = std::move(openMenu)]
+                                                (uint64_t, TdObjectPtr object) {
         if (!object || (object->get_id() != td::td_api::message::ID)) {
             // Deleted since, as far as TDLib knows, whatever the tab shows
             bool gone = object && (object->get_id() == td::td_api::error::ID) &&
@@ -1738,7 +1739,7 @@ void PurpleTdClient::requestMessageReactions(ChatId chatId, MessageId messageId,
 // What a menu item does: the action, on the account's client, if it is still connected when picked
 static std::function<void()> onClient(const std::string &accountName, std::function<void(PurpleTdClient &)> action)
 {
-    return [accountName, action]() {
+    return [accountName, action = std::move(action)]() {
         PurpleTdClient *client = PurpleTdClient::findConnected(accountName.c_str());
         if (client)
             action(*client);

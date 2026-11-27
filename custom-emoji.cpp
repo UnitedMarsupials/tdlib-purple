@@ -116,7 +116,7 @@ static void getFile(TdAccountData &account, const FileRef &file, FileReady ready
     // Shown already, in the conversation, so someone is waiting for it
     auto request = makeDownloadFile(file.id, OPEN_DOWNLOAD_PRIORITY, true);
     account.transceiver.sendQuery(std::move(request),
-        [&account, ready](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
+        [&account, ready = std::move(ready)](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
             const td::td_api::file *file = objectAs<td::td_api::file>(object);
             ready(account, (file && file->local_ && file->local_->is_downloading_completed_) ?
                            file->local_->path_ : std::string());
@@ -149,7 +149,7 @@ void makeCustomEmojiImage(TdAccountData &account, const std::string &path, int32
             ready(account, 0);
             return;
         }
-        ReactionStickerThread *thread = new ReactionStickerThread(account.purpleAccount, path, ready);
+        ReactionStickerThread *thread = new ReactionStickerThread(account.purpleAccount, path, std::move(ready));
         thread->setSize(CUSTOM_EMOJI_SIZE);
         thread->startThread();
         return;

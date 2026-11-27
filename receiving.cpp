@@ -2922,7 +2922,7 @@ void fetchExtras(IncomingMessage &fullMessage, TdAccountData &account,
         purple_debug_misc(config::pluginId, "Fetching message %" G_GINT64_FORMAT " which message %" G_GINT64_FORMAT " replies to\n",
                         replyMessageId.value(), messageId.value());
         auto getMessageReq = makeGetMessage(chatId, replyMessageId);
-        account.transceiver.sendQueryWithTimeout(std::move(getMessageReq), onFetchReply,
+        account.transceiver.sendQueryWithTimeout(std::move(getMessageReq), std::move(onFetchReply),
                                          getMessageWaitSeconds(fullMessage.messageInfo));
     }
 
@@ -3183,8 +3183,8 @@ static void showCustomEmojiFile(TdAccountData &account, const std::string &path,
     // Whatever it is shown as, it leads to the file
     std::string linkStart = "<a href=\"" + escapeForDisplay(makeFileLinkTarget(path)) + "\">";
     std::string linkEnd   = "</a>";
-    makeCustomEmojiImage(account, path, format, [fallback, shown, linkStart, linkEnd](TdAccountData &account,
-                                                                                     int imageId) {
+    makeCustomEmojiImage(account, path, format, [fallback, shown = std::move(shown), linkStart, linkEnd]
+                                                (TdAccountData &account, int imageId) {
         if (imageId)
             shown(account, linkStart + makeReactionImageText(imageId) + linkEnd, true);
         else
@@ -3232,7 +3232,7 @@ static void customEmojiResponse(TdAccountData &account, ChatId chatId,
         return;
     }
     getCustomEmojiFile(account, sticker->sticker_.get(),
-                       [format, fallback, shown](TdAccountData &account, const std::string &path) {
+                       [format, fallback, shown = std::move(shown)](TdAccountData &account, const std::string &path) {
         if (!path.empty())
             showCustomEmojiFile(account, path, format, fallback, shown);
         else
