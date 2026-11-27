@@ -1427,6 +1427,25 @@ static void removeThumbnail(GtkTextChildAnchor *anchor)
     p_gtk_text_buffer_delete(buffer, &from, &to);
 }
 
+// A pasted thing's items: sent the other way (as a file, or by its content), if it can be; removed
+static std::vector<MenuItem> makePlaceholderItems(const PastedForms &forms,
+                                                  const std::function<void(const std::string &other)> &changeTo,
+                                                  const std::function<void()> &remove)
+{
+    std::vector<MenuItem> items;
+    if (!forms.other.empty()) {
+        MenuItem item;
+        item.label  = forms.otherLabel;
+        item.action = [changeTo, other = forms.other]() { changeTo(other); };
+        items.push_back(std::move(item));
+    }
+    MenuItem removeItem;
+    removeItem.label  = forms.removeLabel;
+    removeItem.action = remove;
+    items.push_back(std::move(removeItem));
+    return items;
+}
+
 // Right-clicked, a thumbnail's menu: to send it the other way, as a file or not, or to take it out
 static gboolean thumbnailClicked(GtkWidget *box, GdkEventButton *event, gpointer data)
 {
@@ -1444,22 +1463,13 @@ static gboolean thumbnailClicked(GtkWidget *box, GdkEventButton *event, gpointer
     // The anchor kept, should it go meanwhile
     std::shared_ptr<GObject> kept(reinterpret_cast<GObject *>(anchor), p_g_object_unref);
     p_g_object_ref(anchor);
-    std::vector<MenuItem> items;
-    if (!forms.other.empty()) {
-        MenuItem item;
-        item.label  = forms.otherLabel;
-        std::string other = forms.other;
-        item.action = [kept, box, other]() {
+    std::vector<MenuItem> items = makePlaceholderItems(forms,
+        [kept, box](const std::string &other) {
             GtkTextChildAnchor *anchor = reinterpret_cast<GtkTextChildAnchor *>(kept.get());
             if (!p_gtk_text_child_anchor_get_deleted(anchor))
                 setThumbnailPlaceholder(anchor, box, other);
-        };
-        items.push_back(std::move(item));
-    }
-    MenuItem remove;
-    remove.label  = forms.removeLabel;
-    remove.action = [kept]() { removeThumbnail(reinterpret_cast<GtkTextChildAnchor *>(kept.get())); };
-    items.push_back(std::move(remove));
+        },
+        [kept]() { removeThumbnail(reinterpret_cast<GtkTextChildAnchor *>(kept.get())); });
 
     GtkWidget *menu = p_gtk_menu_new();
     addMenuItems(menu, items, 0);
@@ -2423,6 +2433,13 @@ static MessageId findMessageAt(GtkTextBuffer *buffer, const GtkTextIter &where)
     return MessageId();
 }
 
+// Where the pointer is in the view, in buffer coordinates
+static void getPointerPosition(GtkTextView *view, gint &x, gint &y)
+{
+    p_gtk_widget_get_pointer(reinterpret_cast<GtkWidget *>(view), &x, &y);
+    p_gtk_text_view_window_to_buffer_coords(view, GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
+}
+
 // The character at the point, in buffer coordinates, if the point is on it, not past the end of its
 // line or beside the text
 static bool getCharAt(GtkTextView *view, gint x, gint y, GtkTextIter &where)
@@ -2524,8 +2541,7 @@ static bool findPointedReaction(GtkWidget *view, PurpleConversation *conv, std::
     GtkTextView *textView = reinterpret_cast<GtkTextView *>(view);
     gint         x, y;
     GtkTextIter  where;
-    p_gtk_widget_get_pointer(view, &x, &y);
-    p_gtk_text_view_window_to_buffer_coords(textView, GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
+    getPointerPosition(textView, x, y);
     if (!getCharAt(textView, x, y, where))
         return false;
     key       = getReactionKey(where);
@@ -2577,8 +2593,7 @@ static gboolean pressingTab(GtkWidget *view, GdkEventButton *event, gpointer)
     GtkTextView *textView = reinterpret_cast<GtkTextView *>(view);
     gint         x, y;
     GtkTextIter  where;
-    p_gtk_widget_get_pointer(view, &x, &y);
-    p_gtk_text_view_window_to_buffer_coords(textView, GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
+    getPointerPosition(textView, x, y);
     if (!getCharAt(textView, x, y, where))
         return FALSE;
     auto pressed = std::make_shared<DraggedFile>();
@@ -2829,18 +2844,9 @@ static void addPlaceholderMenu(PurpleConversation *conv, GtkWidget *entry, GtkWi
     if (!g_placeholderHandler(conv, placeholder, forms))
         return;
 
-    std::vector<MenuItem> items;
-    if (!forms.other.empty()) {
-        MenuItem item;
-        item.label  = forms.otherLabel;
-        std::string other = forms.other;
-        item.action = [entry, start, placeholder, other]() { replacePlaceholder(entry, start, placeholder, other); };
-        items.push_back(std::move(item));
-    }
-    MenuItem remove;
-    remove.label  = forms.removeLabel;
-    remove.action = [entry, start, placeholder]() { replacePlaceholder(entry, start, placeholder, ""); };
-    items.push_back(std::move(remove));
+    std::vector<MenuItem> items = makePlaceholderItems(forms,
+        [entry, start, placeholder](const std::string &other) { replacePlaceholder(entry, start, placeholder, other); },
+        [entry, start, placeholder]() { replacePlaceholder(entry, start, placeholder, ""); });
 
     GtkWidget *separator = p_gtk_separator_menu_item_new();
     p_gtk_menu_shell_append(reinterpret_cast<GtkMenuShell *>(menu), separator);
@@ -2952,12 +2958,11 @@ static gboolean pictureClicked(GSignalInvocationHint *, guint paramCount, const 
     PurpleConversation *conv = view ? findTabConversation(view) : nullptr;
     if (!conv)
         return TRUE;
-    gint x, y;
-    p_gtk_widget_get_pointer(view, &x, &y);
+    gint         x, y;
     GtkTextView *textView = reinterpret_cast<GtkTextView *>(view);
     GtkTextIter  where;
     gint         trailing;
-    p_gtk_text_view_window_to_buffer_coords(textView, GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
+    getPointerPosition(textView, x, y);
     p_gtk_text_view_get_iter_at_position(textView, &where, &trailing, x, y);
     MessageId messageId = findMessageAt(getTextBuffer(conv), where);
     if (!messageId.valid())
