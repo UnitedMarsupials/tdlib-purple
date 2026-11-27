@@ -370,7 +370,8 @@ TEST_F(CustomEmojiReactionTest, NotDownloadedYet)
 
     reactWithCustomEmoji();
     replyWithSticker(make_object<stickerFormatWebp>(), TEST_SOURCE_DIR "/test.webp", false);
-    tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
+    // As a custom emoji in a message is: wanted now, to be shown
+    tgl.verifyRequest(downloadFile(fileId, 32, 0, 0, true));
     prpl.verifyNoEvents();
     tgl.reply(makeFile(fileId, 10000, TEST_SOURCE_DIR "/test.webp"));
     verifyReaction(linked(TEST_SOURCE_DIR "/test.webp", lastImage()), true);

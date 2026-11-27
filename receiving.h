@@ -20,7 +20,6 @@ std::string makeInlineImageText(int imgstoreId, bool ownLine = true);
 // showing each at once, but not so long that a message just sent waits behind them for long
 unsigned getMessageWaitSeconds(const TgMessageInfo &message);
 // Whether an animated sticker is to be converted into a picture the front-end can show
-bool canConvertAnimatedSticker(PurpleAccount *purpleAccount);
 // The conversation a message in the chat goes to; made, if there is none yet
 PurpleConversation *getMessageConversation(TdAccountData &account, const td::td_api::chat &chat);
 // For the conversation window, which renders text as HTML

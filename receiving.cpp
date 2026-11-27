@@ -3170,16 +3170,6 @@ static void showReactionText(TdAccountData &account, const td::td_api::chat &cha
 // Given the reaction as markup: the emoji, or the picture of a custom one
 using CustomEmojiShown = std::function<void(TdAccountData &account, const std::string &reaction, bool image)>;
 
-bool canConvertAnimatedSticker(PurpleAccount *purpleAccount)
-{
-#ifndef NoLottie
-    return canShowImages() && purple_account_get_bool(purpleAccount, AccountOptions::AnimatedStickers,
-                                   AccountOptions::AnimatedStickersDefault);
-#else
-    return false;
-#endif
-}
-
 // In the line, unlike a sticker, which has one of its own
 static std::string makeReactionImageText(int imageId)
 {
@@ -3230,40 +3220,25 @@ static void customEmojiResponse(TdAccountData &account, ChatId chatId,
     else
         // TRANSLATOR: In-chat reaction, in place of one that is a picture of its own rather than an emoji, where it cannot be shown, as in "reacted with [custom emoji] to message ...".
         fallback = escapeForDisplay(_("[custom emoji]"));
-    if (!sticker || !sticker->sticker_ || !sticker->format_ ||
-        purple_account_get_bool(account.purpleAccount, AccountOptions::FoldCustomEmoji,
-                                AccountOptions::FoldCustomEmojiDefault))
-    {
+    if (!sticker || !sticker->sticker_ || !sticker->format_ || foldCustomEmoji(account.purpleAccount)) {
         shown(account, fallback, false);
         return;
     }
 
-    // Those who would rather not see stickers move, would not like reactions to either; one that
-    // cannot be converted is shown as its emoji, but linked to its file
+    // One that may not move is shown as its emoji; one that cannot be converted, as its emoji too,
+    // but linked to its file (showCustomEmojiFile)
     int32_t format = sticker->format_->get_id();
-    if ((format != td::td_api::stickerFormatWebp::ID) &&
-        !purple_account_get_bool(account.purpleAccount, AccountOptions::AnimatedStickers,
-                                 AccountOptions::AnimatedStickersDefault))
-    {
+    if (!animationsWanted(account.purpleAccount, format)) {
         shown(account, fallback, false);
         return;
     }
-
-    const td::td_api::file &file = *sticker->sticker_;
-    if (file.local_ && file.local_->is_downloading_completed_) {
-        showCustomEmojiFile(account, file.local_->path_, format, fallback, shown);
-        return;
-    }
-
-    auto downloadReq = makeDownloadFile(file.id_, FILE_DOWNLOAD_PRIORITY, true);
-    account.transceiver.sendQuery(std::move(downloadReq),
-        [&account, format, fallback, shown](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
-            const td::td_api::file *file = objectAs<td::td_api::file>(object);
-            if (file && file->local_ && file->local_->is_downloading_completed_)
-                showCustomEmojiFile(account, file->local_->path_, format, fallback, shown);
-            else
-                shown(account, fallback, false);
-        });
+    getCustomEmojiFile(account, sticker->sticker_.get(),
+                       [format, fallback, shown](TdAccountData &account, const std::string &path) {
+        if (!path.empty())
+            showCustomEmojiFile(account, path, format, fallback, shown);
+        else
+            shown(account, fallback, false);
+    });
 }
 
 static void showReaction(TdAccountData &account, const td::td_api::chat &chat, MessageId messageId,

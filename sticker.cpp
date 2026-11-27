@@ -1,4 +1,5 @@
 #include "sticker.h"
+#include "purple-info.h"
 #include "buildopt.h"
 #include "client-utils.h"
 #include "config.h"
@@ -252,6 +253,16 @@ static GetFileInfo findGetFileInfo()
 bool canShowImages()
 {
     return findGetFileInfo() != nullptr;
+}
+
+bool canConvertAnimatedSticker(PurpleAccount *purpleAccount)
+{
+#ifndef NoLottie
+    return canShowImages() && purple_account_get_bool(purpleAccount, AccountOptions::AnimatedStickers,
+                                   AccountOptions::AnimatedStickersDefault);
+#else
+    return false;
+#endif
 }
 
 ImageSupport probeImageFile(const std::string &path)

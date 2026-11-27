@@ -13,6 +13,8 @@ enum class ImageSupport {
 
 // Whether the front-end shows pictures at all, which it does with GdkPixbuf, if it has it
 bool canShowImages();
+// Whether an animated (TGS) sticker is converted to be shown moving, as the account may not want
+bool canConvertAnimatedSticker(PurpleAccount *purpleAccount);
 extern const char *gdkPixbufGetFileInfoName;
 
 // Whether the front-end can show the image, by asking its GdkPixbuf, which Pidgin loads it with, to

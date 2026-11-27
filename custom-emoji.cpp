@@ -123,13 +123,22 @@ static void getFile(TdAccountData &account, const FileRef &file, FileReady ready
         });
 }
 
-bool canShowCustomEmojiFormat(PurpleAccount *account, int32_t format)
+bool animationsWanted(PurpleAccount *account, int32_t format)
 {
     // Those who would rather not see stickers move, would not like reactions to either
-    if ((format != td::td_api::stickerFormatWebp::ID) &&
-        !purple_account_get_bool(account, AccountOptions::AnimatedStickers, AccountOptions::AnimatedStickersDefault))
-        return false;
-    return (format != td::td_api::stickerFormatTgs::ID) || canConvertAnimatedSticker(account);
+    return (format == td::td_api::stickerFormatWebp::ID) ||
+           purple_account_get_bool(account, AccountOptions::AnimatedStickers, AccountOptions::AnimatedStickersDefault);
+}
+
+bool canShowCustomEmojiFormat(PurpleAccount *account, int32_t format)
+{
+    return animationsWanted(account, format) &&
+           ((format != td::td_api::stickerFormatTgs::ID) || canConvertAnimatedSticker(account));
+}
+
+void getCustomEmojiFile(TdAccountData &account, const td::td_api::file *file, CustomEmojiFileReady ready)
+{
+    getFile(account, FileRef(file), std::move(ready));
 }
 
 void makeCustomEmojiImage(TdAccountData &account, const std::string &path, int32_t format,
@@ -196,10 +205,9 @@ static void fetchSmileyPicture(TdAccountData &account, const td::td_api::sticker
     });
 }
 
-static bool foldCustomEmoji(TdAccountData &account)
+bool foldCustomEmoji(PurpleAccount *account)
 {
-    return purple_account_get_bool(account.purpleAccount, AccountOptions::FoldCustomEmoji,
-                                   AccountOptions::FoldCustomEmojiDefault);
+    return purple_account_get_bool(account, AccountOptions::FoldCustomEmoji, AccountOptions::FoldCustomEmojiDefault);
 }
 
 // Announces the smiley to the conversation, once for each custom emoji: one announced already
@@ -233,7 +241,7 @@ std::map<int64_t, std::string> addCustomEmojiSmileys(TdAccountData &account, Pur
                                                      const std::vector<CustomEmoji> &emoji)
 {
     std::map<int64_t, std::string> codes;
-    if (!conv || foldCustomEmoji(account))
+    if (!conv || foldCustomEmoji(account.purpleAccount))
         return codes;
 
     auto targets = std::make_shared<std::map<int64_t, SmileyTarget>>();
@@ -283,7 +291,7 @@ std::map<int64_t, std::string> addCustomEmojiSmileys(TdAccountData &account, Pur
 std::string addCustomEmojiSmiley(TdAccountData &account, PurpleConversation *conv,
                                  const td::td_api::sticker &sticker)
 {
-    if (!conv || foldCustomEmoji(account) || !sticker.full_type_ ||
+    if (!conv || foldCustomEmoji(account.purpleAccount) || !sticker.full_type_ ||
         (sticker.full_type_->get_id() != td::td_api::stickerFullTypeCustomEmoji::ID))
         return std::string();
 
