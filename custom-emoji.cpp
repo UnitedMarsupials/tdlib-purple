@@ -123,6 +123,43 @@ static void getFile(TdAccountData &account, const FileRef &file, FileReady ready
         });
 }
 
+bool canShowCustomEmojiFormat(PurpleAccount *account, int32_t format)
+{
+    // Those who would rather not see stickers move, would not like reactions to either
+    if ((format != td::td_api::stickerFormatWebp::ID) &&
+        !purple_account_get_bool(account, AccountOptions::AnimatedStickers, AccountOptions::AnimatedStickersDefault))
+        return false;
+    return (format != td::td_api::stickerFormatTgs::ID) || canConvertAnimatedSticker(account);
+}
+
+void makeCustomEmojiImage(TdAccountData &account, const std::string &path, int32_t format,
+                          CustomEmojiImageReady ready)
+{
+    if (format == td::td_api::stickerFormatTgs::ID) {
+        if (!canConvertAnimatedSticker(account.purpleAccount)) {
+            ready(account, 0);
+            return;
+        }
+        ReactionStickerThread *thread = new ReactionStickerThread(account.purpleAccount, path, ready);
+        thread->setSize(CUSTOM_EMOJI_SIZE);
+        thread->startThread();
+        return;
+    }
+
+    gchar       *data    = nullptr;
+    gsize        size    = 0;
+    ImageSupport support = probeImageFile(path);
+    if ((support == ImageSupport::Supported) && g_file_get_contents(path.c_str(), &data, &size, nullptr)) {
+        // The imgstore takes the data
+        ready(account, addImageFile(data, size, path));
+        return;
+    }
+    purple_debug_misc(config::pluginId, "Cannot show custom emoji %s\n", path.c_str());
+    if (support == ImageSupport::Unrecognized)
+        warnMissingImageLoader(path);
+    ready(account, 0);
+}
+
 // The picture as the front-end can show it: the sticker itself, as it is or, for TGS, converted;
 // failing that, its thumbnail, which is a still picture of it
 static void fetchSmileyPicture(TdAccountData &account, const td::td_api::sticker &sticker, const SmileyTarget &target)
@@ -137,50 +174,25 @@ static void fetchSmileyPicture(TdAccountData &account, const td::td_api::sticker
         });
     };
 
-    // Those who would rather not see stickers move, would not like reactions to either
-    if ((format != td::td_api::stickerFormatWebp::ID) &&
-        !purple_account_get_bool(account.purpleAccount, AccountOptions::AnimatedStickers,
-                                 AccountOptions::AnimatedStickersDefault))
-    {
+    if (!canShowCustomEmojiFormat(account.purpleAccount, format)) {
         useThumbnail(account);
         return;
     }
 
-    if (format == td::td_api::stickerFormatTgs::ID) {
-        if (!canConvertAnimatedSticker(account.purpleAccount)) {
+    getFile(account, stickerFile, [target, format, useThumbnail](TdAccountData &account, const std::string &path) {
+        if (path.empty()) {
             useThumbnail(account);
             return;
         }
-        getFile(account, stickerFile, [target, useThumbnail](TdAccountData &account, const std::string &path) {
-            if (path.empty()) {
+        makeCustomEmojiImage(account, path, format, [target, useThumbnail](TdAccountData &account, int imageId) {
+            PurpleStoredImage *image = imageId ? purple_imgstore_find_by_id(imageId) : nullptr;
+            if (image) {
+                finishSmiley(target, static_cast<const gchar *>(purple_imgstore_get_data(image)),
+                             purple_imgstore_get_size(image));
+                purple_imgstore_unref_by_id(imageId);
+            } else
                 useThumbnail(account);
-                return;
-            }
-            ReactionStickerThread *thread = new ReactionStickerThread(account.purpleAccount, path,
-                [target, useThumbnail](TdAccountData &account, int imageId) {
-                    PurpleStoredImage *image = imageId ? purple_imgstore_find_by_id(imageId) : nullptr;
-                    if (image) {
-                        finishSmiley(target, static_cast<const gchar *>(purple_imgstore_get_data(image)),
-                                     purple_imgstore_get_size(image));
-                        purple_imgstore_unref_by_id(imageId);
-                    } else
-                        useThumbnail(account);
-                });
-            thread->setSize(CUSTOM_EMOJI_SIZE);
-            thread->startThread();
         });
-        return;
-    }
-
-    getFile(account, stickerFile, [target, useThumbnail](TdAccountData &account, const std::string &path) {
-        ImageSupport support = path.empty() ? ImageSupport::NoLoader : probeImageFile(path);
-        if (support == ImageSupport::Supported)
-            finishSmileyFromFile(target, path);
-        else {
-            if (support == ImageSupport::Unrecognized)
-                warnMissingImageLoader(path);
-            useThumbnail(account);
-        }
     });
 }
 

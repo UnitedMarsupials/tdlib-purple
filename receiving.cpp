@@ -3198,38 +3198,13 @@ static void showCustomEmojiFile(TdAccountData &account, const std::string &path,
     // Whatever it is shown as, it leads to the file
     std::string linkStart = "<a href=\"" + escapeForDisplay(makeFileLinkTarget(path)) + "\">";
     std::string linkEnd   = "</a>";
-
-    if (format == td::td_api::stickerFormatTgs::ID) {
-        if (!canConvertAnimatedSticker(account.purpleAccount)) {
+    makeCustomEmojiImage(account, path, format, [fallback, shown, linkStart, linkEnd](TdAccountData &account,
+                                                                                     int imageId) {
+        if (imageId)
+            shown(account, linkStart + makeReactionImageText(imageId) + linkEnd, true);
+        else
             shown(account, linkStart + fallback + linkEnd, false);
-            return;
-        }
-        ReactionStickerThread *thread = new ReactionStickerThread(account.purpleAccount, path,
-            [fallback, shown, linkStart, linkEnd](TdAccountData &account, int imageId) {
-                if (imageId)
-                    shown(account, linkStart + makeReactionImageText(imageId) + linkEnd, true);
-                else
-                    shown(account, linkStart + fallback + linkEnd, false);
-            });
-        thread->setSize(CUSTOM_EMOJI_SIZE);
-        thread->startThread();
-        return;
-    }
-
-    gchar       *data    = nullptr;
-    gsize        size    = 0;
-    ImageSupport support = probeImageFile(path);
-    if ((support == ImageSupport::Supported) && g_file_get_contents(path.c_str(), &data, &size, nullptr)) {
-        // The imgstore takes the data
-        int imageId = addImageFile(data, size, path);
-        shown(account, linkStart + makeReactionImageText(imageId) + linkEnd, true);
-        return;
-    }
-
-    purple_debug_misc(config::pluginId, "Cannot show custom emoji %s\n", path.c_str());
-    if (support == ImageSupport::Unrecognized)
-        warnMissingImageLoader(path);
-    shown(account, linkStart + fallback + linkEnd, false);
+    });
 }
 
 static void customEmojiResponse(TdAccountData &account, ChatId chatId,
@@ -3267,7 +3242,8 @@ static void customEmojiResponse(TdAccountData &account, ChatId chatId,
         return;
     }
 
-    // Those who would rather not see stickers move, would not like reactions to either
+    // Those who would rather not see stickers move, would not like reactions to either; one that
+    // cannot be converted is shown as its emoji, but linked to its file
     int32_t format = sticker->format_->get_id();
     if ((format != td::td_api::stickerFormatWebp::ID) &&
         !purple_account_get_bool(account.purpleAccount, AccountOptions::AnimatedStickers,
