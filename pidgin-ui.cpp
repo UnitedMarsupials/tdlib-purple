@@ -1076,10 +1076,6 @@ static GtkWidget *getEntry(PurpleConversation *conv)
     return getIMHtml(conv) ? PIDGIN_CONVERSATION(conv)->entry : nullptr;
 }
 
-// Pidgin pastes HTML or text only, a picture on the clipboard into a Telegram conversation's input
-// field going nowhere. Its handler of "paste-clipboard" stops the signal, so the picture is put in
-// by an emission hook, which comes before: at the cursor, as Pidgin's Insert menu has it, and sent
-// as a photo the same way. Pidgin pastes the text, if there is any, after.
 // What every emission hook needs of GLib's
 static bool lookUpHookFunctions()
 {
@@ -1569,6 +1565,10 @@ void pasteIntoEntryLater(PurpleConversation *conv, const std::vector<PastedPlace
     g_idle_add(pasteIntoEntry, new EntryPaste{conv, placeholders, ""});
 }
 
+// Pidgin pastes HTML or text only, a picture on the clipboard into a Telegram conversation's input
+// field going nowhere. Its handler of "paste-clipboard" stops the signal, so the picture is put in
+// by an emission hook, which comes before: at the cursor, as Pidgin's Insert menu has it, and sent
+// as a photo the same way. Pidgin pastes the text, if there is any, after.
 static gboolean pastingClipboard(GSignalInvocationHint *, guint paramCount, const GValue *params, gpointer)
 {
     gpointer   instance = paramCount ? p_g_value_get_object(&params[0]) : nullptr;

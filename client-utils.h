@@ -5,6 +5,17 @@
 #include <purple.h>
 #include <thread>
 
+// The object as a T, if it is one: a response, or a member of a type with subclasses
+template<typename T, typename Base>
+const T *objectAs(const td::td_api::object_ptr<Base> &object)
+{
+    return (object && (object->get_id() == T::ID)) ? static_cast<const T *>(object.get()) : nullptr;
+}
+
+// Requests made in many places
+td::td_api::object_ptr<td::td_api::getMessage>        makeGetMessage(ChatId chatId, MessageId messageId);
+td::td_api::object_ptr<td::td_api::createPrivateChat> makeCreatePrivateChat(int64_t userId);
+
 const char *errorCodeMessage();
 
 std::string         getUnsupportedMessageDescription(const td::td_api::MessageContent &content);
@@ -18,15 +29,7 @@ PurpleRequestField *addStringField(PurpleRequestFieldGroup *group, const char *i
 gchar *readPhoto(const std::string &path, const std::string &whose, gsize &size);
 // Why a name is not of one user, as getUsersByPurpleName found: none, or several
 std::string getUserLookupError(const std::vector<const td::td_api::user *> &users, const std::string &name);
-td::td_api::object_ptr<td::td_api::getMessage>        makeGetMessage(ChatId chatId, MessageId messageId);
-td::td_api::object_ptr<td::td_api::createPrivateChat> makeCreatePrivateChat(int64_t userId);
 
-// The object as a T, if it is one: a response, or a member of a type with subclasses
-template<typename T, typename Base>
-const T *objectAs(const td::td_api::object_ptr<Base> &object)
-{
-    return (object && (object->get_id() == T::ID)) ? static_cast<const T *>(object.get()) : nullptr;
-}
 std::string         proxyTypeToString(PurpleProxyType proxyType);
 
 const char *        getPurpleStatusId(const td::td_api::UserStatus &tdStatus);

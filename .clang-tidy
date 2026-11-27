@@ -4,6 +4,8 @@
 # on a build configured with -DCMAKE_EXPORT_COMPILE_COMMANDS=ON.
 Checks: '-*,modernize-use-nullptr,readability-else-after-return,misc-unused-parameters'
 WarningsAsErrors: '*'
-# The tree's own headers, not generated ones, nor gif.h, which is not ours
+# The tree's own headers, not generated ones, nor gif.h, which is not ours. This names the
+# checkout's directory, as GitHub's and most are: one named otherwise checks no header unless run
+# with -header-filter="^$PWD/(test/)?[A-Za-z0-9_-]+\.h$", as CI is.
 HeaderFilterRegex: 'tdlib-purple/(test/)?[A-Za-z0-9_-]+\.h$'
 ExcludeHeaderFilterRegex: 'gif\.h$'

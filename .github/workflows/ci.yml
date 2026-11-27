@@ -217,6 +217,7 @@ jobs:
           find . -maxdepth 2 -name '*.cpp' ! -path './build*' |
           sh .github/annotate.sh Style xargs -P "$(nproc)" -n 1
           /usr/lib/llvm22/bin/clang-tidy -p build --quiet
+          -header-filter="^$PWD/(test/)?[A-Za-z0-9_-]+\.h$"
 
       # The same tests again, under Valgrind: it finds reads of uninitialised
       # memory, use after free and invalid accesses, as well as definite leaks,
