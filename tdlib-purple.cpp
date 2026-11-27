@@ -336,7 +336,9 @@ static ChatId getBlistNodeChatId(PurpleTdClient *tdClient, PurpleBlistNode *node
 static void reportBlistNode(PurpleBlistNode *node, gpointer)
 {
     PurpleTdClient *tdClient = getTdClient(getBlistNodeAccount(node));
-    ChatId          chatId   = tdClient ? getBlistNodeChatId(tdClient, node) : ChatId();
+    if (!tdClient)
+        return;
+    ChatId chatId = getBlistNodeChatId(tdClient, node);
     if (chatId.valid())
         tdClient->reportChat(chatId, {});
 }
@@ -345,7 +347,9 @@ static void reportBlistNode(PurpleBlistNode *node, gpointer)
 static void addReportAction(GList *&menu, PurpleBlistNode *node)
 {
     PurpleTdClient *tdClient = getTdClient(getBlistNodeAccount(node));
-    ChatId          chatId   = tdClient ? getBlistNodeChatId(tdClient, node) : ChatId();
+    if (!tdClient)
+        return;
+    ChatId chatId = getBlistNodeChatId(tdClient, node);
     if (chatId.valid() && tdClient->canReportChat(chatId))
         // TRANSLATOR: Contact, group and conversation menu item; it asks why, in a dialog or more.
         menu = g_list_append(menu, purple_menu_action_new(_("Report…"), PURPLE_CALLBACK(reportBlistNode), nullptr, nullptr));

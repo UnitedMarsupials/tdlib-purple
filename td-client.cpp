@@ -4060,7 +4060,7 @@ bool PurpleTdClient::joinChat(const char *chatName, bool lookUp)
             purple_conversation_present(purple_conv_chat_get_conversation(conv));
     }
 
-    return conv ? true : false;
+    return conv != nullptr;
 }
 
 int PurpleTdClient::sendGroupMessage(int purpleChatId, const char *message)

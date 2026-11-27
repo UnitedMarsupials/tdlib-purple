@@ -1599,9 +1599,8 @@ static void showFileInline(const td::td_api::chat &chat, IncomingMessage &fullMe
     else if (downloads && isSizeWithinLimit(fileSize, fullMessage.inlineFileSizeLimit)) {
         // Sticker with a caption is not a thing but just in case it was: don't skip "Downloading..."
         // notification for such hypothetical object because it will also include caption
-        if ( !((fullMessage.messageInfo.type == TgMessageInfo::Type::Sticker) && !caption) &&
-             !fullMessage.inlineDownloadComplete )
-        {
+        bool bareSticker = (fullMessage.messageInfo.type == TgMessageInfo::Type::Sticker) && !caption;
+        if (!bareSticker && !fullMessage.inlineDownloadComplete) {
             // TRANSLATOR: In-chat notification, appears after a colon (':'). Argument is a file *type*, not a filename.
             notice = formatMessage(_("Downloading {}"), escapeForDisplay(fileDesc));
         }
@@ -2650,7 +2649,7 @@ static bool inlineDownloadNeedAutoDl(const IncomingMessage &fullMessage, const t
 {
     unsigned fileSize = getFileSizeKb(file);
 
-    return !((file.local_ && file.local_->is_downloading_completed_)) &&
+    return !(file.local_ && file.local_->is_downloading_completed_) &&
            isSizeWithinLimit(fileSize, fullMessage.inlineFileSizeLimit) && fullMessage.downloadsMedia;
 }
 
@@ -3609,7 +3608,8 @@ void deleteMessages(TdAccountData &account, const td::td_api::updateDeleteMessag
         showDeletionNotice(account, chatId, *it, purple_account_get_name_for_display(account.purpleAccount),
                            it->outgoing);
     deleted.erase(deleted.begin(), byUs);
-    if (deleted.empty())
+    // None are shown, but of a chat known
+    if (deleted.empty() || !chat)
         return;
 
     // In a group the notice names who sent the message, which tells apart those several members
@@ -4103,8 +4103,10 @@ void redrawChat(TdAccountData &account, ChatId chatId, MessageId earliest)
 
 void showEarlierMessages(TdAccountData &account, PurpleConversation *conv, double filling)
 {
-    const td::td_api::chat *chat     = findConversationChat(account, conv);
-    MessageId               earliest = chat ? findFirstMessage(conv) : MessageId();
+    const td::td_api::chat *chat = findConversationChat(account, conv);
+    if (!chat)
+        return;
+    MessageId earliest = findFirstMessage(conv);
     if (!earliest.valid() || account.historyComplete.count(getId(*chat).value()) ||
         account.redrawTooFar.count({getId(*chat).value(), earliest.value()}))
         return;
@@ -4247,7 +4249,9 @@ static void laterMessagesResponse(TdAccountData &account, ChatId chatId, Message
 void showLaterMessages(TdAccountData &account, PurpleConversation *conv)
 {
     const td::td_api::chat *chat = findConversationChat(account, conv);
-    MessageId               end  = chat ? getTabEnd(conv) : MessageId();
+    if (!chat)
+        return;
+    MessageId end = getTabEnd(conv);
     // Not while history is being fetched, or the tab filled already, nor ahead of messages that wait
     // to be shown still, as later ones would be; once they are, it is told again
     if (!end.valid() || !account.pendingMessages.isChatReady(getId(*chat)) ||

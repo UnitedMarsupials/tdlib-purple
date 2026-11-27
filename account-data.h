@@ -624,7 +624,7 @@ private:
         int32_t   purpleId;
         TdChatPtr chat;
 
-        ChatInfo() : purpleId(0), chat() {}
+        ChatInfo() : purpleId(0) {}
     };
 
     struct GroupInfo {

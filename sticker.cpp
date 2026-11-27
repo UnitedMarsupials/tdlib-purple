@@ -91,7 +91,7 @@ public:
         GifBegin(&handle, fd, width, height, delay);
         bgColorR = (uint8_t) ((bgColor & 0xff0000) >> 16);
         bgColorG = (uint8_t) ((bgColor & 0x00ff00) >> 8);
-        bgColorB = (uint8_t) ((bgColor & 0x0000ff));
+        bgColorB = (uint8_t) (bgColor & 0x0000ff);
         transparent = ((bgColor >> 24) < 0x80);
     }
     ~GifBuilder()
