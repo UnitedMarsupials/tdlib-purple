@@ -36,6 +36,9 @@ void requestStandardDownload(ChatId chatId, const TgMessageInfo &message, const 
                              const td::td_api::file &file, TdTransceiver &transceiver, TdAccountData &account);
 std::string getDownloadPath(const td::td_api::object_ptr<td::td_api::Object> &downloadResponse);
 
+// Its size, or what it is expected to be if that is not known yet
+int64_t  getFileSize64(const td::td_api::file &file);
+// So, as libpurple's transfers take it
 unsigned getFileSize(const td::td_api::file &file);
 unsigned getFileSizeKb(const td::td_api::file &file);
 

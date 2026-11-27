@@ -49,12 +49,8 @@ std::string getPurpleChatName(const td::td_api::chat &chat)
 
 GHashTable *getChatComponents(const td::td_api::chat &chat)
 {
-    char name[32];
-    snprintf(name, sizeof(name)-1, "chat%" G_GINT64_FORMAT "", chat.id_);
-    name[sizeof(name)-1] = '\0';
-
     GHashTable *table = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
-    g_hash_table_insert(table, chatNameComponent, g_strdup(name));
+    g_hash_table_insert(table, chatNameComponent, g_strdup(getPurpleChatName(chat).c_str()));
     // The keys are not freed with this table
     for (char *key: {joinStringKey, nameKey, typeKey})
         g_hash_table_insert(table, key, g_strdup(""));

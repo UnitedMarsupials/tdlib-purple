@@ -140,6 +140,37 @@ TEST_F(FileTransferTest, BigDocument_RequestDownload)
     ));
 }
 
+// Over 2 GiB, its size was cut to 32 bits, became negative, then 0: within any limit, so fetched unasked
+TEST_F(FileTransferTest, HugeDocument_RequestDownload)
+{
+    purple_account_set_string(account, "media-size-threshold", "0.5");
+
+    const int32_t date   = 10001;
+    const int32_t fileId = 1234;
+    purple_account_set_string(account, "download-behaviour", "hyperlink");
+    loginWithOneContact();
+
+    tgl.update(make_object<updateNewMessage>(makeMessage(
+        1,
+        userIds[0],
+        chatIds[0],
+        false,
+        date,
+        makeMessageDocument("doc.file.name", "mime/type", makeFile(fileId, 3000000000), "caption")
+    )));
+    tgl.verifyRequest(viewMessages(chatIds[0], std::vector<int64_t>(1, 1), nullptr, true));
+    prpl.verifyEvents(
+        ServGotImEvent(connection, purpleUserName(0), "caption", PURPLE_MESSAGE_RECV, date),
+        ConversationWriteEvent(
+            purpleUserName(0), purpleUserName(0),
+            userFirstNames[0] + " " + userLastNames[0] + ": Requesting doc.file.name [mime/type] download",
+            PURPLE_MESSAGE_SYSTEM, date
+        ),
+        RequestActionEvent(connection, account, nullptr, nullptr, 2)
+    );
+    tgl.verifyNoRequests();
+}
+
 TEST_F(FileTransferTest, BigDocument_Ignore)
 {
     purple_account_set_string(account, "media-size-threshold", "0.5");

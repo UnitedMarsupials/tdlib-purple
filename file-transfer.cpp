@@ -7,6 +7,7 @@
 #include "sticker.h"
 #include "purple-info.h"
 #include <unistd.h>
+#include <climits>
 
 td::td_api::object_ptr<td::td_api::downloadFile> makeDownloadFile(int32_t fileId, int32_t priority,
                                                                    bool synchronous)
@@ -571,15 +572,17 @@ void requestStandardDownload(ChatId chatId, const TgMessageInfo &message, const 
     purple_xfer_request(xfer);
 }
 
+int64_t getFileSize64(const td::td_api::file &file)
+{
+    return file.size_ ? file.size_ : file.expected_size_;
+}
+
 unsigned getFileSize(const td::td_api::file &file)
 {
-    int32_t size = file.size_;
-    if (size == 0)
-        size = file.expected_size_;
-
+    int64_t size = getFileSize64(file);
     if (size <= 0)
         return 0;
-    return size;
+    return std::min<int64_t>(size, UINT_MAX);
 }
 
 unsigned getFileSizeKb(const td::td_api::file &file)

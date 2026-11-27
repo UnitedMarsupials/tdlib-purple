@@ -47,6 +47,7 @@
 - **A group's or channel's picture shows on its buddy-list entry as soon as it is downloaded.** The entry was looked for by a user, which a group's picture has none of, so the picture showed only once something else about the chat changed.
 - **A buddy's "Last online" is written as the rest of Pidgin writes dates, on one line.** It was C's `ctime`, in English and ending in a line break.
 - **A video note that cannot be shown says it is a faulty video note, not a voice note.**
+- **A file over 2 GiB is asked about before it is downloaded, as any file over the auto-download limit is, and shows its size.** Its size was cut to 32 bits, came out negative, and was taken for 0: within any limit, so it was fetched unasked.
 
 ### Translations
 
