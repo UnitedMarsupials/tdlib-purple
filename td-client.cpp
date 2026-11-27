@@ -1581,63 +1581,33 @@ static const char PAID_REACTION[] = "⭐";
 // The file of a message with a caption, the largest of a photo's, by what it goes as when replaced
 static void getMessageMedia(const td::td_api::message &message, SentMedia &media)
 {
-    const td::td_api::file *file = nullptr;
+    ContentParts parts;
     switch (message.content_ ? message.content_->get_id() : 0) {
-    case td::td_api::messagePhoto::ID: {
-        const auto &photo = static_cast<const td::td_api::messagePhoto &>(*message.content_).photo_;
-        if (photo && !photo->sizes_.empty() && photo->sizes_.back())
-            file = photo->sizes_.back()->photo_.get();
+    case td::td_api::messagePhoto::ID:
         media.kind     = AttachmentKind::Photo;
         media.mimeType = "image/jpeg";
         break;
-    }
-    case td::td_api::messageVideo::ID: {
-        const auto &video = static_cast<const td::td_api::messageVideo &>(*message.content_).video_;
-        if (video) {
-            file = video->video_.get();
-            media.name     = video->file_name_;
-            media.mimeType = video->mime_type_;
-        }
+    case td::td_api::messageVideo::ID:
+    case td::td_api::messageAnimation::ID:
         media.kind = AttachmentKind::Video;
         break;
-    }
-    case td::td_api::messageAnimation::ID: {
-        const auto &animation = static_cast<const td::td_api::messageAnimation &>(*message.content_).animation_;
-        if (animation) {
-            file = animation->animation_.get();
-            media.name     = animation->file_name_;
-            media.mimeType = animation->mime_type_;
-        }
-        media.kind = AttachmentKind::Video;
+    case td::td_api::messageDocument::ID:
+    case td::td_api::messageAudio::ID:
         break;
-    }
-    case td::td_api::messageDocument::ID: {
-        const auto &document = static_cast<const td::td_api::messageDocument &>(*message.content_).document_;
-        if (document) {
-            file = document->document_.get();
-            media.name     = document->file_name_;
-            media.mimeType = document->mime_type_;
-        }
-        break;
-    }
-    case td::td_api::messageAudio::ID: {
-        const auto &audio = static_cast<const td::td_api::messageAudio &>(*message.content_).audio_;
-        if (audio) {
-            file = audio->audio_.get();
-            media.name     = audio->file_name_;
-            media.mimeType = audio->mime_type_;
-        }
-        break;
-    }
     default:
         return;
     }
-    if (!file)
+    getContentParts(*message.content_, parts);
+    if (parts.fileName)
+        media.name = *parts.fileName;
+    if (parts.mimeType)
+        media.mimeType = *parts.mimeType;
+    if (!parts.file)
         return;
     media.present = true;
-    media.fileId  = file->id_;
-    if (file->local_ && file->local_->is_downloading_completed_)
-        media.path = file->local_->path_;
+    media.fileId  = parts.file->id_;
+    if (parts.file->local_ && parts.file->local_->is_downloading_completed_)
+        media.path = parts.file->local_->path_;
 }
 
 // The text a message's editing changes: its text, or a caption, if it can have one
@@ -1646,25 +1616,13 @@ static const td::td_api::formattedText *getEditableText(const td::td_api::messag
     isCaption = true;
     if (!message.content_)
         return nullptr;
-    switch (message.content_->get_id()) {
-    case td::td_api::messageText::ID:
+    if (message.content_->get_id() == td::td_api::messageText::ID) {
         isCaption = false;
         return static_cast<const td::td_api::messageText &>(*message.content_).text_.get();
-    case td::td_api::messagePhoto::ID:
-        return static_cast<const td::td_api::messagePhoto &>(*message.content_).caption_.get();
-    case td::td_api::messageVideo::ID:
-        return static_cast<const td::td_api::messageVideo &>(*message.content_).caption_.get();
-    case td::td_api::messageAnimation::ID:
-        return static_cast<const td::td_api::messageAnimation &>(*message.content_).caption_.get();
-    case td::td_api::messageDocument::ID:
-        return static_cast<const td::td_api::messageDocument &>(*message.content_).caption_.get();
-    case td::td_api::messageAudio::ID:
-        return static_cast<const td::td_api::messageAudio &>(*message.content_).caption_.get();
-    case td::td_api::messageVoiceNote::ID:
-        return static_cast<const td::td_api::messageVoiceNote &>(*message.content_).caption_.get();
-    default:
-        return nullptr;
     }
+    // A video note and a sticker have none
+    ContentParts parts;
+    return getContentParts(*message.content_, parts) ? parts.caption : nullptr;
 }
 
 bool PurpleTdClient::showMessagePopup(PurpleConversation *conv, MessageId messageId, const OpenMenuRef &openMenu)

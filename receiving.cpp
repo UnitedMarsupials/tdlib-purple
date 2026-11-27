@@ -205,6 +205,12 @@ static void getShownContent(const td::td_api::MessageContent &content, ShownMess
     result.quotable = false;
     // TRANSLATOR: What a message is, as in "reacted with 👍 to message from 12:00", where it has no text to quote. Also for "photo", "sticker" and the like.
     result.kind = _("message");
+    // A file, and its caption, of the kinds with one; the first of a photo's sizes is its
+    ContentParts parts;
+    if (getContentParts(content, parts)) {
+        result.file = getFileKey(parts.file);
+        caption     = parts.caption;
+    }
     switch (content.get_id()) {
         case td::td_api::messageText::ID: {
             const auto &text = static_cast<const td::td_api::messageText &>(content);
@@ -218,75 +224,42 @@ static void getShownContent(const td::td_api::MessageContent &content, ShownMess
         case td::td_api::messagePhoto::ID: {
             const auto &photo = static_cast<const td::td_api::messagePhoto &>(content);
             result.kind = _("photo");
+            result.file.clear();
             if (photo.photo_)
                 for (const auto &size: photo.photo_->sizes_)
                     if (size && size->photo_) {
                         result.file = getFileKey(size->photo_.get());
                         break;
                     }
-            caption = photo.caption_.get();
             break;
         }
-        case td::td_api::messageDocument::ID: {
-            const auto &document = static_cast<const td::td_api::messageDocument &>(content);
+        case td::td_api::messageDocument::ID:
             // TRANSLATOR: What a message is, as in "reacted with 👍 to document from 12:00".
             result.kind = _("document");
-            if (document.document_)
-                result.file = getFileKey(document.document_->document_.get());
-            caption = document.caption_.get();
             break;
-        }
-        case td::td_api::messageVideo::ID: {
-            const auto &video = static_cast<const td::td_api::messageVideo &>(content);
+        case td::td_api::messageVideo::ID:
             // TRANSLATOR: What a message is, as in "reacted with 👍 to video from 12:00".
             result.kind = _("video");
-            if (video.video_)
-                result.file = getFileKey(video.video_->video_.get());
-            caption = video.caption_.get();
             break;
-        }
-        case td::td_api::messageAnimation::ID: {
-            const auto &animation = static_cast<const td::td_api::messageAnimation &>(content);
+        case td::td_api::messageAnimation::ID:
             // TRANSLATOR: What a message is, as in "reacted with 👍 to animation from 12:00".
             result.kind = _("animation");
-            if (animation.animation_)
-                result.file = getFileKey(animation.animation_->animation_.get());
-            caption = animation.caption_.get();
             break;
-        }
-        case td::td_api::messageAudio::ID: {
-            const auto &audio = static_cast<const td::td_api::messageAudio &>(content);
+        case td::td_api::messageAudio::ID:
             // TRANSLATOR: What a message is, as in "reacted with 👍 to audio from 12:00".
             result.kind = _("audio");
-            if (audio.audio_)
-                result.file = getFileKey(audio.audio_->audio_.get());
-            caption = audio.caption_.get();
             break;
-        }
-        case td::td_api::messageVoiceNote::ID: {
-            const auto &voiceNote = static_cast<const td::td_api::messageVoiceNote &>(content);
+        case td::td_api::messageVoiceNote::ID:
             // TRANSLATOR: What a message is, as in "reacted with 👍 to voice message from 12:00".
             result.kind = _("voice message");
-            if (voiceNote.voice_note_)
-                result.file = getFileKey(voiceNote.voice_note_->voice_.get());
-            caption = voiceNote.caption_.get();
             break;
-        }
-        case td::td_api::messageVideoNote::ID: {
-            const auto &videoNote = static_cast<const td::td_api::messageVideoNote &>(content);
+        case td::td_api::messageVideoNote::ID:
             // TRANSLATOR: What a message is, as in "reacted with 👍 to video message from 12:00".
             result.kind = _("video message");
-            if (videoNote.video_note_)
-                result.file = getFileKey(videoNote.video_note_->video_.get());
             break;
-        }
-        case td::td_api::messageSticker::ID: {
-            const auto &sticker = static_cast<const td::td_api::messageSticker &>(content);
+        case td::td_api::messageSticker::ID:
             result.kind = _("sticker");
-            if (sticker.sticker_)
-                result.file = getFileKey(sticker.sticker_->sticker_.get());
             break;
-        }
         case td::td_api::messageAnimatedEmoji::ID:
             result.content = static_cast<const td::td_api::messageAnimatedEmoji &>(content).emoji_;
             result.quotable = true;
@@ -2712,106 +2685,151 @@ void getFileFromMessage(const IncomingMessage &fullMessage, FileInfo &result)
     result.file = nullptr;
     result.caption = "";
     result.secret = false;
-    if (!fullMessage.message || !fullMessage.message->content_)
+    ContentParts parts;
+    if (!fullMessage.message || !fullMessage.message->content_ ||
+        !getContentParts(*fullMessage.message->content_, parts))
         return;
-    const td::td_api::message &message = *fullMessage.message;
+    const td::td_api::MessageContent &content = *fullMessage.message->content_;
+    result.file   = parts.file;
+    result.secret = parts.secret;
+    if (parts.caption)
+        result.caption = getMessageText(*parts.caption);
 
-    switch (message.content_->get_id()) {
-        case td::td_api::messagePhoto::ID: {
-            const td::td_api::messagePhoto &photo = static_cast<const td::td_api::messagePhoto &>(*message.content_);
-            result.file = getSelectedPhotoSize(fullMessage, photo);
+    // Its name, and what it is called in the notices of its download
+    switch (content.get_id()) {
+        case td::td_api::messagePhoto::ID:
+            result.file = getSelectedPhotoSize(fullMessage, static_cast<const td::td_api::messagePhoto &>(content));
             result.name = ""; // will not be needed - inline download only
-            if (photo.caption_) result.caption = getMessageText(*photo.caption_);
             // TRANSLATOR: File-type, used to describe what is being downloaded, in sentences like "Downloading photo" or "Ignoring photo download".
             result.description = _("photo");
-            result.secret = photo.is_secret_;
             break;
-        }
         case td::td_api::messageDocument::ID: {
-            const td::td_api::messageDocument &document = static_cast<const td::td_api::messageDocument &>(*message.content_);
-            result.file = document.document_ ? document.document_->document_.get() : nullptr;
-            if (document.caption_) result.caption = getMessageText(*document.caption_);
-            result.name = getFileName(document.document_.get());
-            result.description = makeDocumentDescription(document.document_.get());
+            const auto *document = static_cast<const td::td_api::messageDocument &>(content).document_.get();
+            result.name = getFileName(document);
+            result.description = makeDocumentDescription(document);
             break;
         }
         case td::td_api::messageVideo::ID: {
-            const td::td_api::messageVideo &video = static_cast<const td::td_api::messageVideo &>(*message.content_);
-            result.file = video.video_ ? video.video_->video_.get() : nullptr;
-            if (video.caption_) result.caption = getMessageText(*video.caption_);
-            result.name = getFileName(video.video_.get());
-            result.description = makeDocumentDescription(video.video_.get(),
-                                                         !fullMessage.messageInfo.mediaVariantLinks.empty());
-            result.secret = video.is_secret_;
+            const auto *video = static_cast<const td::td_api::messageVideo &>(content).video_.get();
+            result.name = getFileName(video);
+            result.description = makeDocumentDescription(video, !fullMessage.messageInfo.mediaVariantLinks.empty());
             break;
         }
         case td::td_api::messageAnimation::ID: {
-            const td::td_api::messageAnimation &animation = static_cast<const td::td_api::messageAnimation &>(*message.content_);
-            result.file = animation.animation_ ? animation.animation_->animation_.get() : nullptr;
-            if (animation.caption_) result.caption = getMessageText(*animation.caption_);
-            result.name = getFileName(animation.animation_.get());
-            result.description = makeDocumentDescription(animation.animation_.get());
-            result.secret = animation.is_secret_;
+            const auto *animation = static_cast<const td::td_api::messageAnimation &>(content).animation_.get();
+            result.name = getFileName(animation);
+            result.description = makeDocumentDescription(animation);
             break;
         }
         case td::td_api::messageAudio::ID: {
-            const td::td_api::messageAudio &audio = static_cast<const td::td_api::messageAudio &>(*message.content_);
-            result.file = audio.audio_ ? audio.audio_->audio_.get() : nullptr;
-            if (audio.caption_) result.caption = getMessageText(*audio.caption_);
-            result.name = getFileName(audio.audio_.get());
-            result.description = makeDocumentDescription(audio.audio_.get());
+            const auto *audio = static_cast<const td::td_api::messageAudio &>(content).audio_.get();
+            result.name = getFileName(audio);
+            result.description = makeDocumentDescription(audio);
             break;
         }
         case td::td_api::messageVoiceNote::ID: {
-            const td::td_api::messageVoiceNote &audio = static_cast<const td::td_api::messageVoiceNote &>(*message.content_);
-            result.file = audio.voice_note_ ? audio.voice_note_->voice_.get() : nullptr;
-            if (audio.caption_) result.caption = getMessageText(*audio.caption_);
-            result.name = getFileName(audio.voice_note_.get());
-            result.description = makeDocumentDescription(audio.voice_note_.get());
+            const auto *voice = static_cast<const td::td_api::messageVoiceNote &>(content).voice_note_.get();
+            result.name = getFileName(voice);
+            result.description = makeDocumentDescription(voice);
             break;
         }
         case td::td_api::messageVideoNote::ID: {
-            const td::td_api::messageVideoNote &video = static_cast<const td::td_api::messageVideoNote &>(*message.content_);
-            result.file = video.video_note_ ? video.video_note_->video_.get() : nullptr;
-            result.name = getFileName(video.video_note_.get());
-            result.description = makeDocumentDescription(video.video_note_.get());
-            result.secret = video.is_secret_;
+            const auto *video = static_cast<const td::td_api::messageVideoNote &>(content).video_note_.get();
+            result.name = getFileName(video);
+            result.description = makeDocumentDescription(video);
             break;
         }
-        case td::td_api::messageSticker::ID: {
-            const td::td_api::messageSticker &sticker = static_cast<const td::td_api::messageSticker &>(*message.content_);
-            result.file = sticker.sticker_ ? sticker.sticker_->sticker_.get() : nullptr;
+        case td::td_api::messageSticker::ID:
             result.name = ""; // will not be needed - inline download only
             // TRANSLATOR: File-type, used to describe what is being downloaded, in sentences like "Downloading photo" or "Ignoring photo download".
             result.description = _("sticker");
             break;
-        }
+    }
+}
+
+// Of a file and the rest of a kind with them
+template<typename Media>
+static void setMediaParts(const Media *media, const td::td_api::file *file, ContentParts &parts)
+{
+    parts.file     = file;
+    parts.fileName = media ? &media->file_name_ : nullptr;
+    parts.mimeType = media ? &media->mime_type_ : nullptr;
+}
+
+bool getContentParts(const td::td_api::MessageContent &content, ContentParts &parts)
+{
+    parts = ContentParts();
+    switch (content.get_id()) {
+    case td::td_api::messagePhoto::ID: {
+        const auto &photo = static_cast<const td::td_api::messagePhoto &>(content);
+        if (photo.photo_ && !photo.photo_->sizes_.empty() && photo.photo_->sizes_.back())
+            parts.file = photo.photo_->sizes_.back()->photo_.get();
+        parts.caption = photo.caption_.get();
+        parts.secret  = photo.is_secret_;
+        return true;
+    }
+    case td::td_api::messageDocument::ID: {
+        const auto &document = static_cast<const td::td_api::messageDocument &>(content);
+        setMediaParts(document.document_.get(), document.document_ ? document.document_->document_.get() : nullptr,
+                      parts);
+        parts.caption = document.caption_.get();
+        return true;
+    }
+    case td::td_api::messageVideo::ID: {
+        const auto &video = static_cast<const td::td_api::messageVideo &>(content);
+        setMediaParts(video.video_.get(), video.video_ ? video.video_->video_.get() : nullptr, parts);
+        parts.caption = video.caption_.get();
+        parts.secret  = video.is_secret_;
+        return true;
+    }
+    case td::td_api::messageAnimation::ID: {
+        const auto &animation = static_cast<const td::td_api::messageAnimation &>(content);
+        setMediaParts(animation.animation_.get(), animation.animation_ ? animation.animation_->animation_.get()
+                                                                        : nullptr, parts);
+        parts.caption = animation.caption_.get();
+        parts.secret  = animation.is_secret_;
+        return true;
+    }
+    case td::td_api::messageAudio::ID: {
+        const auto &audio = static_cast<const td::td_api::messageAudio &>(content);
+        setMediaParts(audio.audio_.get(), audio.audio_ ? audio.audio_->audio_.get() : nullptr, parts);
+        parts.caption = audio.caption_.get();
+        return true;
+    }
+    case td::td_api::messageVoiceNote::ID: {
+        const auto &voice = static_cast<const td::td_api::messageVoiceNote &>(content);
+        parts.file     = voice.voice_note_ ? voice.voice_note_->voice_.get() : nullptr;
+        parts.mimeType = voice.voice_note_ ? &voice.voice_note_->mime_type_ : nullptr;
+        parts.caption  = voice.caption_.get();
+        return true;
+    }
+    case td::td_api::messageVideoNote::ID: {
+        const auto &video = static_cast<const td::td_api::messageVideoNote &>(content);
+        parts.file   = video.video_note_ ? video.video_note_->video_.get() : nullptr;
+        parts.secret = video.is_secret_;
+        return true;
+    }
+    case td::td_api::messageSticker::ID: {
+        const auto &sticker = static_cast<const td::td_api::messageSticker &>(content);
+        parts.file = sticker.sticker_ ? sticker.sticker_->sticker_.get() : nullptr;
+        return true;
+    }
+    default:
+        return false;
     }
 }
 
 void getMessageFileKind(const td::td_api::MessageContent &content, bool &hasFile, bool &picture)
 {
-    hasFile = true;
+    ContentParts parts;
+    hasFile = getContentParts(content, parts);
     picture = false;
-    switch (content.get_id()) {
-        case td::td_api::messagePhoto::ID:
-            picture = true;
-            break;
-        case td::td_api::messageSticker::ID: {
-            const auto &sticker = static_cast<const td::td_api::messageSticker &>(content);
-            picture = sticker.sticker_ && sticker.sticker_->format_ &&
-                      (sticker.sticker_->format_->get_id() == td::td_api::stickerFormatWebp::ID);
-            break;
-        }
-        case td::td_api::messageDocument::ID:
-        case td::td_api::messageVideo::ID:
-        case td::td_api::messageAnimation::ID:
-        case td::td_api::messageAudio::ID:
-        case td::td_api::messageVoiceNote::ID:
-        case td::td_api::messageVideoNote::ID:
-            break;
-        default:
-            hasFile = false;
+    if (content.get_id() == td::td_api::messagePhoto::ID)
+        picture = true;
+    else if (content.get_id() == td::td_api::messageSticker::ID) {
+        const auto &sticker = static_cast<const td::td_api::messageSticker &>(content);
+        picture = sticker.sticker_ && sticker.sticker_->format_ &&
+                  (sticker.sticker_->format_->get_id() == td::td_api::stickerFormatWebp::ID);
     }
 }
 
@@ -3825,20 +3843,9 @@ static void stopRedrawProgress(TdAccountData &account, ChatId chatId)
 // Whether Pidgin's tab writes TDLib's message as a notice, rather than as someone's message
 static bool isShownAsNotice(const td::td_api::message &message)
 {
-    switch (message.content_ ? message.content_->get_id() : 0) {
-    case td::td_api::messageText::ID:
-    case td::td_api::messagePhoto::ID:
-    case td::td_api::messageVideo::ID:
-    case td::td_api::messageDocument::ID:
-    case td::td_api::messageAudio::ID:
-    case td::td_api::messageAnimation::ID:
-    case td::td_api::messageVoiceNote::ID:
-    case td::td_api::messageVideoNote::ID:
-    case td::td_api::messageSticker::ID:
-        return false;
-    default:
-        return true;
-    }
+    ContentParts parts;
+    return !message.content_ || ((message.content_->get_id() != td::td_api::messageText::ID) &&
+                                 !getContentParts(*message.content_, parts));
 }
 
 // What of the log goes into the tab with TDLib's messages: a message the log names that TDLib no

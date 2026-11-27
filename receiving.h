@@ -62,6 +62,18 @@ struct FileInfo {
 
 const td::td_api::file *selectPhotoSize(PurpleAccount *account, const td::td_api::messagePhoto &photo);
 void getFileFromMessage(const IncomingMessage &fullMessage, FileInfo &result);
+// What a message's content holds, of the kinds with a file: a photo (its largest size), a document,
+// a video, an animation, an audio file, a voice or video note, or a sticker. Pointers into it, null
+// where it has none.
+struct ContentParts {
+    const td::td_api::file          *file     = nullptr;
+    const td::td_api::formattedText *caption  = nullptr;
+    const std::string               *fileName = nullptr;
+    const std::string               *mimeType = nullptr;
+    bool                             secret   = false;
+};
+// Whether the content is of one of those kinds
+bool getContentParts(const td::td_api::MessageContent &content, ContentParts &parts);
 // Whether a message of the content carries a file, as getFileFromMessage() finds it, and whether
 // that is a picture, to be copied as one too: a photo, or a sticker that does not move
 void getMessageFileKind(const td::td_api::MessageContent &content, bool &hasFile, bool &picture);
