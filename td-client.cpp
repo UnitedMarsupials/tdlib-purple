@@ -391,43 +391,35 @@ bool PurpleTdClient::addProxy()
     if (username == nullptr) username = "";
     if (password == nullptr) password = "";
     if (host == nullptr) host = "";
-    std::string errorMessage;
-
     td::td_api::object_ptr<td::td_api::ProxyType> tdProxyType;
     switch (proxyType) {
     case PURPLE_PROXY_NONE:
-        tdProxyType = nullptr;
-        break;
+        return true;
     case PURPLE_PROXY_SOCKS5:
         tdProxyType = td::td_api::make_object<td::td_api::proxyTypeSocks5>(username, password);
         break;
     case PURPLE_PROXY_HTTP:
         tdProxyType = td::td_api::make_object<td::td_api::proxyTypeHttp>(username, password, true);
         break;
-    default:
+    default: {
         // TRANSLATOR: Buddy-window error message, argument will be some kind of proxy-identifier.
-        errorMessage = formatMessage(_("Proxy type {} is not supported"), proxyTypeToString(proxyType));
-        break;
-    }
-
-    if (!errorMessage.empty()) {
+        std::string errorMessage = formatMessage(_("Proxy type {} is not supported"), proxyTypeToString(proxyType));
         purple_connection_error(purple_account_get_connection(m_account), errorMessage.c_str());
         return false;
     }
-    if (tdProxyType) {
-        auto addProxy = td::td_api::make_object<td::td_api::addProxy>();
-#if TDLIB_API_ADDED_PROXY
-        addProxy->proxy_ = td::td_api::make_object<td::td_api::proxy>(host, port, std::move(tdProxyType));
-#else
-        addProxy->server_ = host;
-        addProxy->port_ = port;
-        addProxy->type_ = std::move(tdProxyType);
-#endif
-        addProxy->enable_ = true;
-        m_transceiver.sendQuery(std::move(addProxy), &PurpleTdClient::addProxyResponse);
-        m_isProxyAdded = true;
     }
 
+    auto request = td::td_api::make_object<td::td_api::addProxy>();
+#if TDLIB_API_ADDED_PROXY
+    request->proxy_ = td::td_api::make_object<td::td_api::proxy>(host, port, std::move(tdProxyType));
+#else
+    request->server_ = host;
+    request->port_   = port;
+    request->type_   = std::move(tdProxyType);
+#endif
+    request->enable_ = true;
+    m_transceiver.sendQuery(std::move(request), &PurpleTdClient::addProxyResponse);
+    m_isProxyAdded = true;
     return true;
 }
 
@@ -519,18 +511,21 @@ struct DatabasePasswordRequest {
     PurpleTdClient::DatabaseKeyUse use;
 };
 
-PurpleTdClient *findRequestClient(const DatabasePasswordRequest &request)
+PurpleTdClient *findRequestClient(const DatabasePasswordRequest &request, PurpleAccount **account = nullptr)
 {
-    PurpleAccount  *account = purple_accounts_find(request.accountName.c_str(), config::pluginId);
-    PurpleTdClient *client  = account ? getTdClient(account) : nullptr;
+    PurpleAccount  *found  = purple_accounts_find(request.accountName.c_str(), config::pluginId);
+    PurpleTdClient *client = found ? getTdClient(found) : nullptr;
+    if (account)
+        *account = found;
     return (client == request.client) ? client : nullptr;
 }
 
-// Pidgin's own dialog, its password remembered if the box is ticked
-void accountPasswordEntered(DatabasePasswordRequest *data, PurpleRequestFields *fields)
+// From Pidgin's own dialog for the account's password, remembered if the box is ticked, or from ours
+void passwordEntered(DatabasePasswordRequest *data, PurpleRequestFields *fields, bool accountPassword)
 {
     std::unique_ptr<DatabasePasswordRequest> request(data);
-    PurpleTdClient *client   = findRequestClient(*request);
+    PurpleAccount  *account;
+    PurpleTdClient *client   = findRequestClient(*request, &account);
     const char     *password = purple_request_fields_get_string(fields, "password");
     if (!client)
         return;
@@ -538,24 +533,22 @@ void accountPasswordEntered(DatabasePasswordRequest *data, PurpleRequestFields *
         client->databasePasswordCancelled(request->use);
         return;
     }
-    PurpleAccount *account = purple_accounts_find(request->accountName.c_str(), config::pluginId);
-    if (purple_request_fields_get_bool(fields, "remember"))
-        purple_account_set_remember_password(account, TRUE);
-    purple_account_set_password(account, password);
+    if (accountPassword) {
+        if (purple_request_fields_get_bool(fields, "remember"))
+            purple_account_set_remember_password(account, TRUE);
+        purple_account_set_password(account, password);
+    }
     client->databasePasswordEntered(request->use, password);
+}
+
+void accountPasswordEntered(DatabasePasswordRequest *data, PurpleRequestFields *fields)
+{
+    passwordEntered(data, fields, true);
 }
 
 void databasePasswordEntered(DatabasePasswordRequest *data, PurpleRequestFields *fields)
 {
-    std::unique_ptr<DatabasePasswordRequest> request(data);
-    PurpleTdClient *client   = findRequestClient(*request);
-    const char     *password = purple_request_fields_get_string(fields, "password");
-    if (client) {
-        if (password && *password)
-            client->databasePasswordEntered(request->use, password);
-        else
-            client->databasePasswordCancelled(request->use);
-    }
+    passwordEntered(data, fields, false);
 }
 
 void databasePasswordCancelled(DatabasePasswordRequest *data, PurpleRequestFields *)

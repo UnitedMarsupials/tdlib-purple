@@ -168,14 +168,21 @@ struct DownloadData {
     : account(&account), transceiver(&transceiver) {}
 };
 
+// A download transfer's data, taken from it, to be freed
+static std::unique_ptr<DownloadData> takeDownloadData(PurpleXfer *xfer)
+{
+    std::unique_ptr<DownloadData> data(static_cast<DownloadData *>(xfer->data));
+    xfer->data = nullptr;
+    return data;
+}
+
 static void nop(PurpleXfer *)
 {
 }
 
 static void cancelDownload(PurpleXfer *xfer)
 {
-    std::unique_ptr<DownloadData> data(static_cast<DownloadData *>(xfer->data));
-    xfer->data = nullptr;
+    std::unique_ptr<DownloadData> data = takeDownloadData(xfer);
     if (!data) return;
 
     int32_t fileId;
@@ -196,8 +203,7 @@ static void finishInlineDownloadProgress(DownloadRequest &downloadReq, TdAccount
     ChatId      chatId;
 
     if (account.getFileTransfer(downloadReq.fileId, download, chatId)) {
-        std::unique_ptr<DownloadData> data(static_cast<DownloadData *>(download->data));
-        download->data = nullptr;
+        std::unique_ptr<DownloadData> data = takeDownloadData(download);
         purple_xfer_set_bytes_sent(download, downloadReq.fileSize);
         purple_xfer_set_completed(download, TRUE);
         purple_xfer_end(download);
@@ -431,9 +437,10 @@ std::string getDownloadPath(const td::td_api::object_ptr<td::td_api::Object> &do
 }
 
 struct DownloadWrapup {
-    PurpleXfer *download;
-    FILE       *tdlibFile;
-    std::string tdlibPath;
+    PurpleXfer          *download;
+    FILE                *tdlibFile;
+    std::string          tdlibPath;
+    std::vector<uint8_t> buffer; // for each chunk
 };
 
 static gboolean wrapupDownload(void *data)
@@ -448,8 +455,8 @@ static gboolean wrapupDownload(void *data)
             chunkSize = purple_xfer_get_size(wrapupData->download) - purple_xfer_get_bytes_sent(wrapupData->download);
         }
 
-        uint8_t *buf = new uint8_t[chunkSize];
-        unsigned bytesRead = fread(buf, 1, chunkSize, wrapupData->tdlibFile);
+        wrapupData->buffer.resize(chunkSize);
+        unsigned bytesRead = fread(wrapupData->buffer.data(), 1, chunkSize, wrapupData->tdlibFile);
         if (bytesRead < chunkSize) {
             // Unlikely error message not worth translating
             std::string message = formatMessage("Failed to download {}: error reading {} after {} bytes",
@@ -462,8 +469,7 @@ static gboolean wrapupDownload(void *data)
             last = true;
         }
 
-        purple_xfer_write_file(wrapupData->download, buf, bytesRead);
-        delete[] buf;
+        purple_xfer_write_file(wrapupData->download, wrapupData->buffer.data(), bytesRead);
 
         if (last) {
             purple_xfer_set_completed(wrapupData->download, TRUE);
@@ -492,8 +498,7 @@ static void standardDownloadResponse(TdAccountData *account, uint64_t requestId,
     ChatId      chatId;
 
     if (account->getFileTransfer(request->fileId, download, chatId)) {
-        std::unique_ptr<DownloadData> data(static_cast<DownloadData *>(download->data));
-        download->data = nullptr;
+        std::unique_ptr<DownloadData> data = takeDownloadData(download);
         account->removeFileTransfer(request->fileId);
 
         FILE *f = nullptr;

@@ -50,12 +50,10 @@ void updateKnownSecretChat(SecretChatId secretChatId, TdAccountData &account)
     } else
         purple_blist_alias_buddy(buddy, alias.c_str());
 
-    if (state == td::td_api::secretChatStateReady::ID)
-        purple_prpl_got_user_status(account.purpleAccount, purpleBuddyName.c_str(),
-                                    purple_primitive_get_id_from_type(PURPLE_STATUS_AVAILABLE), nullptr);
-    else
-        purple_prpl_got_user_status(account.purpleAccount, purpleBuddyName.c_str(),
-                                    purple_primitive_get_id_from_type(PURPLE_STATUS_OFFLINE), nullptr);
+    PurpleStatusPrimitive status = (state == td::td_api::secretChatStateReady::ID) ? PURPLE_STATUS_AVAILABLE
+                                                                                 : PURPLE_STATUS_OFFLINE;
+    purple_prpl_got_user_status(account.purpleAccount, purpleBuddyName.c_str(),
+                                purple_primitive_get_id_from_type(status), nullptr);
 }
 
 void updateSecretChat(td::td_api::object_ptr<td::td_api::secretChat> secretChat, TdAccountData &account)

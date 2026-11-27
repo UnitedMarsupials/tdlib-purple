@@ -210,7 +210,8 @@ void updateCall(const td::td_api::call &call, TdAccountData &account, TdTranscei
 
     if (!call.state_) return; // just in case
 
-    if (!call.is_outgoing_ && (call.state_->get_id() == td::td_api::callStatePending::ID)) {
+    int32_t state = call.state_->get_id();
+    if (!call.is_outgoing_ && (state == td::td_api::callStatePending::ID)) {
         if (!account.hasActiveCall()) {
             account.setActiveCall(call.id_);
             // TRANSLATOR: Dialog content, user will have the options "_OK" and "_Cancel".
@@ -238,7 +239,7 @@ void updateCall(const td::td_api::call &call, TdAccountData &account, TdTranscei
 
             discardCall(call.id_, transceiver);
         }
-    } else if (call.is_outgoing_ && (call.state_->get_id() == td::td_api::callStatePending::ID)) {
+    } else if (call.is_outgoing_ && (state == td::td_api::callStatePending::ID)) {
         if (!account.hasActiveCall()) {
             account.setActiveCall(call.id_);
             if (!buddyName.empty())
@@ -252,18 +253,17 @@ void updateCall(const td::td_api::call &call, TdAccountData &account, TdTranscei
             // started at the same time, or one is started an another received at the same time.
             discardCall(call.id_, transceiver);
         }
-    } else if (call.state_->get_id() == td::td_api::callStateReady::ID) {
+    } else if (state == td::td_api::callStateReady::ID) {
         if (! activateCall(call, buddyName, account)) {
             discardCall(call.id_, transceiver);
             account.removeActiveCall();
         }
     }
-    else if ( ((call.state_->get_id() == td::td_api::callStateHangingUp::ID) ||
-               (call.state_->get_id() == td::td_api::callStateDiscarded::ID) ||
-               (call.state_->get_id() == td::td_api::callStateError::ID)) &&
-              account.hasActiveCall() && account.getActiveCallId() == call.id_)
+    else if (((state == td::td_api::callStateHangingUp::ID) || (state == td::td_api::callStateDiscarded::ID) ||
+              (state == td::td_api::callStateError::ID)) &&
+             account.hasActiveCall() && account.getActiveCallId() == call.id_)
     {
-        if (call.state_->get_id() == td::td_api::callStateError::ID) {
+        if (state == td::td_api::callStateError::ID) {
             const td::td_api::callStateError &error = static_cast<const td::td_api::callStateError &>(*call.state_);
             notifyCallError(error, buddyName, account);
         }

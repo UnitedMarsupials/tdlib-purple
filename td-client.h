@@ -19,7 +19,7 @@ enum class BasicGroupMembership: uint8_t {
 // A message's picture, video or file, to be replaced, as Telegram lets it be, once the message is edited
 struct SentMedia {
     bool           present = false;
-    AttachmentKind kind    = AttachmentKind::Document;
+    AttachmentKind kind    = AttachmentKind::Document; // as are an audio file and any document
     int32_t        fileId  = 0;
     std::string    path;    // here, if it is here yet
     std::string    name;
