@@ -2964,7 +2964,7 @@ static void findMessageResponse(TdAccountData &account, ChatId chatId, MessageId
 
     pendingMessage->repliedMessageFetchDoneOrFailed = true;
     if (object && (object->get_id() == td::td_api::message::ID))
-        pendingMessage->repliedMessage = td::move_tl_object_as<td::td_api::message>(object);
+        pendingMessage->repliedMessage = RepliedMessage(td::move_tl_object_as<td::td_api::message>(object).release());
     else
         purple_debug_misc(config::pluginId, "Failed to fetch reply source for message %" G_GINT64_FORMAT "\n",
                           pendingMessageId.value());

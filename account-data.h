@@ -9,6 +9,7 @@
 
 #include <deque>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <set>
 #include <tuple>
@@ -144,18 +145,8 @@ public:
     : PendingRequest(requestId), xfer(xfer), chatId(chatId), kind(kind) {}
 };
 
-// The message a message replies to, which goes with the latter's info but is not copied with it:
-// whoever needs it moves it (DownloadRequest)
-class RepliedMessage: public td::td_api::object_ptr<td::td_api::message> {
-public:
-    using Base = td::td_api::object_ptr<td::td_api::message>;
-    RepliedMessage() = default;
-    RepliedMessage(const RepliedMessage &) noexcept {}
-    RepliedMessage(RepliedMessage &&) = default;
-    RepliedMessage &operator=(const RepliedMessage &) noexcept { reset(); return *this; }
-    RepliedMessage &operator=(RepliedMessage &&) = default;
-    RepliedMessage &operator=(Base &&other) noexcept { Base::operator=(std::move(other)); return *this; }
-};
+// The message a message replies to, shared by the copies of the latter's info, as a download's
+using RepliedMessage = std::shared_ptr<const td::td_api::message>;
 
 struct TgMessageInfo {
     enum class Type {
@@ -184,8 +175,8 @@ struct TgMessageInfo {
     bool        logRedrawn = false; // shown so into a tab of a chat with no log yet: logged after all
     bool        picturesComing = false; // shown with stand-ins for pictures fetched: logged once they are
 
-    // A copy kept for later, as by a download, without the message replied to (RepliedMessage) and
-    // without picturesComing, which is of the showing in progress, not of what is shown later
+    // A copy kept for later, as by a download, without picturesComing, which is of the showing in
+    // progress, not of what is shown later
     void assign(const TgMessageInfo &other)
     {
         *this          = other;
@@ -221,12 +212,9 @@ public:
       thumbnail(thumbnail)
     {
         // If download is started while the message is in PendingMessageQueue, repliedMessage will
-        // be on IncomingMessage, and one here in TgMessageInfo will be NULL. In this case,
-        // repliedMessage will be moved onto DownloadRequest if message leaves PendingMessageQueue
-        // before download is complete (meaning it took more than 1 second to download).
+        // be on IncomingMessage, and the one here empty: it is given to the DownloadRequest if the
+        // message leaves PendingMessageQueue before the download is complete (handleLongInlineDownload)
         this->message.assign(message);
-        if (message.repliedMessage)
-            this->message.repliedMessage = std::move(message.repliedMessage);
     }
     // An inline download still in progress, as at logout, leaves its temporary file behind otherwise
     ~DownloadRequest();
@@ -272,7 +260,7 @@ public:
 
 struct IncomingMessage {
     td::td_api::object_ptr<td::td_api::message> message;
-    td::td_api::object_ptr<td::td_api::message> repliedMessage;
+    RepliedMessage                              repliedMessage;
     td::td_api::object_ptr<td::td_api::file>    thumbnail;
     std::string inlineDownloadedFilePath;
     // Thumbnail the sender attached to a video, shown along with the video's own link or notice
