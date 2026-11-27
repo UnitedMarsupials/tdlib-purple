@@ -265,20 +265,37 @@ enum class MarkKind {
     Reactions // the end of the line of reactions after them, if it has one
 };
 
+// The names of a message's marks all start so, followed by the kind and the message's id
+static const char MESSAGE_MARK_PREFIX[] = "tdlib-message-";
 static const char START_MARK_PREFIX[]   = "tdlib-message-start-";
 
 static std::string getMarkName(MessageId messageId, MarkKind kind)
 {
-    const char *prefix = (kind == MarkKind::Start) ? START_MARK_PREFIX :
-                         (kind == MarkKind::Body)  ? "tdlib-message-body-" :
-                         (kind == MarkKind::End)   ? "tdlib-message-end-" :
-                         (kind == MarkKind::Buttons) ? "tdlib-message-buttons-" : "tdlib-message-reactions-";
-    return prefix + std::to_string(messageId.value());
+    const char *name = (kind == MarkKind::Start) ? "start-" :
+                       (kind == MarkKind::Body)  ? "body-" :
+                       (kind == MarkKind::End)   ? "end-" :
+                       (kind == MarkKind::Buttons) ? "buttons-" : "reactions-";
+    return MESSAGE_MARK_PREFIX + (name + std::to_string(messageId.value()));
 }
 
-static std::string getMarkName(MessageId messageId, bool start)
+static GtkTextMark *getMessageMark(GtkTextBuffer *buffer, MessageId messageId, MarkKind kind)
 {
-    return getMarkName(messageId, start ? MarkKind::Start : MarkKind::End);
+    return getMessageMark(buffer, messageId, kind);
+}
+
+// Moved to the latest of the message's marks of those kinds, where that is later
+static void extendToMarks(GtkTextBuffer *buffer, MessageId messageId, std::initializer_list<MarkKind> kinds,
+                          GtkTextIter &iter)
+{
+    for (MarkKind kind: kinds) {
+        GtkTextMark *mark = getMessageMark(buffer, messageId, kind);
+        GtkTextIter  at;
+        if (mark) {
+            p_gtk_text_buffer_get_iter_at_mark(buffer, &at, mark);
+            if (p_gtk_text_iter_compare(&iter, &at) < 0)
+                iter = at;
+        }
+    }
 }
 
 static void setMark(GtkTextBuffer *buffer, const std::string &name, const GtkTextIter &where)
@@ -298,8 +315,8 @@ static const char BODY_MARKER[] = "\xe2\x81\xa0";
 // The message's text and its end, if it is in the tab still, and not trimmed away
 static bool getBody(GtkTextBuffer *buffer, MessageId messageId, GtkTextIter &body, GtkTextIter &end)
 {
-    GtkTextMark *bodyMark = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Body).c_str());
-    GtkTextMark *endMark  = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::End).c_str());
+    GtkTextMark *bodyMark = getMessageMark(buffer, messageId, MarkKind::Body);
+    GtkTextMark *endMark  = getMessageMark(buffer, messageId, MarkKind::End);
     if (!bodyMark || !endMark)
         return false;
     p_gtk_text_buffer_get_iter_at_mark(buffer, &body, bodyMark);
@@ -409,7 +426,7 @@ static void replaceBody(PurpleConversation *conv, const char *html)
     GtkIMHtml     *imhtml  = getIMHtml(conv);
     GtkTextBuffer *buffer  = imhtml->text_buffer;
     MessageId      id      = g_messageBeingWritten->messageId;
-    GtkTextMark   *endMark = p_gtk_text_buffer_get_mark(buffer, getMarkName(id, MarkKind::End).c_str());
+    GtkTextMark   *endMark = getMessageMark(buffer, id, MarkKind::End);
     std::string    text;
     if (!g_messageBeingWritten->bodyMarked) {
         GtkTextIter body, end;
@@ -473,11 +490,11 @@ static gboolean displayingMessage(PurpleAccount *account, const char *, char **m
             // Gone from the tab since: shown anew instead
             g_messageBeingWritten->replacing = false;
         MessageId    id    = g_messageBeingWritten->messageId;
-        GtkTextMark *start = p_gtk_text_buffer_get_mark(buffer, getMarkName(id, MarkKind::Start).c_str());
+        GtkTextMark *start = getMessageMark(buffer, id, MarkKind::Start);
         if (g_messageBeingWritten->anew) {
             // What went with an earlier showing goes with this one instead
             for (MarkKind kind: {MarkKind::Body, MarkKind::Buttons, MarkKind::Reactions}) {
-                GtkTextMark *mark = p_gtk_text_buffer_get_mark(buffer, getMarkName(id, kind).c_str());
+                GtkTextMark *mark = getMessageMark(buffer, id, kind);
                 if (mark)
                     p_gtk_text_buffer_delete_mark(buffer, mark);
             }
@@ -504,8 +521,7 @@ static gboolean displayingMessage(PurpleAccount *account, const char *, char **m
     // Where the message ends, before its reactions and what came after it, on a line of its own,
     // without a header again; the tab scrolled to it, if it is the last
     GtkTextBuffer *buffer  = g_messageBeingWritten->extending ? getTextBuffer(conv) : nullptr;
-    GtkTextMark   *endMark = buffer ? p_gtk_text_buffer_get_mark(buffer,
-                                          getMarkName(g_messageBeingWritten->messageId, MarkKind::End).c_str())
+    GtkTextMark   *endMark = buffer ? getMessageMark(buffer, g_messageBeingWritten->messageId, MarkKind::End)
                                     : nullptr;
     if (endMark) {
         GtkTextIter end, bufferEnd;
@@ -535,15 +551,15 @@ static void displayedMessage(PurpleAccount *, const char *, char *,
     GtkTextBuffer *buffer = (g_messageBeingWritten && (g_messageBeingWritten->conv == conv))
                             ? getTextBuffer(conv) : nullptr;
     if (buffer) {
-        GtkTextMark *startMark = p_gtk_text_buffer_get_mark(buffer, getMarkName(g_messageBeingWritten->messageId, true).c_str());
+        GtkTextMark *startMark = getMessageMark(buffer, g_messageBeingWritten->messageId, MarkKind::Start);
         GtkTextIter  start, end;
         p_gtk_text_buffer_get_iter_at_mark(buffer, &start, startMark);
         // Pidgin ends the previous line only after saying a message is coming
         if (p_gtk_text_iter_get_char(&start) == '\n')
             p_gtk_text_iter_forward_char(&start);
         p_gtk_text_buffer_get_end_iter(buffer, &end);
-        setMark(buffer, getMarkName(g_messageBeingWritten->messageId, true), start);
-        setMark(buffer, getMarkName(g_messageBeingWritten->messageId, false), end);
+        setMark(buffer, getMarkName(g_messageBeingWritten->messageId, MarkKind::Start), start);
+        setMark(buffer, getMarkName(g_messageBeingWritten->messageId, MarkKind::End), end);
 
         // Where the first part's text starts, past the header
         GtkTextIter marker, pastMarker;
@@ -585,8 +601,6 @@ static char *drawingBuddy(PurpleBuddy *buddy)
 }
 
 static guint g_connectSource = 0;
-
-static const char MESSAGE_MARK_PREFIX[] = "tdlib-message-";
 
 // The plugin's marks at the iterator whose names start with the prefix
 static std::vector<GtkTextMark *> getMarksAt(const GtkTextIter &iter, const char *prefix)
@@ -802,11 +816,11 @@ static void showMessageArea(PurpleConversation *conv, MessageId messageId, MarkK
 {
     GtkIMHtml     *imhtml  = getIMHtml(conv);
     GtkTextBuffer *buffer  = imhtml ? imhtml->text_buffer : nullptr;
-    GtkTextMark   *endMark = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::End).c_str()) : nullptr;
+    GtkTextMark   *endMark = buffer ? getMessageMark(buffer, messageId, MarkKind::End) : nullptr;
     if (!endMark)
         return;
     GtkTextMark *buttonsMark = (kind == MarkKind::Reactions)
-                               ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Buttons).c_str())
+                               ? getMessageMark(buffer, messageId, MarkKind::Buttons)
                                : nullptr;
     if (buttonsMark) {
         GtkTextIter textEnd, buttonsEnd;
@@ -815,9 +829,8 @@ static void showMessageArea(PurpleConversation *conv, MessageId messageId, MarkK
         if (p_gtk_text_iter_compare(&textEnd, &buttonsEnd) < 0)
             endMark = buttonsMark;
     }
-    std::string  name = getMarkName(messageId, kind);
     GtkTextIter  end, areaEnd;
-    GtkTextMark *areaEndMark = p_gtk_text_buffer_get_mark(buffer, name.c_str());
+    GtkTextMark *areaEndMark = getMessageMark(buffer, messageId, kind);
     p_gtk_text_buffer_get_iter_at_mark(buffer, &end, endMark);
     if (areaEndMark) {
         p_gtk_text_buffer_get_iter_at_mark(buffer, &areaEnd, areaEndMark);
@@ -851,7 +864,7 @@ static void showMessageArea(PurpleConversation *conv, MessageId messageId, MarkK
     if (tagged && !reactions.empty())
         connectReactionTips(imhtml);
     p_gtk_text_buffer_get_iter_at_mark(buffer, &areaEnd, after);
-    p_gtk_text_buffer_create_mark(buffer, name.c_str(), &areaEnd, TRUE);
+    p_gtk_text_buffer_create_mark(buffer, getMarkName(messageId, kind).c_str(), &areaEnd, TRUE);
     p_gtk_text_buffer_delete_mark(buffer, after);
 }
 
@@ -897,11 +910,6 @@ struct Progress {
     unsigned            step  = 0;
 };
 
-static GtkTextMark *getProgressMark(GtkTextBuffer *buffer, const char *name)
-{
-    return p_gtk_text_buffer_get_mark(buffer, name);
-}
-
 // Back and forth through the frames, as Claude Code's
 static const char *getSpinnerFrame(unsigned step)
 {
@@ -914,8 +922,8 @@ static gboolean turnSpinner(gpointer data)
     Progress *progress = static_cast<Progress *>(data);
     GtkIMHtml *imhtml  = g_list_find(purple_get_conversations(), progress->conv) ? getIMHtml(progress->conv)
                                                                                  : nullptr;
-    GtkTextMark *spinner = imhtml ? getProgressMark(imhtml->text_buffer, PROGRESS_SPINNER) : nullptr;
-    GtkTextMark *end     = imhtml ? getProgressMark(imhtml->text_buffer, PROGRESS_END) : nullptr;
+    GtkTextMark *spinner = imhtml ? p_gtk_text_buffer_get_mark(imhtml->text_buffer, PROGRESS_SPINNER) : nullptr;
+    GtkTextMark *end     = imhtml ? p_gtk_text_buffer_get_mark(imhtml->text_buffer, PROGRESS_END) : nullptr;
     if (!spinner || !end) {
         // The tab is gone
         progress->timer = 0;
@@ -937,9 +945,10 @@ static gboolean turnSpinner(gpointer data)
 // with a menu and reactions, but found by a link to it
 static const char LOGGED_MARK_PREFIX[] = "tdlib-message-logged-";
 
-static std::string getLoggedMarkName(MessageId messageId, bool start)
+static std::string getLoggedMarkName(MessageId messageId, MarkKind kind)
 {
-    return LOGGED_MARK_PREFIX + std::string(start ? "start-" : "end-") + std::to_string(messageId.value());
+    return LOGGED_MARK_PREFIX + std::string((kind == MarkKind::Start) ? "start-" : "end-") +
+           std::to_string(messageId.value());
 }
 
 void appendTabLine(PurpleConversation *conv, const std::string &html, MessageId messageId)
@@ -960,8 +969,8 @@ void appendTabLine(PurpleConversation *conv, const std::string &html, MessageId 
         if (offset)
             p_gtk_text_iter_forward_char(&start);
         p_gtk_text_buffer_get_end_iter(buffer, &where);
-        setMark(buffer, getLoggedMarkName(messageId, true), start);
-        setMark(buffer, getLoggedMarkName(messageId, false), where);
+        setMark(buffer, getLoggedMarkName(messageId, MarkKind::Start), start);
+        setMark(buffer, getLoggedMarkName(messageId, MarkKind::End), where);
     }
 }
 
@@ -1017,8 +1026,8 @@ void stopProgress(PurpleConversation *conv)
     if (!imhtml)
         return;
     GtkTextBuffer *buffer = imhtml->text_buffer;
-    GtkTextMark   *start  = getProgressMark(buffer, PROGRESS_START);
-    GtkTextMark   *end    = getProgressMark(buffer, PROGRESS_END);
+    GtkTextMark   *start  = p_gtk_text_buffer_get_mark(buffer, PROGRESS_START);
+    GtkTextMark   *end    = p_gtk_text_buffer_get_mark(buffer, PROGRESS_END);
     if (start && end) {
         GtkTextIter from, to;
         p_gtk_text_buffer_get_iter_at_mark(buffer, &from, start);
@@ -1029,7 +1038,7 @@ void stopProgress(PurpleConversation *conv)
         p_gtk_imhtml_delete(imhtml, &from, &to);
     }
     for (const char *name: {PROGRESS_START, PROGRESS_SPINNER, PROGRESS_END})
-        if (GtkTextMark *mark = getProgressMark(buffer, name))
+        if (GtkTextMark *mark = p_gtk_text_buffer_get_mark(buffer, name))
             p_gtk_text_buffer_delete_mark(buffer, mark);
 }
 
@@ -1060,8 +1069,8 @@ void updateProgress(PurpleConversation *conv, const std::string &html)
 {
     GtkIMHtml     *imhtml  = purple_conversation_get_data(conv, PROGRESS_KEY) ? getIMHtml(conv) : nullptr;
     GtkTextBuffer *buffer  = imhtml ? imhtml->text_buffer : nullptr;
-    GtkTextMark   *start   = buffer ? getProgressMark(buffer, PROGRESS_START) : nullptr;
-    GtkTextMark   *spinner = buffer ? getProgressMark(buffer, PROGRESS_SPINNER) : nullptr;
+    GtkTextMark   *start   = buffer ? p_gtk_text_buffer_get_mark(buffer, PROGRESS_START) : nullptr;
+    GtkTextMark   *spinner = buffer ? p_gtk_text_buffer_get_mark(buffer, PROGRESS_SPINNER) : nullptr;
     if (!start || !spinner)
         return;
     // Its text only, between the line break before it, if any, and the spinner; the marks put
@@ -2036,7 +2045,7 @@ void setChangesMarked(PurpleConversation *conv, MessageId messageId, bool marked
         return;
     edited->marked = marked;
     p_gtk_imhtml_delete(imhtml, &body, &end);
-    GtkTextMark *endMark = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::End).c_str());
+    GtkTextMark *endMark = getMessageMark(buffer, messageId, MarkKind::End);
     insertAtMark(imhtml, endMark, (formatEditedText(imhtml, *edited) + edited->editNote).c_str());
 }
 
@@ -2056,27 +2065,19 @@ void removeMessage(PurpleConversation *conv, MessageId messageId)
     GtkIMHtml     *imhtml = getIMHtml(conv);
     GtkTextBuffer *buffer = imhtml ? imhtml->text_buffer : nullptr;
     GtkTextIter    body, end;
-    GtkTextMark   *start  = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Start).c_str()) : nullptr;
+    GtkTextMark   *start  = buffer ? getMessageMark(buffer, messageId, MarkKind::Start) : nullptr;
     if (!start || !getBody(buffer, messageId, body, end))
         return;
     GtkTextIter from, to;
     p_gtk_text_buffer_get_iter_at_mark(buffer, &from, start);
     to = end;
-    for (MarkKind kind: {MarkKind::Buttons, MarkKind::Reactions}) {
-        GtkTextMark *areaMark = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, kind).c_str());
-        GtkTextIter  areaEnd;
-        if (areaMark) {
-            p_gtk_text_buffer_get_iter_at_mark(buffer, &areaEnd, areaMark);
-            if (p_gtk_text_iter_compare(&to, &areaEnd) < 0)
-                to = areaEnd;
-        }
-    }
+    extendToMarks(buffer, messageId, {MarkKind::Buttons, MarkKind::Reactions}, to);
     // With the line break before it, which Pidgin put there for it
     if (p_gtk_text_iter_backward_char(&from) && (p_gtk_text_iter_get_char(&from) != '\n'))
         p_gtk_text_iter_forward_char(&from);
     p_gtk_imhtml_delete(imhtml, &from, &to);
     for (MarkKind kind: {MarkKind::Start, MarkKind::Body, MarkKind::End, MarkKind::Buttons, MarkKind::Reactions}) {
-        GtkTextMark *mark = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, kind).c_str());
+        GtkTextMark *mark = getMessageMark(buffer, messageId, kind);
         if (mark)
             p_gtk_text_buffer_delete_mark(buffer, mark);
     }
@@ -2087,8 +2088,8 @@ MessageMarks findMessageMarks(PurpleConversation *conv, MessageId messageId)
     MessageMarks   marks;
     GtkTextBuffer *buffer = getTextBuffer(conv);
     if (buffer) {
-        marks.start = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, true).c_str());
-        marks.end   = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, false).c_str());
+        marks.start = getMessageMark(buffer, messageId, MarkKind::Start);
+        marks.end   = getMessageMark(buffer, messageId, MarkKind::End);
         if (!marks.start || !marks.end)
             marks = MessageMarks();
     }
@@ -2107,7 +2108,7 @@ void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId
         if (!buffer)
             continue;
         for (MarkKind kind: {MarkKind::Start, MarkKind::Body, MarkKind::End}) {
-            GtkTextMark *mark = p_gtk_text_buffer_get_mark(buffer, getMarkName(oldId, kind).c_str());
+            GtkTextMark *mark = getMessageMark(buffer, oldId, kind);
             if (mark) {
                 GtkTextIter where;
                 p_gtk_text_buffer_get_iter_at_mark(buffer, &where, mark);
@@ -2121,12 +2122,12 @@ void renameMessageMarks(PurpleAccount *account, MessageId oldId, MessageId newId
 bool scrollToMessage(PidginIMHtml *imhtml, MessageId messageId)
 {
     GtkTextBuffer *buffer = (g_pidginUi && imhtml) ? imhtml->text_buffer : nullptr;
-    GtkTextMark   *start  = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, true).c_str()) : nullptr;
-    GtkTextMark   *end    = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, false).c_str()) : nullptr;
+    GtkTextMark   *start  = buffer ? getMessageMark(buffer, messageId, MarkKind::Start) : nullptr;
+    GtkTextMark   *end    = buffer ? getMessageMark(buffer, messageId, MarkKind::End) : nullptr;
     // Or its line from the log, unless trimmed away since, its marks left together
     if (buffer && (!start || !end)) {
-        start = p_gtk_text_buffer_get_mark(buffer, getLoggedMarkName(messageId, true).c_str());
-        end   = p_gtk_text_buffer_get_mark(buffer, getLoggedMarkName(messageId, false).c_str());
+        start = p_gtk_text_buffer_get_mark(buffer, getLoggedMarkName(messageId, MarkKind::Start).c_str());
+        end   = p_gtk_text_buffer_get_mark(buffer, getLoggedMarkName(messageId, MarkKind::End).c_str());
     }
     if (!start || !end)
         return false;
@@ -2395,16 +2396,9 @@ static MessageId findMessageAt(GtkTextBuffer *buffer, const GtkTextIter &where)
             continue;
         // Its text, its buttons or its reactions, whichever ends later: an edit's text goes in after
         // the end of reactions taken back, which is where the text ended
-        bool before = false;
-        for (MarkKind kind: {MarkKind::Reactions, MarkKind::Buttons, MarkKind::End}) {
-            GtkTextMark *end = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, kind).c_str());
-            GtkTextIter  endIter;
-            if (end) {
-                p_gtk_text_buffer_get_iter_at_mark(buffer, &endIter, end);
-                before = before || (p_gtk_text_iter_compare(&where, &endIter) < 0);
-            }
-        }
-        return before ? messageId : MessageId();
+        GtkTextIter end = where;
+        extendToMarks(buffer, messageId, {MarkKind::Reactions, MarkKind::Buttons, MarkKind::End}, end);
+        return (p_gtk_text_iter_compare(&where, &end) < 0) ? messageId : MessageId();
     } while (p_gtk_text_iter_backward_char(&iter));
     return MessageId();
 }
@@ -3064,8 +3058,8 @@ MessageId findFirstMessage(PurpleConversation *conv)
 // Whether the message is in the tab still: trimmed away by Pidgin, its marks stay, together
 static bool isMessageShown(GtkTextBuffer *buffer, MessageId messageId)
 {
-    GtkTextMark *start = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::Start).c_str());
-    GtkTextMark *end   = p_gtk_text_buffer_get_mark(buffer, getMarkName(messageId, MarkKind::End).c_str());
+    GtkTextMark *start = getMessageMark(buffer, messageId, MarkKind::Start);
+    GtkTextMark *end   = getMessageMark(buffer, messageId, MarkKind::End);
     GtkTextIter  startIter, endIter;
     if (!start || !end)
         return false;
@@ -3081,8 +3075,7 @@ MessageId findMessageAfter(PurpleConversation *conv, MessageId messageId)
     if (!buffer || !isMessageShown(buffer, messageId))
         return MessageId();
     p_gtk_text_buffer_get_iter_at_mark(buffer, &iter,
-                                       p_gtk_text_buffer_get_mark(buffer,
-                                                                  getMarkName(messageId, MarkKind::End).c_str()));
+                                       getMessageMark(buffer, messageId, MarkKind::End));
     while (p_gtk_text_iter_forward_char(&iter)) {
         MessageId next = findMessageStart(iter);
         if (next.valid())
@@ -3211,7 +3204,7 @@ bool trimTab(PurpleConversation *conv, unsigned maxLines, bool fromTop, MessageI
     gint           lines  = buffer ? p_gtk_text_buffer_get_line_count(buffer) : 0;
     if (!maxLines || (lines <= gint(maxLines)))
         return false;
-    GtkTextMark *keepMark = keep.valid() ? p_gtk_text_buffer_get_mark(buffer, getMarkName(keep, true).c_str())
+    GtkTextMark *keepMark = keep.valid() ? getMessageMark(buffer, keep, MarkKind::Start)
                                          : nullptr;
     // From the top, the first message to stay; from the end, the first to go
     gint line = findStartLine(buffer, fromTop ? (lines - maxLines) : maxLines, fromTop);
@@ -3281,7 +3274,7 @@ static gboolean scrollToMessageTop(gpointer data)
     if (imhtml && imhtml->scroll_src && (++scroll->checks < SCROLLED_CHECKS))
         return G_SOURCE_CONTINUE;
     GtkTextBuffer *buffer = imhtml ? imhtml->text_buffer : nullptr;
-    GtkTextMark   *start  = buffer ? p_gtk_text_buffer_get_mark(buffer, getMarkName(scroll->messageId, true).c_str())
+    GtkTextMark   *start  = buffer ? getMessageMark(buffer, scroll->messageId, MarkKind::Start)
                                    : nullptr;
     if (start)
         p_gtk_text_view_scroll_to_mark(reinterpret_cast<GtkTextView *>(imhtml), start, 0.0, TRUE, 0.0, 0.0);
