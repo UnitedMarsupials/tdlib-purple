@@ -1080,10 +1080,35 @@ static GtkWidget *getEntry(PurpleConversation *conv)
 // field going nowhere. Its handler of "paste-clipboard" stops the signal, so the picture is put in
 // by an emission hook, which comes before: at the cursor, as Pidgin's Insert menu has it, and sent
 // as a photo the same way. Pidgin pastes the text, if there is any, after.
-static guint  g_pasteSignal     = 0;
-static gulong g_pasteHook       = 0;
-static guint  g_backspaceSignal = 0;
-static gulong g_backspaceHook   = 0;
+// What every emission hook needs of GLib's
+static bool lookUpHookFunctions()
+{
+    return LOOK_UP(g_signal_lookup) && LOOK_UP(g_signal_add_emission_hook) && LOOK_UP(g_signal_remove_emission_hook);
+}
+
+// A hook on a signal of every widget of a type, called before the widget's own handlers: added at
+// load, if the front-end has the signal, and removed at unload
+struct EmissionHook {
+    guint  signal = 0;
+    gulong id     = 0;
+
+    bool install(const char *name, GType type, GSignalEmissionHook function)
+    {
+        signal = p_g_signal_lookup(name, type);
+        id     = signal ? p_g_signal_add_emission_hook(signal, 0, function, nullptr, nullptr) : 0;
+        return id != 0;
+    }
+    void remove()
+    {
+        if (id)
+            p_g_signal_remove_emission_hook(signal, id);
+        id = 0;
+    }
+    explicit operator bool() const { return id != 0; }
+};
+
+static EmissionHook g_pasteHook;
+static EmissionHook g_backspaceHook;
 
 static PurpleConversation *findEntryConversation(gpointer entry)
 {
@@ -1133,8 +1158,7 @@ struct Takeover {
     std::vector<gulong> blocked;
 };
 static PastedHandler      g_pastedHandler      = nullptr;
-static guint              g_dropSignal         = 0;
-static gulong             g_dropHook           = 0;
+static EmissionHook       g_dropHook;
 
 void setPastedHandler(PastedHandler handler)
 {
@@ -1713,12 +1737,12 @@ static void watchConversation(PidginConversation *gtkconv)
     if (!conv || !gtkconv->entry || !gtkconv->imhtml || !g_pasteHook || !p_gtk_clipboard_wait_for_uris ||
         strcmp(purple_account_get_protocol_id(purple_conversation_get_account(conv)), config::pluginId))
         return;
-    watchSignal(gtkconv->entry, g_pasteSignal, "paste-clipboard");
+    watchSignal(gtkconv->entry, g_pasteHook.signal, "paste-clipboard");
     watchDrags(gtkconv->imhtml);
     if (!g_dropHook)
         return;
-    watchSignal(gtkconv->entry, g_dropSignal, "drag-data-received");
-    watchSignal(gtkconv->imhtml, g_dropSignal, "drag-data-received");
+    watchSignal(gtkconv->entry, g_dropHook.signal, "drag-data-received");
+    watchSignal(gtkconv->imhtml, g_dropHook.signal, "drag-data-received");
     if (!p_g_object_get_data(reinterpret_cast<GObject *>(gtkconv->imhtml), TEXT_DROP_KEY)) {
         TextDrop *drop = new TextDrop;
         drop->motion   = p_g_signal_connect_data(gtkconv->imhtml, "drag-motion", G_CALLBACK(draggingOverText),
@@ -1750,8 +1774,7 @@ static void unwatchConversation(PurpleConversation *conv)
 
 static void connectPaste(gpointer plugin)
 {
-    if (!LOOK_UP(gtk_imhtml_get_type) || !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
-        !LOOK_UP(g_signal_remove_emission_hook) || !LOOK_UP(g_value_get_object) ||
+    if (!LOOK_UP(gtk_imhtml_get_type) || !lookUpHookFunctions() || !LOOK_UP(g_value_get_object) ||
         !LOOK_UP(gtk_widget_get_clipboard) || !LOOK_UP(gtk_clipboard_wait_is_image_available) ||
         !LOOK_UP(gtk_clipboard_wait_for_image) || !LOOK_UP(gdk_pixbuf_save_to_buffer) ||
         !LOOK_UP(g_object_unref) ||
@@ -1760,10 +1783,7 @@ static void connectPaste(gpointer plugin)
         purple_debug_warning(config::pluginId, "Cannot paste pictures: some of GTK is not found\n");
         return;
     }
-    g_pasteSignal = p_g_signal_lookup("paste-clipboard", p_gtk_imhtml_get_type());
-    if (g_pasteSignal)
-        g_pasteHook = p_g_signal_add_emission_hook(g_pasteSignal, 0, pastingClipboard, nullptr, nullptr);
-    if (!g_pasteHook || !LOOK_UP(gtk_clipboard_wait_for_uris) || !LOOK_UP(g_signal_handler_find) ||
+    if (!g_pasteHook.install("paste-clipboard", p_gtk_imhtml_get_type(), pastingClipboard) || !LOOK_UP(gtk_clipboard_wait_for_uris) || !LOOK_UP(g_signal_handler_find) ||
         !LOOK_UP(g_signal_handler_block) || !LOOK_UP(g_signal_handler_unblock) ||
         !LOOK_UP(g_signal_stop_emission_by_name) || !LOOK_UP(gtk_text_buffer_insert_at_cursor))
     {
@@ -1777,9 +1797,7 @@ static void connectPaste(gpointer plugin)
         LOOK_UP(gdk_pixbuf_loader_write) && LOOK_UP(gdk_pixbuf_loader_close) &&
         LOOK_UP(gdk_pixbuf_loader_get_pixbuf))
     {
-        g_dropSignal = p_g_signal_lookup("drag-data-received", p_gtk_widget_get_type());
-        if (g_dropSignal)
-            g_dropHook = p_g_signal_add_emission_hook(g_dropSignal, 0, droppingData, nullptr, nullptr);
+        g_dropHook.install("drag-data-received", p_gtk_widget_get_type(), droppingData);
     }
     if (!g_dropHook)
         purple_debug_warning(config::pluginId, "Cannot take drops: some of GTK is not found\n");
@@ -1795,8 +1813,7 @@ static void connectPaste(gpointer plugin)
         !LOOK_UP(gtk_event_box_set_visible_window) || !LOOK_UP(gtk_container_add) || !LOOK_UP(gtk_menu_new) ||
         !LOOK_UP(gtk_menu_popup) || !LOOK_UP(gtk_widget_show_all) || !LOOK_UP(gtk_widget_destroy) ||
         !LOOK_UP(g_object_set_data) || !LOOK_UP(gtk_text_buffer_get_slice) || !LOOK_UP(g_signal_connect_data) ||
-        !(g_backspaceSignal = p_g_signal_lookup("backspace", p_gtk_imhtml_get_type())) ||
-        !(g_backspaceHook = p_g_signal_add_emission_hook(g_backspaceSignal, 0, backspacing, nullptr, nullptr)))
+        !g_backspaceHook.install("backspace", p_gtk_imhtml_get_type(), backspacing))
     {
         p_gtk_text_buffer_create_child_anchor = nullptr;
         purple_debug_warning(config::pluginId, "Cannot show thumbnails of pasted files: some of GTK is not found\n");
@@ -1812,18 +1829,13 @@ static void connectPaste(gpointer plugin)
 
 static void disconnectPaste()
 {
-    if (g_dropHook)
-        p_g_signal_remove_emission_hook(g_dropSignal, g_dropHook);
-    if (g_backspaceHook)
-        p_g_signal_remove_emission_hook(g_backspaceSignal, g_backspaceHook);
-    g_backspaceHook = 0;
+    g_dropHook.remove();
+    g_backspaceHook.remove();
     if (g_pasteHook) {
-        p_g_signal_remove_emission_hook(g_pasteSignal, g_pasteHook);
+        g_pasteHook.remove();
         for (GList *item = purple_get_conversations(); item; item = item->next)
             unwatchConversation(static_cast<PurpleConversation *>(item->data));
     }
-    g_pasteHook = 0;
-    g_dropHook  = 0;
 }
 
 static void setEntryText(GtkWidget *entry, const char *html)
@@ -2200,8 +2212,7 @@ struct OpenMenu {
 };
 
 static MessagePopupHandler g_messagePopupHandler = nullptr;
-static guint               g_popupSignal = 0;
-static gulong              g_popupHook   = 0;
+static EmissionHook        g_popupHook;
 
 void setMessagePopupHandler(MessagePopupHandler handler)
 {
@@ -2916,10 +2927,8 @@ struct PictureMenu {
 };
 static PictureMenu g_pictureMenu;
 static guint       g_pictureMenuSource  = 0;
-static guint       g_pictureEventSignal = 0;
-static gulong      g_pictureEventHook   = 0;
-static guint       g_menuShowSignal     = 0;
-static gulong      g_menuShowHook       = 0;
+static EmissionHook g_pictureEventHook;
+static EmissionHook g_menuShowHook;
 
 static gboolean forgetPictureMenu(gpointer)
 {
@@ -3337,8 +3346,7 @@ void setBottomReachedHandler(BottomReachedHandler handler)
 // before it; shown for a tab that stops short of its chat's newest message
 static LatestAskedHandler g_latestAskedHandler = nullptr;
 static std::string        g_latestLabel;
-static guint              g_pressSignal = 0;
-static gulong             g_pressHook   = 0;
+static EmissionHook       g_pressHook;
 static const char         LATEST_ITEM_KEY[]      = "tdlib-purple-latest-item";
 static const char         LATEST_SEPARATOR_KEY[] = "tdlib-purple-latest-separator";
 
@@ -3403,23 +3411,18 @@ static void connectTabMenu()
     if (!LOOK_UP(pidgin_conv_windows_get_list) || !LOOK_UP(pidgin_conv_get_tab_at_xy) ||
         !LOOK_UP(pidgin_conv_window_get_gtkconv_at_index) || !LOOK_UP(gtk_separator_menu_item_new) ||
         !LOOK_UP(gtk_widget_show) || !LOOK_UP(gtk_widget_hide) || !LOOK_UP(g_object_set_data) ||
-        !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
-        !LOOK_UP(g_signal_remove_emission_hook) || !LOOK_UP(g_value_get_object) ||
+        !lookUpHookFunctions() || !LOOK_UP(g_value_get_object) ||
         !LOOK_UP(gtk_widget_get_type) || !LOOK_UP(g_value_get_boxed))
     {
         purple_debug_warning(config::pluginId, "Cannot add to the menu of tabs: some of GTK is not found\n");
         return;
     }
-    g_pressSignal = p_g_signal_lookup("button-press-event", p_gtk_widget_get_type());
-    if (g_pressSignal)
-        g_pressHook = p_g_signal_add_emission_hook(g_pressSignal, 0, tabsPressed, nullptr, nullptr);
+    g_pressHook.install("button-press-event", p_gtk_widget_get_type(), tabsPressed);
 }
 
 static void disconnectTabMenu()
 {
-    if (g_pressHook)
-        p_g_signal_remove_emission_hook(g_pressSignal, g_pressHook);
-    g_pressHook = 0;
+    g_pressHook.remove();
 }
 
 // Whether the tab's text is scrolled to its end, or has no more than fits
@@ -3481,10 +3484,8 @@ void keepViewLater(PurpleConversation *conv)
 
 // A tab's text scrolled to its top: not again until it is scrolled down from there, nor while it
 // fits, emptied to be filled anew, which starts at the top too
-static guint             g_scrollSignal = 0;
-static gulong            g_scrollHook   = 0;
-static guint             g_wheelSignal  = 0;
-static gulong            g_wheelHook    = 0;
+static EmissionHook      g_scrollHook;
+static EmissionHook      g_wheelHook;
 static const char        AT_TOP_KEY[]   = "tdlib-purple-at-top";
 static const char        AT_BOTTOM_KEY[] = "tdlib-purple-at-bottom";
 
@@ -3561,29 +3562,20 @@ static gboolean wheelTurned(GSignalInvocationHint *, guint paramCount, const GVa
 
 static void connectScroll()
 {
-    if (!LOOK_UP(gtk_adjustment_get_type) || !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
-        !LOOK_UP(g_signal_remove_emission_hook) || !LOOK_UP(g_value_get_object) ||
+    if (!LOOK_UP(gtk_adjustment_get_type) || !lookUpHookFunctions() || !LOOK_UP(g_value_get_object) ||
         !LOOK_UP(gtk_widget_get_type) || !LOOK_UP(g_value_get_boxed))
     {
         purple_debug_warning(config::pluginId, "Cannot follow the scrolling of tabs: some of GTK is not found\n");
         return;
     }
-    g_scrollSignal = p_g_signal_lookup("value-changed", p_gtk_adjustment_get_type());
-    if (g_scrollSignal)
-        g_scrollHook = p_g_signal_add_emission_hook(g_scrollSignal, 0, scrolled, nullptr, nullptr);
-    g_wheelSignal = p_g_signal_lookup("scroll-event", p_gtk_widget_get_type());
-    if (g_wheelSignal)
-        g_wheelHook = p_g_signal_add_emission_hook(g_wheelSignal, 0, wheelTurned, nullptr, nullptr);
+    g_scrollHook.install("value-changed", p_gtk_adjustment_get_type(), scrolled);
+    g_wheelHook.install("scroll-event", p_gtk_widget_get_type(), wheelTurned);
 }
 
 static void disconnectScroll()
 {
-    if (g_scrollHook)
-        p_g_signal_remove_emission_hook(g_scrollSignal, g_scrollHook);
-    if (g_wheelHook)
-        p_g_signal_remove_emission_hook(g_wheelSignal, g_wheelHook);
-    g_scrollHook = 0;
-    g_wheelHook  = 0;
+    g_scrollHook.remove();
+    g_wheelHook.remove();
 }
 
 // The tabs shown, as last told, worked out anew whenever that may have changed: until it can be,
@@ -3592,12 +3584,9 @@ static bool                           g_tracksShown       = false;
 static std::set<PurpleConversation *> g_shownConversations;
 static ShownHandler                   g_shownHandler      = nullptr;
 static ViewedHandler                  g_viewedHandler     = nullptr;
-static guint                          g_windowStateSignal = 0;
-static gulong                         g_windowStateHook   = 0;
-static guint                          g_focusInSignal     = 0;
-static gulong                         g_focusInHook       = 0;
-static guint                          g_focusOutSignal    = 0;
-static gulong                         g_focusOutHook      = 0;
+static EmissionHook                   g_windowStateHook;
+static EmissionHook                   g_focusInHook;
+static EmissionHook                   g_focusOutHook;
 static guint                          g_focusSource       = 0;
 static guint                          g_shownSource       = 0;
 static const char                     VIEW_SOURCE_KEY[]   = "tdlib-purple-view-source";
@@ -3993,34 +3982,19 @@ static void connectShown(gpointer plugin)
     if (!LOOK_UP(pidgin_conv_window_get_active_conversation) || !LOOK_UP(gdk_window_get_state) ||
         !LOOK_UP(gtk_text_view_get_visible_rect) || !LOOK_UP(gtk_text_view_get_iter_at_location) ||
         !LOOK_UP(gtk_text_iter_get_marks) || !LOOK_UP(gtk_text_mark_get_name) || !LOOK_UP(gtk_widget_get_type) ||
-        !LOOK_UP(gtk_window_is_active) ||
-        !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
-        !LOOK_UP(g_signal_remove_emission_hook))
+        !LOOK_UP(gtk_window_is_active) || !lookUpHookFunctions())
     {
         purple_debug_warning(config::pluginId, "Cannot tell which tabs are shown: some of GTK is not found\n");
         return;
     }
-    g_windowStateSignal = p_g_signal_lookup("window-state-event", p_gtk_widget_get_type());
-    if (g_windowStateSignal)
-        g_windowStateHook = p_g_signal_add_emission_hook(g_windowStateSignal, 0, windowStateChanged, nullptr,
-                                                         nullptr);
+    g_windowStateHook.install("window-state-event", p_gtk_widget_get_type(), windowStateChanged);
     // Not GtkWindow's is-active: GObject's notify, which says it, takes no emission hooks
-    g_focusInSignal  = p_g_signal_lookup("focus-in-event", p_gtk_widget_get_type());
-    g_focusOutSignal = p_g_signal_lookup("focus-out-event", p_gtk_widget_get_type());
-    if (g_focusInSignal)
-        g_focusInHook = p_g_signal_add_emission_hook(g_focusInSignal, 0, focusChanged, nullptr, nullptr);
-    if (g_focusOutSignal)
-        g_focusOutHook = p_g_signal_add_emission_hook(g_focusOutSignal, 0, focusChanged, nullptr, nullptr);
+    g_focusInHook.install("focus-in-event", p_gtk_widget_get_type(), focusChanged);
+    g_focusOutHook.install("focus-out-event", p_gtk_widget_get_type(), focusChanged);
     if (!g_windowStateHook || !g_focusInHook || !g_focusOutHook) {
-        if (g_windowStateHook)
-            p_g_signal_remove_emission_hook(g_windowStateSignal, g_windowStateHook);
-        if (g_focusInHook)
-            p_g_signal_remove_emission_hook(g_focusInSignal, g_focusInHook);
-        if (g_focusOutHook)
-            p_g_signal_remove_emission_hook(g_focusOutSignal, g_focusOutHook);
-        g_windowStateHook = 0;
-        g_focusInHook     = 0;
-        g_focusOutHook    = 0;
+        g_windowStateHook.remove();
+        g_focusInHook.remove();
+        g_focusOutHook.remove();
         purple_debug_warning(config::pluginId, "Cannot tell which tabs are shown: windows cannot be followed\n");
         return;
     }
@@ -4043,15 +4017,9 @@ static void connectShown(gpointer plugin)
 
 static void disconnectShown()
 {
-    if (g_windowStateHook)
-        p_g_signal_remove_emission_hook(g_windowStateSignal, g_windowStateHook);
-    if (g_focusInHook)
-        p_g_signal_remove_emission_hook(g_focusInSignal, g_focusInHook);
-    if (g_focusOutHook)
-        p_g_signal_remove_emission_hook(g_focusOutSignal, g_focusOutHook);
-    g_windowStateHook = 0;
-    g_focusInHook     = 0;
-    g_focusOutHook    = 0;
+    g_windowStateHook.remove();
+    g_focusInHook.remove();
+    g_focusOutHook.remove();
     if (g_focusSource)
         g_source_remove(g_focusSource);
     g_focusSource = 0;
@@ -4067,8 +4035,7 @@ static void disconnectShown()
 
 static void connectPopup()
 {
-    if (!LOOK_UP(gtk_imhtml_get_type) || !LOOK_UP(g_signal_lookup) || !LOOK_UP(g_signal_add_emission_hook) ||
-        !LOOK_UP(g_signal_remove_emission_hook) || !LOOK_UP(g_value_get_object) ||
+    if (!LOOK_UP(gtk_imhtml_get_type) || !lookUpHookFunctions() || !LOOK_UP(g_value_get_object) ||
         !LOOK_UP(gtk_widget_get_pointer) || !LOOK_UP(gtk_text_view_window_to_buffer_coords) ||
         !LOOK_UP(gtk_text_view_get_iter_at_location) || !LOOK_UP(gtk_text_view_get_iter_at_position) ||
         !LOOK_UP(gtk_text_iter_get_marks) || !LOOK_UP(gtk_text_mark_get_name) ||
@@ -4080,34 +4047,27 @@ static void connectPopup()
     // The placeholders' menu is not added without them
     LOOK_UP(gtk_text_buffer_get_slice);
     LOOK_UP(gtk_text_buffer_insert);
-    g_popupSignal = p_g_signal_lookup("populate-popup", p_gtk_imhtml_get_type());
-    if (g_popupSignal)
-        g_popupHook = p_g_signal_add_emission_hook(g_popupSignal, 0, populatingPopup, nullptr, nullptr);
+    g_popupHook.install("populate-popup", p_gtk_imhtml_get_type(), populatingPopup);
     if (!LOOK_UP(gtk_widget_get_type) || !LOOK_UP(g_value_get_boxed) || !LOOK_UP(gtk_widget_get_parent) ||
         !LOOK_UP(gtk_menu_get_type) || !LOOK_UP(g_type_check_instance_is_a))
     {
         purple_debug_warning(config::pluginId, "Cannot add to the menu of a picture: some of GTK is not found\n");
         return;
     }
-    g_pictureEventSignal = p_g_signal_lookup("event", p_gtk_widget_get_type());
-    g_menuShowSignal     = p_g_signal_lookup("show", p_gtk_widget_get_type());
-    if (g_pictureEventSignal && g_menuShowSignal) {
-        g_pictureEventHook = p_g_signal_add_emission_hook(g_pictureEventSignal, 0, pictureClicked, nullptr, nullptr);
-        g_menuShowHook     = p_g_signal_add_emission_hook(g_menuShowSignal, 0, menuShown, nullptr, nullptr);
+    // Both or neither
+    if (!g_pictureEventHook.install("event", p_gtk_widget_get_type(), pictureClicked) ||
+        !g_menuShowHook.install("show", p_gtk_widget_get_type(), menuShown))
+    {
+        g_pictureEventHook.remove();
+        g_menuShowHook.remove();
     }
 }
 
 static void disconnectPopup()
 {
-    if (g_popupHook)
-        p_g_signal_remove_emission_hook(g_popupSignal, g_popupHook);
-    if (g_pictureEventHook)
-        p_g_signal_remove_emission_hook(g_pictureEventSignal, g_pictureEventHook);
-    if (g_menuShowHook)
-        p_g_signal_remove_emission_hook(g_menuShowSignal, g_menuShowHook);
-    g_popupHook        = 0;
-    g_pictureEventHook = 0;
-    g_menuShowHook     = 0;
+    g_popupHook.remove();
+    g_pictureEventHook.remove();
+    g_menuShowHook.remove();
     if (g_pictureMenuSource)
         g_source_remove(g_pictureMenuSource);
     g_pictureMenuSource = 0;
