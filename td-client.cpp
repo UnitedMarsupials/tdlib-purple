@@ -5098,8 +5098,8 @@ void PurpleTdClient::createSecretChat(const char* buddyName)
 {
     std::vector<const td::td_api::user *> users = getUsersByPurpleName(buddyName, m_data, "create secret chat");
     if (users.size() != 1) {
-        // Unlikely error message not worth translating
-        std::string message = formatMessage("Cannot create secret chat: {}", getUserLookupError(users, buddyName));
+        // TRANSLATOR: Failure notification, content; the argument is why, such as that the user is not found.
+        std::string message = formatMessage(_("Cannot create secret chat: {}"), getUserLookupError(users, buddyName));
         purple_notify_error(purple_account_get_connection(m_account),
                             // TRANSLATOR: Failure notification, title
                             _("Failed to create secret chat"),
