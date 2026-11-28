@@ -3,9 +3,9 @@
 
 #include "account-data.h"
 
-bool initiateCall(int64_t userId, TdAccountData &account, TdTransceiver &transceiver);
-void updateCall(const td::td_api::call &call, TdAccountData &account, TdTransceiver &transceiver);
-void discardCurrentCall(TdAccountData &account, TdTransceiver &transceiver);
+bool initiateCall(int64_t userId, TdAccountData &account);
+void updateCall(const td::td_api::call &call, TdAccountData &account);
+void discardCurrentCall(TdAccountData &account);
 void showCallMessage(const td::td_api::chat &chat, const TgMessageInfo &message,
                      const td::td_api::messageCall &callEnded, TdAccountData &account);
 

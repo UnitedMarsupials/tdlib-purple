@@ -2,6 +2,7 @@
 #include "rich-message.h"
 #include "client-utils.h"
 #include "config.h"
+#include "file-transfer.h"
 #include "purple-info.h"
 #include "receiving.h"
 #include "translate.h"
@@ -9,9 +10,14 @@
 
 static int64_t getFileSize(const td::td_api::file *file)
 {
-    if (!file)
-        return 0;
-    return file->size_ ? file->size_ : file->expected_size_;
+    return file ? getFileSize64(*file) : 0;
+}
+
+// Its number of pixels; one of unknown dimensions, as the original of a photo just sent is, is
+// taken for the largest
+static int64_t getArea(int32_t width, int32_t height)
+{
+    return (width && height) ? int64_t(width) * height : INT64_MAX;
 }
 
 void getMediaVariants(const td::td_api::MessageContent &content, std::vector<MediaVariant> &variants)
@@ -41,10 +47,7 @@ void getMediaVariants(const td::td_api::MessageContent &content, std::vector<Med
                                                 alternative->codec_, alternative->video_.get()});
     }
 
-    // One of unknown dimensions, as the original of a photo just sent is, is taken for the largest
-    auto area = [](const MediaVariant &variant) {
-        return (variant.width && variant.height) ? (int64_t)variant.width * variant.height : INT64_MAX;
-    };
+    auto area = [](const MediaVariant &variant) { return getArea(variant.width, variant.height); };
     std::stable_sort(variants.begin(), variants.end(), [&area](const MediaVariant &a, const MediaVariant &b) {
         return (area(a) < area(b)) || ((area(a) == area(b)) && (a.size < b.size));
     });
@@ -69,11 +72,7 @@ static std::string describeVariant(const MediaVariant &variant)
 
 const td::td_api::file *findBiggestPhotoSize(const td::td_api::photo &photo)
 {
-    // One of unknown dimensions, as the original of a photo just sent is, is taken for the largest,
-    // as among the variants
-    auto area = [](const td::td_api::photoSize &size) {
-        return (size.width_ && size.height_) ? int64_t(size.width_) * size.height_ : INT64_MAX;
-    };
+    auto area = [](const td::td_api::photoSize &size) { return getArea(size.width_, size.height_); };
     const td::td_api::photoSize *biggest = nullptr;
     for (const auto &size: photo.sizes_)
         if (size && size->photo_ && (!biggest || (area(*size) > area(*biggest))))

@@ -20,7 +20,6 @@ std::string makeInlineImageText(int imgstoreId, bool ownLine = true);
 // showing each at once, but not so long that a message just sent waits behind them for long
 unsigned getMessageWaitSeconds(const TgMessageInfo &message);
 // Whether an animated sticker is to be converted into a picture the front-end can show
-bool canConvertAnimatedSticker(PurpleAccount *purpleAccount);
 // The conversation a message in the chat goes to; made, if there is none yet
 PurpleConversation *getMessageConversation(TdAccountData &account, const td::td_api::chat &chat);
 // For the conversation window, which renders text as HTML
@@ -45,11 +44,11 @@ void showDownloadedFileInline(ChatId chatId, TgMessageInfo &message,
                               const std::string &fileDescription,
                               td::td_api::object_ptr<td::td_api::file> thumbnail,
                               const std::string &preview,
-                              TdTransceiver &transceiver, TdAccountData &account);
+                              TdAccountData &account);
 bool isStickerAnimated(const std::string &filePath);
 bool shouldConvertAnimatedSticker(const TgMessageInfo &message, const PurpleAccount *purpleAccount);
 void showMessage(const td::td_api::chat &chat, IncomingMessage &fullMessage,
-                 TdTransceiver &transceiver, TdAccountData &account);
+                 TdAccountData &account);
 void showMessages(std::vector<IncomingMessage>& messages, TdAccountData &account);
 
 struct FileInfo {
@@ -62,6 +61,18 @@ struct FileInfo {
 
 const td::td_api::file *selectPhotoSize(PurpleAccount *account, const td::td_api::messagePhoto &photo);
 void getFileFromMessage(const IncomingMessage &fullMessage, FileInfo &result);
+// What a message's content holds, of the kinds with a file: a photo (its largest size), a document,
+// a video, an animation, an audio file, a voice or video note, or a sticker. Pointers into it, null
+// where it has none.
+struct ContentParts {
+    const td::td_api::file          *file     = nullptr;
+    const td::td_api::formattedText *caption  = nullptr;
+    const std::string               *fileName = nullptr;
+    const std::string               *mimeType = nullptr;
+    bool                             secret   = false;
+};
+// Whether the content is of one of those kinds
+bool getContentParts(const td::td_api::MessageContent &content, ContentParts &parts);
 // Whether a message of the content carries a file, as getFileFromMessage() finds it, and whether
 // that is a picture, to be copied as one too: a photo, or a sticker that does not move
 void getMessageFileKind(const td::td_api::MessageContent &content, bool &hasFile, bool &picture);
@@ -69,10 +80,9 @@ void getMessageFileKind(const td::td_api::MessageContent &content, bool &hasFile
 void makeFullMessage(const td::td_api::chat &chat, td::td_api::object_ptr<td::td_api::message> message,
                      IncomingMessage &fullMessage, const TdAccountData &account);
 bool isMessageReady(const IncomingMessage &fullMessage, const TdAccountData &account);
-void fetchExtras(IncomingMessage &fullMessage, TdTransceiver &transceiver, TdAccountData &account,
+void fetchExtras(IncomingMessage &fullMessage, TdAccountData &account,
                  TdTransceiver::ResponseCb2 onFetchReply);
-void checkMessageReady(const IncomingMessage *message, TdTransceiver &transceiver,
-                       TdAccountData &account, std::vector<IncomingMessage> *rvReadyMessages = nullptr);
+void checkMessageReady(const IncomingMessage *message, TdAccountData &account, std::vector<IncomingMessage> *rvReadyMessages = nullptr);
 
 void handleIncomingMessage(TdAccountData &account, const td::td_api::chat &chat,
                            td::td_api::object_ptr<td::td_api::message> message,
@@ -90,6 +100,7 @@ void stickerConverted(TdAccountData &account, int32_t fileId, int imageId);
 void logMessagesAwaitingPictures(TdAccountData &account);
 // The chat's conversation, if it is open; none is opened
 PurpleConversation *findMessageConversation(TdAccountData &account, const td::td_api::chat &chat);
+PurpleConversation *findMessageConversation(TdAccountData &account, ChatId chatId);
 // Names a message by when it was sent, as the conversation window shows it
 std::string formatMessageTime(time_t timestamp);
 // Of a picture shown in the conversation, the size that does for it, of those within the limit on

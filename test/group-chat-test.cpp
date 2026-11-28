@@ -65,15 +65,50 @@ TEST_F(GroupChatTest, BasicGroupChatAppearsAfterLogin)
 
     tgl.verifyRequest(getBasicGroupFullInfo(groupId));
     prpl.verifyEvents(AddChatEvent(
-        groupChatPurpleName, groupChatTitle, account, NULL, NULL
+        groupChatPurpleName, groupChatTitle, account, nullptr, nullptr
     ));
+}
+
+// A group's picture, once downloaded, is the entry's
+TEST_F(GroupChatTest, BasicGroupPhoto)
+{
+    constexpr int32_t fileId = 1234;
+    const std::string path   = std::string(TEST_SOURCE_DIR) + "/test.webp";
+    login();
+
+    auto group           = make_object<basicGroup>();
+    group->id_           = groupId;
+    group->member_count_ = 2;
+    group->status_       = make_object<chatMemberStatusMember>();
+    group->is_active_    = true;
+    tgl.update(make_object<updateBasicGroup>(std::move(group)));
+    auto chat = makeChat(groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0);
+    chat->photo_ = make_object<chatPhotoInfo>();
+    chat->photo_->small_ = makeFile(fileId, 10000);
+    chat->photo_->big_   = makeFile(fileId + 1, 100000);
+    tgl.update(make_object<updateNewChat>(std::move(chat)));
+    uint64_t downloadId = tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
+    // Asked again, as the chat is updated before TDLib says it is being downloaded
+    tgl.update(makeUpdateChatListMain(groupChatId));
+    tgl.verifyRequests({
+        make_object<downloadFile>(fileId, 1, 0, 0, true),
+        makeGetBasicGroupFullInfo(groupId)
+    });
+    prpl.verifyEvents(AddChatEvent(groupChatPurpleName, groupChatTitle, account, nullptr, nullptr));
+
+    gchar *data = nullptr;
+    gsize  size = 0;
+    ASSERT_TRUE(g_file_get_contents(path.c_str(), &data, &size, nullptr));
+    tgl.reply(downloadId, makeFile(fileId, size, path));
+    prpl.verifyEvents(SetUserPhotoEvent(account, groupChatPurpleName, data, size));
+    g_free(data);
 }
 
 TEST_F(GroupChatTest, ExistingBasicGroupChatAtLogin)
 {
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
-    purple_blist_add_chat(purple_chat_new(account, groupChatTitle.c_str(), components), NULL, NULL);
+    purple_blist_add_chat(purple_chat_new(account, groupChatTitle.c_str(), components), nullptr, nullptr);
     prpl.discardEvents();
 
     auto groupChat = makeChat(
@@ -215,14 +250,14 @@ TEST_F(GroupChatTest, ExistingBasicGroupReceiveMessageAtLogin_WithMemberList_Rem
     constexpr int32_t date         = 12345;
     constexpr int     purpleChatId = 2;
 
-    GHashTable *table = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *table = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(table, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
-    purple_blist_add_chat(purple_chat_new(account, groupChatTitle.c_str(), table), NULL, NULL);
+    purple_blist_add_chat(purple_chat_new(account, groupChatTitle.c_str(), table), nullptr, nullptr);
 
     // Pre-add one of two group members as a contact
     purple_blist_add_buddy(purple_buddy_new(account, purpleUserName(0).c_str(),
                                             (userFirstNames[0] + " " + userLastNames[0]).c_str()),
-                           NULL, NULL, NULL);
+                           nullptr, nullptr, nullptr);
     prpl.discardEvents();
 
     std::vector<object_ptr<chatMember>> members;
@@ -416,7 +451,7 @@ TEST_F(GroupChatTest, SendMessageWithMemberList)
         }
     );
 
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
     pluginInfo().join_chat(connection, components);
     g_hash_table_destroy(components);
@@ -482,12 +517,12 @@ TEST_F(GroupChatTest, JoinBasicGroupByInviteLink)
     login();
 
     // As if "Add chat" function in pidgin was used
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup(""));
     g_hash_table_insert(components, (char *)"link", g_strdup(LINK));
 
     PurpleChat *chat = purple_chat_new(account, "old chat", components);
-    purple_blist_add_chat(chat, NULL, NULL);
+    purple_blist_add_chat(chat, nullptr, nullptr);
     prpl.discardEvents();
 
     // And now that chat is being joined
@@ -510,7 +545,7 @@ TEST_F(GroupChatTest, JoinBasicGroupByInviteLink)
     tgl.update(std::move(chatUpdate));
     // Chat is added, list of members requested
     prpl.verifyEvents(AddChatEvent(
-        groupChatPurpleName, groupChatTitle, account, NULL, NULL
+        groupChatPurpleName, groupChatTitle, account, nullptr, nullptr
     ));
     uint64_t groupInfoRequestId = tgl.verifyRequest(getBasicGroupFullInfo(groupId));
 
@@ -640,7 +675,7 @@ TEST_F(GroupChatTest, AddContactByGroupChatName)
 
     // Adding him to contact list from group chat members
     PurpleBuddy *buddy = purple_buddy_new(account, (userFirstNames[1] + " " + userLastNames[1]).c_str(), "");
-    purple_blist_add_buddy(buddy, NULL, &standardPurpleGroup, NULL);
+    purple_blist_add_buddy(buddy, nullptr, &standardPurpleGroup, nullptr);
     prpl.discardEvents();
     pluginInfo().add_buddy(connection, buddy, &standardPurpleGroup);
 
@@ -678,7 +713,7 @@ TEST_F(GroupChatTest, CreateRemoveBasicGroupInAnotherClient)
     ));
     tgl.verifyRequest(viewMessages(groupChatId, {messageId[0]}, nullptr, true));
     prpl.verifyEvents(
-        AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), NULL),
+        AddChatEvent(groupChatPurpleName, groupChatTitle, account, notJoinedGroup(), nullptr),
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle),
         ConvSetTitleEvent(groupChatPurpleName, groupChatTitle),
         ConversationWriteEvent(groupChatPurpleName, NotificationWho,
@@ -689,7 +724,7 @@ TEST_F(GroupChatTest, CreateRemoveBasicGroupInAnotherClient)
     tgl.update(makeUpdateChatListMain(groupChatId));
     tgl.verifyRequest(getBasicGroupFullInfo(groupId));
     prpl.verifyEvents(AddChatEvent(
-        groupChatPurpleName, groupChatTitle, account, NULL, NULL
+        groupChatPurpleName, groupChatTitle, account, nullptr, nullptr
     ));
 
     tgl.update(make_object<updateBasicGroupFullInfo>(
@@ -740,13 +775,13 @@ TEST_F(GroupChatTest, DeleteBasicGroup_Creator)
     GList *actions = pluginInfo().blist_node_menu(&chat->node);
 
     nodeMenuAction(&chat->node, actions, "Delete group");
-    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
+    prpl.verifyEvents(RequestActionEvent(connection, account, nullptr, nullptr, 2));
     prpl.requestedAction("_No");
     tgl.verifyNoRequests();
     prpl.verifyNoEvents();
 
     nodeMenuAction(&chat->node, actions, "Delete group");
-    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
+    prpl.verifyEvents(RequestActionEvent(connection, account, nullptr, nullptr, 2));
     prpl.requestedAction("_Yes");
     {
         auto files = make_object<optimizeStorage>();
@@ -794,7 +829,7 @@ TEST_F(GroupChatTest, DeleteBasicGroup_SentNotLogged)
     GList *actions = pluginInfo().blist_node_menu(&chat->node);
     nodeMenuAction(&chat->node, actions, "Delete group");
     g_list_free_full(actions, (GDestroyNotify)purple_menu_action_free);
-    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
+    prpl.verifyEvents(RequestActionEvent(connection, account, nullptr, nullptr, 2));
     prpl.requestedAction("_Yes");
     {
         auto files = make_object<optimizeStorage>();
@@ -822,7 +857,7 @@ TEST_F(GroupChatTest, DeleteBasicGroup_NonCreator)
 
     // Someone else's: left, and nothing of it kept here
     nodeMenuAction(&chat->node, actions, "Delete group");
-    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
+    prpl.verifyEvents(RequestActionEvent(connection, account, nullptr, nullptr, 2));
     prpl.requestedAction("_Yes");
     {
         auto files = make_object<optimizeStorage>();
@@ -846,13 +881,13 @@ TEST_F(GroupChatTest, LeaveBasicGroup)
     GList *actions = pluginInfo().blist_node_menu(&chat->node);
 
     nodeMenuAction(&chat->node, actions, "Leave group");
-    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
+    prpl.verifyEvents(RequestActionEvent(connection, account, nullptr, nullptr, 2));
     prpl.requestedAction("_No");
     tgl.verifyNoRequests();
     prpl.verifyNoEvents();
 
     nodeMenuAction(&chat->node, actions, "Leave group");
-    prpl.verifyEvents(RequestActionEvent(connection, account, NULL, NULL, 2));
+    prpl.verifyEvents(RequestActionEvent(connection, account, nullptr, nullptr, 2));
     prpl.requestedAction("_Yes");
     // Only left, nothing of it deleted
     tgl.verifyRequest(leaveChat(groupChatId));
@@ -926,7 +961,7 @@ TEST_F(GroupChatTest, UsersWithSameName)
         }
     );
 
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
     pluginInfo().join_chat(connection, components);
     g_hash_table_destroy(components);
@@ -1022,7 +1057,7 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
     );
 
     // Open chat
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
     pluginInfo().join_chat(connection, components);
     g_hash_table_destroy(components);
@@ -1106,8 +1141,8 @@ TEST_F(GroupChatTest, GroupChatWithDeletedUser_WriteToNonContact)
     // Not a contact yet: the conversation goes by their id all the same, a buddy until the program
     // quits showing their name
     prpl.verifyEvents(
-        AddBuddyEvent(purpleUserName(0), userFirstNames[0] + " " + userLastNames[0], account, NULL,
-                      purple_find_group("Telegram: not in contacts"), NULL),
+        AddBuddyEvent(purpleUserName(0), userFirstNames[0] + " " + userLastNames[0], account, nullptr,
+                      purple_find_group("Telegram: not in contacts"), nullptr),
         NewConversationEvent(PURPLE_CONV_TYPE_IM, account, purpleUserName(0)),
         ConversationWriteEvent(
             purpleUserName(0),
@@ -1187,7 +1222,7 @@ TEST_F(GroupChatTest, Kick)
     loginWithBasicGroup();
     tgl.update(standardUpdateUserNoPhone(0));
 
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
     pluginInfo().join_chat(connection, components);
     g_hash_table_destroy(components);
@@ -1239,7 +1274,7 @@ TEST_F(GroupChatTest, Invite)
     loginWithBasicGroup();
     tgl.update(standardUpdateUserNoPhone(0));
 
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
     pluginInfo().join_chat(connection, components);
     g_hash_table_destroy(components);
@@ -1250,7 +1285,7 @@ TEST_F(GroupChatTest, Invite)
     );
 
     pluginInfo().chat_invite(
-        connection, purpleChatId, NULL,
+        connection, purpleChatId, nullptr,
         purpleUserName(1).c_str()
     );
     prpl.verifyEvents(ConversationWriteEvent(
@@ -1260,7 +1295,7 @@ TEST_F(GroupChatTest, Invite)
     ));
 
     pluginInfo().chat_invite(
-        connection, purpleChatId, NULL,
+        connection, purpleChatId, nullptr,
         (userFirstNames[1] + " " + userLastNames[1]).c_str()
     );
     prpl.verifyEvents(ConversationWriteEvent(
@@ -1270,7 +1305,7 @@ TEST_F(GroupChatTest, Invite)
     ));
 
     pluginInfo().chat_invite(
-        connection, purpleChatId, NULL,
+        connection, purpleChatId, nullptr,
         purpleUserName(0).c_str()
     );
     tgl.verifyRequest(addChatMember(groupChatId, userIds[0], 0));
@@ -1283,7 +1318,7 @@ TEST_F(GroupChatTest, Invite)
     ));
 
     pluginInfo().chat_invite(
-        connection, purpleChatId, NULL,
+        connection, purpleChatId, nullptr,
         (userFirstNames[0] + " " + userLastNames[0]).c_str()
     );
     tgl.verifyRequest(addChatMember(groupChatId, userIds[0], 0));
@@ -1469,7 +1504,7 @@ TEST_F(GroupChatTest, SendFile)
     constexpr int     purpleChatId = 1;
     loginWithBasicGroup();
 
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
     pluginInfo().join_chat(connection, components);
     g_hash_table_destroy(components);
@@ -1529,9 +1564,9 @@ TEST_F(GroupChatTest, OpenLeftGroupChat_ReceiveMessageAtLogin)
     constexpr int32_t date         = 12345;
     constexpr int     purpleChatId = 2;
 
-    GHashTable *table = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *table = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(table, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
-    purple_blist_add_chat(purple_chat_new(account, groupChatTitle.c_str(), table), NULL, NULL);
+    purple_blist_add_chat(purple_chat_new(account, groupChatTitle.c_str(), table), nullptr, nullptr);
 
     // The existing conversations are left-overs from previous connection, so libpurple ids doesn't
     // have to match what they are going to be in this connection
@@ -1545,7 +1580,7 @@ TEST_F(GroupChatTest, OpenLeftGroupChat_ReceiveMessageAtLogin)
     // Pre-add one of two group members as a contact
     purple_blist_add_buddy(purple_buddy_new(account, purpleUserName(0).c_str(),
                                             (userFirstNames[0] + " " + userLastNames[0]).c_str()),
-                           NULL, NULL, NULL);
+                           nullptr, nullptr, nullptr);
     prpl.discardEvents();
 
     auto chat = makeChat(
@@ -1597,9 +1632,9 @@ TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListMainRightAway)
 {
     constexpr int purpleChatId = 1;
 
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
-    purple_blist_add_chat(purple_chat_new(account, groupChatTitle.c_str(), components), NULL, NULL);
+    purple_blist_add_chat(purple_chat_new(account, groupChatTitle.c_str(), components), nullptr, nullptr);
 
     // Fabricate an open, "left" conversation for the group chat. We would get one if logging out
     // with pidgin or finch while having chat conversation open.
@@ -1618,7 +1653,7 @@ TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListMainRightAway)
 
     // pidgin will do this immediately after account is reported connected, and updateNewChat will
     // occur early in login sequence as well. But to simplify, let's say this happens now.
-    components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
     pluginInfo().join_chat(connection, components);
     g_hash_table_destroy(components);
@@ -1648,9 +1683,9 @@ TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListNullFirst)
 {
     constexpr int purpleChatId = 1;
 
-    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    GHashTable *components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
-    purple_blist_add_chat(purple_chat_new(account, groupChatTitle.c_str(), components), NULL, NULL);
+    purple_blist_add_chat(purple_chat_new(account, groupChatTitle.c_str(), components), nullptr, nullptr);
 
     // Fabricate an open, "left" conversation for the group chat. We would get one if logging out
     // with pidgin or finch while having chat conversation open.
@@ -1669,7 +1704,7 @@ TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListNullFirst)
 
     // pidgin will do this immediately after account is reported connected, and updateNewChat will
     // occur early in login sequence as well. But to simplify, let's say this happens now.
-    components = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
+    components = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
     g_hash_table_insert(components, (char *)"id", g_strdup((groupChatPurpleName).c_str()));
     pluginInfo().join_chat(connection, components);
     g_hash_table_destroy(components);
@@ -1697,7 +1732,7 @@ TEST_F(GroupChatTest, RejoinAtStartupBeforeUpdateNewChat_ChatListNullFirst)
     tgl.update(makeUpdateChatList(groupChatId, make_object<chatListMain>()));
     // Chat is re-added to buddy list, and now joining
     prpl.verifyEvents(
-        AddChatEvent(groupChatPurpleName, groupChatTitle, account, NULL, NULL),
+        AddChatEvent(groupChatPurpleName, groupChatTitle, account, nullptr, nullptr),
         ServGotJoinedChatEvent(connection, purpleChatId, groupChatPurpleName, groupChatTitle)
     );
     tgl.verifyRequest(getBasicGroupFullInfo(groupId));
@@ -1861,7 +1896,7 @@ TEST_F(GroupChatTest, ReportMember)
     }
     tgl.verifyRequest(reportChat(chatIds[0], "spam", {}, ""));
     tgl.reply(makeReportTextRequired("spam2", true));
-    prpl.verifyEvents(RequestInputEvent(NULL, account, NULL, NULL));
+    prpl.verifyEvents(RequestInputEvent(nullptr, account, nullptr, nullptr));
     prpl.inputEnter("Sells things");
     tgl.verifyRequest(reportChat(chatIds[0], "spam2", {}, "Sells things"));
     tgl.reply(make_object<reportChatResultOk>());

@@ -91,13 +91,13 @@ static void finishSmiley(const SmileyTarget &target, const gchar *data, gsize si
 
 static void finishSmileyFromFile(const SmileyTarget &target, const std::string &path)
 {
-    gchar *data = NULL;
+    gchar *data = nullptr;
     gsize  size = 0;
-    if (!path.empty() && g_file_get_contents(path.c_str(), &data, &size, NULL)) {
+    if (!path.empty() && g_file_get_contents(path.c_str(), &data, &size, nullptr)) {
         finishSmiley(target, data, size);
         g_free(data);
     } else
-        finishSmiley(target, NULL, 0);
+        finishSmiley(target, nullptr, 0);
 }
 
 using FileReady = std::function<void(TdAccountData &account, const std::string &path)>;
@@ -114,20 +114,59 @@ static void getFile(TdAccountData &account, const FileRef &file, FileReady ready
     }
 
     // Shown already, in the conversation, so someone is waiting for it
-    auto request = td::td_api::make_object<td::td_api::downloadFile>();
-    request->file_id_     = file.id;
-    request->priority_    = OPEN_DOWNLOAD_PRIORITY;
-    request->offset_      = 0;
-    request->limit_       = 0;
-    request->synchronous_ = true;
+    auto request = makeDownloadFile(file.id, OPEN_DOWNLOAD_PRIORITY, true);
     account.transceiver.sendQuery(std::move(request),
-        [&account, ready](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
-            const td::td_api::file *file = nullptr;
-            if (object && (object->get_id() == td::td_api::file::ID))
-                file = static_cast<const td::td_api::file *>(object.get());
+        [&account, ready = std::move(ready)](uint64_t, td::td_api::object_ptr<td::td_api::Object> object) {
+            const td::td_api::file *file = objectAs<td::td_api::file>(object);
             ready(account, (file && file->local_ && file->local_->is_downloading_completed_) ?
                            file->local_->path_ : std::string());
         });
+}
+
+bool animationsWanted(PurpleAccount *account, int32_t format)
+{
+    // Those who would rather not see stickers move, would not like reactions to either
+    return (format == td::td_api::stickerFormatWebp::ID) ||
+           purple_account_get_bool(account, AccountOptions::AnimatedStickers, AccountOptions::AnimatedStickersDefault);
+}
+
+bool canShowCustomEmojiFormat(PurpleAccount *account, int32_t format)
+{
+    return animationsWanted(account, format) &&
+           ((format != td::td_api::stickerFormatTgs::ID) || canConvertAnimatedSticker(account));
+}
+
+void getCustomEmojiFile(TdAccountData &account, const td::td_api::file *file, CustomEmojiFileReady ready)
+{
+    getFile(account, FileRef(file), std::move(ready));
+}
+
+void makeCustomEmojiImage(TdAccountData &account, const std::string &path, int32_t format,
+                          CustomEmojiImageReady ready)
+{
+    if (format == td::td_api::stickerFormatTgs::ID) {
+        if (!canConvertAnimatedSticker(account.purpleAccount)) {
+            ready(account, 0);
+            return;
+        }
+        ReactionStickerThread *thread = new ReactionStickerThread(account.purpleAccount, path, std::move(ready));
+        thread->setSize(CUSTOM_EMOJI_SIZE);
+        thread->startThread();
+        return;
+    }
+
+    gchar       *data    = nullptr;
+    gsize        size    = 0;
+    ImageSupport support = probeImageFile(path);
+    if ((support == ImageSupport::Supported) && g_file_get_contents(path.c_str(), &data, &size, nullptr)) {
+        // The imgstore takes the data
+        ready(account, addImageFile(data, size, path));
+        return;
+    }
+    purple_debug_misc(config::pluginId, "Cannot show custom emoji %s\n", path.c_str());
+    if (support == ImageSupport::Unrecognized)
+        warnMissingImageLoader(path);
+    ready(account, 0);
 }
 
 // The picture as the front-end can show it: the sticker itself, as it is or, for TGS, converted;
@@ -144,57 +183,31 @@ static void fetchSmileyPicture(TdAccountData &account, const td::td_api::sticker
         });
     };
 
-    // Those who would rather not see stickers move, would not like reactions to either
-    if ((format != td::td_api::stickerFormatWebp::ID) &&
-        !purple_account_get_bool(account.purpleAccount, AccountOptions::AnimatedStickers,
-                                 AccountOptions::AnimatedStickersDefault))
-    {
+    if (!canShowCustomEmojiFormat(account.purpleAccount, format)) {
         useThumbnail(account);
         return;
     }
 
-    if (format == td::td_api::stickerFormatTgs::ID) {
-        if (!canConvertAnimatedSticker(account.purpleAccount)) {
+    getFile(account, stickerFile, [target, format, useThumbnail](TdAccountData &account, const std::string &path) {
+        if (path.empty()) {
             useThumbnail(account);
             return;
         }
-        getFile(account, stickerFile, [target, useThumbnail](TdAccountData &account, const std::string &path) {
-            if (path.empty()) {
+        makeCustomEmojiImage(account, path, format, [target, useThumbnail](TdAccountData &account, int imageId) {
+            PurpleStoredImage *image = imageId ? purple_imgstore_find_by_id(imageId) : nullptr;
+            if (image) {
+                finishSmiley(target, static_cast<const gchar *>(purple_imgstore_get_data(image)),
+                             purple_imgstore_get_size(image));
+                purple_imgstore_unref_by_id(imageId);
+            } else
                 useThumbnail(account);
-                return;
-            }
-            ReactionStickerThread *thread = new ReactionStickerThread(account.purpleAccount, path,
-                [target, useThumbnail](TdAccountData &account, int imageId) {
-                    PurpleStoredImage *image = imageId ? purple_imgstore_find_by_id(imageId) : NULL;
-                    if (image) {
-                        finishSmiley(target, static_cast<const gchar *>(purple_imgstore_get_data(image)),
-                                     purple_imgstore_get_size(image));
-                        purple_imgstore_unref_by_id(imageId);
-                    } else
-                        useThumbnail(account);
-                });
-            thread->setSize(CUSTOM_EMOJI_SIZE);
-            thread->startThread();
         });
-        return;
-    }
-
-    getFile(account, stickerFile, [target, useThumbnail](TdAccountData &account, const std::string &path) {
-        ImageSupport support = path.empty() ? ImageSupport::NoLoader : probeImageFile(path);
-        if (support == ImageSupport::Supported)
-            finishSmileyFromFile(target, path);
-        else {
-            if (support == ImageSupport::Unrecognized)
-                warnMissingImageLoader(path);
-            useThumbnail(account);
-        }
     });
 }
 
-static bool foldCustomEmoji(TdAccountData &account)
+bool foldCustomEmoji(PurpleAccount *account)
 {
-    return purple_account_get_bool(account.purpleAccount, AccountOptions::FoldCustomEmoji,
-                                   AccountOptions::FoldCustomEmojiDefault);
+    return purple_account_get_bool(account, AccountOptions::FoldCustomEmoji, AccountOptions::FoldCustomEmojiDefault);
 }
 
 // Announces the smiley to the conversation, once for each custom emoji: one announced already
@@ -228,7 +241,7 @@ std::map<int64_t, std::string> addCustomEmojiSmileys(TdAccountData &account, Pur
                                                      const std::vector<CustomEmoji> &emoji)
 {
     std::map<int64_t, std::string> codes;
-    if (!conv || foldCustomEmoji(account))
+    if (!conv || foldCustomEmoji(account.purpleAccount))
         return codes;
 
     auto targets = std::make_shared<std::map<int64_t, SmileyTarget>>();
@@ -268,7 +281,7 @@ std::map<int64_t, std::string> addCustomEmojiSmileys(TdAccountData &account, Pur
                         }
                 // Those Telegram did not know
                 for (const auto &item: *targets)
-                    finishSmiley(item.second, NULL, 0);
+                    finishSmiley(item.second, nullptr, 0);
             });
     }
 
@@ -278,7 +291,7 @@ std::map<int64_t, std::string> addCustomEmojiSmileys(TdAccountData &account, Pur
 std::string addCustomEmojiSmiley(TdAccountData &account, PurpleConversation *conv,
                                  const td::td_api::sticker &sticker)
 {
-    if (!conv || foldCustomEmoji(account) || !sticker.full_type_ ||
+    if (!conv || foldCustomEmoji(account.purpleAccount) || !sticker.full_type_ ||
         (sticker.full_type_->get_id() != td::td_api::stickerFullTypeCustomEmoji::ID))
         return std::string();
 

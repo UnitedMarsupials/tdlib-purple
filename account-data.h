@@ -9,6 +9,7 @@
 
 #include <deque>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <set>
 #include <tuple>
@@ -32,6 +33,8 @@ bool        isUserIdName(const char *s);
 UserId      purpleBuddyNameToUserId(const char *s);
 SecretChatId purpleBuddyNameToSecretChatId(const char *s);
 bool        isPrivateChat(const td::td_api::chat &chat);
+// A basic group, or a supergroup: a group or a channel
+bool        isGroupChat(const td::td_api::chat &chat);
 UserId      getUserIdByPrivateChat(const td::td_api::chat &chat);
 class TdAccountData;
 bool        isChatInContactList(const TdAccountData &account, const td::td_api::chat &chat,
@@ -43,8 +46,9 @@ SecretChatId getSecretChatId(const td::td_api::chat &chat);
 bool        isGroupMember(const td::td_api::object_ptr<td::td_api::ChatMemberStatus> &status);
 bool        isSameUser(const td::td_api::MessageSender &member1, const td::td_api::MessageSender &member2);
 
+// Catching up with a chat: as many messages asked for at once, and at most so many in all
 enum {
-    CHAT_HISTORY_REQUEST_LIMIT  = 50,
+    CHAT_HISTORY_REQUEST_LIMIT  = 30,
     CHAT_HISTORY_RETRIEVE_LIMIT = 100
 };
 
@@ -77,7 +81,8 @@ public:
     SupergroupId groupId;
     td::td_api::object_ptr<td::td_api::chatMembers> members;
 
-    GroupMembersRequestCont(uint64_t requestId, SupergroupId groupId, td::td_api::chatMembers *members)
+    GroupMembersRequestCont(uint64_t requestId, SupergroupId groupId,
+                            td::td_api::object_ptr<td::td_api::chatMembers> &&members)
     : PendingRequest(requestId), groupId(groupId), members(std::move(members)) {}
 };
 
@@ -140,6 +145,9 @@ public:
     : PendingRequest(requestId), xfer(xfer), chatId(chatId), kind(kind) {}
 };
 
+// The message a message replies to, shared by the copies of the latter's info, as a download's
+using RepliedMessage = std::shared_ptr<const td::td_api::message>;
+
 struct TgMessageInfo {
     enum class Type {
         Photo,
@@ -156,7 +164,7 @@ struct TgMessageInfo {
     bool        outgoing = false;
     bool        sentLocally = false; // For outgoing messages, whether sent by this very client
     MessageId   repliedMessageId;
-    td::td_api::object_ptr<td::td_api::message> repliedMessage;
+    RepliedMessage repliedMessage;
     std::string forwardedFrom;
     std::string altText; // to show instead of the picture, where it cannot be shown
     bool        anonymousChannelPost = false; // incomingGroupchatSender is "Channel post", naming nobody
@@ -167,25 +175,20 @@ struct TgMessageInfo {
     bool        logRedrawn = false; // shown so into a tab of a chat with no log yet: logged after all
     bool        picturesComing = false; // shown with stand-ins for pictures fetched: logged once they are
 
+    // Who sent it, as a group chat names them: by idNNN, else by name, else "someone"
+    const std::string &getGroupchatSender() const
+    {
+        static const std::string someone = "someone";
+        return !incomingGroupchatSenderName.empty() ? incomingGroupchatSenderName :
+               !incomingGroupchatSender.empty()     ? incomingGroupchatSender : someone;
+    }
+
+    // A copy kept for later, as by a download, without picturesComing, which is of the showing in
+    // progress, not of what is shown later
     void assign(const TgMessageInfo &other)
     {
-        id = other.id;
-        type = other.type;
-        incomingGroupchatSender = other.incomingGroupchatSender;
-        incomingGroupchatSenderName = other.incomingGroupchatSenderName;
-        timestamp = other.timestamp;
-        outgoing = other.outgoing;
-        sentLocally = other.sentLocally;
-        repliedMessageId = other.repliedMessageId;
-        repliedMessage = nullptr;
-        forwardedFrom = other.forwardedFrom;
-        altText = other.altText;
-        anonymousChannelPost = other.anonymousChannelPost;
-        fromHistory = other.fromHistory;
-        mediaVariantLinks = other.mediaVariantLinks;
-        unlogged = other.unlogged;
-        redrawn = other.redrawn;
-        logRedrawn = other.logRedrawn;
+        *this          = other;
+        picturesComing = false;
     }
 };
 
@@ -216,13 +219,9 @@ public:
       fileSize(fileSize), downloadedSize(0), fileDescription(fileDescription),
       thumbnail(thumbnail)
     {
-        // If download is started while the message is in PendingMessageQueue, repliedMessage will
-        // be on IncomingMessage, and one here in TgMessageInfo will be NULL. In this case,
-        // repliedMessage will be moved onto DownloadRequest if message leaves PendingMessageQueue
-        // before download is complete (meaning it took more than 1 second to download).
+        // The message replied to is shared, if it is here yet; one fetched later is copied in when
+        // the message leaves PendingMessageQueue before the download is complete (handleLongInlineDownload)
         this->message.assign(message);
-        if (message.repliedMessage)
-            this->message.repliedMessage = std::move(message.repliedMessage);
     }
     // An inline download still in progress, as at logout, leaves its temporary file behind otherwise
     ~DownloadRequest();
@@ -246,7 +245,7 @@ public:
     PurpleXfer  *fileUpload;
 
     NewPrivateChatForMessage(uint64_t requestId, const char *username, const char *message)
-    : PendingRequest(requestId), username(username), message(message ? message : nullptr),
+    : PendingRequest(requestId), username(username), message(message ? message : ""),
       fileUpload(nullptr) {}
 
     NewPrivateChatForMessage(uint64_t requestId, const char *username, PurpleXfer *upload)
@@ -268,7 +267,6 @@ public:
 
 struct IncomingMessage {
     td::td_api::object_ptr<td::td_api::message> message;
-    td::td_api::object_ptr<td::td_api::message> repliedMessage;
     td::td_api::object_ptr<td::td_api::file>    thumbnail;
     std::string inlineDownloadedFilePath;
     // Thumbnail the sender attached to a video, shown along with the video's own link or notice
@@ -278,24 +276,24 @@ struct IncomingMessage {
     // Could be refactored.
     TgMessageInfo messageInfo;
 
-    int32_t  selectedPhotoSizeId;
-    int32_t  previewFileId; // 0 if there is no thumbnail worth showing
+    int32_t  selectedPhotoSizeId = 0;
+    int32_t  previewFileId = 0; // 0 if there is no thumbnail worth showing
     // Its size, and the low-grade picture the video carries, for its stand-in while it comes
     int32_t     previewWidth  = 0;
     int32_t     previewHeight = 0;
     unsigned    previewSizeKb = 0;
     std::string previewLowGrade;
-    unsigned inlineFileSizeLimit;
-    bool     standardDownloadConfigured;
-    bool     repliedMessageFetchDoneOrFailed;
-    bool     previewFetchDone;
+    unsigned inlineFileSizeLimit = 0;
+    bool     standardDownloadConfigured = false;
+    bool     repliedMessageFetchDoneOrFailed = false;
+    bool     previewFetchDone = false;
     // Whether the video's thumbnail is fetched and waited for, as decided once it is received
     bool     previewWaited = false;
     // Whether the chat's media were fetched unasked when it was received: what is fetched for it, and
     // waited for, goes by that, not by the setting changed meanwhile
     bool     downloadsMedia = true;
-    bool     inlineDownloadComplete;
-    bool     inlineDownloadTimeout;
+    bool     inlineDownloadComplete = false;
+    bool     inlineDownloadTimeout = false;
 
     // For a message shown again because it was edited: when it was first sent, and whether
     // its caption is all that changed, and so all there is to show
@@ -325,7 +323,6 @@ public:
     };
     static constexpr MessageAction Append = MessageAction::Append;
     static constexpr MessageAction Prepend = MessageAction::Prepend;
-    using TdMessagePtr = td::td_api::object_ptr<td::td_api::message>;
 
     IncomingMessage &addPendingMessage(IncomingMessage &&message, MessageAction action);
     void             setMessageReady(ChatId chatId, MessageId messageId,
@@ -351,6 +348,8 @@ private:
     std::vector<ChatQueue> m_queues;
 
     std::vector<ChatQueue>::iterator getChatQueue(ChatId chatId);
+    ChatQueue &getOrAddChatQueue(ChatId chatId);
+    static std::list<Message>::iterator findMessage(ChatQueue &queue, MessageId messageId);
     Message &addMessage(ChatQueue &queue, MessageAction action);
     void extractReadyMessages(std::vector<ChatQueue>::iterator pQueue,
                               std::vector<IncomingMessage> &readyMessages);
@@ -372,7 +371,7 @@ struct ShownMessage {
     std::string sender;    // who sent it, as the conversation names them; empty if not known
     bool        outgoing    = false;
     bool        deletedHere = false; // asked to be, from this client: by us, then
-    time_t      timestamp;
+    time_t      timestamp = 0;
     // Who gave which reaction, as far as anyone has been named, and whether it was us
     std::map<std::string, bool> reactions;
     // Those giving each reaction now, by its key: as many as are named, the latest first, all once
@@ -435,6 +434,17 @@ public:
         unsigned maxMessageLength = 0;
         int64_t  myUserId         = 0;
     } options;
+
+    // As tabs are filled anew, for this session: messages found too far back for their tab once,
+    // which they are no nearer to since; chats whose tabs show their first message; and how many
+    // messages a tab was last filled with, for those that would fill it to be reckoned
+    std::set<std::pair<int64_t, int64_t>> redrawTooFar;
+    std::set<int64_t>                     historyComplete;
+    std::map<int64_t, size_t>             redrawnCounts;
+    // Chats whose tabs, being opened for a link to a message, are to be filled from that one; and
+    // those to be filled with the newest messages once not busy
+    std::map<int64_t, MessageId>          linkedMessages;
+    std::set<int64_t>                     newestPending;
 
     PurpleAccount *const  purpleAccount;
     TdTransceiver        &transceiver;
@@ -500,9 +510,9 @@ public:
     const td::td_api::chat       *getChatBySecretChat(SecretChatId secretChatId);
 
     template<typename ReqType, typename... ArgsType>
-    void addPendingRequest(ArgsType... args)
+    void addPendingRequest(ArgsType &&... args)
     {
-        m_requests.push_back(std::make_unique<ReqType>(args...));
+        m_requests.push_back(std::make_unique<ReqType>(std::forward<ArgsType>(args)...));
     }
     template<typename ReqType>
     void addPendingRequest(uint64_t requestId, std::unique_ptr<ReqType> &&request)
@@ -614,7 +624,7 @@ private:
         int32_t   purpleId;
         TdChatPtr chat;
 
-        ChatInfo() : purpleId(0), chat() {}
+        ChatInfo() : purpleId(0) {}
     };
 
     struct GroupInfo {
@@ -655,9 +665,6 @@ private:
     // List of contacts for which private chat is not known yet.
     std::vector<UserId>                m_contactUserIdsNoChat;
 
-    // Used to remember stuff during asynchronous communication when adding contact
-    std::vector<ContactRequest>        m_addContactRequests;
-
     // Chats we want to libpurple-join when we get an updateNewChat about them
     std::vector<ChatId>                m_expectedChats;
 
@@ -672,14 +679,14 @@ private:
 
     // Voice call data
     std::unique_ptr<tgvoip::VoIPController> m_callData;
-    int32_t                                 m_callId;
+    int32_t                                 m_callId = 0;
 
     std::unique_ptr<PendingRequest> getPendingRequestImpl(uint64_t requestId);
     void                            saveTempFileUploads();
     PendingRequest *                findPendingRequestImpl(uint64_t requestId);
 
     // Read receipts not sent immediately due to away status (grouped per chat)
-    std::vector<std::vector<ReadReceipt>> m_pendingReadReceipts;
+    std::map<ChatId, std::vector<ReadReceipt>> m_pendingReadReceipts;
 
     // Messages received in this session, and the order they came in, oldest first, so that
     // only so many are kept

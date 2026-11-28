@@ -44,11 +44,18 @@
 - **An animated sticker's or custom emoji's GIF no longer stays behind in the temporary directory when its account or chat is gone by the time it is converted**, as when Pidgin quits or the account disconnects meanwhile.
 - **A message of ours, edited and then deleted from here, is said to be deleted by us as our own**, rather than named as one we sent like another member's. An edit forgot that the message was ours.
 - **In Pidgin, our own messages deleted since are struck out, or left out, when a chat's tab is filled again, like everyone else's.** Ours were logged as they were written, before Telegram gave them the ids they keep, so that the log could not say which they were. Now each is logged once sent, under its lasting id; one never sent is not logged at all, though TDLib still shows it.
+- **A group's or channel's picture shows on its buddy-list entry as soon as it is downloaded.** The entry was looked for by a user, which a group's picture has none of, so the picture showed only once something else about the chat changed.
+- **A buddy's "Last online" is written as the rest of Pidgin writes dates, on one line.** It was C's `ctime`, in English and ending in a line break.
+- **A video note that cannot be shown says it is a faulty video note, not a voice note.**
+- **A file over 2 GiB is asked about before it is downloaded, as any file over the auto-download limit is, and shows its size.** Its size was cut to 32 bits, came out negative, and was taken for 0: within any limit, so it was fetched unasked.
+- **In Pidgin, a tab scrolled back reaches its chat's earlier messages again after the account reconnects, and with two accounts in one chat, each goes back on its own.** What filling tabs anew had found -- which chats had shown their first message, which messages were too far back -- was kept by chat id alone, for as long as the program ran: shared by the accounts, and kept from one session to the next; so was which message a link had led to, which then filled a tab opened after a reconnect from it.
 
 ### Translations
 
 - **Czech, German, Polish, Albanian and Ukrainian are complete again**, with the strings 0.9.6 added: forwarding, copying a message's file or picture, a group's news, and who deleted a message.
 - **The same languages have the strings added since: the local database's password, forwarding to several chats at once, the buddy-list group of those not in the contacts, and reporting a group's member.** Some had been matched by msgmerge to older strings they resembled, and said, for instance, "New password" for "Database password" or "Enable secret chats" for encrypting the database.
+- **The notices of a secret file received, and the "Send read receipts" option, are translated**: they were marked for translators but not looked up. Ukrainian has them.
+- **"User not found", and the error for a name that several users go by, which then names it, are translated wherever a user is looked up by name**: sending, calling, adding to a group, kicking, creating a secret chat. They were in English but in two places, in four wordings, and the secret chat's error began in English too.
 
 ## 0.9.6 (2026-11-14)
 

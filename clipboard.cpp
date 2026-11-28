@@ -8,6 +8,7 @@
 #include <purple.h>
 #include <gio/gio.h>
 #include <string.h>
+#include <algorithm>
 #include <vector>
 #ifndef _WIN32
 #include <poll.h>
@@ -62,19 +63,29 @@ AttachmentKind guessAttachmentKind(const std::string &path)
     return kind;
 }
 
-static const char IMAGE_LABEL[] = "Image";
-static const char VIDEO_LABEL[] = "Video";
-static const char VOICE_LABEL[] = "Voice";
+static const AttachmentKind MEDIA_KINDS[] = {AttachmentKind::Photo, AttachmentKind::Video, AttachmentKind::Voice};
+
+// What a kind is called, as in a placeholder; in lower case, in a file's name
+static const char *getKindLabel(AttachmentKind kind)
+{
+    switch (kind) {
+    case AttachmentKind::Photo:
+        return "Image";
+    case AttachmentKind::Video:
+        return "Video";
+    case AttachmentKind::Voice:
+        return "Voice";
+    case AttachmentKind::Document:
+        break;
+    }
+    return "Document";
+}
 
 std::string PastedAttachment::placeholder() const
 {
-    if (kind == AttachmentKind::Photo)
-        return std::string("[") + IMAGE_LABEL + "#" + std::to_string(number) + "]";
-    if (kind == AttachmentKind::Video)
-        return std::string("[") + VIDEO_LABEL + "#" + std::to_string(number) + "]";
-    if (kind == AttachmentKind::Voice)
-        return std::string("[") + VOICE_LABEL + "#" + std::to_string(number) + "]";
-    return filePlaceholder();
+    if (kind == AttachmentKind::Document)
+        return filePlaceholder();
+    return std::string("[") + getKindLabel(kind) + "#" + std::to_string(number) + "]";
 }
 
 std::string PastedAttachment::filePlaceholder() const
@@ -97,9 +108,9 @@ PastedAttachments::~PastedAttachments()
 
 std::string makeAttachmentName(AttachmentKind kind, unsigned number, const std::string &mimeType)
 {
-    std::string name = (kind == AttachmentKind::Photo) ? "image" : (kind == AttachmentKind::Video) ? "video"
-                     : (kind == AttachmentKind::Voice) ? "voice" : "document";
-    name += "-" + std::to_string(number);
+    gchar      *lowered = g_ascii_strdown(getKindLabel(kind), -1);
+    std::string name    = std::string(lowered) + "-" + std::to_string(number);
+    g_free(lowered);
     // TDLib's, which it tells the type of a file it sends by
     std::string extension;
     if (!mimeType.empty()) {
@@ -186,8 +197,9 @@ PlaceholderUse findPasted(const PastedAttachments &attachments, const std::strin
 
     std::string label = placeholder.substr(1, hash - 1);
     bool        media = (use.attachment->kind != AttachmentKind::Document);
-    if (media && (!g_ascii_strcasecmp(label.c_str(), IMAGE_LABEL) || !g_ascii_strcasecmp(label.c_str(), VIDEO_LABEL) ||
-                  !g_ascii_strcasecmp(label.c_str(), VOICE_LABEL)))
+    if (media && std::any_of(std::begin(MEDIA_KINDS), std::end(MEDIA_KINDS), [&label](AttachmentKind kind) {
+            return !g_ascii_strcasecmp(label.c_str(), getKindLabel(kind));
+        }))
         return use;
     use.asFile = true;
     // A name it cannot go under, one of a directory, is its own

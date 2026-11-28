@@ -91,7 +91,12 @@ namespace GroupOptions {
 unsigned getAutoDownloadLimitKb(PurpleAccount *account);
 bool     isSizeWithinLimit(unsigned size, unsigned limit);
 bool     ignoreBigDownloads(PurpleAccount *account);
+PurpleTdClient *getTdClient(PurpleConnection *gc);
 PurpleTdClient *getTdClient(PurpleAccount *account);
+PurpleTdClient *getTdClient(PurpleConversation *conv);
+// Whether the account, or the conversation's, is a Telegram one of this plugin's
+bool isOurAccount(PurpleAccount *account);
+bool isOurConversation(PurpleConversation *conv);
 const char *getUiName();
 bool        canDisableReadReceipts();
 bool        isReadReceiptsEnabled(PurpleAccount *account);

@@ -11,28 +11,33 @@ enum {
     OPEN_DOWNLOAD_PRIORITY       = 32,
 };
 
+// A request for the whole of a file; synchronous, its answer is the file once it is here
+td::td_api::object_ptr<td::td_api::downloadFile> makeDownloadFile(int32_t fileId, int32_t priority,
+                                                                   bool synchronous);
 bool saveImage(int id, char **fileName);
 // What a file sent by file transfer goes as: a document, or, if the account sends files by their
 // content, what that is, as for a pasted one
 AttachmentKind getSentFileKind(PurpleAccount *account, const std::string &path);
 void startDocumentUpload(ChatId chatId, const std::string &filename, PurpleXfer *xfer,
-                         TdTransceiver &transceiver, TdAccountData &account,
+                         TdAccountData &account,
                          TdTransceiver::ResponseCb response);
 void uploadResponseError(PurpleXfer *xfer, const std::string &message, TdAccountData &account);
 void startDocumentUploadProgress(ChatId chatId, PurpleXfer *xfer, AttachmentKind kind, const td::td_api::file &file,
-                                 TdTransceiver &transceiver, TdAccountData &account,
+                                 TdAccountData &account,
                                  TdTransceiver::ResponseCb sendMessageResponse);
 void downloadFileInline(int32_t fileId, ChatId chatId, TgMessageInfo &message,
                         const std::string &fileDescription,
                         td::td_api::object_ptr<td::td_api::file> thumbnail,
-                        TdTransceiver &transceiver, TdAccountData &account);
-void updateFileTransferProgress(const td::td_api::file &file, TdTransceiver &transceiver,
-                                TdAccountData &account, TdTransceiver::ResponseCb sendMessageResponse);
+                        TdAccountData &account);
+void updateFileTransferProgress(const td::td_api::file &file, TdAccountData &account, TdTransceiver::ResponseCb sendMessageResponse);
 
 void requestStandardDownload(ChatId chatId, const TgMessageInfo &message, const std::string &fileName,
-                             const td::td_api::file &file, TdTransceiver &transceiver, TdAccountData &account);
+                             const td::td_api::file &file, TdAccountData &account);
 std::string getDownloadPath(const td::td_api::object_ptr<td::td_api::Object> &downloadResponse);
 
+// Its size, or what it is expected to be if that is not known yet
+int64_t  getFileSize64(const td::td_api::file &file);
+// So, as libpurple's transfers take it
 unsigned getFileSize(const td::td_api::file &file);
 unsigned getFileSizeKb(const td::td_api::file &file);
 

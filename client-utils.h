@@ -5,11 +5,31 @@
 #include <purple.h>
 #include <thread>
 
+// The object as a T, if it is one: a response, or a member of a type with subclasses
+template<typename T, typename Base>
+const T *objectAs(const td::td_api::object_ptr<Base> &object)
+{
+    return (object && (object->get_id() == T::ID)) ? static_cast<const T *>(object.get()) : nullptr;
+}
+
+// Requests made in many places
+td::td_api::object_ptr<td::td_api::getMessage>        makeGetMessage(ChatId chatId, MessageId messageId);
+td::td_api::object_ptr<td::td_api::createPrivateChat> makeCreatePrivateChat(int64_t userId);
+
 const char *errorCodeMessage();
 
 std::string         getUnsupportedMessageDescription(const td::td_api::MessageContent &content);
 std::string         describeUnsupportedContent(const td::td_api::MessageContent &content);
 std::string         getDisplayedError(const td::td_api::object_ptr<td::td_api::Object> &object);
+
+// A text field of a dialog, masked for a password
+PurpleRequestField *addStringField(PurpleRequestFieldGroup *group, const char *id, const char *label,
+                                   const char *value = nullptr, bool masked = false);
+// A photo's file, for libpurple to keep as a buddy's or chat's icon; null if it cannot be read, logged
+gchar *readPhoto(const std::string &path, const std::string &whose, gsize &size);
+// Why a name is not of one user, as getUsersByPurpleName found: none, or several
+std::string getUserLookupError(const std::vector<const td::td_api::user *> &users, const std::string &name);
+
 std::string         proxyTypeToString(PurpleProxyType proxyType);
 
 const char *        getPurpleStatusId(const td::td_api::UserStatus &tdStatus);
@@ -28,8 +48,6 @@ bool                downloadsMedia(PurpleAccount *account, PurpleBlistNode *node
 void                setDownloadsMedia(PurpleBlistNode *node, bool download);
 // The same for a chat: one with no entry, being a stranger's or not joined, is not downloaded
 bool                downloadsChatMedia(const TdAccountData &account, const td::td_api::chat &chat);
-// The user a name is of: an id, as the plugin names users, our own number, a phone number or a
-// @username; a display name too, if asked for, where a person types it
 // A user's buddy, as a conversation with them needs, if they are not a contact: for as long as the
 // program runs, never saved. Its name, which the conversation goes by, as any user's.
 std::string         addTransientBuddy(TdAccountData &account, const td::td_api::user &user);
@@ -38,6 +56,8 @@ bool                isMovedOutOfTransient(PurpleBlistNode *node, PurpleGroup *gr
 // Saved from now on, wherever it is
 void                keepInBuddyList(PurpleBlistNode *node);
 void                returnToTransientGroup(PurpleBlistNode *node);
+// The user a name is of: an id, as the plugin names users, our own number, a phone number or a
+// @username; a display name too, if asked for, where a person types it
 std::vector<const td::td_api::user *> getUsersByPurpleName(const char *buddyName, TdAccountData &account,
                                                            const char *action, bool byDisplayName = false);
 PurpleConversation *getImConversation(PurpleAccount *account, const char *username);
@@ -58,7 +78,6 @@ void                removeGroupChat(PurpleAccount *purpleAccount, const td::td_a
 void                addTransientChat(TdAccountData &account, const td::td_api::chat &chat);
 void                wipeChatTraces(PurpleAccount *purpleAccount, ChatId chatId, const std::string &convName,
                                    PurpleConversationType type);
-void                removePrivateChat(TdAccountData &account, const td::td_api::chat &chat);
 void                saveChatLastMessage(TdAccountData &account, ChatId chatId, MessageId messageId);
 MessageId           getChatLastMessage(TdAccountData &account, ChatId chatId);
 std::string         makeBasicDisplayName(const td::td_api::user &user);
@@ -136,6 +155,10 @@ void updateSupergroupChatMembers(PurpleConvChat *purpleChat, const td::td_api::c
 // the rest of it dropped
 td::td_api::object_ptr<td::td_api::formattedText> parseFormattedText(const std::string &html);
 
+// The local file at the path, for TDLib to read
+td::td_api::object_ptr<td::td_api::inputFileLocal> makeInputFileLocal(const std::string &path);
+// What TDLib uploads a file as, for a kind
+td::td_api::object_ptr<td::td_api::FileType> makeFileType(AttachmentKind kind);
 // A file going as the kind given, with its caption; the local file at the path is read for what the
 // kind needs of it, a recording's length
 td::td_api::object_ptr<td::td_api::InputMessageContent>
@@ -152,8 +175,7 @@ struct ParsedEdit {
 };
 ParsedEdit parseEdit(const char *message, const TdAccountData &account);
 bool isSameFormattedText(const td::td_api::formattedText &a, const td::td_api::formattedText &b);
-int  transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiver,
-                     TdAccountData &account, TdTransceiver::ResponseCb response);
+int  transmitMessage(ChatId chatId, const char *message, TdAccountData &account, TdTransceiver::ResponseCb response);
 
 void requestRecoveryEmailConfirmation(PurpleConnection *gc, const char *emailInfo);
 

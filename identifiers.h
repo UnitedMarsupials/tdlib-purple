@@ -5,6 +5,7 @@
 #include <string>
 #include <limits>
 #include <stdlib.h>
+#include <errno.h>
 #include <td/telegram/td_api.h>
 
 template<typename IntType>
@@ -18,9 +19,6 @@ public:
     IntType value() const { return m_value; }
 private:
     IntType m_value;
-    
-    template<typename Object>
-    friend void setId(Object &object, Identifier<IntType> id);
 };
 
 template <typename IntType>
@@ -28,18 +26,12 @@ IntType Identifier<IntType>::convertFromString(const char *s)
 {
     long long x;
     static_assert(sizeof(x) >= sizeof(IntType), "long long must hold identifier type");
-	errno = 0;
-    x = strtoll(s, NULL, 10);
+    errno = 0;
+    x = strtoll(s, nullptr, 10);
     if (errno || (x < std::numeric_limits<IntType>::min()) || (x > std::numeric_limits<IntType>::max()))
         return 0;
 
     return x;
-}
-
-template<typename Object, typename IntType>
-void setId(Object &object, Identifier<IntType> id)
-{
-    object.id_ = id.value;
 }
 
 #define DEFINE_ID_CLASS(classname, inttype) \
@@ -141,7 +133,7 @@ UserId       getUserId(const td::td_api::updateUserStatus &update);
 UserId       getUserId(const td::td_api::updateChatAction &update);
 UserId       getUserId(const td::td_api::importedContacts &contacts, unsigned index);
 UserId       getUserId(const td::td_api::users &users, unsigned index);
-UserId 	     getUserId(const td::td_api::object_ptr<td::td_api::MessageSender>& sender);
+UserId       getUserId(const td::td_api::object_ptr<td::td_api::MessageSender>& sender);
 
 ChatId       getChatId(const td::td_api::updateChatPosition &update);
 ChatId       getChatId(const td::td_api::updateChatTitle &update);

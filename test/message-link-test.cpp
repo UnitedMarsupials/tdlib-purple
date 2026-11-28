@@ -3,6 +3,7 @@
 #include "tdlib-purple.h"
 #include "client-utils.h"
 #include "buildopt.h"
+#include "rich-message.h"
 #include "td-client.h"
 #include "config.h"
 
@@ -814,7 +815,7 @@ TEST_F(MessageLinkTest, ReportMessage)
     client->reportChat(chat, {message}, "spam");
     tgl.verifyRequest(reportChat(chatIds[0], "spam", {messageId}, ""));
     tgl.reply(makeReportTextRequired("spam2", true));
-    prpl.verifyEvents(RequestInputEvent(NULL, account, NULL, NULL));
+    prpl.verifyEvents(RequestInputEvent(nullptr, account, nullptr, nullptr));
     prpl.inputEnter("Sells things");
     tgl.verifyRequest(reportChat(chatIds[0], "spam2", {messageId}, "Sells things"));
     tgl.reply(make_object<reportChatResultOk>());
@@ -841,7 +842,7 @@ TEST(JumpLink, Parse)
 
 TEST(JumpLink, OnlyWhereEnabled)
 {
-    PurpleAccount *account = purple_account_new("+1234", NULL);
+    PurpleAccount *account = purple_account_new("+1234", nullptr);
     ASSERT_EQ(std::string("12:00"), linkToMessage(account, ChatId::fromString("-100"), MessageId::fromString("5"), "12:00"));
     setJumpLinksEnabled(true);
     ASSERT_EQ(std::string("<a href=\"tdlib-message://%2B1234/-100/5\">12:00</a>"),
@@ -1154,7 +1155,7 @@ TEST_F(MessageLinkTest, ForwardToAnotherAccount)
         purpleUserName(0), purpleUserName(0), "The message was not forwarded to Friend (other): the account is not connected",
         PURPLE_MESSAGE_ERROR, 0
     ));
-    other->gc = NULL;
+    other->gc = nullptr;
 }
 
 // Telegram's own links, handed to libpurple as by a web browser's handler for tg: links
@@ -1304,5 +1305,93 @@ TEST_F(MessageLinkTest, RichMessageMedia)
                                              PURPLE_MESSAGE_SYSTEM, 0));
     tgl.reply(::makeFile(203, 1254000, "/path/photo.jpg"));
     prpl.verifyEvents(NotifyUriEvent("file:///path/photo.jpg"));
+}
+#endif
+
+#if TDLIB_API_RICH_MESSAGE
+// formatRichMessage numbers a rich message's media as it lays them out, and findRichMessageMedia
+// finds one by that number, each by a walk of its own over the nested blocks: they must agree, or a
+// click opens another file. Media numbered in the order they are written, in a list, a quote, a
+// collage and details, nested.
+TEST(RichMessageMediaTest, NumberedAlikeBothWays)
+{
+    int32_t nextId = 1;
+    // Each medium captioned with its file's id, to tell which a link is on
+    auto captionOf = [](int32_t fileId) {
+        auto text    = make_object<richTextPlain>();
+        text->text_  = "file" + std::to_string(fileId) + ".";
+        auto caption = make_object<pageBlockCaption>();
+        caption->text_ = std::move(text);
+        return caption;
+    };
+    auto photoBlock = [&nextId, &captionOf]() {
+        auto block = make_object<pageBlockPhoto>();
+        block->photo_ = make_object<photo>();
+        block->photo_->sizes_.push_back(makePhotoSize(makeFile(nextId, 1000), 320, 320));
+        block->caption_ = captionOf(nextId++);
+        return block;
+    };
+    auto videoBlock = [&nextId, &captionOf]() {
+        auto block = make_object<pageBlockVideo>();
+        block->video_ = make_object<video>();
+        block->video_->video_ = makeFile(nextId, 1000);
+        block->caption_ = captionOf(nextId++);
+        return block;
+    };
+
+    auto rich = make_object<richMessage>();
+    rich->blocks_.push_back(photoBlock());
+    auto list = make_object<pageBlockList>();
+    for (int i = 0; i < 2; i++) {
+        auto item = make_object<pageBlockListItem>();
+        item->label_ = std::to_string(i + 1);
+        item->blocks_.push_back(photoBlock());
+        item->blocks_.push_back(videoBlock());
+        list->items_.push_back(std::move(item));
+    }
+    rich->blocks_.push_back(std::move(list));
+    auto quote = make_object<pageBlockBlockQuote>();
+    quote->blocks_.push_back(videoBlock());
+    auto collage = make_object<pageBlockCollage>();
+    collage->blocks_.push_back(photoBlock());
+    collage->blocks_.push_back(videoBlock());
+    quote->blocks_.push_back(std::move(collage));
+    rich->blocks_.push_back(std::move(quote));
+    auto details = make_object<pageBlockDetails>();
+    details->blocks_.push_back(photoBlock());
+    auto inner = make_object<pageBlockList>();
+    auto item  = make_object<pageBlockListItem>();
+    item->blocks_.push_back(videoBlock());
+    inner->items_.push_back(std::move(item));
+    details->blocks_.push_back(std::move(inner));
+    rich->blocks_.push_back(std::move(details));
+    rich->blocks_.push_back(videoBlock());
+    const size_t count = nextId - 1;
+
+    // Each medium linked as #n, n counting from 0 in the order the layout gives, the n+1st file's
+    // caption after it
+    std::string html = formatRichMessage(*rich, [](size_t index) { return "#" + std::to_string(index); });
+    size_t at = 0;
+    for (size_t n = 0; n < count; n++) {
+        size_t found = html.find("\"#" + std::to_string(n) + "\"", at);
+        ASSERT_NE(std::string::npos, found) << "Medium " << n << " not linked in order in " << html;
+        size_t end = html.find("</a>", found);
+        ASSERT_NE(std::string::npos, end);
+        EXPECT_EQ(" file" + std::to_string(n + 1) + ".", html.substr(end + 4, 6 + std::to_string(n + 1).size()))
+            << "Medium " << n << " in " << html;
+        at = found;
+    }
+    EXPECT_EQ(std::string::npos, html.find("\"#" + std::to_string(count) + "\""));
+
+    // ...and found by the same number, as the n+1st written
+    for (size_t n = 0; n < count; n++) {
+        std::string              description;
+        const td::td_api::photo *photo = nullptr;
+        const td::td_api::file  *file  = findRichMessageMedia(*rich, n, description, &photo, 0);
+        ASSERT_NE(nullptr, file) << "Medium " << n << " not found";
+        EXPECT_EQ(int32_t(n + 1), file->id_) << "Medium " << n;
+    }
+    std::string description;
+    EXPECT_EQ(nullptr, findRichMessageMedia(*rich, count, description, nullptr, 0));
 }
 #endif

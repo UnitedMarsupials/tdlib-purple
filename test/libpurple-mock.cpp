@@ -25,7 +25,7 @@ static const std::string &consoleCodeset()
 {
     static const std::string codeset = [] {
         std::string result = "US-ASCII";
-        locale_t locale = newlocale(LC_CTYPE_MASK, "", (locale_t)0);
+        locale_t locale = newlocale(LC_CTYPE_MASK, "", (locale_t)nullptr);
         if (locale) {
             result = nl_langinfo_l(CODESET, locale);
             freelocale(locale);
@@ -42,7 +42,7 @@ static const std::string &consoleCodeset()
 void printToConsole(const std::string &text)
 {
     gchar *converted = g_convert_with_fallback(text.c_str(), text.size(), consoleCodeset().c_str(),
-                                               "UTF-8", "?", NULL, NULL, NULL);
+                                               "UTF-8", "?", nullptr, nullptr, nullptr);
     if (converted) {
         fputs(converted, stdout);
         g_free(converted);
@@ -143,12 +143,12 @@ extern "C++" void setPresenceIdle(bool idle)
     g_presenceIdle = idle;
 }
 
-PurplePresence *purple_account_get_presence(const PurpleAccount *account)
+PurplePresence *purple_account_get_presence(const PurpleAccount *)
 {
-    return NULL;
+    return nullptr;
 }
 
-gboolean purple_presence_is_idle(const PurplePresence *presence)
+gboolean purple_presence_is_idle(const PurplePresence *)
 {
     return g_presenceIdle;
 }
@@ -172,7 +172,7 @@ PurpleAccount *purple_account_new(const char *username, const char *protocol_id)
     account->username = strdup(username);
     account->protocol_id = protocol_id ? strdup(protocol_id) : nullptr;
     account->alias = nullptr;
-    account->proxy_info = NULL;
+    account->proxy_info = nullptr;
 
     g_accounts.emplace_back();
     g_accounts.back().account = account;
@@ -182,12 +182,12 @@ PurpleAccount *purple_account_new(const char *username, const char *protocol_id)
 
 PurpleBlistNode root = {
     .type = PURPLE_BLIST_OTHER_NODE,
-    .prev = NULL,
-    .next = NULL,
-    .parent = NULL,
-    .child = NULL,
-    .settings = NULL,
-    .ui_data = NULL,
+    .prev = nullptr,
+    .next = nullptr,
+    .parent = nullptr,
+    .child = nullptr,
+    .settings = nullptr,
+    .ui_data = nullptr,
     .flags = (PurpleBlistNodeFlags)0
 };
 
@@ -231,15 +231,15 @@ PurpleAccount *purple_accounts_find(const char *name, const char *protocol)
                            });
     if (it != g_accounts.end())
         return it->account;
-    return NULL;
+    return nullptr;
 }
 
 GList *purple_connections_get_all(void)
 {
     // Libpurple's own, not to be freed: kept until asked again
-    static GList *connections = NULL;
+    static GList *connections = nullptr;
     g_list_free(connections);
-    connections = NULL;
+    connections = nullptr;
     for (const AccountInfo &account: g_accounts)
         if (account.account->gc)
             connections = g_list_append(connections, account.account->gc);
@@ -254,7 +254,7 @@ void purple_blist_add_account(PurpleAccount *account)
 static void addNode(PurpleBlistNode &node)
 {
     node.next = root.child;
-    node.prev = NULL;
+    node.prev = nullptr;
     if (root.child)
         root.child->prev = &node;
     root.child = &node;
@@ -266,7 +266,7 @@ static void removeNode(PurpleBlistNode &node)
     for (found = root.child; found; found = found->next)
         if (found == &node)
             break;
-    ASSERT_TRUE(found != NULL) << "Removing unknown blist node";
+    ASSERT_TRUE(found != nullptr) << "Removing unknown blist node";
     if (node.prev)
         node.prev->next = node.next;
     if (node.next)
@@ -277,14 +277,14 @@ static void removeNode(PurpleBlistNode &node)
 
 void purple_blist_add_buddy(PurpleBuddy *buddy, PurpleContact *contact, PurpleGroup *group, PurpleBlistNode *node)
 {
-    ASSERT_EQ(NULL, node) << "Not supported";
+    ASSERT_EQ(nullptr, node) << "Not supported";
     auto pAccount = std::find_if(g_accounts.begin(), g_accounts.end(),
                                  [buddy](const AccountInfo &info) { return (info.account == buddy->account); });
     ASSERT_FALSE(pAccount == g_accounts.end()) << "Adding buddy with unknown account";
 
     // As in libpurple, adding a buddy already in the list moves it to the group
     if (std::find(pAccount->buddies.begin(), pAccount->buddies.end(), buddy) != pAccount->buddies.end()) {
-        buddy->node.parent = group ? &group->node : NULL;
+        buddy->node.parent = group ? &group->node : nullptr;
         EVENT(AddBuddyEvent, buddy->name, buddy->alias, buddy->account, contact, group, node);
         return;
     }
@@ -295,14 +295,14 @@ void purple_blist_add_buddy(PurpleBuddy *buddy, PurpleContact *contact, PurpleGr
                              }) == pAccount->buddies.end())
         << "Buddy already exists in this account";
 
-    buddy->node.parent = group ? &group->node : NULL;
+    buddy->node.parent = group ? &group->node : nullptr;
     addNode(buddy->node);
     pAccount->buddies.push_back(buddy);
 
     EVENT(AddBuddyEvent, buddy->name, buddy->alias, buddy->account, contact, group, node);
 }
 
-void purple_blist_remove_account(PurpleAccount *account)
+void purple_blist_remove_account(PurpleAccount *)
 {
     // TODO add event
 }
@@ -326,7 +326,7 @@ static gboolean
 purple_strings_are_different(const char *one, const char *two)
 {
         return !((one && two && g_utf8_collate(one, two) == 0) ||
-                        ((one == NULL || *one == '\0') && (two == NULL || *two == '\0')));
+                        ((one == nullptr || *one == '\0') && (two == nullptr || *two == '\0')));
 }
 
 void purple_blist_alias_buddy(PurpleBuddy *buddy, const char *alias)
@@ -374,7 +374,7 @@ void purple_blist_remove_chat(PurpleChat *chat)
 
 GSList *purple_find_buddies(PurpleAccount *account, const char *name)
 {
-    GSList *result = NULL;
+    GSList *result = nullptr;
     for (const AccountInfo &info: g_accounts)
         if (info.account == account)
             for (PurpleBuddy *buddy: info.buddies)
@@ -416,13 +416,13 @@ PurpleAccount *purple_buddy_get_account(const PurpleBuddy *buddy)
 
 static void newNode(PurpleBlistNode &node, PurpleBlistNodeType type)
 {
-    node.child = NULL;
-    node.next = NULL;
-    node.parent = NULL;
-    node.prev = NULL;
+    node.child = nullptr;
+    node.next = nullptr;
+    node.parent = nullptr;
+    node.prev = nullptr;
     node.type = type;
     node.flags = (PurpleBlistNodeFlags)0;
-    node.settings = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
+    node.settings = g_hash_table_new_full(g_str_hash, g_str_equal, nullptr, g_free);
 }
 
 PurpleBuddy *purple_buddy_new(PurpleAccount *account, const char *name, const char *alias)
@@ -431,8 +431,8 @@ PurpleBuddy *purple_buddy_new(PurpleAccount *account, const char *name, const ch
 
     buddy->account = account;
     buddy->name = strdup(name);
-    buddy->alias = alias ? strdup(alias) : NULL;
-    buddy->node.parent = NULL;
+    buddy->alias = alias ? strdup(alias) : nullptr;
+    buddy->node.parent = nullptr;
     newNode(buddy->node, PURPLE_BLIST_BUDDY_NODE);
 
     return buddy;
@@ -449,9 +449,11 @@ void purple_buddy_destroy(PurpleBuddy *buddy)
 void
 purple_buddy_icons_set_for_user(PurpleAccount *account, const char *username,
                                 void *icon_data, size_t icon_len,
-                                const char *checksum)
+                                const char *)
 {
     EVENT(SetUserPhotoEvent, account, username, icon_data, icon_len);
+    // libpurple takes the data, and frees it
+    g_free(icon_data);
 }
 
 PurpleStoredImage *
@@ -460,7 +462,8 @@ purple_buddy_icons_node_set_custom_icon(PurpleBlistNode *node,
 {
     EXPECT_TRUE(PURPLE_BLIST_NODE_IS_CHAT(node));
     EVENT(SetUserPhotoEvent, PURPLE_CHAT(node)->account, getChatName(PURPLE_CHAT(node)), icon_data, icon_len);
-    return NULL;
+    g_free(icon_data);
+    return nullptr;
 }
 
 PurpleChat *purple_chat_new(PurpleAccount *account, const char *alias, GHashTable *components)
@@ -475,7 +478,7 @@ PurpleChat *purple_chat_new(PurpleAccount *account, const char *alias, GHashTabl
 
 void purple_blist_add_chat(PurpleChat *chat, PurpleGroup *group, PurpleBlistNode *node)
 {
-    ASSERT_EQ(NULL, node) << "Not supported";
+    ASSERT_EQ(nullptr, node) << "Not supported";
     char *name = getChatName(chat);
 
     auto pAccount = std::find_if(g_accounts.begin(), g_accounts.end(),
@@ -484,7 +487,7 @@ void purple_blist_add_chat(PurpleChat *chat, PurpleGroup *group, PurpleBlistNode
 
     // One in the buddy list already is moved, as real libpurple does, which tells only the signal
     if (std::find(pAccount->chats.begin(), pAccount->chats.end(), chat) != pAccount->chats.end()) {
-        chat->node.parent = group ? &group->node : NULL;
+        chat->node.parent = group ? &group->node : nullptr;
         EVENT(AddChatEvent, name, chat->alias, chat->account, group, node);
         emitBlistNodeAdded(&chat->node);
         return;
@@ -496,7 +499,7 @@ void purple_blist_add_chat(PurpleChat *chat, PurpleGroup *group, PurpleBlistNode
                              }) == pAccount->chats.end())
         << "Chat already exists in this account";
 
-    chat->node.parent = group ? &group->node : NULL;
+    chat->node.parent = group ? &group->node : nullptr;
     addNode(chat->node);
     pAccount->chats.push_back(chat);
 
@@ -513,7 +516,7 @@ PurpleChat *purple_blist_find_chat(PurpleAccount *account, const char *name)
 {
     // real purple_blist_find_chat does this
     if (!purple_account_is_connected(account))
-        return NULL;
+        return nullptr;
 
     auto pAccount = std::find_if(g_accounts.begin(), g_accounts.end(),
                                  [account](const AccountInfo &info) { return (info.account == account); });
@@ -528,7 +531,7 @@ PurpleChat *purple_blist_find_chat(PurpleAccount *account, const char *name)
             return *it;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 const char *purple_chat_get_name(PurpleChat *chat)
@@ -555,7 +558,7 @@ void purple_connection_error(PurpleConnection *gc, const char *reason)
     EVENT(ConnectionErrorEvent, gc, reason);
 }
 
-void purple_connection_error_reason(PurpleConnection *gc, PurpleConnectionError reason, const char *description)
+void purple_connection_error_reason(PurpleConnection *gc, PurpleConnectionError, const char *description)
 {
     EVENT(ConnectionErrorEvent, gc, description);
 }
@@ -586,7 +589,7 @@ void purple_connection_set_state(PurpleConnection *gc, PurpleConnectionState sta
     EVENT(ConnectionSetStateEvent, gc, state);
 }
 
-void purple_connection_update_progress(PurpleConnection *gc, const char *text,
+void purple_connection_update_progress(PurpleConnection *gc, const char *,
 									 size_t step, size_t count)
 {
     EVENT(ConnectionUpdateProgressEvent, gc, step, count);
@@ -616,8 +619,8 @@ static PurpleConversation *purple_conversation_new_impl(PurpleConversationType t
     conv->type = type;
     conv->account = account;
     conv->name = strdup(name);
-    conv->title = NULL;
-    conv->ui_ops = NULL;
+    conv->title = nullptr;
+    conv->ui_ops = nullptr;
     conv->logging = TRUE;
     if (conv->type == PURPLE_CONV_TYPE_IM) {
         conv->u.im = new PurpleConvIm;
@@ -688,7 +691,7 @@ PurpleConvIm *purple_conversation_get_im_data(const PurpleConversation *conv)
     if (conv->type == PURPLE_CONV_TYPE_IM)
         return conv->u.im;
 
-    return NULL;
+    return nullptr;
 }
 
 PurpleConvChat *purple_conversation_get_chat_data(const PurpleConversation *conv)
@@ -696,7 +699,7 @@ PurpleConvChat *purple_conversation_get_chat_data(const PurpleConversation *conv
     if (conv->type == PURPLE_CONV_TYPE_CHAT)
         return conv->u.chat;
 
-    return NULL;
+    return nullptr;
 }
 
 PurpleAccount *purple_conversation_get_account(const PurpleConversation *conv)
@@ -771,12 +774,12 @@ void purple_conv_chat_write(PurpleConvChat *chat, const char *who,
 }
 
 // Only what is dropped into Pidgin's conversations is fetched, which the tests do not do
-PurpleUtilFetchUrlData *purple_util_fetch_url_request_len(const gchar *url, gboolean full, const gchar *user_agent,
-                                                          gboolean http11, const gchar *request,
-                                                          gboolean include_headers, gssize max_len,
-                                                          PurpleUtilFetchUrlCallback callback, void *data)
+PurpleUtilFetchUrlData *purple_util_fetch_url_request_len(const gchar *, gboolean, const gchar *,
+                                                          gboolean, const gchar *,
+                                                          gboolean, gssize,
+                                                          PurpleUtilFetchUrlCallback, void *)
 {
-    return NULL;
+    return nullptr;
 }
 
 
@@ -827,7 +830,7 @@ PurpleBuddy *purple_find_buddy(PurpleAccount *account, const char *name)
             return *it;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 PurpleConversation *purple_find_chat(const PurpleConnection *gc, int id)
@@ -846,7 +849,7 @@ PurpleConversation *purple_find_chat(const PurpleConnection *gc, int id)
             return *it;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 PurpleConversation *purple_find_conversation_with_account(
@@ -865,32 +868,32 @@ PurpleConversation *purple_find_conversation_with_account(
         if (it != pAccount->conversations.end())
             return *it;
     }
-    return NULL;
+    return nullptr;
 }
 
 GList *purple_get_conversations(void)
 {
     // libpurple's own list, not to be freed by the caller: made anew each time
-    static GList *conversations = NULL;
+    static GList *conversations = nullptr;
     g_list_free(conversations);
-    conversations = NULL;
+    conversations = nullptr;
     for (const AccountInfo &info: g_accounts)
         for (PurpleConversation *conv: info.conversations)
             conversations = g_list_append(conversations, conv);
     return conversations;
 }
 
-void purple_notify_close(PurpleNotifyType type, void *ui_handle)
+void purple_notify_close(PurpleNotifyType, void *)
 {
 }
 
-void *purple_notify_message(void *handle, PurpleNotifyMsgType type,
-						  const char *title, const char *primary,
-						  const char *secondary, PurpleNotifyCloseCallback cb,
-						  gpointer user_data)
+void *purple_notify_message(void *, PurpleNotifyMsgType,
+						  const char *, const char *,
+						  const char *, PurpleNotifyCloseCallback,
+						  gpointer)
 {
     // TODO event
-    return NULL;
+    return nullptr;
 }
 
 // Custom smileys, as Pidgin has them; other front-ends turn them down
@@ -902,7 +905,7 @@ extern "C++" void setCustomSmileys(bool supported)
 }
 
 gboolean purple_conv_custom_smiley_add(PurpleConversation *conv, const char *smile,
-                                       const char *cksum_type, const char *chksum, gboolean remote)
+                                       const char *, const char *, gboolean)
 {
     if (!g_customSmileys)
         return FALSE;
@@ -911,7 +914,7 @@ gboolean purple_conv_custom_smiley_add(PurpleConversation *conv, const char *smi
 }
 
 void purple_conv_custom_smiley_write(PurpleConversation *conv, const char *smile,
-                                     const guchar *data, gsize size)
+                                     const guchar *, gsize size)
 {
     EVENT(CustomSmileyWriteEvent, conv->name, smile, size);
 }
@@ -951,10 +954,10 @@ void purple_conversation_set_data(PurpleConversation *conv, const char *key, gpo
 gpointer purple_conversation_get_data(PurpleConversation *conv, const char *key)
 {
     auto it = g_conversationData.find(std::make_pair(conv, std::string(key)));
-    return (it != g_conversationData.end()) ? it->second : NULL;
+    return (it != g_conversationData.end()) ? it->second : nullptr;
 }
 
-void purple_conversation_update(PurpleConversation *conv, PurpleConvUpdateType type)
+void purple_conversation_update(PurpleConversation *, PurpleConvUpdateType)
 {
 }
 
@@ -977,35 +980,35 @@ int getImageRefs(int id)
     return (it != g_imageRefs.end()) ? it->second : 0;
 }
 
-void *purple_notify_uri(void *handle, const char *uri)
+void *purple_notify_uri(void *, const char *uri)
 {
     EVENT(NotifyUriEvent, uri);
-    return NULL;
+    return nullptr;
 }
 
 PurpleNotifyUserInfo *purple_notify_user_info_new(void)
 {
-    return NULL;
+    return nullptr;
 }
 
-GList *purple_notify_user_info_get_entries(PurpleNotifyUserInfo *user_info)
+GList *purple_notify_user_info_get_entries(PurpleNotifyUserInfo *)
 {
-    return NULL;
+    return nullptr;
 }
 
-void purple_notify_user_info_add_section_break(PurpleNotifyUserInfo *user_info)
-{
-}
-
-void purple_notify_user_info_add_pair(PurpleNotifyUserInfo *user_info, const char *label, const char *value)
+void purple_notify_user_info_add_section_break(PurpleNotifyUserInfo *)
 {
 }
 
-void *purple_notify_userinfo(PurpleConnection *gc, const char *who,
-						   PurpleNotifyUserInfo *user_info, PurpleNotifyCloseCallback cb,
-						   gpointer user_data)
+void purple_notify_user_info_add_pair(PurpleNotifyUserInfo *, const char *, const char *)
 {
-    return NULL;
+}
+
+void *purple_notify_userinfo(PurpleConnection *, const char *,
+						   PurpleNotifyUserInfo *, PurpleNotifyCloseCallback,
+						   gpointer)
+{
+    return nullptr;
 }
 
 gboolean purple_plugin_register(PurplePlugin *plugin)
@@ -1027,12 +1030,12 @@ void purple_prpl_got_user_status(PurpleAccount *account, const char *name,
     EVENT(UserStatusEvent, account, name, type);
 }
 
-gboolean purple_prefs_exists(const char *name)
+gboolean purple_prefs_exists(const char *)
 {
     return FALSE;
 }
 
-int purple_prefs_get_int(const char *name)
+int purple_prefs_get_int(const char *)
 {
     return 0;
 }
@@ -1046,15 +1049,15 @@ gboolean purple_prefs_get_bool(const char *name)
 
 PurpleIdleUiOps *purple_idle_get_ui_ops(void)
 {
-    return NULL;
+    return nullptr;
 }
 
-void purple_conversation_clear_message_history(PurpleConversation *conv)
+void purple_conversation_clear_message_history(PurpleConversation *)
 {
 }
 
 void *purple_request_action(void *handle, const char *title, const char *primary,
-	const char *secondary, int default_action, PurpleAccount *account,
+	const char *secondary, int, PurpleAccount *account,
 	const char *who, PurpleConversation *conv, void *user_data,
 	size_t action_count, ...)
 {
@@ -1069,7 +1072,7 @@ void *purple_request_action(void *handle, const char *title, const char *primary
     va_end(ap);
 
     EVENT(RequestActionEvent, handle, title, primary, secondary, account, who, conv, user_data, buttons, callbacks);
-    return NULL;
+    return nullptr;
 }
 
 static bool g_requestInputSupported = true;
@@ -1080,8 +1083,8 @@ extern "C++" void setRequestInputSupported(bool supported)
 }
 
 void *purple_request_input(void *handle, const char *title, const char *primary,
-	const char *secondary, const char *default_value, gboolean multiline,
-	gboolean masked, gchar *hint,
+	const char *secondary, const char *default_value, gboolean,
+	gboolean, gchar *,
 	const char *ok_text, GCallback ok_cb,
 	const char *cancel_text, GCallback cancel_cb,
 	PurpleAccount *account, const char *who, PurpleConversation *conv,
@@ -1089,7 +1092,7 @@ void *purple_request_input(void *handle, const char *title, const char *primary,
 {
     // No request ui-ops: libpurple asks nothing and returns NULL
     if (!g_requestInputSupported)
-        return NULL;
+        return nullptr;
     EVENT(RequestInputEvent, handle, title, primary, secondary, default_value, ok_text, ok_cb,
           cancel_text, cancel_cb, account, who, conv, user_data);
 
@@ -1097,7 +1100,7 @@ void *purple_request_input(void *handle, const char *title, const char *primary,
     return &g_accounts;
 }
 
-PurpleRoomlist *purple_roomlist_new(PurpleAccount *account)
+PurpleRoomlist *purple_roomlist_new(PurpleAccount *)
 {
     PurpleRoomlist *roomlist = new PurpleRoomlist;
     roomlist->ref = 1;
@@ -1126,8 +1129,8 @@ void purple_roomlist_unref(PurpleRoomlist *list)
 }
 
 PurpleRoomlistField *purple_roomlist_field_new(PurpleRoomlistFieldType type,
-                                           const gchar *label, const gchar *name,
-                                           gboolean hidden)
+                                           const gchar *, const gchar *name,
+                                           gboolean)
 {
     PurpleRoomlistField *field = new PurpleRoomlistField;
     field->type = type;
@@ -1149,11 +1152,11 @@ void purple_roomlist_set_fields(PurpleRoomlist *list, GList *fields)
 
 struct RealRoom {
     std::vector<std::string> fieldValues;
-    GList firstField = {NULL, NULL, NULL};
+    GList firstField = {nullptr, nullptr, nullptr};
 };
 
-PurpleRoomlistRoom *purple_roomlist_room_new(PurpleRoomlistRoomType type, const gchar *name,
-                                         PurpleRoomlistRoom *parent)
+PurpleRoomlistRoom *purple_roomlist_room_new(PurpleRoomlistRoomType, const gchar *,
+                                         PurpleRoomlistRoom *)
 {
     PurpleRoomlistRoom *room = reinterpret_cast<PurpleRoomlistRoom *>(new RealRoom);
     return room;
@@ -1192,18 +1195,18 @@ void purple_roomlist_room_add(PurpleRoomlist *list, PurpleRoomlistRoom *notRoom)
     delete room;
 }
 
-void purple_serv_got_join_chat_failed(PurpleConnection *gc, GHashTable *data)
+void purple_serv_got_join_chat_failed(PurpleConnection *, GHashTable *)
 {
     // TODO event
 }
 
-PurpleStatusType *purple_status_type_new_full(PurpleStatusPrimitive primitive,
-										  const char *id, const char *name,
-										  gboolean saveable,
-										  gboolean user_settable,
-										  gboolean independent)
+PurpleStatusType *purple_status_type_new_full(PurpleStatusPrimitive,
+										  const char *, const char *,
+										  gboolean,
+										  gboolean,
+										  gboolean)
 {
-    return NULL;
+    return nullptr;
 }
 
 const char *purple_user_dir(void)
@@ -1219,8 +1222,8 @@ PurpleXfer *purple_xfer_new(PurpleAccount *account,
     xfer->type = type;
     xfer->who = strdup(who);
     xfer->ref = 1;
-    xfer->filename = NULL;
-    xfer->local_filename = NULL;
+    xfer->filename = nullptr;
+    xfer->local_filename = nullptr;
     xfer->status = PURPLE_XFER_STATUS_UNKNOWN;
     xfer->size = 0;
     memset(&xfer->ops, 0, sizeof(xfer->ops));
@@ -1320,8 +1323,8 @@ void purple_xfer_set_size(PurpleXfer *xfer, size_t size)
     xfer->size = size;
 }
 
-void purple_xfer_start(PurpleXfer *xfer, int fd, const char *ip,
-					 unsigned int port)
+void purple_xfer_start(PurpleXfer *xfer, int, const char *,
+					 unsigned int)
 {
     EVENT(XferStartEvent, xfer->local_filename);
     xfer->status = PURPLE_XFER_STATUS_STARTED;
@@ -1356,7 +1359,7 @@ void purple_xfer_cancel_remote(PurpleXfer *xfer)
     purple_xfer_unref(xfer);
 }
 
-void purple_xfer_error(PurpleXferType type, PurpleAccount *account, const char *who, const char *msg)
+void purple_xfer_error(PurpleXferType, PurpleAccount *account, const char *who, const char *msg)
 {
     purple_notify_error(account, "Xfer error", who, msg);
 }
@@ -1427,7 +1430,7 @@ void serv_got_chat_in(PurpleConnection *g, int id, const char *who,
 void serv_got_im(PurpleConnection *gc, const char *who, const char *msg,
 				 PurpleMessageFlags flags, time_t mtime)
 {
-    if (purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, who, gc->account) == NULL) {
+    if (purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, who, gc->account) == nullptr) {
         purple_conversation_new_impl(PURPLE_CONV_TYPE_IM, gc->account, who);
     }
     EVENT(ServGotImEvent, gc, who, msg, flags, mtime);
@@ -1447,13 +1450,13 @@ PurpleConversation *serv_got_joined_chat(PurpleConnection *gc,
     return conv;
 }
 
-void serv_got_typing(PurpleConnection *gc, const char *name, int timeout,
-					 PurpleTypingState state)
+void serv_got_typing(PurpleConnection *, const char *, int,
+					 PurpleTypingState)
 {
     // TODO event
 }
 
-void serv_got_typing_stopped(PurpleConnection *gc, const char *name)
+void serv_got_typing_stopped(PurpleConnection *, const char *)
 {
     // TODO event
 }
@@ -1470,12 +1473,12 @@ void purple_conv_chat_add_user(PurpleConvChat *chat, const char *user,
     EVENT(ChatAddUserEvent, chat->conv->name, user, extra_msg ? extra_msg : "", flags, new_arrival);
 }
 
-void purple_conv_chat_add_users(PurpleConvChat *chat, GList *users, GList *extra_msgs,
+void purple_conv_chat_add_users(PurpleConvChat *chat, GList *users, GList *,
 							  GList *flags, gboolean new_arrivals)
 {
     GList *user, *flag;
     for (user = users, flag = flags; user; user = user->next, flag = flag->next)
-        purple_conv_chat_add_user(chat, (const char *)user->data, NULL,
+        purple_conv_chat_add_user(chat, (const char *)user->data, nullptr,
                                   (PurpleConvChatBuddyFlags)GPOINTER_TO_INT(flag->data), new_arrivals);
 }
 
@@ -1544,7 +1547,7 @@ PurpleGroup *purple_find_group(const char *name)
     for (PurpleGroup *group: g_groups)
         if (!strcmp(name, group->name))
             return group;
-    return NULL;
+    return nullptr;
 }
 
 PurpleGroup *purple_group_new(const char *name)
@@ -1555,7 +1558,7 @@ PurpleGroup *purple_group_new(const char *name)
     return group;
 }
 
-void purple_blist_add_group(PurpleGroup *group, PurpleBlistNode *node)
+void purple_blist_add_group(PurpleGroup *group, PurpleBlistNode *)
 {
     addNode(group->node);
     g_groups.push_back(group);
@@ -1607,7 +1610,7 @@ guint8 *arrayDup(gpointer data, size_t size)
     return result;
 }
 
-int purple_imgstore_add_with_id(gpointer data, size_t size, const char *filename)
+int purple_imgstore_add_with_id(gpointer data, size_t size, const char *)
 {
     imageStore.push_back(std::make_unique<PurpleStoredImage>());
     imageStore.back()->data = std::vector<uint8_t>(size);
@@ -1648,10 +1651,10 @@ extern "C" {
 void *gdk_pixbuf_get_file_info(const gchar *filename, gint *width, gint *height)
 {
     static int format;
-    gchar     *data = NULL;
+    gchar     *data = nullptr;
     gsize      size = 0;
-    if (!g_file_get_contents(filename, &data, &size, NULL))
-        return NULL;
+    if (!g_file_get_contents(filename, &data, &size, nullptr))
+        return nullptr;
     std::string contents(data, size);
     g_free(data);
 
@@ -1660,7 +1663,7 @@ void *gdk_pixbuf_get_file_info(const gchar *filename, gint *width, gint *height)
             *width = *height = 100;
             return &format;
         }
-    return NULL;
+    return nullptr;
 }
 
 }
@@ -1669,8 +1672,7 @@ PurpleStoredImage *purple_imgstore_find_by_id(int id)
 {
     if ((id >= 1) && ((unsigned)id <= imageStore.size()))
         return imageStore[id-1].get();
-    else
-        return NULL;
+    return nullptr;
 }
 
 gconstpointer purple_imgstore_get_data(PurpleStoredImage *img)
@@ -1753,39 +1755,39 @@ const char *purple_proxy_info_get_password(const PurpleProxyInfo *info)
 
 PurpleRequestFields *purple_request_fields_new(void)
 {
-    return NULL;
+    return nullptr;
 }
 
-PurpleRequestFieldGroup *purple_request_field_group_new(const char *title)
+PurpleRequestFieldGroup *purple_request_field_group_new(const char *)
 {
-    return NULL;
+    return nullptr;
 }
 
-PurpleRequestField *purple_request_field_string_new(const char *id,
-												const char *text,
-												const char *default_value,
-												gboolean multiline)
+PurpleRequestField *purple_request_field_string_new(const char *,
+												const char *,
+												const char *,
+												gboolean)
 {
-    return NULL;
+    return nullptr;
 }
 
-void purple_request_field_set_type_hint(PurpleRequestField *field,
-									  const char *type_hint)
-{
-}
-
-void purple_request_field_string_set_masked(PurpleRequestField *field,
-										  gboolean masked)
+void purple_request_field_set_type_hint(PurpleRequestField *,
+									  const char *)
 {
 }
 
-void purple_request_field_group_add_field(PurpleRequestFieldGroup *group,
-										PurpleRequestField *field)
+void purple_request_field_string_set_masked(PurpleRequestField *,
+										  gboolean)
 {
 }
 
-void purple_request_fields_add_group(PurpleRequestFields *fields,
-								   PurpleRequestFieldGroup *group)
+void purple_request_field_group_add_field(PurpleRequestFieldGroup *,
+										PurpleRequestField *)
+{
+}
+
+void purple_request_fields_add_group(PurpleRequestFields *,
+								   PurpleRequestFieldGroup *)
 {
 }
 
@@ -1808,35 +1810,35 @@ static bool answerRequest(GCallback ok_cb, GCallback cancel_cb, void *user_data)
 {
     if (g_requestAnswers.empty() || !ok_cb) {
         if (cancel_cb)
-            reinterpret_cast<PurpleRequestFieldsCb>(cancel_cb)(user_data, NULL);
+            reinterpret_cast<PurpleRequestFieldsCb>(cancel_cb)(user_data, nullptr);
         return false;
     }
     std::map<std::string, std::string> answer = std::move(g_requestAnswers.front());
     g_requestAnswers.erase(g_requestAnswers.begin());
     g_requestAnswer = &answer;
-    reinterpret_cast<PurpleRequestFieldsCb>(ok_cb)(user_data, NULL);
+    reinterpret_cast<PurpleRequestFieldsCb>(ok_cb)(user_data, nullptr);
     g_requestAnswer = nullptr;
     return true;
 }
 
-const char *purple_request_fields_get_string(const PurpleRequestFields *fields,
+const char *purple_request_fields_get_string(const PurpleRequestFields *,
 										   const char *id)
 {
     auto it = g_requestAnswer ? g_requestAnswer->find(id) : decltype(g_requestAnswer->end())();
     return (g_requestAnswer && (it != g_requestAnswer->end())) ? it->second.c_str() : "";
 }
 
-gboolean purple_request_fields_get_bool(const PurpleRequestFields *fields, const char *id)
+gboolean purple_request_fields_get_bool(const PurpleRequestFields *, const char *id)
 {
     return g_requestAnswer && g_requestAnswer->count(id) && (g_requestAnswer->at(id) == "1");
 }
 
-PurpleRequestField *purple_request_field_bool_new(const char *id, const char *text, gboolean default_value)
+PurpleRequestField *purple_request_field_bool_new(const char *, const char *, gboolean)
 {
-    return NULL;
+    return nullptr;
 }
 
-void purple_request_field_set_required(PurpleRequestField *field, gboolean required)
+void purple_request_field_set_required(PurpleRequestField *, gboolean)
 {
 }
 
@@ -1850,18 +1852,18 @@ void purple_account_request_password(PurpleAccount *account, GCallback ok_cb, GC
 // No buddy list window to draw anew
 PurpleBlistUiOps *purple_blist_get_ui_ops(void)
 {
-    return NULL;
+    return nullptr;
 }
 
 PurpleBuddyList *purple_get_blist(void)
 {
-    return NULL;
+    return nullptr;
 }
 
 // No logs, as the tests' conversations are never filled from them, there being no Pidgin
-GList *purple_log_get_logs(PurpleLogType type, const char *name, PurpleAccount *account)
+GList *purple_log_get_logs(PurpleLogType, const char *, PurpleAccount *)
 {
-    return NULL;
+    return nullptr;
 }
 
 // Logged already, unless a test says not
@@ -1870,7 +1872,7 @@ extern "C++" void setLogTotalSize(int size)
     g_logTotalSize = size;
 }
 
-int purple_log_get_total_size(PurpleLogType type, const char *name, PurpleAccount *account)
+int purple_log_get_total_size(PurpleLogType, const char *, PurpleAccount *)
 {
     return g_logTotalSize;
 }
@@ -1880,16 +1882,16 @@ char *purple_log_get_log_dir(PurpleLogType type, const char *name, PurpleAccount
 {
     std::string base = name + std::string(type == PURPLE_LOG_CHAT ? ".chat" : "");
     return g_build_filename(purple_user_dir(), "logs", "telegram", purple_account_get_username(account), base.c_str(),
-                            NULL);
+                            nullptr);
 }
 
-char *purple_log_read(PurpleLog *log, PurpleLogReadFlags *flags)
+char *purple_log_read(PurpleLog *, PurpleLogReadFlags *)
 {
     return g_strdup("");
 }
 
 PurpleLog *purple_log_new(PurpleLogType type, const char *name, PurpleAccount *account,
-                          PurpleConversation *conv, time_t time, const struct tm *tm)
+                          PurpleConversation *conv, time_t time, const struct tm *)
 {
     PurpleLog *log = g_new0(PurpleLog, 1);
     log->type    = type;
@@ -1900,7 +1902,7 @@ PurpleLog *purple_log_new(PurpleLogType type, const char *name, PurpleAccount *a
     return log;
 }
 
-void purple_log_write(PurpleLog *log, PurpleMessageFlags type, const char *from, time_t time, const char *message)
+void purple_log_write(PurpleLog *, PurpleMessageFlags, const char *, time_t, const char *message)
 {
     g_loggedMessages.push_back(message);
 }
@@ -1913,24 +1915,24 @@ void purple_log_free(PurpleLog *log)
     }
 }
 
-PurpleRequestField *purple_request_field_choice_new(const char *id, const char *text, int default_value)
+PurpleRequestField *purple_request_field_choice_new(const char *, const char *, int)
 {
-    return NULL;
+    return nullptr;
 }
 
-void purple_request_field_choice_add(PurpleRequestField *field, const char *label)
+void purple_request_field_choice_add(PurpleRequestField *, const char *)
 {
 }
 
 // As answered, by its index
-int purple_request_fields_get_choice(const PurpleRequestFields *fields, const char *id)
+int purple_request_fields_get_choice(const PurpleRequestFields *, const char *id)
 {
     auto it = g_requestAnswer ? g_requestAnswer->find(id) : decltype(g_requestAnswer->end())();
     return (g_requestAnswer && (it != g_requestAnswer->end())) ? atoi(it->second.c_str()) : -1;
 }
 
 // The list only, telling no server
-gboolean purple_privacy_deny_add(PurpleAccount *account, const char *who, gboolean local_only)
+gboolean purple_privacy_deny_add(PurpleAccount *account, const char *who, gboolean)
 {
     for (GSList *item = account->deny; item; item = item->next)
         if (!strcmp(static_cast<const char *>(item->data), who))
@@ -1939,7 +1941,7 @@ gboolean purple_privacy_deny_add(PurpleAccount *account, const char *who, gboole
     return TRUE;
 }
 
-gboolean purple_privacy_deny_remove(PurpleAccount *account, const char *who, gboolean local_only)
+gboolean purple_privacy_deny_remove(PurpleAccount *account, const char *who, gboolean)
 {
     for (GSList *item = account->deny; item; item = item->next)
         if (!strcmp(static_cast<const char *>(item->data), who)) {
@@ -1971,11 +1973,11 @@ extern "C++" void setRequestListChoices(std::vector<int> indices)
     g_requestListChoices = std::move(indices);
 }
 
-void *purple_request_fields(void *handle, const char *title, const char *primary,
-	const char *secondary, PurpleRequestFields *fields,
-	const char *ok_text, GCallback ok_cb,
-	const char *cancel_text, GCallback cancel_cb,
-	PurpleAccount *account, const char *who, PurpleConversation *conv,
+void *purple_request_fields(void *, const char *, const char *,
+	const char *, PurpleRequestFields *fields,
+	const char *, GCallback ok_cb,
+	const char *, GCallback cancel_cb,
+	PurpleAccount *, const char *, PurpleConversation *,
 	void *user_data)
 {
     ListField       *list    = g_listField;
@@ -2003,10 +2005,10 @@ void *purple_request_fields(void *handle, const char *title, const char *primary
     if (list)
         g_list_free(list->selected);
     delete list;
-    return NULL;
+    return nullptr;
 }
 
-PurpleRequestField *purple_request_field_list_new(const char *id, const char *text)
+PurpleRequestField *purple_request_field_list_new(const char *, const char *)
 {
     delete g_listField;
     g_listField = new ListField;
@@ -2028,7 +2030,7 @@ void purple_request_field_list_set_multi_select(PurpleRequestField *field, gbool
 
 GList *purple_request_field_list_get_selected(const PurpleRequestField *field)
 {
-    return field ? reinterpret_cast<const ListField *>(field)->selected : NULL;
+    return field ? reinterpret_cast<const ListField *>(field)->selected : nullptr;
 }
 
 void *purple_request_field_list_get_data(const PurpleRequestField *field, const char *text)
@@ -2037,10 +2039,10 @@ void *purple_request_field_list_get_data(const PurpleRequestField *field, const 
         for (const auto &item: reinterpret_cast<const ListField *>(field)->items)
             if (item.first == text)
                 return item.second;
-    return NULL;
+    return nullptr;
 }
 
-PurpleRequestField *purple_request_fields_get_field(const PurpleRequestFields *fields, const char *id)
+PurpleRequestField *purple_request_fields_get_field(const PurpleRequestFields *, const char *)
 {
     // The only field there is, the list, while its request is answered
     return reinterpret_cast<PurpleRequestField *>(g_listField);
@@ -2049,21 +2051,21 @@ PurpleRequestField *purple_request_fields_get_field(const PurpleRequestFields *f
 GList *purple_get_chats(void)
 {
     // libpurple's own list, not to be freed by the caller: made anew each time
-    static GList *chats = NULL;
+    static GList *chats = nullptr;
     g_list_free(chats);
-    chats = NULL;
+    chats = nullptr;
     for (GList *item = purple_get_conversations(); item; item = item->next)
         if (purple_conversation_get_type(static_cast<PurpleConversation *>(item->data)) == PURPLE_CONV_TYPE_CHAT)
             chats = g_list_append(chats, item->data);
     return chats;
 }
 
-PurplePlugin *purple_connection_get_prpl(const PurpleConnection *gc)
+PurplePlugin *purple_connection_get_prpl(const PurpleConnection *)
 {
-    return NULL;
+    return nullptr;
 }
 
-void serv_send_file(PurpleConnection *gc, const char *who, const char *file)
+void serv_send_file(PurpleConnection *, const char *, const char *)
 {
 }
 
@@ -2078,12 +2080,12 @@ void purple_conv_chat_send(PurpleConvChat *chat, const char *message)
 }
 
 PurpleMenuAction *purple_menu_action_new(const char *label, PurpleCallback callback,
-                                     gpointer data, GList *children)
+                                     gpointer data, GList *)
 {
     PurpleMenuAction *action = new PurpleMenuAction;
     action->label = strdup(label);
     action->callback = callback;
-    action->children = NULL;
+    action->children = nullptr;
     action->data = data;
     return action;
 }
@@ -2094,31 +2096,31 @@ void purple_menu_action_free(PurpleMenuAction *act)
     delete act;
 }
 
-PurplePluginAction *purple_plugin_action_new(const char* label, void (*callback)(PurplePluginAction *))
+PurplePluginAction *purple_plugin_action_new(const char*, void (*)(PurplePluginAction *))
 {
-    return NULL;
+    return nullptr;
 }
 
-PurpleAccountOption *purple_account_option_string_new(const char *text,
-	const char *pref_name, const char *default_value)
+PurpleAccountOption *purple_account_option_string_new(const char *,
+	const char *, const char *)
 {
-    return NULL;
+    return nullptr;
 }
 
-PurpleAccountOption *purple_account_option_bool_new(const char *text,
-	const char *pref_name, gboolean default_value)
+PurpleAccountOption *purple_account_option_bool_new(const char *,
+	const char *, gboolean)
 {
-    return NULL;
+    return nullptr;
 }
 
-PurpleAccountOption *purple_account_option_int_new(const char *text,
-	const char *pref_name, int default_value)
+PurpleAccountOption *purple_account_option_int_new(const char *,
+	const char *, int)
 {
-    return NULL;
+    return nullptr;
 }
 
-PurpleAccountOption *purple_account_option_list_new(const char *text,
-	const char *pref_name, GList *list)
+PurpleAccountOption *purple_account_option_list_new(const char *,
+	const char *, GList *list)
 {
     for (GList *choice = list; choice; choice = g_list_next(choice)) {
         PurpleKeyValuePair *kvp = static_cast<PurpleKeyValuePair *>(choice->data);
@@ -2127,7 +2129,7 @@ PurpleAccountOption *purple_account_option_list_new(const char *text,
         g_free(kvp);
     }
     g_list_free(list);
-    return NULL;
+    return nullptr;
 }
 
 const char *purple_account_get_string(const PurpleAccount *account,
@@ -2187,13 +2189,13 @@ void purple_account_remove_setting(PurpleAccount *account, const char *setting)
     }
 }
 
-char *purple_str_size_to_units(size_t size)
+char *purple_str_size_to_units(size_t)
 {
     return g_strdup("purple_str_size_to_units");
 }
 
-PurpleCmdId purple_cmd_register(const gchar *cmd, const gchar *args, PurpleCmdPriority p, PurpleCmdFlag f,
-                             const gchar *prpl_id, PurpleCmdFunc func, const gchar *helpstr, void *data)
+PurpleCmdId purple_cmd_register(const gchar *cmd, const gchar *, PurpleCmdPriority, PurpleCmdFlag,
+                             const gchar *, PurpleCmdFunc func, const gchar *, void *data)
 {
     g_purpleEvents.addCommand(cmd, func, data);
     return 0;
@@ -2201,23 +2203,23 @@ PurpleCmdId purple_cmd_register(const gchar *cmd, const gchar *args, PurpleCmdPr
 
 PurpleMediaManager *purple_media_manager_get(void)
 {
-    return NULL;
+    return nullptr;
 }
 
-PurpleMediaCaps purple_media_manager_get_ui_caps(PurpleMediaManager *manager)
+PurpleMediaCaps purple_media_manager_get_ui_caps(PurpleMediaManager *)
 {
     return PURPLE_MEDIA_CAPS_NONE;
 }
 
-GHashTable *uiInfo = NULL;
+GHashTable *uiInfo = nullptr;
 static bool uiInfoMissing = false;
 
 GHashTable *purple_core_get_ui_info()
 {
     if (uiInfoMissing)
-        return NULL;
+        return nullptr;
     if (!uiInfo)
-        uiInfo = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, NULL);
+        uiInfo = g_hash_table_new_full(g_str_hash, g_str_equal, nullptr, nullptr);
 
     return uiInfo;
 }
@@ -2225,7 +2227,7 @@ GHashTable *purple_core_get_ui_info()
 void setUiName(const char *name)
 {
     if (!uiInfo)
-        uiInfo = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, NULL);
+        uiInfo = g_hash_table_new_full(g_str_hash, g_str_equal, nullptr, nullptr);
 
     static char nameKey[] = "name";
     g_hash_table_insert(uiInfo, nameKey, const_cast<char *>(name));
@@ -2240,12 +2242,12 @@ void setUiInfoMissing(bool missing)
 
 void *purple_conversations_get_handle()
 {
-    return NULL;
+    return nullptr;
 }
 
 PurpleCore *purple_get_core()
 {
-    return NULL;
+    return nullptr;
 }
 
 PurpleConversationUiOps *purple_conversation_get_ui_ops(const PurpleConversation *conv)
@@ -2256,7 +2258,7 @@ PurpleConversationUiOps *purple_conversation_get_ui_ops(const PurpleConversation
 gboolean purple_conversation_has_focus(PurpleConversation *conv)
 {
     // A bit like real libpurple
-    return (conv->ui_ops != NULL);
+    return (conv->ui_ops != nullptr);
 }
 
 struct SignalHandler {
@@ -2266,8 +2268,8 @@ struct SignalHandler {
 };
 static std::vector<SignalHandler> g_signalHandlers;
 
-gulong purple_signal_connect(void *instance, const char *signal,
-	void *handle, PurpleCallback func, void *data)
+gulong purple_signal_connect(void *, const char *signal,
+	void *, PurpleCallback func, void *data)
 {
     // Once, as the plugin is loaded again for every test
     for (const SignalHandler &handler: g_signalHandlers)
@@ -2277,8 +2279,8 @@ gulong purple_signal_connect(void *instance, const char *signal,
     return 0;
 }
 
-void purple_signal_disconnect(void *instance, const char *signal,
-	void *handle, PurpleCallback func)
+void purple_signal_disconnect(void *, const char *signal,
+	void *, PurpleCallback func)
 {
     g_signalHandlers.erase(std::remove_if(g_signalHandlers.begin(), g_signalHandlers.end(),
                                           [signal, func](const SignalHandler &handler) {
@@ -2320,7 +2322,7 @@ bool emitUriHandler(const char *proto, const char *cmd, GHashTable *params)
 // As libpurple's, which Pidgin calls whenever it updates a tab
 void purple_conversation_autoset_title(PurpleConversation *conv)
 {
-    const char *text = NULL;
+    const char *text = nullptr;
     if (conv->type == PURPLE_CONV_TYPE_CHAT) {
         PurpleChat *chat = purple_blist_find_chat(conv->account, conv->name);
         if (chat)

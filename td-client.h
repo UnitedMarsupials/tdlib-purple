@@ -19,7 +19,7 @@ enum class BasicGroupMembership: uint8_t {
 // A message's picture, video or file, to be replaced, as Telegram lets it be, once the message is edited
 struct SentMedia {
     bool           present = false;
-    AttachmentKind kind    = AttachmentKind::Document;
+    AttachmentKind kind    = AttachmentKind::Document; // as are an audio file and any document
     int32_t        fileId  = 0;
     std::string    path;    // here, if it is here yet
     std::string    name;
@@ -249,6 +249,8 @@ private:
     void       onLoggedIn();
     void       getContactsResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void       getChatsResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
+    void       requestMoreChats();
+    void       setBooleanOption(const char *name, bool value);
     void       requestMissingPrivateChats();
     void       loginCreatePrivateChatResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     // List of chats is requested after connection is ready, and when response is received,
@@ -265,6 +267,8 @@ private:
 
     void       updateUserStatus(UserId userId, td::td_api::object_ptr<td::td_api::UserStatus> status);
     void       updateUser(td::td_api::object_ptr<td::td_api::user> user);
+    template<typename Owner>
+    void       downloadAvatar(const td::td_api::file *photo, const Owner &owner);
     void       downloadProfilePhoto(const td::td_api::user &user);
     void       avatarDownloadResponse(uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object);
     void       updateGroup(td::td_api::object_ptr<td::td_api::basicGroup> group);
@@ -336,7 +340,6 @@ private:
     PurpleAccount        *m_account;
     TdTransceiver         m_transceiver;
     TdAccountData         m_data;
-    int32_t               m_lastAuthState = 0;
     DatabaseOpening       m_databaseOpening = DatabaseOpening::Plain;
     // Made of the account's password, while the database is being opened for it
     std::string           m_passwordKey;

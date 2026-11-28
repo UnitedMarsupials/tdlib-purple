@@ -7,6 +7,19 @@
 #include "sticker.h"
 #include "purple-info.h"
 #include <unistd.h>
+#include <climits>
+
+td::td_api::object_ptr<td::td_api::downloadFile> makeDownloadFile(int32_t fileId, int32_t priority,
+                                                                   bool synchronous)
+{
+    auto request = td::td_api::make_object<td::td_api::downloadFile>();
+    request->file_id_     = fileId;
+    request->priority_    = priority;
+    request->offset_      = 0;
+    request->limit_       = 0;
+    request->synchronous_ = synchronous;
+    return request;
+}
 
 enum {
     FILE_UPLOAD_PRIORITY = 1,
@@ -14,15 +27,15 @@ enum {
 
 bool saveImage(int id, char **fileName)
 {
-    *fileName = NULL;
-    char *tempFileName = NULL;
+    *fileName = nullptr;
+    char *tempFileName = nullptr;
 
     PurpleStoredImage *psi = purple_imgstore_find_by_id (id);
     if (!psi) {
         purple_debug_misc(config::pluginId, "Failed to send image: id %d not found\n", id);
         return false;
     }
-    int fd = g_file_open_tmp("tdlib_upload_XXXXXX", &tempFileName, NULL);
+    int fd = g_file_open_tmp("tdlib_upload_XXXXXX", &tempFileName, nullptr);
     if (fd < 0) {
         purple_debug_misc(config::pluginId, "Failed to send image: could not create temporary file\n");
         return false;
@@ -49,51 +62,38 @@ AttachmentKind getSentFileKind(PurpleAccount *account, const std::string &path)
 }
 
 void startDocumentUpload(ChatId chatId, const std::string &filename, PurpleXfer *xfer,
-                         TdTransceiver &transceiver, TdAccountData &account,
+                         TdAccountData &account,
                          TdTransceiver::ResponseCb response)
 {
     // Uploaded as what it is to be sent as: TDLib takes a file uploaded as a document for no photo
     AttachmentKind kind          = getSentFileKind(account.purpleAccount, filename);
     auto           uploadRequest = td::td_api::make_object<td::td_api::preliminaryUploadFile>();
-    uploadRequest->file_ = td::td_api::make_object<td::td_api::inputFileLocal>(filename);
-    switch (kind) {
-    case AttachmentKind::Photo:
-        uploadRequest->file_type_ = td::td_api::make_object<td::td_api::fileTypePhoto>();
-        break;
-    case AttachmentKind::Video:
-        uploadRequest->file_type_ = td::td_api::make_object<td::td_api::fileTypeVideo>();
-        break;
-    case AttachmentKind::Voice:
-        uploadRequest->file_type_ = td::td_api::make_object<td::td_api::fileTypeVoiceNote>();
-        break;
-    case AttachmentKind::Document:
-        uploadRequest->file_type_ = td::td_api::make_object<td::td_api::fileTypeDocument>();
-        break;
-    }
+    uploadRequest->file_ = makeInputFileLocal(filename);
+    uploadRequest->file_type_ = makeFileType(kind);
     uploadRequest->priority_ = FILE_UPLOAD_PRIORITY;
     purple_xfer_ref(xfer);
-    uint64_t requestId = transceiver.sendQuery(std::move(uploadRequest), response);
+    uint64_t requestId = account.transceiver.sendQuery(std::move(uploadRequest), response);
     account.addPendingRequest<UploadRequest>(requestId, xfer, chatId, kind);
 }
 
 static void updateDocumentUploadProgress(const td::td_api::file &file, PurpleXfer *xfer, ChatId chatId,
-                                         AttachmentKind kind, TdTransceiver &transceiver, TdAccountData &account,
+                                         AttachmentKind kind, TdAccountData &account,
                                          TdTransceiver::ResponseCb sendMessageResponse);
 
 void startDocumentUploadProgress(ChatId chatId, PurpleXfer *xfer, AttachmentKind kind, const td::td_api::file &file,
-                                 TdTransceiver &transceiver, TdAccountData &account,
+                                 TdAccountData &account,
                                  TdTransceiver::ResponseCb sendMessageResponse)
 {
     if (purple_xfer_is_canceled(xfer)) {
         // Someone managed to cancel the upload REAL fast
         auto cancelRequest = td::td_api::make_object<td::td_api::cancelPreliminaryUploadFile>(file.id_);
-        transceiver.sendQuery(std::move(cancelRequest), nullptr);
+        account.transceiver.sendQuery(std::move(cancelRequest), nullptr);
         purple_xfer_unref(xfer);
     } else {
         purple_debug_misc(config::pluginId, "Got file id %d for uploading %s\n", (int)file.id_,
                             purple_xfer_get_local_filename(xfer));
         account.addFileTransfer(file.id_, xfer, chatId, kind);
-        updateDocumentUploadProgress(file, xfer, chatId, kind, transceiver, account, sendMessageResponse);
+        updateDocumentUploadProgress(file, xfer, chatId, kind, account, sendMessageResponse);
     }
 }
 
@@ -106,7 +106,7 @@ void uploadResponseError(PurpleXfer *xfer, const std::string &message, TdAccount
 }
 
 static void updateDocumentUploadProgress(const td::td_api::file &file, PurpleXfer *upload, ChatId chatId,
-                                         AttachmentKind kind, TdTransceiver &transceiver, TdAccountData &account,
+                                         AttachmentKind kind, TdAccountData &account,
                                          TdTransceiver::ResponseCb sendMessageResponse)
 {
     size_t fileSize = purple_xfer_get_size(upload);
@@ -115,7 +115,7 @@ static void updateDocumentUploadProgress(const td::td_api::file &file, PurpleXfe
         if (file.remote_->is_uploading_active_) {
             if (purple_xfer_get_status(upload) != PURPLE_XFER_STATUS_STARTED) {
                 purple_debug_misc(config::pluginId, "Started uploading %s\n", purple_xfer_get_local_filename(upload));
-                purple_xfer_start(upload, -1, NULL, 0);
+                purple_xfer_start(upload, -1, nullptr, 0);
             }
             size_t bytesSent = std::max((td::td_api::int53)0, file.remote_->uploaded_size_);
             purple_xfer_set_bytes_sent(upload, std::min(fileSize, bytesSent));
@@ -137,7 +137,7 @@ static void updateDocumentUploadProgress(const td::td_api::file &file, PurpleXfe
                                  td::td_api::make_object<td::td_api::formattedText>());
             sendMessageRequest->chat_id_ = chatId.value();
 
-            uint64_t requestId = transceiver.sendQuery(std::move(sendMessageRequest), sendMessageResponse);
+            uint64_t requestId = account.transceiver.sendQuery(std::move(sendMessageRequest), sendMessageResponse);
             account.addPendingRequest<SendMessageRequest>(requestId, chatId, nullptr);
         }
     } else {
@@ -149,20 +149,25 @@ static void updateDocumentUploadProgress(const td::td_api::file &file, PurpleXfe
 
 struct DownloadData {
     TdAccountData *account;
-    TdTransceiver *transceiver;
 
-    DownloadData(TdAccountData &account, TdTransceiver &transceiver)
-    : account(&account), transceiver(&transceiver) {}
+    explicit DownloadData(TdAccountData &account) : account(&account) {}
 };
 
-static void nop(PurpleXfer *xfer)
+// A download transfer's data, taken from it, to be freed
+static std::unique_ptr<DownloadData> takeDownloadData(PurpleXfer *xfer)
+{
+    std::unique_ptr<DownloadData> data(static_cast<DownloadData *>(xfer->data));
+    xfer->data = nullptr;
+    return data;
+}
+
+static void nop(PurpleXfer *)
 {
 }
 
 static void cancelDownload(PurpleXfer *xfer)
 {
-    std::unique_ptr<DownloadData> data(static_cast<DownloadData *>(xfer->data));
-    xfer->data = NULL;
+    std::unique_ptr<DownloadData> data = takeDownloadData(xfer);
     if (!data) return;
 
     int32_t fileId;
@@ -172,7 +177,7 @@ static void cancelDownload(PurpleXfer *xfer)
         auto cancelRequest = td::td_api::make_object<td::td_api::cancelDownloadFile>();
         cancelRequest->file_id_ = fileId;
         cancelRequest->only_if_pending_ = false;
-        data->transceiver->sendQuery(std::move(cancelRequest), nullptr);
+        data->account->transceiver.sendQuery(std::move(cancelRequest), nullptr);
         data->account->removeFileTransfer(fileId);
     }
 }
@@ -183,8 +188,7 @@ static void finishInlineDownloadProgress(DownloadRequest &downloadReq, TdAccount
     ChatId      chatId;
 
     if (account.getFileTransfer(downloadReq.fileId, download, chatId)) {
-        std::unique_ptr<DownloadData> data(static_cast<DownloadData *>(download->data));
-        download->data = NULL;
+        std::unique_ptr<DownloadData> data = takeDownloadData(download);
         purple_xfer_set_bytes_sent(download, downloadReq.fileSize);
         purple_xfer_set_completed(download, TRUE);
         purple_xfer_end(download);
@@ -203,7 +207,7 @@ static void finishInlineDownloadProgress(DownloadRequest &downloadReq, TdAccount
 
 static void inlineDownloadResponse(uint64_t requestId,
                                    td::td_api::object_ptr<td::td_api::Object> object,
-                                   TdTransceiver &transceiver, TdAccountData &account)
+                                   TdAccountData &account)
 {
     std::unique_ptr<DownloadRequest> request = account.getPendingRequest<DownloadRequest>(requestId);
 
@@ -225,32 +229,31 @@ static void inlineDownloadResponse(uint64_t requestId,
             if (replacementFile)
                 // TODO: if thumbnail already downloaded, mark ready and don't download
                 downloadFileInline(replacementFile->id_, request->chatId, request->message,
-                                   request->fileDescription, nullptr, transceiver, account);
+                                   request->fileDescription, nullptr, account);
             else {
                 pendingMessage->inlineDownloadComplete = true;
                 pendingMessage->inlineDownloadedFilePath = path;
-                checkMessageReady(pendingMessage, transceiver, account);
-                pendingMessage = nullptr;
+                // pendingMessage may have left the queue now
+                checkMessageReady(pendingMessage, account);
             }
         } else {
             // Message no longer in PendingMessageQueue
             if (!path.empty())
                 // No thumbnail here: the message left PendingMessageQueue, taking it along
-                showDownloadedFileInline(request->chatId, request->message, path, NULL,
+                showDownloadedFileInline(request->chatId, request->message, path, nullptr,
                                          request->fileDescription, std::move(request->thumbnail),
-                                         std::string(), transceiver, account);
+                                         std::string(), account);
         }
     }
 }
 
-static void startInlineDownloadProgress(DownloadRequest &request, TdTransceiver &transceiver,
-                                        TdAccountData &account)
+static void startInlineDownloadProgress(DownloadRequest &request, TdAccountData &account)
 {
     purple_debug_misc(config::pluginId, "Tracking download progress of file id %d: downloaded %d/%d\n",
         (int)request.fileId, (int)request.downloadedSize, (int)request.fileSize);
 
-    char *tempFileName = NULL;
-    int fd = g_file_open_tmp("tdlib_download_XXXXXX", &tempFileName, NULL);
+    char *tempFileName = nullptr;
+    int fd = g_file_open_tmp("tdlib_download_XXXXXX", &tempFileName, nullptr);
     if (fd < 0)
         return;
 
@@ -272,14 +275,14 @@ static void startInlineDownloadProgress(DownloadRequest &request, TdTransceiver 
         // transfer if could not be created. Thus we do our best to give it path to a temporary file
         // that it will be able to create. If it somehow does fail then cancel handler isn't set yet
         // so the actual download won't be cancelled.
-        purple_xfer_start(xfer, -1, NULL, 0);
+        purple_xfer_start(xfer, -1, nullptr, 0);
     } else
         request.tempFd = fd;
 
     if (!purple_xfer_is_canceled(xfer)) {
         // purple_xfer_start didn't fail to re-open the temporary file, so now really start tracking
         // the progress
-        xfer->data = new DownloadData(account, transceiver);
+        xfer->data = new DownloadData(account);
         purple_xfer_set_cancel_recv_fnc(xfer, cancelDownload);
         account.addFileTransfer(request.fileId, xfer, ChatId::invalid);
     } else
@@ -289,8 +292,7 @@ static void startInlineDownloadProgress(DownloadRequest &request, TdTransceiver 
     g_free(tempFileName);
 }
 
-static void handleLongInlineDownload(uint64_t requestId, TdTransceiver &transceiver,
-                                     TdAccountData &account)
+static void handleLongInlineDownload(uint64_t requestId, TdAccountData &account)
 {
     DownloadRequest *pRequest = account.findPendingRequest<DownloadRequest>(requestId);
     if (pRequest) {
@@ -300,27 +302,23 @@ static void handleLongInlineDownload(uint64_t requestId, TdTransceiver &transcei
             // We didn't want inline downloads, but got one anyway because it's image or sticker.
             // At least don't get the fake file transfer going, because that tends to get bitlbee
             // and spectrum in trouble.
-            startInlineDownloadProgress(*pRequest, transceiver, account);
+            startInlineDownloadProgress(*pRequest, account);
 
         IncomingMessage *pendingMessage = account.pendingMessages.findPendingMessage(pRequest->chatId, pRequest->message.id);
         if (pendingMessage) {
 
             pendingMessage->inlineDownloadTimeout = true;
             std::vector<IncomingMessage> readyMessages;
-            checkMessageReady(pendingMessage, transceiver, account, &readyMessages);
-            pendingMessage = nullptr;
+            // pendingMessage leaves the queue now, if it is ready
+            checkMessageReady(pendingMessage, account, &readyMessages);
 
-            // Now after "Downloading..." notification has been displayed (which may have been
-            // accompanied by file caption, if any, in which case it needs reply source if it was a
-            // reply), we can move reply source from no-longer-pending IncomingMessage onto
-            // DownloadRequest, so that citation can be displayed again when displaying hyperlink.
-            // If the message is a reply but fetching reply source hasn't produced a response yet
-            // at this point, a successful such response may technically yet come in which case we
-            // will lose the reply source. But this is extremely unlikely, and not even a problem.
-            for (IncomingMessage &pendingMessage: readyMessages)
-                if (pendingMessage.message && (getId(*pendingMessage.message) == pRequest->message.id)) {
-                    pRequest->message.repliedMessage = std::move(pendingMessage.repliedMessage);
-                    pRequest->thumbnail = std::move(pendingMessage.thumbnail);
+            // The message replied to, if it came after the download began, and the thumbnail go
+            // with the DownloadRequest, for the hyperlink shown once the file is here. A reply
+            // source fetched later still is lost: unlikely, and not a problem.
+            for (IncomingMessage &readyMessage: readyMessages)
+                if (readyMessage.message && (getId(*readyMessage.message) == pRequest->message.id)) {
+                    pRequest->message.repliedMessage = readyMessage.messageInfo.repliedMessage;
+                    pRequest->thumbnail = std::move(readyMessage.thumbnail);
                 }
         }
     }
@@ -329,20 +327,14 @@ static void handleLongInlineDownload(uint64_t requestId, TdTransceiver &transcei
 void downloadFileInline(int32_t fileId, ChatId chatId, TgMessageInfo &message,
                         const std::string &fileDescription,
                         td::td_api::object_ptr<td::td_api::file> thumbnail,
-                        TdTransceiver &transceiver, TdAccountData &account)
+                        TdAccountData &account)
 {
-    td::td_api::object_ptr<td::td_api::downloadFile> downloadReq =
-        td::td_api::make_object<td::td_api::downloadFile>();
-    downloadReq->file_id_     = fileId;
-    downloadReq->priority_    = FILE_DOWNLOAD_PRIORITY;
-    downloadReq->offset_      = 0;
-    downloadReq->limit_       = 0;
-    downloadReq->synchronous_ = true;
+    auto downloadReq = makeDownloadFile(fileId, FILE_DOWNLOAD_PRIORITY, true);
 
-    uint64_t requestId = transceiver.sendQuery(
+    uint64_t requestId = account.transceiver.sendQuery(
         std::move(downloadReq),
-        [&transceiver, &account](uint64_t reqId, td::td_api::object_ptr<td::td_api::Object> object) {
-            inlineDownloadResponse(reqId, std::move(object), transceiver, account);
+        [&account](uint64_t reqId, td::td_api::object_ptr<td::td_api::Object> object) {
+            inlineDownloadResponse(reqId, std::move(object), account);
         });
     std::unique_ptr<DownloadRequest> request = std::make_unique<DownloadRequest>(requestId, chatId,
                                                message, fileId, 0, fileDescription, thumbnail.release());
@@ -352,9 +344,9 @@ void downloadFileInline(int32_t fileId, ChatId chatId, TgMessageInfo &message,
         request->message.logRedrawn = false;
 
     account.addPendingRequest<DownloadRequest>(requestId, std::move(request));
-    transceiver.setQueryTimer(requestId,
-                              [&transceiver, &account](uint64_t reqId, td::td_api::object_ptr<td::td_api::Object>) {
-                                  handleLongInlineDownload(reqId, transceiver, account);
+    account.transceiver.setQueryTimer(requestId,
+                              [&account](uint64_t reqId, td::td_api::object_ptr<td::td_api::Object>) {
+                                  handleLongInlineDownload(reqId, account);
                               }, getMessageWaitSeconds(message), false);
 }
 
@@ -380,7 +372,7 @@ static void updateDownloadProgress(const td::td_api::file &file, PurpleXfer *xfe
                 close(downloadReq->tempFd);
             downloadReq->tempFd = -1;
             if (purple_xfer_get_status(xfer) != PURPLE_XFER_STATUS_STARTED)
-                purple_xfer_start(xfer, -1, NULL, 0);
+                purple_xfer_start(xfer, -1, nullptr, 0);
         }
 
         purple_xfer_set_bytes_sent(xfer, downloadedSize);
@@ -391,15 +383,14 @@ static void updateDownloadProgress(const td::td_api::file &file, PurpleXfer *xfe
     downloadReq->downloadedSize = downloadedSize;
 }
 
-void updateFileTransferProgress(const td::td_api::file &file, TdTransceiver &transceiver,
-                                TdAccountData &account, TdTransceiver::ResponseCb sendMessageResponse)
+void updateFileTransferProgress(const td::td_api::file &file, TdAccountData &account, TdTransceiver::ResponseCb sendMessageResponse)
 {
-    PurpleXfer    *xfer = NULL;
+    PurpleXfer    *xfer = nullptr;
     ChatId         chatId;
     AttachmentKind kind = AttachmentKind::Document;
     if (account.getFileTransfer(file.id_, xfer, chatId, &kind)) {
         if (xfer && (purple_xfer_get_type(xfer) == PURPLE_XFER_SEND))
-            updateDocumentUploadProgress(file, xfer, chatId, kind, transceiver, account, sendMessageResponse);
+            updateDocumentUploadProgress(file, xfer, chatId, kind, account, sendMessageResponse);
     }
 
     updateDownloadProgress(file, xfer, account);
@@ -424,9 +415,10 @@ std::string getDownloadPath(const td::td_api::object_ptr<td::td_api::Object> &do
 }
 
 struct DownloadWrapup {
-    PurpleXfer *download;
-    FILE       *tdlibFile;
-    std::string tdlibPath;
+    PurpleXfer          *download;
+    FILE                *tdlibFile;
+    std::string          tdlibPath;
+    std::vector<uint8_t> buffer; // for each chunk
 };
 
 static gboolean wrapupDownload(void *data)
@@ -441,8 +433,8 @@ static gboolean wrapupDownload(void *data)
             chunkSize = purple_xfer_get_size(wrapupData->download) - purple_xfer_get_bytes_sent(wrapupData->download);
         }
 
-        uint8_t *buf = new uint8_t[chunkSize];
-        unsigned bytesRead = fread(buf, 1, chunkSize, wrapupData->tdlibFile);
+        wrapupData->buffer.resize(chunkSize);
+        unsigned bytesRead = fread(wrapupData->buffer.data(), 1, chunkSize, wrapupData->tdlibFile);
         if (bytesRead < chunkSize) {
             // Unlikely error message not worth translating
             std::string message = formatMessage("Failed to download {}: error reading {} after {} bytes",
@@ -455,8 +447,7 @@ static gboolean wrapupDownload(void *data)
             last = true;
         }
 
-        purple_xfer_write_file(wrapupData->download, buf, bytesRead);
-        delete[] buf;
+        purple_xfer_write_file(wrapupData->download, wrapupData->buffer.data(), bytesRead);
 
         if (last) {
             purple_xfer_set_completed(wrapupData->download, TRUE);
@@ -470,8 +461,8 @@ static gboolean wrapupDownload(void *data)
         fclose(wrapupData->tdlibFile);
         delete wrapupData;
         return G_SOURCE_REMOVE;
-    } else
-        return G_SOURCE_CONTINUE;
+    }
+    return G_SOURCE_CONTINUE;
 }
 
 static void standardDownloadResponse(TdAccountData *account, uint64_t requestId,
@@ -485,11 +476,10 @@ static void standardDownloadResponse(TdAccountData *account, uint64_t requestId,
     ChatId      chatId;
 
     if (account->getFileTransfer(request->fileId, download, chatId)) {
-        std::unique_ptr<DownloadData> data(static_cast<DownloadData *>(download->data));
-        download->data = NULL;
+        std::unique_ptr<DownloadData> data = takeDownloadData(download);
         account->removeFileTransfer(request->fileId);
 
-        FILE *f = NULL;
+        FILE *f = nullptr;
         if (!path.empty())
             f = fopen(path.c_str(), "r");
 
@@ -534,15 +524,9 @@ static void startStandardDownload(PurpleXfer *xfer)
 
     int32_t fileId;
     if (data->account->getFileIdForTransfer(xfer, fileId)) {
-        td::td_api::object_ptr<td::td_api::downloadFile> downloadReq =
-            td::td_api::make_object<td::td_api::downloadFile>();
-        downloadReq->file_id_     = fileId;
-        downloadReq->priority_    = FILE_DOWNLOAD_PRIORITY;
-        downloadReq->offset_      = 0;
-        downloadReq->limit_       = 0;
-        downloadReq->synchronous_ = true;
+        auto downloadReq = makeDownloadFile(fileId, FILE_DOWNLOAD_PRIORITY, true);
 
-        uint64_t requestId = data->transceiver->sendQuery(std::move(downloadReq),
+        uint64_t requestId = data->account->transceiver.sendQuery(std::move(downloadReq),
                                                           [account=data->account](uint64_t requestId, td::td_api::object_ptr<td::td_api::Object> object) {
                                                               standardDownloadResponse(account, requestId, std::move(object));
                                                           });
@@ -553,12 +537,12 @@ static void startStandardDownload(PurpleXfer *xfer)
         data->account->addPendingRequest<DownloadRequest>(requestId, std::move(request));
         // Start immediately, because standardDownloadResponse will call purple_xfer_write_file, which
         // will fail if purple_xfer_start hasn't been called
-        purple_xfer_start(xfer, -1, NULL, 0);
+        purple_xfer_start(xfer, -1, nullptr, 0);
     }
 }
 
 void requestStandardDownload(ChatId chatId, const TgMessageInfo &message, const std::string &fileName,
-                             const td::td_api::file &file, TdTransceiver &transceiver, TdAccountData &account)
+                             const td::td_api::file &file, TdAccountData &account)
 {
     std::string who = getDownloadXferPeerName(chatId, message, account);
     PurpleXfer *xfer = purple_xfer_new (account.purpleAccount, PURPLE_XFER_RECEIVE, who.c_str());
@@ -566,21 +550,22 @@ void requestStandardDownload(ChatId chatId, const TgMessageInfo &message, const 
     purple_xfer_set_cancel_recv_fnc(xfer, cancelDownload);
     purple_xfer_set_filename(xfer, fileName.c_str());
     purple_xfer_set_size(xfer, getFileSize(file));
-    xfer->data = new DownloadData(account, transceiver);
+    xfer->data = new DownloadData(account);
     account.addFileTransfer(file.id_, xfer, ChatId::invalid);
     purple_xfer_request(xfer);
 }
 
+int64_t getFileSize64(const td::td_api::file &file)
+{
+    return file.size_ ? file.size_ : file.expected_size_;
+}
+
 unsigned getFileSize(const td::td_api::file &file)
 {
-    int32_t size = file.size_;
-    if (size == 0)
-        size = file.expected_size_;
-
+    int64_t size = getFileSize64(file);
     if (size <= 0)
         return 0;
-    else
-        return size;
+    return std::min<int64_t>(size, UINT_MAX);
 }
 
 unsigned getFileSizeKb(const td::td_api::file &file)
@@ -601,7 +586,7 @@ std::string makeDocumentDescription(const td::td_api::videoNote *document)
 {
     if (!document)
         // Unlikely error message not worth translating
-        return "faulty voice note";
+        return "faulty video note";
     // TRANSLATOR: In-line document type. Argument will be a duration.
     return formatMessage(_("video note [{}]"), formatDuration(document->duration_));
 }
@@ -631,6 +616,8 @@ std::string makeDocumentDescription(const td::td_api::video *document, bool orig
 
 std::string getFileName(const td::td_api::voiceNote* document)
 {
+    if (!document)
+        return _("voiceNote");
     td::Client::Response resp = td::Client::execute({0, td::td_api::make_object<td::td_api::getFileExtension>(document->mime_type_)});
     if (resp.object && (resp.object->get_id() == td::td_api::text::ID)) {
         // TRANSLATOR: Filename. Keep it short, and as few special characters as possible.
@@ -639,7 +626,8 @@ std::string getFileName(const td::td_api::voiceNote* document)
     return _("voiceNote");
 }
 
-std::string getFileName(const td::td_api::videoNote *document)
+// Always the same name: Telegram's video notes are of one format
+std::string getFileName(const td::td_api::videoNote *)
 {
     // TRANSLATOR: Filename. Keep it short, and as few special characters as possible.
     return std::string(_("videoNote")) + ".avi";

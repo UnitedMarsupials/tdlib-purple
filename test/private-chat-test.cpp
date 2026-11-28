@@ -18,7 +18,7 @@ TEST_F(PrivateChatTest, AddContactByPhone)
 
     // Adding new buddy
     PurpleBuddy *buddy = purple_buddy_new(account, userPhones[0].c_str(), "Local Alias");
-    purple_blist_add_buddy(buddy, NULL, &standardPurpleGroup, NULL);
+    purple_blist_add_buddy(buddy, nullptr, &standardPurpleGroup, nullptr);
     prpl.discardEvents();
     pluginInfo().add_buddy(connection, buddy, &standardPurpleGroup);
 
@@ -67,9 +67,9 @@ TEST_F(PrivateChatTest, AddContactByPhone)
         purpleUserName(0),
         "Local Alias",
         account,
-        NULL,
+        nullptr,
         &standardPurpleGroup,
-        NULL
+        nullptr
     ));
 
     tgl.reply(makeChat(
@@ -86,7 +86,7 @@ TEST_F(PrivateChatTest, AddContactByUsername)
 
     // Adding new buddy
     PurpleBuddy *buddy = purple_buddy_new(account, "username", "Local Alias");
-    purple_blist_add_buddy(buddy, NULL, &standardPurpleGroup, NULL);
+    purple_blist_add_buddy(buddy, nullptr, &standardPurpleGroup, nullptr);
     prpl.discardEvents();
     pluginInfo().add_buddy(connection, buddy, &standardPurpleGroup);
 
@@ -136,9 +136,9 @@ TEST_F(PrivateChatTest, AddContactByUsername)
         purpleUserName(0),
         "Local Alias",
         account,
-        NULL,
+        nullptr,
         &standardPurpleGroup,
-        NULL
+        nullptr
     ));
     tgl.reply(makeChat(
         chatIds[0],
@@ -154,7 +154,7 @@ TEST_F(PrivateChatTest, AddContactByUsername_DoesntBecomeContact)
 
     // Adding new buddy
     PurpleBuddy *buddy = purple_buddy_new(account, "username", "Local Alias");
-    purple_blist_add_buddy(buddy, NULL, &standardPurpleGroup, NULL);
+    purple_blist_add_buddy(buddy, nullptr, &standardPurpleGroup, nullptr);
     prpl.discardEvents();
     pluginInfo().add_buddy(connection, buddy, &standardPurpleGroup);
 
@@ -338,7 +338,7 @@ void PrivateChatTest::contactedByStranger(object_ptr<ChatActionBar> &&actionBar)
 
     // Moved into a group of ours: added to contacts, our phone number not given. Until they are a
     // contact the buddy is not saved; if adding them fails, it is back where it was
-    purple_blist_add_buddy(buddy, NULL, &standardPurpleGroup, NULL);
+    purple_blist_add_buddy(buddy, nullptr, &standardPurpleGroup, nullptr);
     prpl.discardEvents();
     pluginInfo().group_buddy(connection, purpleUserName(0).c_str(), "Telegram: not in contacts",
                              standardPurpleGroup.name);
@@ -349,7 +349,7 @@ void PrivateChatTest::contactedByStranger(object_ptr<ChatActionBar> &&actionBar)
     EXPECT_EQ(transient, purple_buddy_get_group(buddy));
 
     // Moved again, tried again: as a contact, kept where it was put
-    purple_blist_add_buddy(buddy, NULL, &standardPurpleGroup, NULL);
+    purple_blist_add_buddy(buddy, nullptr, &standardPurpleGroup, nullptr);
     prpl.discardEvents();
     pluginInfo().group_buddy(connection, purpleUserName(0).c_str(), "Telegram: not in contacts",
                              standardPurpleGroup.name);
@@ -1344,8 +1344,8 @@ TEST_F(PrivateChatTest, SendImageFromEarlierSession)
     std::string   paths[4];
     std::string   setting;
     for (unsigned i = 0; i < 4; i++) {
-        char *path = NULL;
-        int   fd   = g_file_open_tmp("tdlib_test_XXXXXX", &path, NULL);
+        char *path = nullptr;
+        int   fd   = g_file_open_tmp("tdlib_test_XXXXXX", &path, nullptr);
         ASSERT_TRUE(fd >= 0);
         ::close(fd);
         paths[i] = path;
@@ -1481,16 +1481,16 @@ TEST_F(PrivateChatTest, TypingNotification)
     loginWithOneContact();
 
     pluginInfo().send_typing(connection, purpleUserName(0).c_str(), PURPLE_TYPING);
-    tgl.verifyRequest(sendChatAction(chatIds[0], 0, "", make_object<chatActionTyping>()));
+    tgl.verifyRequest(sendChatAction(chatIds[0], {}, "", make_object<chatActionTyping>()));
 
     pluginInfo().send_typing(connection, purpleUserName(0).c_str(), PURPLE_TYPED);
-    tgl.verifyRequest(sendChatAction(chatIds[0], 0, "", make_object<chatActionCancel>()));
+    tgl.verifyRequest(sendChatAction(chatIds[0], {}, "", make_object<chatActionCancel>()));
 
     pluginInfo().send_typing(connection, purpleUserName(0).c_str(), PURPLE_TYPING);
-    tgl.verifyRequest(sendChatAction(chatIds[0], 0, "", make_object<chatActionTyping>()));
+    tgl.verifyRequest(sendChatAction(chatIds[0], {}, "", make_object<chatActionTyping>()));
 
     pluginInfo().send_typing(connection, purpleUserName(0).c_str(), PURPLE_NOT_TYPING);
-    tgl.verifyRequest(sendChatAction(chatIds[0], 0, "", make_object<chatActionCancel>()));
+    tgl.verifyRequest(sendChatAction(chatIds[0], {}, "", make_object<chatActionCancel>()));
 }
 
 TEST_F(PrivateChatTest, DeleteContact)
@@ -1505,11 +1505,11 @@ TEST_F(PrivateChatTest, DeleteContact)
 
     // Nothing of the chat stays here: TDLib's messages and files, Pidgin's log
     gchar *logDir  = g_build_filename(purple_user_dir(), "logs", "telegram", ("+" + selfPhoneNumber).c_str(),
-                                      purpleUserName(0).c_str(), NULL);
-    gchar *logFile = g_build_filename(logDir, "2026-11-24.120000-0500EST.html", NULL);
+                                      purpleUserName(0).c_str(), nullptr);
+    gchar *logFile = g_build_filename(logDir, "2026-11-24.120000-0500EST.html", nullptr);
     ASSERT_EQ(0, g_mkdir_with_parents(logDir, 0700));
-    ASSERT_TRUE(g_file_set_contents(logFile, "<html></html>", -1, NULL));
-    pluginInfo().remove_buddy(connection, dup, NULL);
+    ASSERT_TRUE(g_file_set_contents(logFile, "<html></html>", -1, nullptr));
+    pluginInfo().remove_buddy(connection, dup, nullptr);
     purple_buddy_destroy(dup);
     {
         auto files = make_object<optimizeStorage>();
@@ -1863,8 +1863,8 @@ TEST_F(PrivateChatTest, WriteToUnknownUser)
 
 TEST_F(PrivateChatTest, BuddyWithNullAlias)
 {
-    PurpleBuddy *buddy = purple_buddy_new(account, purpleUserName(0).c_str(), NULL);
-    purple_blist_add_buddy(buddy, NULL, &standardPurpleGroup, NULL);
+    PurpleBuddy *buddy = purple_buddy_new(account, purpleUserName(0).c_str(), nullptr);
+    purple_blist_add_buddy(buddy, nullptr, &standardPurpleGroup, nullptr);
     prpl.discardEvents();
 
     login(
@@ -2036,11 +2036,11 @@ TEST_F(PrivateChatTest, DeletedAccountsGroupRenamed)
 {
     // Made under another translation, so renamed after this one
     PurpleGroup *group = purple_group_new("Gelöschte Konten (Telegram)");
-    purple_blist_add_group(group, NULL);
+    purple_blist_add_group(group, nullptr);
     purple_blist_node_set_string(PURPLE_BLIST_NODE(group), "tdlib-deleted-accounts", "Gelöschte Konten (Telegram)");
     // Named by the user, so left alone
     PurpleGroup *ownGroup = purple_group_new("Gone");
-    purple_blist_add_group(ownGroup, NULL);
+    purple_blist_add_group(ownGroup, nullptr);
 
     loginWithOneContact();
     EXPECT_STREQ("Deleted Accounts (Telegram)", purple_group_get_name(group));
@@ -2063,10 +2063,10 @@ TEST_F(PrivateChatTest, DeletedAccountsFoundAtLogin)
     for (unsigned i: {0, 1}) {
         PurpleBuddy *buddy = purple_buddy_new(account, purpleUserName(i).c_str(),
                                               (userFirstNames[i] + " " + userLastNames[i]).c_str());
-        purple_blist_add_buddy(buddy, NULL, NULL, NULL);
+        purple_blist_add_buddy(buddy, nullptr, nullptr, nullptr);
     }
     PurpleGroup *group = purple_group_new("Deleted Accounts (Telegram)");
-    purple_blist_add_group(group, NULL);
+    purple_blist_add_group(group, nullptr);
     purple_blist_node_set_string(PURPLE_BLIST_NODE(group), "tdlib-deleted-accounts", "Deleted Accounts (Telegram)");
     prpl.discardEvents();
 
@@ -2271,7 +2271,7 @@ TEST_F(PrivateChatTest, ShownBeforeChatKnown)
     login();
     // A contact in the buddy list whose chat TDLib tells of only later
     tgl.update(standardUpdateUser(1));
-    purple_blist_add_buddy(purple_buddy_new(account, purpleUserName(1).c_str(), NULL), NULL, NULL, NULL);
+    purple_blist_add_buddy(purple_buddy_new(account, purpleUserName(1).c_str(), nullptr), nullptr, nullptr, nullptr);
     PurpleTdClient     *client = PurpleTdClient::findConnected(("+" + selfPhoneNumber).c_str());
     PurpleConversation *conv   = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, purpleUserName(1).c_str());
     ASSERT_NE(nullptr, client);
@@ -2370,8 +2370,8 @@ TEST_F(PrivateChatTest, AddBuddyById)
     prpl.discardEvents();
 
     // As from a group's member list, the member being named by id
-    PurpleBuddy *buddy = purple_buddy_new(account, purpleUserName(1).c_str(), NULL);
-    purple_blist_add_buddy(buddy, NULL, &standardPurpleGroup, NULL);
+    PurpleBuddy *buddy = purple_buddy_new(account, purpleUserName(1).c_str(), nullptr);
+    purple_blist_add_buddy(buddy, nullptr, &standardPurpleGroup, nullptr);
     prpl.discardEvents();
     pluginInfo().add_buddy(connection, buddy, &standardPurpleGroup);
     prpl.verifyEvents(RemoveBuddyEvent(account, purpleUserName(1)));

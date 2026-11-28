@@ -144,6 +144,54 @@ std::string describeUnsupportedContent(const td::td_api::MessageContent &content
     return result;
 }
 
+PurpleRequestField *addStringField(PurpleRequestFieldGroup *group, const char *id, const char *label,
+                                   const char *value, bool masked)
+{
+    PurpleRequestField *field = purple_request_field_string_new(id, label, value, FALSE);
+    if (masked)
+        purple_request_field_string_set_masked(field, TRUE);
+    purple_request_field_group_add_field(group, field);
+    return field;
+}
+
+gchar *readPhoto(const std::string &path, const std::string &whose, gsize &size)
+{
+    gchar  *data  = nullptr;
+    GError *error = nullptr;
+    if (g_file_get_contents(path.c_str(), &data, &size, &error))
+        return data;
+    purple_debug_warning(config::pluginId, "Failed to load photo %s for %s: %s\n", path.c_str(), whose.c_str(),
+                         error->message);
+    g_error_free(error);
+    return nullptr;
+}
+
+std::string getUserLookupError(const std::vector<const td::td_api::user *> &users, const std::string &name)
+{
+    if (users.empty())
+        // TRANSLATOR: Error message, as of a user named to send a message to or to add to a group
+        return _("User not found");
+    // TRANSLATOR: Error message, argument is a name several users go by
+    return formatMessage(_("More than one user known with name '{}'"), name);
+}
+
+td::td_api::object_ptr<td::td_api::getMessage> makeGetMessage(ChatId chatId, MessageId messageId)
+{
+    auto request = td::td_api::make_object<td::td_api::getMessage>();
+    request->chat_id_    = chatId.value();
+    request->message_id_ = messageId.value();
+    return request;
+}
+
+// Not forced: TDLib may ask the server, so that what it says of the chat is right
+td::td_api::object_ptr<td::td_api::createPrivateChat> makeCreatePrivateChat(int64_t userId)
+{
+    auto request = td::td_api::make_object<td::td_api::createPrivateChat>();
+    request->user_id_ = userId;
+    request->force_   = false;
+    return request;
+}
+
 std::string getDisplayedError(const td::td_api::object_ptr<td::td_api::Object> &object)
 {
     if (!object) {
@@ -151,13 +199,12 @@ std::string getDisplayedError(const td::td_api::object_ptr<td::td_api::Object> &
         // was used, but it isn't used in a way that can lead to this message
         return "No response received";
     }
-    else if (object->get_id() == td::td_api::error::ID) {
+    if (object->get_id() == td::td_api::error::ID) {
         const td::td_api::error &error = static_cast<const td::td_api::error &>(*object);
         return formatMessage(errorCodeMessage(), {std::to_string(error.code_), error.message_});
-    } else {
-        // Should not be possible
-        return "Unexpected response";
     }
+    // Should not be possible
+    return "Unexpected response";
 }
 
 std::string proxyTypeToString(PurpleProxyType proxyType)
@@ -184,8 +231,7 @@ const char *getPurpleStatusId(const td::td_api::UserStatus &tdStatus)
 {
     if (tdStatus.get_id() == td::td_api::userStatusOnline::ID)
         return purple_primitive_get_id_from_type(PURPLE_STATUS_AVAILABLE);
-    else
-        return purple_primitive_get_id_from_type(PURPLE_STATUS_AWAY);
+    return purple_primitive_get_id_from_type(PURPLE_STATUS_AWAY);
 }
 
 PurpleBlistNode *findChatBlistNode(const TdAccountData &account, const td::td_api::chat &chat)
@@ -206,11 +252,21 @@ PurpleBlistNode *findChatBlistNode(const TdAccountData &account, const td::td_ap
 
 static const char DELETED_MESSAGES_SETTING[] = "tdlib-deleted-messages";
 
+// What a buddy or chat chose for itself, if it did: whether its setting is the value saying yes
+static bool getNodeChoice(PurpleBlistNode *node, const char *setting, const char *yes, bool &chosen)
+{
+    const char *value = node ? purple_blist_node_get_string(node, setting) : nullptr;
+    if (!value || !*value)
+        return false;
+    chosen = !strcmp(value, yes);
+    return true;
+}
+
 bool keepsDeletedMessages(PurpleAccount *account, PurpleBlistNode *node)
 {
-    const char *chosen = node ? purple_blist_node_get_string(node, DELETED_MESSAGES_SETTING) : nullptr;
-    if (chosen && *chosen)
-        return !strcmp(chosen, "keep");
+    bool keep;
+    if (getNodeChoice(node, DELETED_MESSAGES_SETTING, "keep", keep))
+        return keep;
     return purple_account_get_bool(account, AccountOptions::StrikeOutDeleted, AccountOptions::StrikeOutDeletedDefault);
 }
 
@@ -223,9 +279,9 @@ static const char DOWNLOAD_MEDIA_SETTING[] = "tdlib-download-media";
 
 bool downloadsMedia(PurpleAccount *account, PurpleBlistNode *node)
 {
-    const char *chosen = node ? purple_blist_node_get_string(node, DOWNLOAD_MEDIA_SETTING) : nullptr;
-    if (chosen && *chosen)
-        return !strcmp(chosen, "yes");
+    bool download;
+    if (getNodeChoice(node, DOWNLOAD_MEDIA_SETTING, "yes", download))
+        return download;
     // Under "Telegram: not joined" or "Telegram: not in contacts", which are not saved
     if (node && (purple_blist_node_get_flags(node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE))
         return false;
@@ -316,7 +372,7 @@ std::vector<const td::td_api::user *> getUsersByPurpleName(const char *buddyName
 PurpleConversation *getImConversation(PurpleAccount *account, const char *username)
 {
     PurpleConversation *conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_IM, username, account);
-    if (conv == NULL)
+    if (conv == nullptr)
         conv = purple_conversation_new(PURPLE_CONV_TYPE_IM, account, username);
 
     return conv;
@@ -344,7 +400,7 @@ static PurpleGroup *getTransientGroup(const char *groupName)
     if (!group) {
         group = purple_group_new(groupName);
         purple_blist_node_set_flags(PURPLE_BLIST_NODE(group), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
-        purple_blist_add_group(group, NULL);
+        purple_blist_add_group(group, nullptr);
     }
     return group;
 }
@@ -357,7 +413,7 @@ void addTransientChat(TdAccountData &account, const td::td_api::chat &chat)
                       chat.title_.c_str());
     PurpleChat *purpleChat = purple_chat_new(account.purpleAccount, chat.title_.c_str(), getChatComponents(chat));
     purple_blist_node_set_flags(PURPLE_BLIST_NODE(purpleChat), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
-    purple_blist_add_chat(purpleChat, group, NULL);
+    purple_blist_add_chat(purpleChat, group, nullptr);
 }
 
 
@@ -378,7 +434,7 @@ PurpleConvChat *getChatConversation(TdAccountData &account, const td::td_api::ch
     // purple_conv_chat_has_left returns true) and if that's the case, serv_got_joined_chat must
     // still be called to make them active and thus able to send or receive messages, because that's
     // the kind of thing we were called for here.
-    if ((conv == NULL) || purple_conv_chat_has_left(purple_conversation_get_chat_data(conv))) {
+    if ((conv == nullptr) || purple_conv_chat_has_left(purple_conversation_get_chat_data(conv))) {
         if (chatPurpleId != 0) {
             purple_debug_misc(config::pluginId, "Creating conversation for chat %s (purple id %d)\n",
                               chat.title_.c_str(), chatPurpleId);
@@ -388,7 +444,7 @@ PurpleConvChat *getChatConversation(TdAccountData &account, const td::td_api::ch
             serv_got_joined_chat(purple_account_get_connection(account.purpleAccount), chatPurpleId, chatName.c_str());
             conv = purple_find_conversation_with_account(PURPLE_CONV_TYPE_CHAT, chatName.c_str(),
                                                          account.purpleAccount);
-            if (conv == NULL)
+            if (conv == nullptr)
                 purple_debug_warning(config::pluginId, "Did not create conversation for chat %s\n", chat.title_.c_str());
             else {
                 // The conversation was named before it could know of the entry, which Pidgin will
@@ -409,7 +465,7 @@ PurpleConvChat *getChatConversation(TdAccountData &account, const td::td_api::ch
 
         if (purpleChat && newChatCreated) {
             BasicGroupId                          basicGroupId = getBasicGroupId(chat);
-            const td::td_api::basicGroupFullInfo *groupInfo    = basicGroupId.valid() ? account.getBasicGroupInfo(basicGroupId) : nullptr;
+            const td::td_api::basicGroupFullInfo *groupInfo    = account.getBasicGroupInfo(basicGroupId);
             if (groupInfo)
                 updateChatConversation(purpleChat, *groupInfo, account);
 
@@ -427,7 +483,7 @@ PurpleConvChat *getChatConversation(TdAccountData &account, const td::td_api::ch
         return purpleChat;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 PurpleConvChat *findChatConversation(PurpleAccount *account, const td::td_api::chat &chat)
@@ -437,7 +493,7 @@ PurpleConvChat *findChatConversation(PurpleAccount *account, const td::td_api::c
                                                                      name.c_str(), account);
     if (conv)
         return purple_conversation_get_chat_data(conv);
-    return NULL;
+    return nullptr;
 }
 
 bool conversationHasFocus(PurpleConversation *conv)
@@ -446,10 +502,9 @@ bool conversationHasFocus(PurpleConversation *conv)
 
     // purple_conversation_has_focus return false if this callback is not set, as is the case with
     // bitlbee, but we want to default to sending read receipts
-    if ((ops == NULL) || (ops->has_focus == NULL))
+    if ((ops == nullptr) || (ops->has_focus == nullptr))
         return true;
-    else
-        return purple_conversation_has_focus(conv);
+    return purple_conversation_has_focus(conv);
 }
 
 bool isDeletedUser(const td::td_api::user &user)
@@ -469,7 +524,7 @@ static PurpleGroup *findDeletedAccountsGroup(PurpleBlistNode *node)
                 return group;
         }
     }
-    return NULL;
+    return nullptr;
 }
 
 // Deleted accounts of every Telegram account go to one group. It is found by the setting we gave
@@ -493,7 +548,7 @@ PurpleGroup *getDeletedAccountsGroup(bool create)
         group = purple_find_group(name);
         if (!group) {
             group = purple_group_new(name);
-            purple_blist_add_group(group, NULL);
+            purple_blist_add_group(group, nullptr);
         }
         purple_blist_node_set_string(PURPLE_BLIST_NODE(group), GroupOptions::DeletedAccounts, name);
     }
@@ -508,7 +563,7 @@ static void writeBuddyNotice(TdAccountData &account, PurpleBuddy *buddy, const c
                                                                       account.purpleAccount);
     if (conv)
         purple_conv_im_write(purple_conversation_get_im_data(conv), "", notice,
-                             PURPLE_MESSAGE_SYSTEM, time(NULL));
+                             PURPLE_MESSAGE_SYSTEM, time(nullptr));
 }
 
 // The buddy is kept, with the name it had, for its conversations' log
@@ -531,9 +586,9 @@ void markBuddyDeleted(TdAccountData &account, const td::td_api::user &user)
 
     // TRANSLATOR: Buddy's name, of an account that was deleted. The argument is the name it had.
     purple_blist_alias_buddy(buddy, formatMessage(_("{} (deleted)"), alias).c_str());
-    purple_blist_add_buddy(buddy, NULL, getDeletedAccountsGroup(true), NULL);
+    purple_blist_add_buddy(buddy, nullptr, getDeletedAccountsGroup(true), nullptr);
     purple_prpl_got_user_status(account.purpleAccount, purpleUserName.c_str(),
-                                purple_primitive_get_id_from_type(PURPLE_STATUS_OFFLINE), NULL);
+                                purple_primitive_get_id_from_type(PURPLE_STATUS_OFFLINE), nullptr);
     // TRANSLATOR: In-chat status update. The owner may have deleted it, or Telegram.
     writeBuddyNotice(account, buddy, _("This account has been deleted."));
 }
@@ -544,13 +599,13 @@ void restoreDeletedBuddy(TdAccountData &account, const td::td_api::user &user)
     std::string  purpleUserName = getPurpleBuddyName(user);
     PurpleBuddy *buddy          = purple_find_buddy(account.purpleAccount, purpleUserName.c_str());
     const char  *oldGroupName   = buddy ? purple_blist_node_get_string(PURPLE_BLIST_NODE(buddy),
-                                                                       BuddyOptions::GroupBeforeDeletion) : NULL;
+                                                                       BuddyOptions::GroupBeforeDeletion) : nullptr;
     if (!oldGroupName)
         return;
 
     purple_debug_info(config::pluginId, "Account of buddy %s has been restored\n", purple_buddy_get_name(buddy));
-    PurpleGroup *oldGroup = *oldGroupName ? purple_find_group(oldGroupName) : NULL;
-    purple_blist_add_buddy(buddy, NULL, oldGroup, NULL);
+    PurpleGroup *oldGroup = *oldGroupName ? purple_find_group(oldGroupName) : nullptr;
+    purple_blist_add_buddy(buddy, nullptr, oldGroup, nullptr);
     purple_blist_node_remove_setting(PURPLE_BLIST_NODE(buddy), BuddyOptions::GroupBeforeDeletion);
     // TRANSLATOR: In-chat status update, of an account that had been deleted.
     writeBuddyNotice(account, buddy, _("This account has been restored."));
@@ -581,9 +636,9 @@ void returnToTransientGroup(PurpleBlistNode *node)
     if (!node || !(purple_blist_node_get_flags(node) & PURPLE_BLIST_NODE_FLAG_NO_SAVE))
         return;
     if (PURPLE_BLIST_NODE_IS_CHAT(node))
-        purple_blist_add_chat(PURPLE_CHAT(node), getTransientGroup(getTransientChatGroupName()), NULL);
+        purple_blist_add_chat(PURPLE_CHAT(node), getTransientGroup(getTransientChatGroupName()), nullptr);
     else if (PURPLE_BLIST_NODE_IS_BUDDY(node))
-        purple_blist_add_buddy(PURPLE_BUDDY(node), NULL, getTransientGroup(getTransientBuddyGroupName()), NULL);
+        purple_blist_add_buddy(PURPLE_BUDDY(node), nullptr, getTransientGroup(getTransientBuddyGroupName()), nullptr);
 }
 
 void keepInBuddyList(PurpleBlistNode *node)
@@ -615,9 +670,9 @@ std::string addTransientBuddy(TdAccountData &account, const td::td_api::user &us
     }
     PurpleGroup *group = getTransientGroup(getTransientBuddyGroupName());
     purple_debug_misc(config::pluginId, "Adding %s to the buddy list until the program quits\n", buddyName.c_str());
-    buddy = purple_buddy_new(account.purpleAccount, buddyName.c_str(), alias.empty() ? NULL : alias.c_str());
+    buddy = purple_buddy_new(account.purpleAccount, buddyName.c_str(), alias.empty() ? nullptr : alias.c_str());
     purple_blist_node_set_flags(PURPLE_BLIST_NODE(buddy), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
-    purple_blist_add_buddy(buddy, NULL, group, NULL);
+    purple_blist_add_buddy(buddy, nullptr, group, nullptr);
     return buddyName;
 }
 
@@ -632,13 +687,13 @@ void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, con
     std::string alias          = chat ? chat->title_ : makeBasicDisplayName(user);
 
     PurpleBuddy *buddy = purple_find_buddy(account.purpleAccount, purpleUserName.c_str());
-    if ((buddy == NULL) || isTransientBuddy(buddy)) {
+    if ((buddy == nullptr) || isTransientBuddy(buddy)) {
         purple_debug_misc(config::pluginId, "Adding new buddy %s for user %s\n",
                           alias.c_str(), purpleUserName.c_str());
 
         const ContactRequest *contactReq = account.findContactRequest(getId(user));
         PurpleGroup          *group      = (contactReq && !contactReq->groupName.empty()) ?
-                                           purple_find_group(contactReq->groupName.c_str()) : NULL;
+                                           purple_find_group(contactReq->groupName.c_str()) : nullptr;
         // Moved out of "Telegram: not in contacts" by the user (PurpleTdClient::buddyMoved), it stays
         if (buddy && isMovedOutOfTransient(PURPLE_BLIST_NODE(buddy), purple_buddy_get_group(buddy)))
             group = purple_buddy_get_group(buddy);
@@ -653,7 +708,7 @@ void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, con
                 purple_blist_alias_buddy(buddy, alias.c_str());
         } else
             buddy = purple_buddy_new(account.purpleAccount, purpleUserName.c_str(), alias.c_str());
-        purple_blist_add_buddy(buddy, NULL, group, NULL);
+        purple_blist_add_buddy(buddy, nullptr, group, nullptr);
         // If a new buddy has been added here, it means that there was updateNewChat with the private
         // chat. This means either we added them to contacts or started messaging them, or they
         // messaged us. Either way, there is no need to for any extra notification about new contact
@@ -673,28 +728,22 @@ void updatePrivateChat(TdAccountData &account, const td::td_api::chat *chat, con
             if (photo.local_ && photo.local_->is_downloading_completed_ &&
                 (user.profile_photo_->id_ != oldPhotoId))
             {
-                gchar  *img = NULL;
-                size_t  len;
-                GError *err = NULL;
-                g_file_get_contents(photo.local_->path_.c_str(), &img, &len, &err);
-                if (err) {
-                    purple_debug_warning(config::pluginId, "Failed to load profile photo %s for %s: %s\n",
-                                         photo.local_->path_.c_str(), purpleUserName.c_str(),  err->message);
-                    g_error_free(err);
-                } else {
+                gsize  len;
+                gchar *img = readPhoto(photo.local_->path_, purpleUserName, len);
+                if (img) {
                     std::string newPhotoIdStr = std::to_string(user.profile_photo_->id_);
                     purple_blist_node_set_string(PURPLE_BLIST_NODE(buddy), BuddyOptions::ProfilePhotoId,
                                                  newPhotoIdStr.c_str());
                     purple_debug_info(config::pluginId, "Loaded new profile photo for %s (id %s)\n",
                                       purpleUserName.c_str(), newPhotoIdStr.c_str());
                     purple_buddy_icons_set_for_user(account.purpleAccount, purpleUserName.c_str(),
-                                                    img, len, NULL);
+                                                    img, len, nullptr);
                 }
             }
         } else if (oldPhotoId) {
             purple_debug_info(config::pluginId, "Removing profile photo from %s\n", purpleUserName.c_str());
             purple_blist_node_remove_setting(PURPLE_BLIST_NODE(buddy), BuddyOptions::ProfilePhotoId);
-            purple_buddy_icons_set_for_user(account.purpleAccount, purpleUserName.c_str(), NULL, 0, NULL);
+            purple_buddy_icons_set_for_user(account.purpleAccount, purpleUserName.c_str(), nullptr, 0, nullptr);
         }
     }
 }
@@ -713,7 +762,7 @@ static void updateGroupChat(TdAccountData &account, const td::td_api::chat &chat
     if (!purpleChat) {
         purpleDebug("Adding new chat for {} {} ({})", {std::string(groupType), groupId, chat.title_});
         purpleChat = purple_chat_new(account.purpleAccount, chat.title_.c_str(), getChatComponents(chat));
-        purple_blist_add_chat(purpleChat, NULL, NULL);
+        purple_blist_add_chat(purpleChat, nullptr, nullptr);
     } else {
         // Shown before we joined, it is ours now, and to be kept
         PurpleBlistNode *node = PURPLE_BLIST_NODE(purpleChat);
@@ -723,7 +772,7 @@ static void updateGroupChat(TdAccountData &account, const td::td_api::chat &chat
             bool moved = isMovedOutOfTransient(node, purple_chat_get_group(purpleChat));
             keepInBuddyList(node);
             if (!moved)
-                purple_blist_add_chat(purpleChat, NULL, NULL);
+                purple_blist_add_chat(purpleChat, nullptr, nullptr);
         }
         // As saved by an earlier version
         completeChatComponents(purpleChat);
@@ -752,15 +801,9 @@ static void updateGroupChat(TdAccountData &account, const td::td_api::chat &chat
         if (photo.local_ && photo.local_->is_downloading_completed_ && photo.remote_ &&
             !photo.remote_->unique_id_.empty() && (!oldPhotoId || (photo.remote_->unique_id_ != oldPhotoId)))
         {
-            gchar  *img = NULL;
-            size_t  len;
-            GError *err = NULL;
-            g_file_get_contents(photo.local_->path_.c_str(), &img, &len, &err);
-            if (err) {
-                purple_debug_warning(config::pluginId, "Failed to load chat photo %s for %s: %s\n",
-                                        photo.local_->path_.c_str(), chat.title_.c_str(),  err->message);
-                g_error_free(err);
-            } else {
+            gsize  len;
+            gchar *img = readPhoto(photo.local_->path_, chat.title_, len);
+            if (img) {
                 purple_blist_node_set_string(PURPLE_BLIST_NODE(purpleChat), BuddyOptions::ProfilePhotoId,
                                              photo.remote_->unique_id_.c_str());
                 purple_debug_info(config::pluginId, "Loaded new chat photo for %s (id %s)\n",
@@ -772,7 +815,7 @@ static void updateGroupChat(TdAccountData &account, const td::td_api::chat &chat
     } else if (oldPhotoId) {
         purple_debug_info(config::pluginId, "Removing chat photo from %s\n", chat.title_.c_str());
         purple_blist_node_remove_setting(PURPLE_BLIST_NODE(purpleChat), BuddyOptions::ProfilePhotoId);
-        purple_buddy_icons_node_set_custom_icon(PURPLE_BLIST_NODE(purpleChat), NULL, 0);
+        purple_buddy_icons_node_set_custom_icon(PURPLE_BLIST_NODE(purpleChat), nullptr, 0);
     }
 }
 
@@ -816,7 +859,7 @@ bool isInviteLinkActive(const td::td_api::chatInviteLink &linkInfo)
 {
     return !linkInfo.is_revoked_ &&
         ((linkInfo.member_limit_ == 0) || (linkInfo.member_count_ < linkInfo.member_limit_)) &&
-        ((linkInfo.expiration_date_ == 0) || (std::time(NULL) < static_cast<time_t>(linkInfo.expiration_date_)));
+        ((linkInfo.expiration_date_ == 0) || (std::time(nullptr) < static_cast<time_t>(linkInfo.expiration_date_)));
 }
 
 static std::string lastMessageSetting(ChatId chatId)
@@ -844,10 +887,10 @@ void wipeChatTraces(PurpleAccount *purpleAccount, ChatId chatId, const std::stri
 
     gchar      *logDir = purple_log_get_log_dir((type == PURPLE_CONV_TYPE_CHAT) ? PURPLE_LOG_CHAT : PURPLE_LOG_IM,
                                                 convName.c_str(), purpleAccount);
-    GDir       *dir    = logDir ? g_dir_open(logDir, 0, NULL) : nullptr;
+    GDir       *dir    = logDir ? g_dir_open(logDir, 0, nullptr) : nullptr;
     const char *entry;
     while (dir && (entry = g_dir_read_name(dir))) {
-        gchar *path = g_build_filename(logDir, entry, NULL);
+        gchar *path = g_build_filename(logDir, entry, nullptr);
         if (g_remove(path) != 0)
             purple_debug_warning(config::pluginId, "Cannot remove %s from the log\n", path);
         g_free(path);
@@ -876,18 +919,8 @@ void removeGroupChat(PurpleAccount *purpleAccount, const td::td_api::chat &chat)
         return;
     }
     purple_blist_remove_chat(purpleChat);
-    // TODO: uncomment when updateNewChat(chat_list=NULL) + updateChatChatList(non-NULL) at login
-    // no longer removes chat
-    //std::string setting = lastMessageSetting(getId(chat));
-    //purple_account_remove_setting(purpleAccount, setting.c_str());
-}
-
-void removePrivateChat(TdAccountData &account, const td::td_api::chat &chat)
-{
-    // TODO: uncomment when updateNewChat(chat_list=NULL) + updateChatChatList(non-NULL) at login
-    // no longer removes chat
-    //std::string setting = lastMessageSetting(getId(chat));
-    //purple_account_remove_setting(account.purpleAccount, setting.c_str());
+    // TODO: the chat's lastMessageSetting is kept: at login, updateNewChat with no chat list, then
+    // updateChatChatList, would remove it, though the chat stays. So for a private chat's.
 }
 
 void saveChatLastMessage(TdAccountData &account, ChatId chatId, MessageId messageId)
@@ -900,7 +933,7 @@ void saveChatLastMessage(TdAccountData &account, ChatId chatId, MessageId messag
 MessageId getChatLastMessage(TdAccountData &account, ChatId chatId)
 {
     std::string setting = lastMessageSetting(chatId);
-    const char *value = purple_account_get_string(account.purpleAccount, setting.c_str(), NULL);
+    const char *value = purple_account_get_string(account.purpleAccount, setting.c_str(), nullptr);
 
     return value ? MessageId::fromString(value) : MessageId();
 }
@@ -918,31 +951,46 @@ std::string makeBasicDisplayName(const td::td_api::user &user)
 // Posted in a channel, by nobody named: its sender is "Channel post"
 bool isAnonymousChannelPost(const td::td_api::chat &chat, const td::td_api::message &message)
 {
-    return !message.is_outgoing_ && (getBasicGroupId(chat).valid() || getSupergroupId(chat).valid()) &&
+    return !message.is_outgoing_ && isGroupChat(chat) &&
            !getSenderUserId(message).valid() && message.author_signature_.empty() && message.is_channel_post_;
+}
+
+// Who a forwarded message came from: a user, one who hides, or a channel -- as its sender, by its
+// author's signature, as its source, by the channel's title
+static std::string getForwardOriginName(const td::td_api::MessageOrigin &origin, const TdAccountData &account,
+                                        bool channelAuthor)
+{
+    switch (origin.get_id()) {
+    case td::td_api::messageOriginUser::ID:
+        return account.getDisplayName(getSenderUserId(static_cast<const td::td_api::messageOriginUser &>(origin)));
+    case td::td_api::messageOriginHiddenUser::ID:
+        return static_cast<const td::td_api::messageOriginHiddenUser &>(origin).sender_name_;
+    case td::td_api::messageOriginChannel::ID: {
+        const auto &channel = static_cast<const td::td_api::messageOriginChannel &>(origin);
+        if (channelAuthor)
+            return channel.author_signature_;
+        const td::td_api::chat *chat = account.getChat(getChatId(channel));
+        return chat ? chat->title_ : std::string();
+    }
+    }
+    return "";
 }
 
 std::string getIncomingGroupchatSenderPurpleName(const td::td_api::chat &chat, const td::td_api::message &message,
                                                  const TdAccountData &account)
 {
-    if (!message.is_outgoing_ && (getBasicGroupId(chat).valid() || getSupergroupId(chat).valid())) {
+    if (!message.is_outgoing_ && isGroupChat(chat)) {
         UserId senderId = getSenderUserId(message);
         if (senderId.valid())
             return account.getDisplayName(senderId);
-        else if (!message.author_signature_.empty())
+        if (!message.author_signature_.empty())
             return message.author_signature_;
-        else if (message.is_channel_post_) {
+        if (message.is_channel_post_) {
             // TRANSLATOR: The "sender" of a message that was posted to a channel. Will be used like a username.
             return _("Channel post");
-        } else if (message.forward_info_ && message.forward_info_->origin_)
-            switch (message.forward_info_->origin_->get_id()) {
-            case td::td_api::messageOriginUser::ID:
-                return account.getDisplayName(getSenderUserId(static_cast<const td::td_api::messageOriginUser &>(*message.forward_info_->origin_)));
-            case td::td_api::messageOriginHiddenUser::ID:
-                return static_cast<const td::td_api::messageOriginHiddenUser &>(*message.forward_info_->origin_).sender_name_;
-            case td::td_api::messageOriginChannel::ID:
-                return static_cast<const td::td_api::messageOriginChannel&>(*message.forward_info_->origin_).author_signature_;
-            }
+        }
+        if (message.forward_info_ && message.forward_info_->origin_)
+            return getForwardOriginName(*message.forward_info_->origin_, account, true);
     }
 
     // For outgoing messages, our name will be used instead
@@ -954,22 +1002,7 @@ std::string getIncomingGroupchatSenderPurpleName(const td::td_api::chat &chat, c
 std::string getForwardSource(const td::td_api::messageForwardInfo &forwardInfo,
                              const TdAccountData &account)
 {
-    if (!forwardInfo.origin_)
-        return "";
-
-    switch (forwardInfo.origin_->get_id()) {
-        case td::td_api::messageOriginUser::ID:
-            return account.getDisplayName(getSenderUserId(static_cast<const td::td_api::messageOriginUser &>(*forwardInfo.origin_)));
-        case td::td_api::messageOriginHiddenUser::ID:
-            return static_cast<const td::td_api::messageOriginHiddenUser &>(*forwardInfo.origin_).sender_name_;
-        case td::td_api::messageOriginChannel::ID: {
-            const td::td_api::chat *chat = account.getChat(getChatId(static_cast<const td::td_api::messageOriginChannel&>(*forwardInfo.origin_)));
-            if (chat)
-                return chat->title_;
-        }
-    }
-
-    return "";
+    return forwardInfo.origin_ ? getForwardOriginName(*forwardInfo.origin_, account, false) : std::string();
 }
 
 void getNamesFromAlias(const char *alias, std::string &firstName, std::string &lastName)
@@ -1020,37 +1053,29 @@ static void findChatsByComponents(PurpleBlistNode *node,
     }
 }
 
-std::vector<PurpleChat *>findChatsByJoinString(const std::string &joinString)
+static std::vector<PurpleChat *> findChats(const char *joinString, const char *name, int type)
 {
     std::vector<PurpleChat *> result;
-
-    for (PurpleBlistNode *root = purple_blist_get_root(); root;
-         root = purple_blist_node_get_sibling_next(root)) // LOL
-    {
-        findChatsByComponents(root, joinString.c_str(), "", 0, result);
-    }
-
+    for (PurpleBlistNode *root = purple_blist_get_root(); root; root = purple_blist_node_get_sibling_next(root))
+        findChatsByComponents(root, joinString, name, type, result);
     return result;
+}
+
+std::vector<PurpleChat *>findChatsByJoinString(const std::string &joinString)
+{
+    return findChats(joinString.c_str(), "", 0);
 }
 
 std::vector<PurpleChat *> findChatsByNewGroup(const char *name, int type)
 {
-    std::vector<PurpleChat *> result;
-
-    for (PurpleBlistNode *root = purple_blist_get_root(); root;
-         root = purple_blist_node_get_sibling_next(root)) // LOL
-    {
-        findChatsByComponents(root, "", name, type, result);
-    }
-
-    return result;
+    return findChats("", name, type);
 }
 
 static void setChatMembers(PurpleConvChat *purpleChat,
                            const std::vector<td::td_api::object_ptr<td::td_api::chatMember>> &members,
                            const TdAccountData &account)
 {
-    GList *flags = NULL;
+    GList *flags = nullptr;
     std::vector<std::string> nameData;
 
     for (const auto &member: members) {
@@ -1080,12 +1105,12 @@ static void setChatMembers(PurpleConvChat *purpleChat,
         flags = g_list_append(flags, GINT_TO_POINTER(flag));
     }
 
-    GList *names = NULL;
+    GList *names = nullptr;
     for (const std::string &name: nameData)
         names = g_list_append(names, const_cast<char *>(name.c_str()));
 
     purple_conv_chat_clear_users(purpleChat);
-    purple_conv_chat_add_users(purpleChat, names, NULL, flags, false);
+    purple_conv_chat_add_users(purpleChat, names, nullptr, flags, false);
     g_list_free(names);
     g_list_free(flags);
 }
@@ -1093,14 +1118,15 @@ static void setChatMembers(PurpleConvChat *purpleChat,
 void updateChatConversation(PurpleConvChat *purpleChat, const td::td_api::basicGroupFullInfo &groupInfo,
                     const TdAccountData &account)
 {
-    purple_conv_chat_set_topic(purpleChat, NULL, groupInfo.description_.c_str());
+    purple_conv_chat_set_topic(purpleChat, nullptr, groupInfo.description_.c_str());
     setChatMembers(purpleChat, groupInfo.members_, account);
 }
 
+// As for a basic group, whose members come with its info; a supergroup's are asked for
 void updateChatConversation(PurpleConvChat *purpleChat, const td::td_api::supergroupFullInfo &groupInfo,
-                    const TdAccountData &account)
+                    const TdAccountData &)
 {
-    purple_conv_chat_set_topic(purpleChat, NULL, groupInfo.description_.c_str());
+    purple_conv_chat_set_topic(purpleChat, nullptr, groupInfo.description_.c_str());
 }
 
 void updateSupergroupChatMembers(PurpleConvChat* purpleChat, const td::td_api::chatMembers& members,
@@ -1127,12 +1153,17 @@ static void addFormat(std::vector<TextFormat> &formats, size_t start, size_t end
         formats.push_back({start, end, kind, url});
 }
 
+static std::string asciiLower(std::string text)
+{
+    for (char &c: text)
+        c = g_ascii_tolower(c);
+    return text;
+}
+
 // The value of an attribute of a tag, unescaped; empty if it has none
 static std::string getAttribute(const std::string &tag, const char *name)
 {
-    std::string lowered = tag;
-    for (char &c: lowered)
-        c = g_ascii_tolower(c);
+    std::string lowered = asciiLower(tag);
     std::string key = std::string(" ") + name + "=";
     size_t      at  = lowered.find(key);
     if (at == std::string::npos)
@@ -1180,9 +1211,8 @@ static void parseMarkup(const std::string &html, std::string &text, std::vector<
         bool        closing = (tag.size() > 1) && (tag[1] == '/');
         size_t      nameAt  = closing ? 2 : 1;
         size_t      nameEnd = tag.find_first_of(" />", nameAt);
-        std::string name    = tag.substr(nameAt, (nameEnd == std::string::npos) ? std::string::npos : nameEnd - nameAt);
-        for (char &c: name)
-            c = g_ascii_tolower(c);
+        std::string name    = asciiLower(tag.substr(nameAt, (nameEnd == std::string::npos) ? std::string::npos
+                                                                                           : nameEnd - nameAt));
 
         if (name == "br") {
             text += '\n';
@@ -1217,9 +1247,7 @@ static void parseMarkup(const std::string &html, std::string &text, std::vector<
             if (!item.url.empty())
                 item.kinds.push_back(TextFormat::Kind::Link);
         } else if (name == "span") {
-            std::string style = getAttribute(tag, "style");
-            for (char &c: style)
-                c = g_ascii_tolower(c);
+            std::string style = asciiLower(getAttribute(tag, "style"));
             if (style.find("bold") != std::string::npos)
                 item.kinds.push_back(TextFormat::Kind::Bold);
             if (style.find("italic") != std::string::npos)
@@ -1343,8 +1371,8 @@ static size_t splitTextChunk(MessagePart &part, const char *text, size_t length,
     // Try to truncate to a whole number of utf-8 characters
     size_t      chunkLen;
     const char *pos = g_utf8_find_prev_char(text, text+lengthLimit);
-    if (pos != NULL) {
-        const char *next = g_utf8_find_next_char(pos, NULL);
+    if (pos != nullptr) {
+        const char *next = g_utf8_find_next_char(pos, nullptr);
         if (next == text+lengthLimit)
             chunkLen = lengthLimit;
         else
@@ -1398,6 +1426,20 @@ static void appendText(std::vector<MessagePart> &parts, const char *s, size_t le
     }
 }
 
+// A placeholder of a pasted thing at s, bracketed within a line, as written: unescaped from the
+// message's HTML. Where it ends, with use set to it, or null.
+static const char *findPlaceholderAt(const char *s, const PastedAttachments &attachments, PlaceholderUse &use)
+{
+    const char *close = (*s == '[') ? strpbrk(s + 1, "[]\n<") : nullptr;
+    if (!close || (*close != ']'))
+        return nullptr;
+    std::string bracketed(s, close + 1);
+    char       *written = purple_unescape_html(bracketed.c_str());
+    use = findPasted(attachments, written ? written : bracketed);
+    g_free(written);
+    return use.attachment ? close + 1 : nullptr;
+}
+
 static void parseMessage(const char *message, std::vector<MessagePart> &parts, TdAccountData &account)
 {
     parts.clear();
@@ -1410,18 +1452,13 @@ static void parseMessage(const char *message, std::vector<MessagePart> &parts, T
     while (*s) {
         bool  isImage = false;
         long  imageId;
-        char *pastImage = NULL;
+        char *pastImage = nullptr;
 
         PlaceholderUse attachment;
         size_t         placeholderLength = 0;
-        // Bracketed, within a line, its text as written, unescaped from the message's HTML
-        const char *close = (*s == '[') ? strpbrk(s + 1, "[]\n<") : nullptr;
-        if (close && (*close == ']') && !account.pastedAttachments.items.empty()) {
-            std::string bracketed(s, close + 1);
-            char       *written = purple_unescape_html(bracketed.c_str());
-            attachment = findPasted(account.pastedAttachments, written ? written : bracketed);
-            g_free(written);
-            placeholderLength = bracketed.size();
+        if (!account.pastedAttachments.items.empty()) {
+            const char *end = findPlaceholderAt(s, account.pastedAttachments, attachment);
+            placeholderLength = end ? end - s : 0;
         }
 
         if (attachment.attachment) {
@@ -1489,6 +1526,20 @@ struct OggPage {
 };
 }
 
+// Of an Ogg page's header at p
+static uint64_t getOggGranule(const unsigned char *p)
+{
+    uint64_t granule = 0;
+    for (int b = 7; b >= 0; b--)
+        granule = (granule << 8) | p[6 + b];
+    return granule;
+}
+
+static uint32_t getOggSerial(const unsigned char *p)
+{
+    return p[14] | (p[15] << 8) | (p[16] << 16) | (uint32_t(p[17]) << 24);
+}
+
 static bool readOggPage(const std::vector<unsigned char> &data, size_t offset, OggPage &page)
 {
     enum { HEADER = 27 };
@@ -1496,10 +1547,8 @@ static bool readOggPage(const std::vector<unsigned char> &data, size_t offset, O
         return false;
     const unsigned char *p = &data[offset];
     page.offset    = offset;
-    page.granule   = 0;
-    for (int b = 7; b >= 0; b--)
-        page.granule = (page.granule << 8) | p[6 + b];
-    page.serial    = p[14] | (p[15] << 8) | (p[16] << 16) | (uint32_t(p[17]) << 24);
+    page.granule   = getOggGranule(p);
+    page.serial    = getOggSerial(p);
     page.continued = p[5] & 1;
     page.segments  = p[26];
     if (offset + HEADER + page.segments > data.size())
@@ -1567,18 +1616,37 @@ static int getOpusDuration(const std::string &path)
     // The last page of the stream with a position: a capture pattern, version 0, the same serial number
     for (size_t i = (tail.size() >= HEADER) ? tail.size() - HEADER + 1 : 0; i-- > 0;) {
         const unsigned char *last = &tail[i];
-        if (memcmp(last, "OggS", 4) || last[4] ||
-            ((last[14] | (last[15] << 8) | (last[16] << 16) | (uint32_t(last[17]) << 24)) != first.serial))
+        if (memcmp(last, "OggS", 4) || last[4] || (getOggSerial(last) != first.serial))
             continue;
-        uint64_t granule = 0;
-        for (int b = 7; b >= 0; b--)
-            granule = (granule << 8) | last[6 + b];
+        uint64_t granule = getOggGranule(last);
         if ((granule == UINT64_MAX) || (granule <= start + preSkip))
             continue;
         uint64_t samples = granule - start - preSkip;
         return int(std::max<uint64_t>((samples + RATE - 1) / RATE, 1));
     }
     return 0;
+}
+
+td::td_api::object_ptr<td::td_api::FileType> makeFileType(AttachmentKind kind)
+{
+    switch (kind) {
+    case AttachmentKind::Photo:
+        return td::td_api::make_object<td::td_api::fileTypePhoto>();
+    case AttachmentKind::Video:
+        return td::td_api::make_object<td::td_api::fileTypeVideo>();
+    case AttachmentKind::Voice:
+        return td::td_api::make_object<td::td_api::fileTypeVoiceNote>();
+    case AttachmentKind::Document:
+        break;
+    }
+    return td::td_api::make_object<td::td_api::fileTypeDocument>();
+}
+
+td::td_api::object_ptr<td::td_api::inputFileLocal> makeInputFileLocal(const std::string &path)
+{
+    auto file   = td::td_api::make_object<td::td_api::inputFileLocal>();
+    file->path_ = path;
+    return file;
 }
 
 td::td_api::object_ptr<td::td_api::InputMessageContent>
@@ -1642,7 +1710,7 @@ makeAttachmentContent(const PlaceholderUse &use, const std::string &uploadPath,
 {
     purple_debug_misc(config::pluginId, "Sending %s\n", uploadPath.c_str());
     return makeMediaContent(use.asFile ? AttachmentKind::Document : use.attachment->kind,
-                            td::td_api::make_object<td::td_api::inputFileLocal>(uploadPath), use.attachment->path,
+                            makeInputFileLocal(uploadPath), use.attachment->path,
                             std::move(caption));
 }
 
@@ -1658,19 +1726,14 @@ ParsedEdit parseEdit(const char *message, const TdAccountData &account)
     ParsedEdit  edit;
     std::string html;
     for (const char *s = message ? message : ""; *s;) {
-        const char *close = (*s == '[') ? strpbrk(s + 1, "[]\n<") : nullptr;
-        if (close && (*close == ']')) {
-            std::string    bracketed(s, close + 1);
-            char          *written = purple_unescape_html(bracketed.c_str());
-            PlaceholderUse use     = findPasted(account.pastedAttachments, written ? written : bracketed);
-            g_free(written);
-            if (use.attachment) {
-                edit.attachments.push_back(use);
-                // With the space or line break after it, as when sending
-                for (s = close + 1; *s == ' ' || *s == '\n' || !g_ascii_strncasecmp(s, "<br>", 4);)
-                    s += (*s == '<') ? 4 : 1;
-                continue;
-            }
+        PlaceholderUse use;
+        const char    *end = findPlaceholderAt(s, account.pastedAttachments, use);
+        if (use.attachment) {
+            edit.attachments.push_back(use);
+            // With the space or line break after it, as when sending
+            for (s = end; *s == ' ' || *s == '\n' || !g_ascii_strncasecmp(s, "<br>", 4);)
+                s += (*s == '<') ? 4 : 1;
+            continue;
         }
         html += *s++;
     }
@@ -1699,8 +1762,7 @@ static size_t getAlbumSize(const std::vector<MessagePart> &parts, size_t first)
     return size;
 }
 
-int transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiver,
-                    TdAccountData &account, TdTransceiver::ResponseCb response)
+int transmitMessage(ChatId chatId, const char *message, TdAccountData &account, TdTransceiver::ResponseCb response)
 {
     std::vector<MessagePart> parts;
     parseMessage(message, parts, account);
@@ -1733,13 +1795,13 @@ int transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiv
                 auto sendMessageRequest = td::td_api::make_object<td::td_api::sendMessage>();
                 sendMessageRequest->chat_id_ = chatId.value();
                 sendMessageRequest->input_message_content_ = makeAttachment(input);
-                requestId = transceiver.sendQuery(std::move(sendMessageRequest), response);
+                requestId = account.transceiver.sendQuery(std::move(sendMessageRequest), response);
             } else {
                 auto sendAlbumRequest = td::td_api::make_object<td::td_api::sendMessageAlbum>();
                 sendAlbumRequest->chat_id_ = chatId.value();
                 for (size_t j = i; j < i + albumSize; j++)
                     sendAlbumRequest->input_message_contents_.push_back(makeAttachment(parts[j]));
-                requestId = transceiver.sendQuery(std::move(sendAlbumRequest), response);
+                requestId = account.transceiver.sendQuery(std::move(sendAlbumRequest), response);
             }
             account.addPendingRequest<SendMessageRequest>(requestId, chatId, nullptr);
             i += albumSize - 1;
@@ -1748,23 +1810,16 @@ int transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiv
 
         td::td_api::object_ptr<td::td_api::sendMessage> sendMessageRequest = td::td_api::make_object<td::td_api::sendMessage>();
         sendMessageRequest->chat_id_ = chatId.value();
-        char *tempFileName = NULL;
+        char *tempFileName = nullptr;
         bool  hasImage     = false;
 
         if (input.isImage)
             hasImage = saveImage(input.imageId, &tempFileName);
 
         if (hasImage) {
-            td::td_api::object_ptr<td::td_api::inputMessagePhoto> content = td::td_api::make_object<td::td_api::inputMessagePhoto>();
-#if TDLIB_API_INPUT_PHOTO
-            content->photo_ = td::td_api::make_object<td::td_api::inputPhoto>();
-            content->photo_->photo_ = td::td_api::make_object<td::td_api::inputFileLocal>(tempFileName);
-#else
-            content->photo_ = td::td_api::make_object<td::td_api::inputFileLocal>(tempFileName);
-#endif
-            content->caption_ = makeFormattedText(input.text, input.formats, 0, input.text.size());
-
-            sendMessageRequest->input_message_content_ = std::move(content);
+            sendMessageRequest->input_message_content_ =
+                makeMediaContent(AttachmentKind::Photo, makeInputFileLocal(tempFileName),
+                                 tempFileName, makeFormattedText(input.text, input.formats, 0, input.text.size()));
             purple_debug_misc(config::pluginId, "Sending photo %s\n", tempFileName);
         } else {
             td::td_api::object_ptr<td::td_api::inputMessageText> content = td::td_api::make_object<td::td_api::inputMessageText>();
@@ -1772,7 +1827,7 @@ int transmitMessage(ChatId chatId, const char *message, TdTransceiver &transceiv
             sendMessageRequest->input_message_content_ = std::move(content);
         }
 
-        uint64_t requestId = transceiver.sendQuery(std::move(sendMessageRequest), response);
+        uint64_t requestId = account.transceiver.sendQuery(std::move(sendMessageRequest), response);
         account.addPendingRequest<SendMessageRequest>(requestId, chatId, tempFileName);
         if (tempFileName)
             g_free(tempFileName);
@@ -1786,10 +1841,9 @@ std::string getSenderDisplayName(const td::td_api::chat &chat, const TgMessageIn
 {
     if (message.outgoing)
         return purple_account_get_name_for_display(account);
-    else if (isPrivateChat(chat) || getSecretChatId(chat).valid())
+    if (isPrivateChat(chat) || getSecretChatId(chat).valid())
         return chat.title_;
-    else
-        return message.incomingGroupchatSender;
+    return message.incomingGroupchatSender;
 }
 
 static bool g_messageLinksEnabled = false;
@@ -1807,15 +1861,13 @@ void setMessageLinksEnabled(bool enabled)
 // <scheme><account>/<chat id>/<message id>
 static std::string makeLink(const char *scheme, PurpleAccount *account, ChatId chatId, MessageId messageId)
 {
-    gchar *accountName = g_uri_escape_string(purple_account_get_username(account), NULL, FALSE);
+    gchar *accountName = g_uri_escape_string(purple_account_get_username(account), nullptr, FALSE);
     std::string result = std::string(scheme) + accountName + '/' +
                          std::to_string(chatId.value()) + '/' + std::to_string(messageId.value());
     g_free(accountName);
     return result;
 }
 
-// tdlib://<account>/<chat id>/<message id>: the message, rather than its file, which may not be
-// there yet, and whose path would not outlive TDLib's file cache
 bool isLinkSchemeAllowed(const std::string &url)
 {
     gchar *scheme  = g_uri_parse_scheme(url.c_str());
@@ -1828,6 +1880,8 @@ bool isLinkSchemeAllowed(const std::string &url)
     return allowed;
 }
 
+// tdlib://<account>/<chat id>/<message id>: the message, rather than its file, which may not be
+// there yet, and whose path would not outlive TDLib's file cache
 std::string makeMessageLink(PurpleAccount *account, ChatId chatId, MessageId messageId,
                             const std::string &variant)
 {
@@ -1849,8 +1903,8 @@ static bool parseLink(const char *scheme, const char *link, std::string &account
     bool    valid = (count == 3) || ((count == 4) && *parts[3]);
     variant = (count == 4) ? parts[3] : "";
     if (valid) {
-        gchar *name = g_uri_unescape_string(parts[0], NULL);
-        valid = (name != NULL);
+        gchar *name = g_uri_unescape_string(parts[0], nullptr);
+        valid = (name != nullptr);
         if (name)
             accountName = name;
         g_free(name);
@@ -2106,32 +2160,20 @@ void notifySendFailed(const td::td_api::updateMessageSendFailed &sendFailed, TdA
     }
 }
 
-template<typename T>
-T zeroIfNegative(T value)
-{
-    return (value >= 0) ? value : 0;
-}
-
 void updateOption(const td::td_api::updateOption &option, TdAccountData &account)
 {
-    if ((option.name_ == "version") && option.value_ &&
-        (option.value_->get_id() == td::td_api::optionValueString::ID))
-    {
-        purple_debug_misc(config::pluginId, "tdlib version: %s\n",
-                            static_cast<const td::td_api::optionValueString &>(*option.value_).value_.c_str());
-    } else if ((option.name_ == "message_caption_length_max") && option.value_ &&
-        (option.value_->get_id() == td::td_api::optionValueInteger::ID))
-    {
-        account.options.maxCaptionLength = zeroIfNegative(static_cast<const td::td_api::optionValueInteger &>(*option.value_).value_);
-    } else if ((option.name_ == "message_text_length_max") && option.value_ &&
-        (option.value_->get_id() == td::td_api::optionValueInteger::ID))
-    {
-        account.options.maxMessageLength = zeroIfNegative(static_cast<const td::td_api::optionValueInteger &>(*option.value_).value_);
-    } else if ((option.name_ == "my_id") && option.value_ &&
-        (option.value_->get_id() == td::td_api::optionValueInteger::ID))
-    {
-        account.options.myUserId = static_cast<const td::td_api::optionValueInteger &>(*option.value_).value_;
-    } else
+    const auto *string  = objectAs<td::td_api::optionValueString>(option.value_);
+    const auto *integer = objectAs<td::td_api::optionValueInteger>(option.value_);
+
+    if ((option.name_ == "version") && string)
+        purple_debug_misc(config::pluginId, "tdlib version: %s\n", string->value_.c_str());
+    else if ((option.name_ == "message_caption_length_max") && integer)
+        account.options.maxCaptionLength = std::max<int64_t>(integer->value_, 0);
+    else if ((option.name_ == "message_text_length_max") && integer)
+        account.options.maxMessageLength = std::max<int64_t>(integer->value_, 0);
+    else if ((option.name_ == "my_id") && integer)
+        account.options.myUserId = integer->value_;
+    else
         purple_debug_misc(config::pluginId, "Option update %s\n", option.name_.c_str());
 }
 
@@ -2141,7 +2183,7 @@ void populateGroupChatList(PurpleRoomlist *roomlist, const std::vector<const td:
     for (const td::td_api::chat *chat: chats)
         if (account.isGroupChatWithMembership(*chat)) {
             PurpleRoomlistRoom *room = purple_roomlist_room_new(PURPLE_ROOMLIST_ROOMTYPE_ROOM,
-                                                                chat->title_.c_str(), NULL);
+                                                                chat->title_.c_str(), nullptr);
             purple_roomlist_room_add_field (roomlist, room, getPurpleChatName(*chat).c_str());
             BasicGroupId groupId = getBasicGroupId(*chat);
             if (groupId.valid()) {
@@ -2232,11 +2274,11 @@ void AccountThread::finishAll()
 
 void *findFrontEndSymbol(const char *name)
 {
-    gpointer symbol = NULL;
-    GModule *program = g_module_open(NULL, (GModuleFlags)0);
+    gpointer symbol = nullptr;
+    GModule *program = g_module_open(nullptr, (GModuleFlags)0);
     if (program) {
         if (!g_module_symbol(program, name, &symbol))
-            symbol = NULL;
+            symbol = nullptr;
         g_module_close(program);
     }
     return symbol;

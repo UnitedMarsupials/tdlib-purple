@@ -24,7 +24,7 @@ void FileTransferTest::sendFile(const std::string &path, object_ptr<FileType> up
     tgl.verifyRequest(preliminaryUploadFile(make_object<inputFileLocal>(path), std::move(uploadedAs), 1));
 
     // Here whole, and being uploaded: just begun, or all of it
-    auto uploading = [&path, fileId](bool active, int64_t uploaded) {
+    auto uploading = [&path](bool active, int64_t uploaded) {
         auto local = make_object<localFile>();
         local->path_                     = path;
         local->is_downloading_completed_ = true;
@@ -120,7 +120,7 @@ TEST_F(FileTransferTest, BigDocument_RequestDownload)
             userFirstNames[0] + " " + userLastNames[0] + ": Requesting doc.file.name [mime/type] download",
             PURPLE_MESSAGE_SYSTEM, date
         ),
-        RequestActionEvent(connection, account, NULL, NULL, 2)
+        RequestActionEvent(connection, account, nullptr, nullptr, 2)
     );
 
     prpl.requestedAction("_Yes");
@@ -138,6 +138,39 @@ TEST_F(FileTransferTest, BigDocument_RequestDownload)
         PURPLE_MESSAGE_RECV,
         date
     ));
+}
+
+// Over 2 GiB, its size was cut to 32 bits, became negative, then 0: within any limit, so fetched unasked
+TEST_F(FileTransferTest, HugeDocument_RequestDownload)
+{
+    purple_account_set_string(account, "media-size-threshold", "0.5");
+
+    const int32_t date   = 10001;
+    const int32_t fileId = 1234;
+    purple_account_set_string(account, "download-behaviour", "hyperlink");
+    loginWithOneContact();
+
+    tgl.update(make_object<updateNewMessage>(makeMessage(
+        1,
+        userIds[0],
+        chatIds[0],
+        false,
+        date,
+        makeMessageDocument("doc.file.name", "mime/type", makeFile(fileId, 3000000000), "caption")
+    )));
+    tgl.verifyRequest(viewMessages(chatIds[0], std::vector<int64_t>(1, 1), nullptr, true));
+    prpl.verifyEvents(
+        ServGotImEvent(connection, purpleUserName(0), "caption", PURPLE_MESSAGE_RECV, date),
+        ConversationWriteEvent(
+            purpleUserName(0), purpleUserName(0),
+            userFirstNames[0] + " " + userLastNames[0] + ": Requesting doc.file.name [mime/type] download",
+            PURPLE_MESSAGE_SYSTEM, date
+        ),
+        RequestActionEvent(connection, account, nullptr, nullptr, 2)
+    );
+    tgl.verifyNoRequests();
+    prpl.requestedAction("_No");
+    tgl.verifyNoRequests();
 }
 
 TEST_F(FileTransferTest, BigDocument_Ignore)
@@ -408,9 +441,9 @@ TEST_F(FileTransferTest, WebpSticker)
         date
     ));
     // As it is, for the front-end's GdkPixbuf to decode
-    gchar *data = NULL;
+    gchar *data = nullptr;
     gsize  size = 0;
-    ASSERT_TRUE(g_file_get_contents(TEST_SOURCE_DIR "/test.webp", &data, &size, NULL));
+    ASSERT_TRUE(g_file_get_contents(TEST_SOURCE_DIR "/test.webp", &data, &size, nullptr));
     g_free(data);
     ASSERT_EQ(size, purple_imgstore_get_size(purple_imgstore_find_by_id(getLastImgstoreId())));
 }
@@ -1108,8 +1141,8 @@ TEST_F(FileTransferTest, ReceiveDocument_StandardTransfer_TinyFile)
 
     tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
 
-    char *tdlibFileName = NULL;
-    int fd = g_file_open_tmp("tdlib_test_XXXXXX", &tdlibFileName, NULL);
+    char *tdlibFileName = nullptr;
+    int fd = g_file_open_tmp("tdlib_test_XXXXXX", &tdlibFileName, nullptr);
     ASSERT_TRUE(fd >= 0);
     ASSERT_EQ((ssize_t)sizeof(data), write(fd, data, sizeof(data)));
     ::close(fd);
@@ -1179,8 +1212,8 @@ TEST_F(FileTransferTest, ReceiveDocument_StandardTransfer_Progress)
 
     tgl.verifyRequest(downloadFile(fileId, 1, 0, 0, true));
 
-    char *tdlibFileName = NULL;
-    int fd = g_file_open_tmp("tdlib_test_XXXXXX", &tdlibFileName, NULL);
+    char *tdlibFileName = nullptr;
+    int fd = g_file_open_tmp("tdlib_test_XXXXXX", &tdlibFileName, nullptr);
     ASSERT_TRUE(fd >= 0);
     ASSERT_EQ((ssize_t)sizeof(data), write(fd, data, sizeof(data)));
     ::close(fd);
@@ -1651,7 +1684,7 @@ TEST_F(PasteTest, MediaEdited)
     media.mimeType = "image/jpeg";
     auto edit = [&](const char *text) {
         client->askEditMessage(chat, message, "caption", "caption", true, 0, media);
-        prpl.verifyEvents(RequestInputEvent(nullptr, account, NULL, NULL));
+        prpl.verifyEvents(RequestInputEvent(nullptr, account, nullptr, nullptr));
         prpl.inputEnter(text);
     };
 
@@ -1690,7 +1723,7 @@ TEST_F(PasteTest, MediaEdited)
     remote.fileId = 100;
     remote.path   = "";
     client->askEditMessage(chat, MessageId::fromString("2"), "", "", true, 0, remote);
-    prpl.verifyEvents(RequestInputEvent(nullptr, account, NULL, NULL));
+    prpl.verifyEvents(RequestInputEvent(nullptr, account, nullptr, nullptr));
     prpl.inputEnter("[image-3.jpg#3]");
     tgl.verifyRequest(downloadFile(100, 32, 0, 0, true));
     tgl.reply(::makeFile(100, 4, later));

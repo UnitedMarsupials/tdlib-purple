@@ -14,43 +14,32 @@ const char *getChatNameComponent()
     return chatNameComponent;
 }
 
+static proto_chat_entry *makeChatEntry(const char *label, const char *identifier)
+{
+    proto_chat_entry *entry = g_new0(proto_chat_entry, 1);
+    entry->label      = label;
+    entry->identifier = identifier;
+    entry->required   = FALSE;
+    return entry;
+}
+
 GList *getChatJoinInfo()
 {
     // First entry is the internal chat name used to look up conversations
-    struct proto_chat_entry *pce;
-    pce = g_new0 (struct proto_chat_entry, 1);
     // TRANSLATOR: Info item *and* dialog item.
-    pce->label = _("Chat ID (don't change):");
-    pce->identifier = chatNameComponent;
-    pce->required = FALSE;
-    GList *info = g_list_append (NULL, pce);
+    GList *info = g_list_append(nullptr, makeChatEntry(_("Chat ID (don't change):"), chatNameComponent));
+    // TRANSLATOR: Info item *and* dialog item.
+    info = g_list_append(info, makeChatEntry(_("Join URL or name (empty if creating new):"), joinStringKey));
+    // TRANSLATOR: Info item *and* dialog item.
+    info = g_list_append(info, makeChatEntry(_("Group name (if creating a group):"), nameKey));
 
-    pce = g_new0 (struct proto_chat_entry, 1);
     // TRANSLATOR: Info item *and* dialog item.
-    pce->label = _("Join URL or name (empty if creating new):");
-    pce->identifier = joinStringKey;
-    pce->required = FALSE;
-    info = g_list_append (info, pce);
-
-    pce = g_new0 (struct proto_chat_entry, 1);
-    // TRANSLATOR: Info item *and* dialog item.
-    pce->label = _("Group name (if creating a group):");
-    pce->identifier = nameKey;
-    pce->required = FALSE;
-    info = g_list_append (info, pce);
-
-    pce = g_new0 (struct proto_chat_entry, 1);
-    // TRANSLATOR: Info item *and* dialog item.
-    pce->label = _("Group to create: 1=small 2=big 3=channel");
-    pce->identifier = typeKey;
-    pce->required = FALSE;
-    pce->is_int = TRUE;
+    proto_chat_entry *type = makeChatEntry(_("Group to create: 1=small 2=big 3=channel"), typeKey);
+    type->is_int = TRUE;
     static_assert((GROUP_TYPE_BASIC > 0) && (GROUP_TYPE_SUPER > 0) && (GROUP_TYPE_CHANNEL > 0), "positive please");
-    pce->min = std::min({GROUP_TYPE_BASIC, GROUP_TYPE_SUPER, GROUP_TYPE_CHANNEL});
-    pce->max = std::max({GROUP_TYPE_BASIC, GROUP_TYPE_SUPER, GROUP_TYPE_CHANNEL});
-    info = g_list_append (info, pce);
-
-    return info;
+    type->min = std::min({GROUP_TYPE_BASIC, GROUP_TYPE_SUPER, GROUP_TYPE_CHANNEL});
+    type->max = std::max({GROUP_TYPE_BASIC, GROUP_TYPE_SUPER, GROUP_TYPE_CHANNEL});
+    return g_list_append(info, type);
 }
 
 std::string getPurpleChatName(const td::td_api::chat &chat)
@@ -60,12 +49,8 @@ std::string getPurpleChatName(const td::td_api::chat &chat)
 
 GHashTable *getChatComponents(const td::td_api::chat &chat)
 {
-    char name[32];
-    snprintf(name, sizeof(name)-1, "chat%" G_GINT64_FORMAT "", chat.id_);
-    name[sizeof(name)-1] = '\0';
-
-    GHashTable *table = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, g_free);
-    g_hash_table_insert(table, chatNameComponent, g_strdup(name));
+    GHashTable *table = g_hash_table_new_full (g_str_hash, g_str_equal, nullptr, g_free);
+    g_hash_table_insert(table, chatNameComponent, g_strdup(getPurpleChatName(chat).c_str()));
     // The keys are not freed with this table
     for (char *key: {joinStringKey, nameKey, typeKey})
         g_hash_table_insert(table, key, g_strdup(""));
@@ -140,7 +125,7 @@ unsigned getAutoDownloadLimitKb(PurpleAccount *account)
         // TRANSLATOR: Buddy-window error message, argument will be a "number".
         std::string message = formatMessage(_("Invalid auto-download limit '{}', resetting to default"), dlLimitStr);
         // TRANSLATOR: Title of a buddy-window error message
-        purple_notify_warning(account, _("Download limit"), message.c_str(), NULL);
+        purple_notify_warning(account, _("Download limit"), message.c_str(), nullptr);
         purple_account_set_string(account, AccountOptions::AutoDownloadLimit,
                                   AccountOptions::AutoDownloadLimitDefault);
         dlLimit = atof(AccountOptions::AutoDownloadLimitDefault);
@@ -164,19 +149,35 @@ bool ignoreBigDownloads(PurpleAccount *account)
                    AccountOptions::BigDownloadHandlingDiscard);
 }
 
+PurpleTdClient *getTdClient(PurpleConnection *gc)
+{
+    return gc ? static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(gc)) : nullptr;
+}
+
 PurpleTdClient *getTdClient(PurpleAccount *account)
 {
-    PurpleConnection *connection = purple_account_get_connection(account);
-    if (connection)
-        return static_cast<PurpleTdClient *>(purple_connection_get_protocol_data(connection));
-    else
-        return NULL;
+    return getTdClient(purple_account_get_connection(account));
+}
+
+PurpleTdClient *getTdClient(PurpleConversation *conv)
+{
+    return getTdClient(purple_conversation_get_account(conv));
+}
+
+bool isOurAccount(PurpleAccount *account)
+{
+    return account && !strcmp(purple_account_get_protocol_id(account), config::pluginId);
+}
+
+bool isOurConversation(PurpleConversation *conv)
+{
+    return conv && isOurAccount(purple_conversation_get_account(conv));
 }
 
 const char *getUiName()
 {
     GHashTable *ui_info = purple_core_get_ui_info();
-    if (ui_info == NULL)
+    if (ui_info == nullptr)
         return "";
     const char *name = static_cast<const char *>(g_hash_table_lookup(ui_info, "name"));
     return name ? name : "";
@@ -186,8 +187,7 @@ const char *AccountOptions::DownloadBehaviourDefault()
 {
     if (!strcasecmp(getUiName(), "pidgin"))
         return AccountOptions::DownloadBehaviourHyperlink;
-    else
-        return AccountOptions::DownloadBehaviourStandard;
+    return AccountOptions::DownloadBehaviourStandard;
 }
 
 bool canDisableReadReceipts()
@@ -201,6 +201,5 @@ bool isReadReceiptsEnabled(PurpleAccount *account)
     if (canDisableReadReceipts())
         return (purple_account_get_bool(account, AccountOptions::ReadReceipts,
                                         AccountOptions::ReadReceiptsDefault) != FALSE);
-    else
-        return true;
+    return true;
 }

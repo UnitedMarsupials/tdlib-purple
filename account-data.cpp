@@ -31,8 +31,7 @@ const char *getCanonicalPhoneNumber(const char *s)
 {
     if (*s == '+')
         return s+1;
-    else
-        return s;
+    return s;
 }
 
 // The prefix, then digits and nothing else, as the plugin writes them
@@ -59,16 +58,17 @@ SecretChatId purpleBuddyNameToSecretChatId(const char *s)
 
 static bool isPhoneEqual(const std::string &n1, const std::string &n2)
 {
-    const char *s1 = n1.c_str();
-    const char *s2 = n2.c_str();
-    if (*s1 == '+') s1++;
-    if (*s2 == '+') s2++;
-    return !strcmp(s1, s2);
+    return !strcmp(getCanonicalPhoneNumber(n1.c_str()), getCanonicalPhoneNumber(n2.c_str()));
 }
 
 bool isPrivateChat(const td::td_api::chat &chat)
 {
     return getUserIdByPrivateChat(chat).valid();
+}
+
+bool isGroupChat(const td::td_api::chat &chat)
+{
+    return getBasicGroupId(chat).valid() || getSupergroupId(chat).valid();
 }
 
 UserId getUserIdByPrivateChat(const td::td_api::chat &chat)
@@ -129,26 +129,41 @@ SecretChatId getSecretChatId(const td::td_api::chat &chat)
     return SecretChatId::invalid;
 }
 
+// Of every ChatMemberStatus TDLib defines, only the creator and a restricted member can be in a
+// group's administration without belonging to it; an administrator has no flag saying otherwise.
 bool isGroupMember(const td::td_api::object_ptr<td::td_api::ChatMemberStatus> &status)
 {
     if (!status)
         return false;
-    else if ((status->get_id() == td::td_api::chatMemberStatusLeft::ID) ||
-             (status->get_id() == td::td_api::chatMemberStatusBanned::ID))
-        return false;
-    else if (status->get_id() == td::td_api::chatMemberStatusRestricted::ID)
+    switch (status->get_id()) {
+    case td::td_api::chatMemberStatusRestricted::ID:
         return static_cast<const td::td_api::chatMemberStatusRestricted &>(*status).is_member_;
-    else if (status->get_id() == td::td_api::chatMemberStatusCreator::ID)
+    case td::td_api::chatMemberStatusCreator::ID:
         return static_cast<const td::td_api::chatMemberStatusCreator &>(*status).is_member_;
-    else if (status->get_id() == td::td_api::chatMemberStatusMember::ID)
+    case td::td_api::chatMemberStatusMember::ID:
+    case td::td_api::chatMemberStatusAdministrator::ID:
         return true;
-    // An administrator is a member and has no flag saying otherwise -- only the creator and a
-    // restricted member can be in a group's administration without belonging to it. These six
-    // are every ChatMemberStatus TDLib defines.
-    else if (status->get_id() == td::td_api::chatMemberStatusAdministrator::ID)
-        return true;
+    default: // left, banned
+        return false;
+    }
+}
 
-    return false;
+// What map holds for key, or null
+template<typename Map, typename Key>
+static const typename Map::mapped_type *findIn(const Map &map, const Key &key)
+{
+    auto it = map.find(key);
+    return (it != map.end()) ? &it->second : nullptr;
+}
+
+// The first chat of the account matching
+template<typename Map, typename Predicate>
+static const td::td_api::chat *findChat(const Map &chats, Predicate matches)
+{
+    auto it = std::find_if(chats.begin(), chats.end(), [&matches](const typename Map::value_type &entry) {
+        return matches(*entry.second.chat);
+    });
+    return (it != chats.end()) ? it->second.chat.get() : nullptr;
 }
 
 bool isSameUser(const td::td_api::MessageSender &member1, const td::td_api::MessageSender &member2)
@@ -164,10 +179,27 @@ bool isSameUser(const td::td_api::MessageSender &member1, const td::td_api::Mess
     return false;
 }
 
-auto PendingMessageQueue::getChatQueue(ChatId chatId) -> std::vector<ChatQueue>::iterator 
+auto PendingMessageQueue::getChatQueue(ChatId chatId) -> std::vector<ChatQueue>::iterator
 {
     return std::find_if(m_queues.begin(), m_queues.end(), [chatId](const ChatQueue &queue) {
         return (queue.chatId == chatId);
+    });
+}
+
+auto PendingMessageQueue::getOrAddChatQueue(ChatId chatId) -> ChatQueue &
+{
+    auto it = getChatQueue(chatId);
+    if (it != m_queues.end())
+        return *it;
+    m_queues.emplace_back();
+    m_queues.back().chatId = chatId;
+    return m_queues.back();
+}
+
+auto PendingMessageQueue::findMessage(ChatQueue &queue, MessageId messageId) -> std::list<Message>::iterator
+{
+    return std::find_if(queue.messages.begin(), queue.messages.end(), [messageId](const Message &m) {
+        return (getId(*m.message.message) == messageId);
     });
 }
 
@@ -176,10 +208,9 @@ PendingMessageQueue::Message &PendingMessageQueue::addMessage(ChatQueue &queue, 
     if (action == MessageAction::Append) {
         queue.messages.emplace_back();
         return queue.messages.back();
-    } else {
-        queue.messages.emplace_front();
-        return queue.messages.front();
     }
+    queue.messages.emplace_front();
+    return queue.messages.front();
 }
 
 IncomingMessage &PendingMessageQueue::addPendingMessage(IncomingMessage &&message,
@@ -187,22 +218,12 @@ IncomingMessage &PendingMessageQueue::addPendingMessage(IncomingMessage &&messag
 {
     if (!message.message) return message;
 
-    ChatId     chatId  = getChatId(*message.message);
-    auto       queueIt = getChatQueue(chatId);
-    ChatQueue *queue;
+    ChatId chatId = getChatId(*message.message);
     purple_debug_misc(config::pluginId,"MessageQueue: chat %" G_GINT64_FORMAT ": "
                       "adding pending message %" G_GINT64_FORMAT " (not ready)\n",
                       chatId.value(), message.message->id_);
 
-    if (queueIt != m_queues.end())
-        queue = &*queueIt;
-    else {
-        m_queues.emplace_back();
-        m_queues.back().chatId = chatId;
-        queue = &m_queues.back();
-    }
-
-    Message &newEntry = addMessage(*queue, action);
+    Message &newEntry = addMessage(getOrAddChatQueue(chatId), action);
     newEntry.ready = false;
     newEntry.message = std::move(message);
     return newEntry.message;
@@ -222,10 +243,8 @@ void PendingMessageQueue::extractReadyMessages(
     }
 
     pQueue->messages.erase(pQueue->messages.begin(), pReady);
-    if (pQueue->messages.empty()) {
+    if (pQueue->messages.empty())
         m_queues.erase(pQueue);
-        pQueue = m_queues.end();
-    }
 }
 
 void PendingMessageQueue::setMessageReady(ChatId chatId, MessageId messageId,
@@ -240,9 +259,7 @@ void PendingMessageQueue::setMessageReady(ChatId chatId, MessageId messageId,
                       "message %" G_GINT64_FORMAT " now ready\n",
                       chatId.value(), messageId.value());
 
-    auto it = std::find_if(pQueue->messages.begin(), pQueue->messages.end(), [messageId](const Message &m) {
-        return (getId(*m.message.message) == messageId);
-    });
+    auto it = findMessage(*pQueue, messageId);
     if (it == pQueue->messages.end()) return;
 
     it->ready = true;
@@ -275,12 +292,9 @@ IncomingMessage *PendingMessageQueue::findPendingMessage(ChatId chatId, MessageI
 {
     auto queueIt = getChatQueue(chatId);
     if (queueIt == m_queues.end()) return nullptr;
-    ChatQueue *queue = &*queueIt;
 
-    auto it = std::find_if(queue->messages.begin(), queue->messages.end(), [messageId](const Message &m) {
-        return (getId(*m.message.message) == messageId);
-    });
-    return (it != queue->messages.end()) ? &it->message : nullptr;
+    auto it = findMessage(*queueIt, messageId);
+    return (it != queueIt->messages.end()) ? &it->message : nullptr;
 }
 
 void PendingMessageQueue::flush(std::vector<IncomingMessage> &messages)
@@ -294,14 +308,7 @@ void PendingMessageQueue::flush(std::vector<IncomingMessage> &messages)
 
 void PendingMessageQueue::setChatNotReady(ChatId chatId)
 {
-    auto pQueue = getChatQueue(chatId);
-    if (pQueue != m_queues.end())
-        pQueue->ready = false;
-    else {
-        m_queues.emplace_back();
-        m_queues.back().chatId = chatId;
-        m_queues.back().ready = false;
-    }
+    getOrAddChatQueue(chatId).ready = false;
 }
 
 void PendingMessageQueue::setChatReady(ChatId chatId, std::vector<IncomingMessage>& readyMessages)
@@ -325,25 +332,19 @@ bool PendingMessageQueue::isChatReady(ChatId chatId)
     auto pQueue = getChatQueue(chatId);
     if (pQueue != m_queues.end())
         return pQueue->ready;
-    else
-        return true;
+    return true;
 }
 
 void TdAccountData::updateUser(TdUserPtr userPtr)
 {
     const td::td_api::user *user = userPtr.get();
     if (user) {
-        UserId   userId = getId(*user);
-        auto     it     = m_userInfo.find(userId);
-
-        if (it == m_userInfo.end()) {
-            auto ret = m_userInfo.emplace(std::make_pair(userId, UserInfo()));
-            it = ret.first;
-        }
-
-        UserInfo &entry = it->second;
+        UserId    userId = getId(*user);
+        UserInfo &entry  = m_userInfo[userId];
         entry.user = std::move(userPtr);
         entry.displayName = makeBasicDisplayName(*user);
+        // The first of "Name", "Name #1", ... no other user has: each looks through all users, which
+        // is quadratic in the few that share a name
         for (unsigned n = 0; n != UINT32_MAX; n++) {
             std::string displayName = entry.displayName;
             if (n != 0) {
@@ -447,13 +448,12 @@ void TdAccountData::addChat(TdChatPtr chat)
     if (!chat)
         return;
 
-    if (chat->type_->get_id() == td::td_api::chatTypePrivate::ID) {
-        const td::td_api::chatTypePrivate &privType = static_cast<const td::td_api::chatTypePrivate &>(*chat->type_);
-        auto pContact = std::find(m_contactUserIdsNoChat.begin(), m_contactUserIdsNoChat.end(),
-                                  getUserId(privType));
+    UserId privateUserId = getUserIdByPrivateChat(*chat);
+    if (privateUserId.valid()) {
+        auto pContact = std::find(m_contactUserIdsNoChat.begin(), m_contactUserIdsNoChat.end(), privateUserId);
         if (pContact != m_contactUserIdsNoChat.end()) {
             purpleDebug("Private chat (id {}) now known for user {}", {
-                std::to_string(chat->id_), std::to_string(privType.user_id_)
+                std::to_string(chat->id_), std::to_string(privateUserId.value())
             });
             m_contactUserIdsNoChat.erase(pContact);
         }
@@ -551,75 +551,45 @@ void TdAccountData::getContactsWithNoChat(std::vector<UserId> &userIds)
 
 const td::td_api::chat *TdAccountData::getChat(ChatId chatId) const
 {
-    auto pChatInfo = m_chatInfo.find(chatId);
-    if (pChatInfo == m_chatInfo.end())
-        return nullptr;
-    else
-        return pChatInfo->second.chat.get();
+    const ChatInfo *info = findIn(m_chatInfo, chatId);
+    return info ? info->chat.get() : nullptr;
 }
 
 int TdAccountData::getPurpleChatId(ChatId tdChatId)
 {
-    auto pChatInfo = m_chatInfo.find(tdChatId);
-    if (pChatInfo == m_chatInfo.end())
-        return 0;
-    else
-        return pChatInfo->second.purpleId;
+    const ChatInfo *info = findIn(m_chatInfo, tdChatId);
+    return info ? info->purpleId : 0;
 }
 
 const td::td_api::chat *TdAccountData::getChatByPurpleId(int32_t purpleChatId) const
 {
-    auto pChatInfo = std::find_if(m_chatInfo.begin(), m_chatInfo.end(),
-                                  [purpleChatId](const ChatMap::value_type &entry) {
-                                      return (entry.second.purpleId == purpleChatId);
-                                  });
-
-    if (pChatInfo != m_chatInfo.end())
-        return pChatInfo->second.chat.get();
-    else
-        return nullptr;
-}
-
-static bool isPrivateChat(const td::td_api::chat &chat, UserId userId)
-{
-    if (chat.type_->get_id() == td::td_api::chatTypePrivate::ID) {
-        const td::td_api::chatTypePrivate &privType = static_cast<const td::td_api::chatTypePrivate &>(*chat.type_);
-        return (getUserId(privType) == userId);
-    }
-    return false;
+    auto it = std::find_if(m_chatInfo.begin(), m_chatInfo.end(), [purpleChatId](const ChatMap::value_type &entry) {
+        return (entry.second.purpleId == purpleChatId);
+    });
+    return (it != m_chatInfo.end()) ? it->second.chat.get() : nullptr;
 }
 
 const td::td_api::chat *TdAccountData::getPrivateChatByUserId(UserId userId) const
 {
-    auto pChatInfo = std::find_if(m_chatInfo.begin(), m_chatInfo.end(),
-                                  [userId](const ChatMap::value_type &entry) {
-                                      return isPrivateChat(*entry.second.chat, userId);
-                                  });
-    if (pChatInfo == m_chatInfo.end())
+    if (!userId.valid())
         return nullptr;
-    else
-        return pChatInfo->second.chat.get();
+    return findChat(m_chatInfo, [userId](const td::td_api::chat &chat) {
+        return (getUserIdByPrivateChat(chat) == userId);
+    });
 }
 
 const td::td_api::user *TdAccountData::getUser(UserId userId) const
 {
-    auto pUser = m_userInfo.find(userId);
-    if (pUser == m_userInfo.end())
-        return nullptr;
-    else
-        return pUser->second.user.get();
+    const UserInfo *info = findIn(m_userInfo, userId);
+    return info ? info->user.get() : nullptr;
 }
 
 const td::td_api::user *TdAccountData::getUserByPhone(const char *phoneNumber) const
 {
-    auto pUser = std::find_if(m_userInfo.begin(), m_userInfo.end(),
-                              [phoneNumber](const UserMap::value_type &entry) {
-                                  return isPhoneEqual(entry.second.user->phone_number_, phoneNumber);
-                              });
-    if (pUser == m_userInfo.end())
-        return nullptr;
-    else
-        return pUser->second.user.get();
+    auto it = std::find_if(m_userInfo.begin(), m_userInfo.end(), [phoneNumber](const UserMap::value_type &entry) {
+        return isPhoneEqual(entry.second.user->phone_number_, phoneNumber);
+    });
+    return (it != m_userInfo.end()) ? it->second.user.get() : nullptr;
 }
 
 const td::td_api::user *TdAccountData::getUserByPrivateChat(const td::td_api::chat &chat) const
@@ -637,11 +607,8 @@ std::string TdAccountData::getDisplayName(const td::td_api::user &user) const
 
 std::string TdAccountData::getDisplayName(UserId userId) const
 {
-    auto it = m_userInfo.find(userId);
-    if (it != m_userInfo.end())
-        return it->second.displayName;
-    else
-        return std::string();
+    const UserInfo *info = findIn(m_userInfo, userId);
+    return info ? info->displayName : std::string();
 }
 
 void TdAccountData::getUsersByDisplayName(const char *displayName,
@@ -692,79 +659,50 @@ void TdAccountData::getUsersByUsername(const char *username,
 
 const td::td_api::basicGroup *TdAccountData::getBasicGroup(BasicGroupId groupId) const
 {
-    auto it = m_groups.find(groupId);
-    if (it != m_groups.end())
-        return it->second.group.get();
-    else
-        return nullptr;
+    auto info = findIn(m_groups, groupId);
+    return info ? info->group.get() : nullptr;
 }
 
 const td::td_api::basicGroupFullInfo *TdAccountData::getBasicGroupInfo(BasicGroupId groupId) const
 {
-    auto it = m_groups.find(groupId);
-    if (it != m_groups.end())
-        return it->second.fullInfo.get();
-    else
-        return nullptr;
+    auto info = findIn(m_groups, groupId);
+    return info ? info->fullInfo.get() : nullptr;
 }
 
 const td::td_api::supergroup *TdAccountData::getSupergroup(SupergroupId groupId) const
 {
-    auto it = m_supergroups.find(groupId);
-    if (it != m_supergroups.end())
-        return it->second.group.get();
-    else
-        return nullptr;
+    auto info = findIn(m_supergroups, groupId);
+    return info ? info->group.get() : nullptr;
 }
 
 const td::td_api::supergroupFullInfo *TdAccountData::getSupergroupInfo(SupergroupId groupId) const
 {
-    auto it = m_supergroups.find(groupId);
-    if (it != m_supergroups.end())
-        return it->second.fullInfo.get();
-    else
-        return nullptr;
+    auto info = findIn(m_supergroups, groupId);
+    return info ? info->fullInfo.get() : nullptr;
 }
 
 const td::td_api::chatMembers *TdAccountData::getSupergroupMembers(SupergroupId groupId) const
 {
-    auto it = m_supergroups.find(groupId);
-    if (it != m_supergroups.end())
-        return it->second.members.get();
-    else
-        return nullptr;
+    auto info = findIn(m_supergroups, groupId);
+    return info ? info->members.get() : nullptr;
 }
 
 const td::td_api::chat *TdAccountData::getBasicGroupChatByGroup(BasicGroupId groupId) const
 {
     if (!groupId.valid())
         return nullptr;
-
-    auto it = std::find_if(m_chatInfo.begin(), m_chatInfo.end(),
-                           [groupId](const ChatMap::value_type &entry) {
-                               return (getBasicGroupId(*entry.second.chat) == groupId);
-                           });
-
-    if (it != m_chatInfo.end())
-        return it->second.chat.get();
-    else
-        return nullptr;
+    return findChat(m_chatInfo, [groupId](const td::td_api::chat &chat) {
+        return (getBasicGroupId(chat) == groupId);
+    });
 }
 
 const td::td_api::chat *TdAccountData::getSupergroupChatByGroup(SupergroupId groupId) const
 {
     if (!groupId.valid())
         return nullptr;
-
-    auto it = std::find_if(m_chatInfo.begin(), m_chatInfo.end(),
-                           [groupId](const ChatMap::value_type &entry) {
-                               return (getSupergroupId(*entry.second.chat) == groupId);
-                           });
-
-    if (it != m_chatInfo.end())
-        return it->second.chat.get();
-    else
-        return nullptr;
+    return findChat(m_chatInfo, [groupId](const td::td_api::chat &chat) {
+        return (getSupergroupId(chat) == groupId);
+    });
 }
 
 bool TdAccountData::isGroupChatWithMembership(const td::td_api::chat &chat) const
@@ -784,15 +722,9 @@ bool TdAccountData::isGroupChatWithMembership(const td::td_api::chat &chat) cons
 
 const td::td_api::chat *TdAccountData::getChatBySecretChat(SecretChatId secretChatId)
 {
-    auto it = std::find_if(m_chatInfo.begin(), m_chatInfo.end(),
-                           [secretChatId](const ChatMap::value_type &entry) {
-                               return (getSecretChatId(*entry.second.chat) == secretChatId);
-                           });
-
-    if (it != m_chatInfo.end())
-        return it->second.chat.get();
-    else
-        return nullptr;
+    return findChat(m_chatInfo, [secretChatId](const td::td_api::chat &chat) {
+        return (getSecretChatId(chat) == secretChatId);
+    });
 }
 
 void TdAccountData::getChats(std::vector<const td::td_api::chat *> &chats) const
@@ -826,46 +758,48 @@ void TdAccountData::removeExpectedChat(ChatId id)
 
 }
 
+using RequestList = std::vector<std::unique_ptr<PendingRequest>>;
+
+static RequestList::iterator findRequestById(RequestList &requests, uint64_t requestId)
+{
+    return std::find_if(requests.begin(), requests.end(), [requestId](const std::unique_ptr<PendingRequest> &req) {
+        return (req->requestId == requestId);
+    });
+}
+
+// The first request of type Request that matches
+template<typename Request, typename Predicate>
+static Request *findRequest(RequestList &requests, Predicate matches)
+{
+    for (const std::unique_ptr<PendingRequest> &req: requests) {
+        Request *request = dynamic_cast<Request *>(req.get());
+        if (request && matches(*request))
+            return request;
+    }
+    return nullptr;
+}
+
 std::unique_ptr<PendingRequest> TdAccountData::getPendingRequestImpl(uint64_t requestId)
 {
-    auto it = std::find_if(m_requests.begin(), m_requests.end(),
-                           [requestId](const std::unique_ptr<PendingRequest> &req) {
-                               return (req->requestId == requestId);
-                           });
-
-    if (it != m_requests.end()) {
-        auto result = std::move(*it);
-        m_requests.erase(it);
-        return result;
-    }
-
-    return nullptr;
+    auto it = findRequestById(m_requests, requestId);
+    if (it == m_requests.end())
+        return nullptr;
+    auto result = std::move(*it);
+    m_requests.erase(it);
+    return result;
 }
 
 PendingRequest *TdAccountData::findPendingRequestImpl(uint64_t requestId)
 {
-    auto it = std::find_if(m_requests.begin(), m_requests.end(),
-                           [requestId](const std::unique_ptr<PendingRequest> &req) {
-                               return (req->requestId == requestId);
-                           });
-
-    if (it != m_requests.end())
-        return it->get();
-
-    return nullptr;
+    auto it = findRequestById(m_requests, requestId);
+    return (it != m_requests.end()) ? it->get() : nullptr;
 }
 
 const ContactRequest *TdAccountData::findContactRequest(UserId userId)
 {
-    auto it = std::find_if(m_requests.begin(), m_requests.end(),
-                           [userId](const std::unique_ptr<PendingRequest> &req) {
-                               const ContactRequest *contactReq = dynamic_cast<const ContactRequest *>(req.get());
-                               return (contactReq && (contactReq->userId == userId));
-                           });
-
-    if (it != m_requests.end())
-        return static_cast<const ContactRequest *>(it->get());
-    return nullptr;
+    return findRequest<ContactRequest>(m_requests, [userId](const ContactRequest &request) {
+        return (request.userId == userId);
+    });
 }
 
 DownloadRequest::~DownloadRequest()
@@ -878,25 +812,16 @@ DownloadRequest::~DownloadRequest()
 
 DownloadRequest* TdAccountData::findDownloadRequest(int32_t fileId)
 {
-    auto it = std::find_if(m_requests.begin(), m_requests.end(),
-                           [fileId](const std::unique_ptr<PendingRequest> &req) {
-                               DownloadRequest *downloadReq = dynamic_cast<DownloadRequest *>(req.get());
-                               return (downloadReq && (downloadReq->fileId == fileId));
-                           });
-
-    if (it != m_requests.end())
-        return static_cast<DownloadRequest *>(it->get());
-    return nullptr;
+    return findRequest<DownloadRequest>(m_requests, [fileId](const DownloadRequest &request) {
+        return (request.fileId == fileId);
+    });
 }
 
 bool TdAccountData::isDownloadingFor(int32_t fileId, ChatId chatId, MessageId messageId)
 {
-    return std::any_of(m_requests.begin(), m_requests.end(),
-                       [fileId, chatId, messageId](const std::unique_ptr<PendingRequest> &req) {
-                           DownloadRequest *downloadReq = dynamic_cast<DownloadRequest *>(req.get());
-                           return (downloadReq && (downloadReq->fileId == fileId) &&
-                                   (downloadReq->chatId == chatId) && (downloadReq->message.id == messageId));
-                       });
+    return findRequest<DownloadRequest>(m_requests, [fileId, chatId, messageId](const DownloadRequest &request) {
+        return (request.fileId == fileId) && (request.chatId == chatId) && (request.message.id == messageId);
+    }) != nullptr;
 }
 
 void TdAccountData::extractFileTransferRequests(std::vector<PurpleXfer *> &transfers)
@@ -906,7 +831,7 @@ void TdAccountData::extractFileTransferRequests(std::vector<PurpleXfer *> &trans
     for (unsigned i = 0; i < m_requests.size(); ) {
         UploadRequest *uploadReq = dynamic_cast<UploadRequest *>(m_requests[i].get());
         NewPrivateChatForMessage *newChatReq = dynamic_cast<NewPrivateChatForMessage *>(m_requests[i].get());
-        PurpleXfer *xfer = NULL;
+        PurpleXfer *xfer = nullptr;
         if (uploadReq)
             xfer = uploadReq->xfer;
         else if (newChatReq)
@@ -967,7 +892,7 @@ void TdAccountData::saveTempFileUploads()
 
 void TdAccountData::loadTempFileUploads()
 {
-    const char *value = purple_account_get_string(purpleAccount, TempFileUploadsSetting, NULL);
+    const char *value = purple_account_get_string(purpleAccount, TempFileUploadsSetting, nullptr);
     if (!value)
         return;
 
@@ -977,7 +902,7 @@ void TdAccountData::loadTempFileUploads()
         if (fields[0] && fields[1] && fields[2] && *fields[2]) {
             m_sentMessages.emplace_back();
             m_sentMessages.back().chatId = ChatId::fromString(fields[0]);
-            m_sentMessages.back().messageId = g_ascii_strtoll(fields[1], NULL, 10);
+            m_sentMessages.back().messageId = g_ascii_strtoll(fields[1], nullptr, 10);
             m_sentMessages.back().tempFile = fields[2];
         }
         g_strfreev(fields);
@@ -991,12 +916,17 @@ void TdAccountData::getTempFileUploads(std::vector<std::pair<ChatId, int64_t>> &
         messages.emplace_back(item.chatId, item.messageId);
 }
 
+template<typename Transfers>
+static auto findFileTransfer(Transfers &transfers, int32_t fileId) -> decltype(transfers.begin())
+{
+    return std::find_if(transfers.begin(), transfers.end(), [fileId](const typename Transfers::value_type &transfer) {
+        return (transfer.fileId == fileId);
+    });
+}
+
 void TdAccountData::addFileTransfer(int32_t fileId, PurpleXfer *xfer, ChatId chatId, AttachmentKind kind)
 {
-    if (std::find_if(m_fileTransfers.begin(), m_fileTransfers.end(),
-                    [fileId](const FileTransferInfo &upload) {
-                        return (upload.fileId == fileId);
-                    }) == m_fileTransfers.end()) {
+    if (findFileTransfer(m_fileTransfers, fileId) == m_fileTransfers.end()) {
         m_fileTransfers.emplace_back();
         m_fileTransfers.back().fileId = fileId;
         m_fileTransfers.back().xfer = xfer;
@@ -1007,8 +937,7 @@ void TdAccountData::addFileTransfer(int32_t fileId, PurpleXfer *xfer, ChatId cha
 
 bool TdAccountData::getFileTransfer(int32_t fileId, PurpleXfer *&xfer, ChatId &chatId, AttachmentKind *kind)
 {
-    auto it = std::find_if(m_fileTransfers.begin(), m_fileTransfers.end(),
-                           [fileId](const FileTransferInfo &upload) { return (upload.fileId == fileId); });
+    auto it = findFileTransfer(m_fileTransfers, fileId);
     if (it != m_fileTransfers.end()) {
         xfer = it->xfer;
         chatId = it->chatId;
@@ -1027,14 +956,13 @@ bool TdAccountData::getFileIdForTransfer(PurpleXfer *xfer, int &fileId)
     if (it != m_fileTransfers.end()) {
         fileId = it->fileId;
         return true;
-    } else
-        return false;
+    }
+    return false;
 }
 
 void TdAccountData::removeFileTransfer(int32_t fileId)
 {
-    auto it = std::find_if(m_fileTransfers.begin(), m_fileTransfers.end(),
-                           [fileId](const FileTransferInfo &upload) { return (upload.fileId == fileId); });
+    auto it = findFileTransfer(m_fileTransfers, fileId);
     if (it != m_fileTransfers.end())
         m_fileTransfers.erase(it);
 }
@@ -1089,7 +1017,7 @@ bool TdAccountData::hasActiveCall()
     return (m_callData != nullptr);
 }
 
-void TdAccountData::setActiveCall(int32_t callId)
+void TdAccountData::setActiveCall([[maybe_unused]] int32_t callId)
 {
 #ifndef NoVoip
     if (!m_callData) {
@@ -1112,26 +1040,14 @@ void TdAccountData::removeActiveCall()
 
 void TdAccountData::addPendingReadReceipt(ChatId chatId, MessageId messageId)
 {
-    auto pChatReceipts = std::find_if(m_pendingReadReceipts.begin(), m_pendingReadReceipts.end(),
-                                      [chatId](const std::vector<ReadReceipt> &receipts) {
-                                          return (!receipts.empty() && (receipts[0].chatId == chatId));
-                                      });
-    if (pChatReceipts != m_pendingReadReceipts.end())
-        pChatReceipts->push_back(ReadReceipt{chatId, messageId});
-    else {
-        m_pendingReadReceipts.emplace_back();
-        m_pendingReadReceipts.back().push_back(ReadReceipt{chatId, messageId});
-    }
+    m_pendingReadReceipts[chatId].push_back(ReadReceipt{chatId, messageId});
 }
 
 void TdAccountData::extractPendingReadReceipts(ChatId chatId, std::vector<ReadReceipt>& receipts)
 {
-    auto pChatReceipts = std::find_if(m_pendingReadReceipts.begin(), m_pendingReadReceipts.end(),
-                                      [chatId](const std::vector<ReadReceipt> &receipts) {
-                                          return (!receipts.empty() && (receipts[0].chatId == chatId));
-                                      });
+    auto pChatReceipts = m_pendingReadReceipts.find(chatId);
     if (pChatReceipts != m_pendingReadReceipts.end()) {
-        receipts = std::move(*pChatReceipts);
+        receipts = std::move(pChatReceipts->second);
         m_pendingReadReceipts.erase(pChatReceipts);
     } else
         receipts.clear();
@@ -1299,9 +1215,9 @@ int TdAccountData::getConvertedSticker(int32_t fileId) const
 
 bool TdAccountData::startStickerConversion(int32_t fileId, ChatId chatId, MessageId messageId)
 {
-    auto it = m_stickerConversions.find(fileId);
-    bool started = (it == m_stickerConversions.end());
-    std::vector<std::pair<ChatId, MessageId>> &waiting = m_stickerConversions[fileId];
+    auto inserted = m_stickerConversions.emplace(fileId, std::vector<std::pair<ChatId, MessageId>>());
+    bool started  = inserted.second;
+    std::vector<std::pair<ChatId, MessageId>> &waiting = inserted.first->second;
     if (std::find(waiting.begin(), waiting.end(), std::make_pair(chatId, messageId)) == waiting.end())
         waiting.emplace_back(chatId, messageId);
     return started;
@@ -1322,11 +1238,17 @@ void TdAccountData::endStickerConversion(int32_t fileId, int imageId,
         purple_imgstore_unref_by_id(imageId);
 }
 
+template<typename Edits>
+static auto findPendingEdit(Edits &edits, ChatId chatId, MessageId messageId) -> decltype(edits.begin())
+{
+    return std::find_if(edits.begin(), edits.end(), [chatId, messageId](const PendingEdit &edit) {
+        return (edit.chatId == chatId) && (edit.messageId == messageId);
+    });
+}
+
 void TdAccountData::addPendingEdit(const PendingEdit &edit)
 {
-    auto it = std::find_if(m_pendingEdits.begin(), m_pendingEdits.end(), [&edit](const PendingEdit &other) {
-        return (other.chatId == edit.chatId) && (other.messageId == edit.messageId);
-    });
+    auto it = findPendingEdit(m_pendingEdits, edit.chatId, edit.messageId);
     if (it == m_pendingEdits.end())
         m_pendingEdits.push_back(edit);
     else {
@@ -1340,9 +1262,7 @@ void TdAccountData::addPendingEdit(const PendingEdit &edit)
 
 bool TdAccountData::extractPendingEdit(ChatId chatId, MessageId messageId, PendingEdit &edit)
 {
-    auto it = std::find_if(m_pendingEdits.begin(), m_pendingEdits.end(), [chatId, messageId](const PendingEdit &other) {
-        return (other.chatId == chatId) && (other.messageId == messageId);
-    });
+    auto it = findPendingEdit(m_pendingEdits, chatId, messageId);
     if (it == m_pendingEdits.end())
         return false;
     edit = *it;

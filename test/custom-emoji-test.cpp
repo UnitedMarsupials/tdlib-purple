@@ -57,9 +57,9 @@ object_ptr<sticker> CustomEmojiTest::makeEmojiSticker(object_ptr<StickerFormat> 
 
 size_t CustomEmojiTest::fileSize(const char *path)
 {
-    gchar *data = NULL;
+    gchar *data = nullptr;
     gsize  size = 0;
-    EXPECT_TRUE(g_file_get_contents(path, &data, &size, NULL));
+    EXPECT_TRUE(g_file_get_contents(path, &data, &size, nullptr));
     g_free(data);
     return size;
 }
@@ -129,8 +129,8 @@ TEST_F(CustomEmojiTest, Folded)
 TEST_F(CustomEmojiTest, WebmFallsBackOnThumbnail)
 {
     // Nothing that would play, but it starts the way WebM does
-    char *path = NULL;
-    int   fd   = g_file_open_tmp("tdlib_test_XXXXXX", &path, NULL);
+    char *path = nullptr;
+    int   fd   = g_file_open_tmp("tdlib_test_XXXXXX", &path, nullptr);
     ASSERT_TRUE(fd >= 0);
     ASSERT_EQ(8, write(fd, "\x1A\x45\xDF\xA3webm", 8));
     ::close(fd);

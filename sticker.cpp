@@ -1,4 +1,5 @@
 #include "sticker.h"
+#include "purple-info.h"
 #include "buildopt.h"
 #include "client-utils.h"
 #include "config.h"
@@ -18,19 +19,19 @@ void showStickerFile(const td::td_api::chat &chat, const TgMessageInfo &message,
                      const std::string &filePath, const std::string &fileDescription,
                      TdAccountData &account)
 {
-    gchar *data = NULL;
+    gchar *data = nullptr;
     gsize  size = 0;
     ImageSupport support = probeImageFile(filePath);
-    if ((support == ImageSupport::Supported) && g_file_get_contents(filePath.c_str(), &data, &size, NULL)) {
+    if ((support == ImageSupport::Supported) && g_file_get_contents(filePath.c_str(), &data, &size, nullptr)) {
         // The imgstore takes the data
         int id = addImageFile(data, size, filePath);
         std::string text = makeInlineImageText(id);
-        showMessageText(account, chat, message, text.c_str(), NULL, PURPLE_MESSAGE_IMAGES);
+        showMessageText(account, chat, message, text.c_str(), nullptr, PURPLE_MESSAGE_IMAGES);
     } else {
         if (support == ImageSupport::Unrecognized)
             warnMissingImageLoader(filePath);
         // The emoji it goes with, where it has one
-        showGenericFileInline(chat, message, filePath, NULL,
+        showGenericFileInline(chat, message, filePath, nullptr,
                               message.altText.empty() ? fileDescription : message.altText, std::string(), account);
     }
 }
@@ -90,7 +91,7 @@ public:
         GifBegin(&handle, fd, width, height, delay);
         bgColorR = (uint8_t) ((bgColor & 0xff0000) >> 16);
         bgColorG = (uint8_t) ((bgColor & 0x00ff00) >> 8);
-        bgColorB = (uint8_t) ((bgColor & 0x0000ff));
+        bgColorB = (uint8_t) (bgColor & 0x0000ff);
         transparent = ((bgColor >> 24) < 0x80);
     }
     ~GifBuilder()
@@ -160,9 +161,9 @@ private:
 
 void StickerConversionThread::run()
 {
-    gchar  *compressedData = NULL;
+    gchar  *compressedData = nullptr;
     gsize   compressedSize = 0;
-    GError *error = NULL;
+    GError *error = nullptr;
 
     g_file_get_contents(inputFileName.c_str(), &compressedData, &compressedSize, &error);
     if (error) {
@@ -184,8 +185,8 @@ void StickerConversionThread::run()
         return;
     }
 
-    char *tempFileName = NULL;
-    int fd = g_file_open_tmp("tdlib_sticker_XXXXXX", &tempFileName, NULL);
+    char *tempFileName = nullptr;
+    int fd = g_file_open_tmp("tdlib_sticker_XXXXXX", &tempFileName, nullptr);
     if (fd < 0) {
         // Unlikely error message not worth translating
         m_errorMessage = "Could not create temporary file";
@@ -252,6 +253,16 @@ static GetFileInfo findGetFileInfo()
 bool canShowImages()
 {
     return findGetFileInfo() != nullptr;
+}
+
+bool canConvertAnimatedSticker(PurpleAccount *purpleAccount)
+{
+#ifndef NoLottie
+    return canShowImages() && purple_account_get_bool(purpleAccount, AccountOptions::AnimatedStickers,
+                                   AccountOptions::AnimatedStickersDefault);
+#else
+    return false;
+#endif
 }
 
 ImageSupport probeImageFile(const std::string &path)
