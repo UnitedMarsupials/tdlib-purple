@@ -3794,12 +3794,6 @@ static bool isShownAsNotice(const td::td_api::message &message)
                                  !getContentParts(*message.content_, parts));
 }
 
-// What of the log goes into the tab with TDLib's messages: a message the log names that TDLib no
-// longer has was deleted, and is struck out or left out, as set for the chat; one the log does not
-// name, or a notice, is left out if TDLib has a message written the same way at much the same time,
-// as it is that one. Other notices, such as of edits and reactions, go in; but not the one closing a
-// log, of no message, which is Pidgin's own that the account has disconnected, and which the
-// messages shown since make no news.
 // From the earliest of the messages; past the tab's last one, if they follow it, as the log's lines
 // between the two are shown with none else: of messages deleted, or notices
 time_t getLoggedLinesSince(const std::vector<td::td_api::object_ptr<td::td_api::message>> &messages,
@@ -3810,6 +3804,12 @@ time_t getLoggedLinesSince(const std::vector<td::td_api::object_ptr<td::td_api::
     return (!messages.empty() && messages.back()) ? messages.back()->date_ : 0;
 }
 
+// What of the log goes into the tab with TDLib's messages: a message the log names that TDLib no
+// longer has was deleted, and is struck out or left out, as set for the chat; one the log does not
+// name, or a notice, is left out if TDLib has a message written the same way at much the same time,
+// as it is that one. Other notices, such as of edits and reactions, go in; but not the one closing a
+// log, of no message, which is Pidgin's own that the account has disconnected, and which the
+// messages shown since make no news.
 std::vector<LoggedLine> pickLoggedLines(std::vector<LoggedLine> logged,
                                         const std::vector<td::td_api::object_ptr<td::td_api::message>> &messages,
                                         bool stopsShort, bool keepDeleted, MessageId after, time_t afterDate)

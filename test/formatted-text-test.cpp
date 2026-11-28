@@ -205,7 +205,8 @@ TEST(LoggedLines, StillOpen)
 TEST(LoggedLines, PastTabEnd)
 {
     // The tab ends at Ann's message at 21:00:00; past it, ours, deleted for everyone, its notices,
-    // then Ann's next message, which Telegram still has, and a notice past that
+    // then Ann's next message and a notice past that. Ann's message is deleted too in the first case,
+    // which fetches nothing, and still on Telegram in the second
     struct tm start = {};
     start.tm_year  = 2026 - 1900;
     start.tm_mon   = 10;
