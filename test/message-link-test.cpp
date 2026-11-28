@@ -1316,16 +1316,26 @@ TEST_F(MessageLinkTest, RichMessageMedia)
 TEST(RichMessageMediaTest, NumberedAlikeBothWays)
 {
     int32_t nextId = 1;
-    auto photoBlock = [&nextId]() {
+    // Each medium captioned with its file's id, to tell which a link is on
+    auto captionOf = [](int32_t fileId) {
+        auto text    = make_object<richTextPlain>();
+        text->text_  = "file" + std::to_string(fileId) + ".";
+        auto caption = make_object<pageBlockCaption>();
+        caption->text_ = std::move(text);
+        return caption;
+    };
+    auto photoBlock = [&nextId, &captionOf]() {
         auto block = make_object<pageBlockPhoto>();
         block->photo_ = make_object<photo>();
-        block->photo_->sizes_.push_back(makePhotoSize(makeFile(nextId++, 1000), 320, 320));
+        block->photo_->sizes_.push_back(makePhotoSize(makeFile(nextId, 1000), 320, 320));
+        block->caption_ = captionOf(nextId++);
         return block;
     };
-    auto videoBlock = [&nextId]() {
+    auto videoBlock = [&nextId, &captionOf]() {
         auto block = make_object<pageBlockVideo>();
         block->video_ = make_object<video>();
-        block->video_->video_ = makeFile(nextId++, 1000);
+        block->video_->video_ = makeFile(nextId, 1000);
+        block->caption_ = captionOf(nextId++);
         return block;
     };
 
@@ -1358,12 +1368,17 @@ TEST(RichMessageMediaTest, NumberedAlikeBothWays)
     rich->blocks_.push_back(videoBlock());
     const size_t count = nextId - 1;
 
-    // Each medium linked as #n, n counting from 0 in the order the layout gives
+    // Each medium linked as #n, n counting from 0 in the order the layout gives, the n+1st file's
+    // caption after it
     std::string html = formatRichMessage(*rich, [](size_t index) { return "#" + std::to_string(index); });
     size_t at = 0;
     for (size_t n = 0; n < count; n++) {
         size_t found = html.find("\"#" + std::to_string(n) + "\"", at);
         ASSERT_NE(std::string::npos, found) << "Medium " << n << " not linked in order in " << html;
+        size_t end = html.find("</a>", found);
+        ASSERT_NE(std::string::npos, end);
+        EXPECT_EQ(" file" + std::to_string(n + 1) + ".", html.substr(end + 4, 6 + std::to_string(n + 1).size()))
+            << "Medium " << n << " in " << html;
         at = found;
     }
     EXPECT_EQ(std::string::npos, html.find("\"#" + std::to_string(count) + "\""));
