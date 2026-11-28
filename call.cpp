@@ -23,7 +23,7 @@ bool initiateCall([[maybe_unused]] int64_t userId, [[maybe_unused]] TdAccountDat
         td::td_api::object_ptr<td::td_api::createCall> callRequest = td::td_api::make_object<td::td_api::createCall>();
         callRequest->user_id_  = userId;
         callRequest->protocol_ = getCallProtocol();
-        transceiver.sendQuery(std::move(callRequest), nullptr);
+        account.transceiver.sendQuery(std::move(callRequest), nullptr);
         // Asked for: libpurple's "call succeeded", not that it was answered
         return true;
     } else
