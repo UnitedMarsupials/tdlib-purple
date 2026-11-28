@@ -2,6 +2,7 @@
 #define _RECEIVING_H
 
 #include "account-data.h"
+#include "log-history.h"
 #include <purple.h>
 #include <map>
 
@@ -96,6 +97,17 @@ void logSentMessage(TdAccountData &account, ChatId chatId, MessageId oldId, Mess
 void fetchViewedPictures(TdAccountData &account, PurpleConversation *conv, const std::vector<MessageId> &messageIds);
 // An animated sticker converted, into the image store, or not (0): the messages showing it shown again
 void stickerConverted(TdAccountData &account, int32_t fileId, int imageId);
+
+// Where the log is read from for messages fetched: the earliest of them, or the tab's last message's
+// date, if they follow it
+time_t getLoggedLinesSince(const std::vector<td::td_api::object_ptr<td::td_api::message>> &messages,
+                           time_t afterDate);
+// The log's lines to show with them, oldest first: from there on, past the tab's last message (after)
+// if they follow it; those a tab stopping short of the rest would not show left out, messages the log
+// has but Telegram no more struck out, if kept
+std::vector<LoggedLine> pickLoggedLines(std::vector<LoggedLine> logged,
+                                        const std::vector<td::td_api::object_ptr<td::td_api::message>> &messages,
+                                        bool stopsShort, bool keepDeleted, MessageId after, time_t afterDate);
 // Logs those still awaiting their pictures as they were shown, as the account goes
 void logMessagesAwaitingPictures(TdAccountData &account);
 // The chat's conversation, if it is open; none is opened

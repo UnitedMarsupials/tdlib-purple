@@ -422,6 +422,19 @@ newest, which Pidgin took longer to write the more it held, and then trimmed,
 by the line, from the top: a fill of 2938 channel posts took fifteen minutes,
 and the first unread was trimmed away.
 
+In the test group, with "scrollback_lines" set to 100, so that it stops
+short: send a message, react to it, edit it, and delete it for everyone. Close
+the tab and open it again; scroll up to the group's first message, then down
+to the end.
+
+* The deleted message comes back at the end, struck out, with the lines of
+  its reaction, its edit and its deletion, as the tab showed them when opened.
+
+Since: scrolling down, the log was read only from the earliest message
+fetched, so what it held between the tab's end and that message, a message
+deleted since and the notices, was left out; with none fetched, as when the
+only later message was deleted, all of it.
+
 ### H6. Telegram links
 
 With Pidgin running, hand it a link to a post of a channel, joined or not,
