@@ -3800,21 +3800,27 @@ static bool isShownAsNotice(const td::td_api::message &message)
 // as it is that one. Other notices, such as of edits and reactions, go in; but not the one closing a
 // log, of no message, which is Pidgin's own that the account has disconnected, and which the
 // messages shown since make no news.
-static std::vector<LoggedLine> getLoggedLines(TdAccountData &account, const td::td_api::chat &chat,
-                                              PurpleConversation *conv,
-                                              const std::vector<td::td_api::object_ptr<td::td_api::message>> &messages,
-                                              bool stopsShort, MessageId after = MessageId())
+// From the earliest of the messages; past the tab's last one, if they follow it, as the log's lines
+// between the two are shown with none else: of messages deleted, or notices
+time_t getLoggedLinesSince(const std::vector<td::td_api::object_ptr<td::td_api::message>> &messages,
+                           time_t afterDate)
+{
+    if (afterDate)
+        return afterDate;
+    return (!messages.empty() && messages.back()) ? messages.back()->date_ : 0;
+}
+
+std::vector<LoggedLine> pickLoggedLines(std::vector<LoggedLine> logged,
+                                        const std::vector<td::td_api::object_ptr<td::td_api::message>> &messages,
+                                        bool stopsShort, bool keepDeleted, MessageId after, time_t afterDate)
 {
     enum { SAME_TIME = 10 };
     std::vector<LoggedLine> lines;
-    time_t since = 0;
-    if (!messages.empty() && messages.back())
-        since = messages.back()->date_;
-    if (!since)
-        return lines;
+    time_t since = getLoggedLinesSince(messages, afterDate);
     // Nothing past the last of them, in a tab that stops there: by its id, for a message the log names
-    time_t  until   = (stopsShort && messages.front()) ? messages.front()->date_ : std::numeric_limits<time_t>::max();
-    int64_t untilId = (stopsShort && messages.front()) ? messages.front()->id_ : std::numeric_limits<int64_t>::max();
+    bool    cut     = stopsShort && !messages.empty() && messages.front();
+    time_t  until   = cut ? messages.front()->date_ : std::numeric_limits<time_t>::max();
+    int64_t untilId = cut ? messages.front()->id_ : std::numeric_limits<int64_t>::max();
     std::set<int64_t>           ids;
     std::multimap<time_t, bool> dates; // whether shown as a notice
     for (const auto &message: messages)
@@ -3828,14 +3834,14 @@ static std::vector<LoggedLine> getLoggedLines(TdAccountData &account, const td::
                 return true;
         return false;
     };
-    bool keepDeleted = keepsDeletedMessages(account.purpleAccount, findChatBlistNode(account, chat));
-    for (LoggedLine &line: readLoggedLines(account.purpleAccount, purple_conversation_get_type(conv),
-                                           purple_conversation_get_name(conv), since))
-    {
+    for (LoggedLine &line: logged) {
         bool keep;
-        // Nor what the tab shows already, before them, which may have been sent in the same second
-        if ((line.when > until) || (line.messageId.valid() && (line.messageId.value() > untilId)) ||
-            (line.messageId.valid() && after.valid() && (line.messageId.value() <= after.value())))
+        // Nor what the tab shows already, before them, which may have been sent in the same second;
+        // the notices of the tab's last second were shown with it
+        if ((line.when < since) || (line.when > until) ||
+            (line.messageId.valid() && (line.messageId.value() > untilId)) ||
+            (line.messageId.valid() && after.valid() && (line.messageId.value() <= after.value())) ||
+            (!line.messageId.valid() && afterDate && (line.when <= afterDate)))
             keep = false;
         else if (line.messageId.valid()) {
             keep = !ids.count(line.messageId.value()) && keepDeleted;
@@ -3851,6 +3857,20 @@ static std::vector<LoggedLine> getLoggedLines(TdAccountData &account, const td::
                 purple_imgstore_unref_by_id(id);
     }
     return lines;
+}
+
+static std::vector<LoggedLine> getLoggedLines(TdAccountData &account, const td::td_api::chat &chat,
+                                              PurpleConversation *conv,
+                                              const std::vector<td::td_api::object_ptr<td::td_api::message>> &messages,
+                                              bool stopsShort, MessageId after = MessageId(), time_t afterDate = 0)
+{
+    time_t since = getLoggedLinesSince(messages, afterDate);
+    if (!since)
+        return {};
+    bool keepDeleted = keepsDeletedMessages(account.purpleAccount, findChatBlistNode(account, chat));
+    return pickLoggedLines(readLoggedLines(account.purpleAccount, purple_conversation_get_type(conv),
+                                           purple_conversation_get_name(conv), since),
+                           messages, stopsShort, keepDeleted, after, afterDate);
 }
 
 // Ready to be shown among the messages, ahead of those already queued
@@ -4183,7 +4203,7 @@ using MessagesNewestFirst = std::vector<td::td_api::object_ptr<td::td_api::messa
 
 // Written after what the tab shows, oldest first, ahead of any that came meanwhile, then as much
 // taken from its top as keeps it short of Pidgin's limit; what was in view stays there
-static void showFetchedLater(TdAccountData &account, ChatId chatId, MessageId end, bool fetched,
+static void showFetchedLater(TdAccountData &account, ChatId chatId, MessageId end, time_t endDate, bool fetched,
                              MessagesNewestFirst later)
 {
     const td::td_api::chat *chat = account.getChat(chatId);
@@ -4199,7 +4219,7 @@ static void showFetchedLater(TdAccountData &account, ChatId chatId, MessageId en
                           reached ? ", up to the newest" : "");
         setTabEnd(conv, reached ? MessageId() : getId(*later.front()));
         keepViewLater(conv);
-        std::vector<LoggedLine> lines = getLoggedLines(account, *chat, conv, later, !reached, end);
+        std::vector<LoggedLine> lines = getLoggedLines(account, *chat, conv, later, !reached, end, endDate);
         auto line = lines.rbegin();
         auto queueLinesSince = [&](time_t since) {
             for (; (line != lines.rend()) && (line->when >= since); ++line)
@@ -4225,13 +4245,17 @@ static void showFetchedLater(TdAccountData &account, ChatId chatId, MessageId en
 static void laterMessagesResponse(TdAccountData &account, ChatId chatId, MessageId end,
                                   td::td_api::object_ptr<td::td_api::Object> response)
 {
-    auto later   = std::make_shared<MessagesNewestFirst>();
-    bool fetched = false;
+    auto   later   = std::make_shared<MessagesNewestFirst>();
+    bool   fetched = false;
+    time_t endDate = 0;
     if (response && (response->get_id() == td::td_api::messages::ID)) {
         fetched = true;
+        // The tab's last message comes too: the log is read past its time
         for (auto &message: static_cast<td::td_api::messages &>(*response).messages_)
             if (message && (getId(*message).value() > end.value()))
                 later->push_back(std::move(message));
+            else if (message && (getId(*message) == end))
+                endDate = message->date_;
     } else
         purple_debug_warning(config::pluginId, "Cannot fetch messages after %" G_GINT64_FORMAT ": %s\n",
                              end.value(), getDisplayedError(response).c_str());
@@ -4240,9 +4264,9 @@ static void laterMessagesResponse(TdAccountData &account, ChatId chatId, Message
     if (conv && !later->empty())
         updateProgress(conv, escapeForDisplay(formatMessage(_("Showing {} messages"), later->size())));
     std::weak_ptr<int> alive = account.lifetime;
-    runAfterDrawing([&account, alive, chatId, end, fetched, later]() {
+    runAfterDrawing([&account, alive, chatId, end, endDate, fetched, later]() {
         if (!alive.expired())
-            showFetchedLater(account, chatId, end, fetched, std::move(*later));
+            showFetchedLater(account, chatId, end, endDate, fetched, std::move(*later));
     });
 }
 

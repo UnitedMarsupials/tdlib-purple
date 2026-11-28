@@ -201,3 +201,50 @@ TEST(LoggedLines, StillOpen)
     ASSERT_EQ(1u, lines.size());
     ASSERT_FALSE(lines[0].closing);
 }
+
+TEST(LoggedLines, PastTabEnd)
+{
+    // The tab ends at Ann's message at 21:00:00; past it, ours, deleted for everyone, its notices,
+    // then Ann's next message, which Telegram still has, and a notice past that
+    struct tm start = {};
+    start.tm_year  = 2026 - 1900;
+    start.tm_mon   = 10;
+    start.tm_mday  = 27;
+    start.tm_hour  = 20;
+    start.tm_isdst = -1;
+    time_t      logStart = mktime(&start);
+    time_t      endDate  = logStart + 3600;
+    std::string content =
+        "<span style=\"color: #A82F2F\"><span style=\"font-size: smaller\">(20:59:00)</span> <b>Ann:</b></span> Before<!--tdlib-message 524288--><br>\n"
+        "<span style=\"color: #A82F2F\"><span style=\"font-size: smaller\">(21:00:00)</span> <b>Ann:</b></span> Last<!--tdlib-message 1048576--><br>\n"
+        "<span style=\"font-size: smaller\">(21:00:00)</span><b> Ann reacts</b><br>\n"
+        "<span style=\"color: #16569E\"><span style=\"font-size: smaller\">(21:52:20)</span> <b>Me:</b></span> Verse<!--tdlib-message 2097152--><br>\n"
+        "<span style=\"font-size: smaller\">(21:53:17)</span><b> Me reacts</b><br>\n"
+        "<span style=\"font-size: smaller\">(21:55:41)</span><b> Me deletes</b><br>\n"
+        "<span style=\"color: #A82F2F\"><span style=\"font-size: smaller\">(22:00:00)</span> <b>Ann:</b></span> Next<!--tdlib-message 3145728--><br>\n"
+        "<span style=\"font-size: smaller\">(22:05:00)</span><b> Ann edits</b><br>\n";
+
+    // Nothing later fetched, the only later message deleted: all past the tab's end, from the log
+    std::vector<object_ptr<message>> none;
+    ASSERT_EQ(0, getLoggedLinesSince(none, 0));
+    ASSERT_EQ(endDate, getLoggedLinesSince(none, endDate));
+    std::vector<LoggedLine> lines = pickLoggedLines(parseLoggedLines(content, logStart), none, false, true,
+                                                    MessageId::fromString("1048576"), endDate);
+    ASSERT_EQ(5u, lines.size());
+    ASSERT_EQ(std::string("<s>Verse</s>"), lines[0].html.substr(lines[0].bodyStart));
+    ASSERT_NE(std::string::npos, lines[1].html.find("Me reacts"));
+    ASSERT_NE(std::string::npos, lines[2].html.find("Me deletes"));
+    ASSERT_EQ(std::string("<s>Next</s>"), lines[3].html.substr(lines[3].bodyStart));
+    ASSERT_NE(std::string::npos, lines[4].html.find("Ann edits"));
+
+    // Ann's next message fetched, the tab to stop short at it: what came between it and the tab's
+    // end too, not what follows it
+    std::vector<object_ptr<message>> later;
+    later.push_back(makeMessage(3145728, 1, 1, false, endDate + 3600, makeTextMessage("Next")));
+    lines = pickLoggedLines(parseLoggedLines(content, logStart), later, true, true,
+                            MessageId::fromString("1048576"), endDate);
+    ASSERT_EQ(3u, lines.size());
+    ASSERT_EQ(std::string("<s>Verse</s>"), lines[0].html.substr(lines[0].bodyStart));
+    ASSERT_NE(std::string::npos, lines[1].html.find("Me reacts"));
+    ASSERT_NE(std::string::npos, lines[2].html.find("Me deletes"));
+}
