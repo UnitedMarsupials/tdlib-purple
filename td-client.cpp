@@ -411,7 +411,10 @@ bool PurpleTdClient::addProxy()
 
     auto request = td::td_api::make_object<td::td_api::addProxy>();
 #if TDLIB_API_ADDED_PROXY
-    request->proxy_ = td::td_api::make_object<td::td_api::proxy>(host, port, std::move(tdProxyType));
+    request->proxy_          = td::td_api::make_object<td::td_api::proxy>();
+    request->proxy_->server_ = host;
+    request->proxy_->port_   = port;
+    request->proxy_->type_   = std::move(tdProxyType);
 #else
     request->server_ = host;
     request->port_   = port;

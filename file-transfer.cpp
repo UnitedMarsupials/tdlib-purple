@@ -68,7 +68,7 @@ void startDocumentUpload(ChatId chatId, const std::string &filename, PurpleXfer 
     // Uploaded as what it is to be sent as: TDLib takes a file uploaded as a document for no photo
     AttachmentKind kind          = getSentFileKind(account.purpleAccount, filename);
     auto           uploadRequest = td::td_api::make_object<td::td_api::preliminaryUploadFile>();
-    uploadRequest->file_ = td::td_api::make_object<td::td_api::inputFileLocal>(filename);
+    uploadRequest->file_ = makeInputFileLocal(filename);
     uploadRequest->file_type_ = makeFileType(kind);
     uploadRequest->priority_ = FILE_UPLOAD_PRIORITY;
     purple_xfer_ref(xfer);

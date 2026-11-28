@@ -1642,6 +1642,13 @@ td::td_api::object_ptr<td::td_api::FileType> makeFileType(AttachmentKind kind)
     return td::td_api::make_object<td::td_api::fileTypeDocument>();
 }
 
+td::td_api::object_ptr<td::td_api::inputFileLocal> makeInputFileLocal(const std::string &path)
+{
+    auto file   = td::td_api::make_object<td::td_api::inputFileLocal>();
+    file->path_ = path;
+    return file;
+}
+
 td::td_api::object_ptr<td::td_api::InputMessageContent>
 makeMediaContent(AttachmentKind kind, td::td_api::object_ptr<td::td_api::InputFile> file, const std::string &path,
                  td::td_api::object_ptr<td::td_api::formattedText> caption)
@@ -1703,7 +1710,7 @@ makeAttachmentContent(const PlaceholderUse &use, const std::string &uploadPath,
 {
     purple_debug_misc(config::pluginId, "Sending %s\n", uploadPath.c_str());
     return makeMediaContent(use.asFile ? AttachmentKind::Document : use.attachment->kind,
-                            td::td_api::make_object<td::td_api::inputFileLocal>(uploadPath), use.attachment->path,
+                            makeInputFileLocal(uploadPath), use.attachment->path,
                             std::move(caption));
 }
 
@@ -1811,7 +1818,7 @@ int transmitMessage(ChatId chatId, const char *message, TdAccountData &account, 
 
         if (hasImage) {
             sendMessageRequest->input_message_content_ =
-                makeMediaContent(AttachmentKind::Photo, td::td_api::make_object<td::td_api::inputFileLocal>(tempFileName),
+                makeMediaContent(AttachmentKind::Photo, makeInputFileLocal(tempFileName),
                                  tempFileName, makeFormattedText(input.text, input.formats, 0, input.text.size()));
             purple_debug_misc(config::pluginId, "Sending photo %s\n", tempFileName);
         } else {

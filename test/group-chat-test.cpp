@@ -76,10 +76,13 @@ TEST_F(GroupChatTest, BasicGroupPhoto)
     const std::string path   = std::string(TEST_SOURCE_DIR) + "/test.webp";
     login();
 
-    tgl.update(make_object<updateBasicGroup>(make_object<basicGroup>(
-        groupId, 2, make_object<chatMemberStatusMember>(), true, 0
-    )));
-    auto chat   = makeChat(groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0);
+    auto group           = make_object<basicGroup>();
+    group->id_           = groupId;
+    group->member_count_ = 2;
+    group->status_       = make_object<chatMemberStatusMember>();
+    group->is_active_    = true;
+    tgl.update(make_object<updateBasicGroup>(std::move(group)));
+    auto chat = makeChat(groupChatId, make_object<chatTypeBasicGroup>(groupId), groupChatTitle, nullptr, 0, 0, 0);
     chat->photo_ = make_object<chatPhotoInfo>();
     chat->photo_->small_ = makeFile(fileId, 10000);
     chat->photo_->big_   = makeFile(fileId + 1, 100000);
@@ -89,7 +92,7 @@ TEST_F(GroupChatTest, BasicGroupPhoto)
     tgl.update(makeUpdateChatListMain(groupChatId));
     tgl.verifyRequests({
         make_object<downloadFile>(fileId, 1, 0, 0, true),
-        make_object<getBasicGroupFullInfo>(groupId)
+        makeGetBasicGroupFullInfo(groupId)
     });
     prpl.verifyEvents(AddChatEvent(groupChatPurpleName, groupChatTitle, account, nullptr, nullptr));
 
